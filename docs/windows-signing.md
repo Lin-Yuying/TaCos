@@ -18,8 +18,11 @@ macOS disk image (`Tacos-Local-<version>-arm64.dmg`). If SignPath credentials ar
 the Windows run also submits the installer for signing before uploading it. On tag pushes the
 release job attaches both files to one GitHub Release.
 
-macOS builds are unsigned and not notarized; Gatekeeper warns on first launch (right-click →
-Open). That is a separate signing setup and is not covered here.
+macOS builds get an ad-hoc signature from `electron/after-pack.js`, which is enough for
+Gatekeeper to accept the bundle, but they are not notarized: the first launch has to be
+allowed under **System Settings → Privacy & Security → Open Anyway**. Seamless distribution
+needs an Apple Developer ID certificate and notarization, which is a separate setup and not
+covered here.
 
 ## SignPath Foundation (free for open source)
 
@@ -94,4 +97,4 @@ Trusted Root program.
 - **EV certificate**: no longer buys SmartScreen reputation; not worth the extra cost.
 - **Azure Trusted Signing**: not available to organizations outside the US/Canada.
 
-macOS signing and notarization are separate and not covered by this workflow.
+macOS Developer ID signing and notarization are separate and not covered by this workflow.

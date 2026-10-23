@@ -168,7 +168,7 @@ jobs:
 
           {
             cat <<'EOF'
-          > **These builds are unsigned.** Windows 11 Smart App Control blocks the unsigned installer, and macOS warns on first launch. Code signing is tracked in [docs/windows-signing.md](https://github.com/Lin-Yuying/tacos/blob/main/docs/windows-signing.md).
+          > **These builds are unsigned.** Windows 11 Smart App Control blocks the unsigned installer. The macOS app is ad-hoc signed but not notarized, so Gatekeeper asks for confirmation on first launch. Code signing is tracked in [docs/windows-signing.md](https://github.com/Lin-Yuying/tacos/blob/main/docs/windows-signing.md).
 
           ## Downloads
 
@@ -177,7 +177,11 @@ jobs:
           | Windows x64 | `Tacos-Local-Setup-*.exe` |
           | macOS (Apple silicon) | `Tacos-Local-*-arm64.dmg` |
 
-          Both installers run Tacos with its own local server and SQLite database, so no account or cloud service is involved. On macOS, drag Tacos into Applications, then right-click → Open the first time.
+          Both installers run Tacos with its own local server and SQLite database, so no account or cloud service is involved.
+
+          **macOS:** drag Tacos into Applications and launch it once. If macOS says it cannot verify the app, allow it under **System Settings → Privacy & Security → Open Anyway**.
+
+          **Windows:** the installer is unsigned, so Smart App Control blocks it. Use the browser against a running Tacos server until a signed build is available.
           EOF
             echo
             gh release view "$tag" --json body -q .body
