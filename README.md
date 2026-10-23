@@ -1,6 +1,8 @@
-<p align="left"><img src="public/brand/otter-line.png" alt="Tacos" width="80"></p> # TaCos
+<p align="left"><img src="public/brand/otter-line.png" alt="Tacos" width="80"></p> 
 
-A self-hosted, issue tracker built for teams that work alongside AI agents.
+# TaCos
+
+A self-hosted, issue tracker built for teams that work alongside AI agents, hmm, the AI agent router will be added in future versions.
 
 Tacos is not another chatbot wrapper. It is a fast, local-first tracker where humans and agents share the same backlog: people work in the web UI, agents plug in over a REST API or MCP, and every change is attributed to whoever made it.
 
