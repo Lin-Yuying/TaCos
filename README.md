@@ -139,7 +139,7 @@ npm run mcp:test
 
 The local desktop build listens on loopback only and stores its data under the OS app-data directory. Build the flavour you plan to ship last: `desktop:standalone:*` rewrites the bundled server payload for its target platform, and the bundler refuses to package a database from the checkout.
 
-Desktop binaries are not code-signed. On Windows 11, Smart App Control blocks unsigned installers outright (there is no per-app override); use a signed build, the browser UI, or a machine where Smart App Control is off.
+Desktop binaries are not code-signed. On Windows 11, Smart App Control blocks unsigned installers outright (there is no per-app override); use a signed build, the browser UI, or a machine where Smart App Control is off. Releases built by GitHub Actions can be signed with SignPath Foundation — see [docs/windows-signing.md](docs/windows-signing.md) for the setup.
 
 ## How it fits together
 

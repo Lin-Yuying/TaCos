@@ -1,0 +1,107 @@
+name: Windows installer
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+  actions: read
+
+concurrency:
+  group: windows-release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: windows-latest
+    env:
+      # Secrets cannot be used in step `if` conditions; expose it here and test the env var.
+      SIGNPATH_API_TOKEN: ${{ secrets.SIGNPATH_API_TOKEN }}
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@v7
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build the local (embedded server) installer
+        run: npm run desktop:standalone:win
+
+      - name: Upload unsigned installer
+        id: upload
+        uses: actions/upload-artifact@v7
+        with:
+          name: tacos-windows-x64-unsigned
+          path: release-standalone/Tacos-Local-Setup-*.exe
+          if-no-files-found: error
+          retention-days: 7
+
+      - name: Sign installer with SignPath
+        if: env.SIGNPATH_API_TOKEN != ''
+        uses: signpath/github-action-submit-signing-request@v3
+        with:
+          api-token: ${{ secrets.SIGNPATH_API_TOKEN }}
+          organization-id: ${{ vars.SIGNPATH_ORGANIZATION_ID }}
+          project-slug: ${{ vars.SIGNPATH_PROJECT_SLUG }}
+          signing-policy-slug: ${{ vars.SIGNPATH_SIGNING_POLICY_SLUG }}
+          artifact-configuration-slug: ${{ vars.SIGNPATH_ARTIFACT_CONFIGURATION_SLUG }}
+          github-artifact-id: ${{ steps.upload.outputs.artifact-id }}
+          wait-for-completion: true
+          output-artifact-directory: signed
+
+      - name: Upload signed installer
+        if: env.SIGNPATH_API_TOKEN != ''
+        uses: actions/upload-artifact@v7
+        with:
+          name: tacos-windows-x64-signed
+          path: signed/**/*.exe
+          if-no-files-found: error
+          retention-days: 7
+
+      - name: Record signing status
+        shell: bash
+        run: |
+          if [ -n "$SIGNPATH_API_TOKEN" ]; then
+            {
+              echo "### Signed installer"
+              echo "SignPath signed the following files:"
+              echo '```'
+              find signed -name '*.exe' -print
+              echo '```'
+            } >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "### Unsigned build" >> "$GITHUB_STEP_SUMMARY"
+            echo "SignPath is not configured, so this installer is **unsigned**. Windows 11 Smart App Control will block it. See [docs/windows-signing.md](https://github.com/Lin-Yuying/tacos/blob/main/docs/windows-signing.md)." >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - name: Publish GitHub release
+        if: startsWith(github.ref, 'refs/tags/v')
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          file=$(find signed -name '*.exe' -print -quit 2>/dev/null || true)
+          if [ -z "$file" ]; then
+            file=$(find release-standalone -name '*.exe' -print -quit)
+          fi
+          if [ -z "$file" ]; then
+            echo "No installer found" >&2
+            exit 1
+          fi
+          if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
+            gh release upload "$GITHUB_REF_NAME" "$file" --clobber
+          else
+            gh release create "$GITHUB_REF_NAME" "$file" \
+              --title "Tacos $GITHUB_REF_NAME" \
+              --generate-notes
+          fi
