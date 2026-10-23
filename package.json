@@ -21,7 +21,7 @@
     "desktop:dist": "electron-builder --mac",
     "desktop:dist:win": "electron-builder --win --x64",
     "desktop:standalone:mac": "npm run build && npm run server:bundle && electron-builder --mac --config electron/builder.standalone.json",
-    "desktop:standalone:win": "npm run build && npm run server:bundle -- --target=win32-x64 && electron-builder --win --x64 --config electron/builder.standalone.json",
+    "desktop:standalone:win": "npm run build && npm run server:bundle -- --target=win32-x64 && electron-builder --win --x64 --publish never --config electron/builder.standalone.json",
     "mcp": "tsx mcp/server.ts",
     "mcp:test": "tsx scripts/test-mcp.ts"
   },
