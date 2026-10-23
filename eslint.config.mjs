@@ -12,6 +12,11 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    // Build artefacts: packaged servers and installers carry thousands of copied files.
+    "dist/**",
+    "release/**",
+    "release-standalone/**",
+    "vendor/**",
   ]),
 ]);
 

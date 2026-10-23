@@ -1,0 +1,23 @@
+{
+  "extends": "./electron/builder.base.json",
+  "directories": {
+    "output": "release-standalone",
+    "buildResources": "electron/assets"
+  },
+  "extraResources": [
+    {
+      "from": "dist/server",
+      "to": "server",
+      "filter": [
+        "**/*"
+      ]
+    }
+  ],
+  "dmg": {
+    "title": "Tacos (Local)",
+    "artifactName": "${productName}-Local-${version}-${arch}.${ext}"
+  },
+  "nsis": {
+    "artifactName": "${productName}-Local-Setup-${version}.${ext}"
+  }
+}

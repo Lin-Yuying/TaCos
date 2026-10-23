@@ -1,26 +1,188 @@
 @import "tailwindcss";
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
+@theme {
+  --color-bg: #ffffff;
+  --color-surface: #f9f9f9;
+  --color-elevated: #f0f0f0;
+  --color-overlay: #ffffff;
+  --color-border: #e5e5e5;
+  --color-border-strong: #d0d0d0;
+  --color-text: #0d0d0d;
+  --color-muted: #5d5d5d;
+  --color-faint: #8f8f8f;
+  --color-accent: #0d0d0d;
+  --color-accent-hover: #2f2f2f;
+  --color-danger: #d93025;
+  --color-row-active: #f3f3f3;
+
+  --font-sans: var(--font-inter), -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --font-mono: ui-monospace, "SF Mono", SFMono-Regular, Menlo, monospace;
 }
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+html,
+body {
+  height: 100%;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+html {
+  color-scheme: light;
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  background: var(--color-bg);
+  color: var(--color-text);
+  font-family: var(--font-sans);
+  font-size: 14px;
+  letter-spacing: -0.005em;
+  overscroll-behavior: none;
+}
+
+::selection {
+  background: color-mix(in srgb, var(--color-text) 16%, transparent);
+}
+
+/*
+ * The Markdown editor keeps the caret in a transparent <textarea> layered over a mirror
+ * div that paints the styling, so the caret has to be drawn by hand and the selection
+ * has to stay see-through or it would hide the text underneath.
+ */
+.md-ghost-input {
+  caret-color: var(--color-text);
+}
+.md-ghost-input::selection {
+  background: color-mix(in srgb, var(--color-text) 14%, transparent);
+}
+
+/* Whole blocks picked by dragging across the document, or by a second ⌘A. */
+.md-block-selected {
+  background: color-mix(in srgb, var(--color-text) 9%, transparent);
+}
+
+* {
+  scrollbar-width: thin;
+  scrollbar-color: #d6d6d6 transparent;
+}
+*::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+*::-webkit-scrollbar-thumb {
+  background: #d6d6d6;
+  border-radius: 4px;
+}
+*::-webkit-scrollbar-thumb:hover {
+  background: #bcbcbc;
+}
+*::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+input:focus,
+textarea:focus,
+button:focus {
+  outline: none;
+}
+
+/* cmdk */
+
+.cmdk-palette [cmdk-input] {
+  width: 100%;
+  background: transparent;
+  border: none;
+  padding: 14px 16px;
+  font-size: 14px;
+  color: var(--color-text);
+}
+.cmdk-palette [cmdk-input]::placeholder {
+  color: var(--color-faint);
+}
+.cmdk-palette [cmdk-group-heading] {
+  padding: 8px 12px 4px;
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--color-faint);
+}
+.cmdk-palette [cmdk-item] {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 12px;
+  margin: 1px 8px;
+  border-radius: 6px;
+  font-size: 13px;
+  color: var(--color-text);
+  cursor: pointer;
+}
+.cmdk-palette [cmdk-item][data-selected="true"] {
+  background: var(--color-elevated);
+}
+.cmdk-palette [cmdk-item][aria-disabled="true"] {
+  color: var(--color-faint);
+}
+
+/* Electron desktop client: native traffic lights sit in the sidebar header. */
+html[data-desktop] .app-titlebar {
+  padding-left: 78px;
+  -webkit-app-region: drag;
+}
+
+html[data-desktop] .app-titlebar > * {
+  -webkit-app-region: no-drag;
+}
+
+/* Window-level tab bar: traffic lights live in its left segment, which is as
+   wide as the sidebar so the tabs line up with the content column. */
+html[data-desktop] .app-windowbar {
+  -webkit-app-region: drag;
+}
+
+html[data-desktop] .app-windowbar .app-windowbar-left {
+  padding-left: 78px;
+  -webkit-app-region: drag;
+}
+
+html[data-desktop] .app-windowbar .app-windowbar-left > * {
+  -webkit-app-region: no-drag;
+}
+
+html[data-desktop] .app-windowbar > * {
+  -webkit-app-region: no-drag;
+}
+
+/* The tab strip is a drag region again, but every tab inside it stays clickable.
+   These come last because they tie with the rule above on specificity. */
+html[data-desktop] .app-windowbar .app-tabstrip {
+  -webkit-app-region: drag;
+}
+
+html[data-desktop] .app-windowbar .app-tab {
+  -webkit-app-region: no-drag;
+}
+
+html[data-desktop] .app-topbar {
+  -webkit-app-region: drag;
+}
+
+html[data-desktop] .app-topbar > * {
+  -webkit-app-region: no-drag;
+}
+
+.app-auth-titlebar {
+  display: none;
+}
+
+html[data-desktop] .app-auth-titlebar {
+  position: fixed;
+  inset: 0 0 auto 0;
+  display: block;
+  height: 44px;
+  -webkit-app-region: drag;
+}
+
+/* The avatar menu sits inside the drag strip, so it must opt out or clicks on it
+   only start a window drag. */
+html[data-desktop] .app-auth-menu {
+  -webkit-app-region: no-drag;
 }
