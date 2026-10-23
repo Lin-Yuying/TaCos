@@ -4,7 +4,7 @@
 
 A self-hosted, issue tracker built for teams that work alongside AI agents, hmm, the AI agent router will be added in future versions.
 
-Tacos is not another chatbot wrapper. It is a fast, local-first tracker where humans and agents share the same backlog: people work in the web UI, agents plug in over a REST API or MCP, and every change is attributed to whoever made it.
+TaCos is a fast, local-first tracker where humans and agents share the same backlog. 
 
 - **Teams and workspaces** — multiple workspaces per install, invite codes, roles, avatars, per-workspace API keys.
 - **Projects** — markdown overviews, color-coded icons, favorites, issue prefixes (`CORE-7`), and a 30-day recycle bin.
