@@ -1,6 +1,4 @@
-<p align="left"><img src="public/brand/otter-line.png" alt="Tacos" width="80"></p>
-
-# Tacos
+<p align="left"><img src="public/brand/otter-line.png" alt="Tacos" width="80"></p> # TaCos
 
 A self-hosted, issue tracker built for teams that work alongside AI agents.
 
