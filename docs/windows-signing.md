@@ -8,15 +8,18 @@ App Control.
 ## How the workflow behaves
 
 [`.github/workflows/windows-release.yml`](../.github/workflows/windows-release.yml) builds
-the local (embedded server) installer on `windows-latest`. It runs when you:
+the local (embedded server) installers for both platforms. It runs when you:
 
-- start it manually from **Actions → Windows installer → Run workflow**, or
-- push a tag like `v0.1.0`.
+- start it manually from **Actions → Desktop installers → Run workflow**, or
+- push a tag like `v1.0.0`.
 
-Every run uploads an **unsigned** artifact. If SignPath credentials are configured, the same
-run also submits the installer for signing and uploads a **signed** artifact. On tag pushes
-the signed installer (or the unsigned one when signing is skipped) is attached to a GitHub
-Release.
+Every run produces a Windows NSIS installer (`Tacos-Local-Setup-<version>.exe`, x64) and a
+macOS disk image (`Tacos-Local-<version>-arm64.dmg`). If SignPath credentials are configured,
+the Windows run also submits the installer for signing before uploading it. On tag pushes the
+release job attaches both files to one GitHub Release.
+
+macOS builds are unsigned and not notarized; Gatekeeper warns on first launch (right-click →
+Open). That is a separate signing setup and is not covered here.
 
 ## SignPath Foundation (free for open source)
 
@@ -29,10 +32,12 @@ does.
 After the application is approved:
 
 1. In SignPath, create a project for `Lin-Yuying/tacos` and a signing policy for releases.
-2. Create an artifact configuration that covers the NSIS installer
-   (`Tacos-Local-Setup-<version>.exe`) and the application executable inside it
-   (`Tacos.exe`). Both executables need a signature, because Smart App Control checks every
-   executable it launches.
+2. Create **two** artifact configurations, because Smart App Control checks every executable
+   it launches and SignPath does not sign files nested inside an NSIS installer:
+   - **Installer** — covers the NSIS installer `Tacos-Local-Setup-<version>.exe` as a
+     `<pe-file>`.
+   - **App executable** — covers `Tacos.exe` from the unpacked app directory as a
+     `<pe-file>`.
 3. Install the SignPath GitHub App on the repository so SignPath can verify the artifact's
    origin.
 4. In the GitHub repository, open **Settings → Secrets and variables → Actions** and add:
@@ -43,22 +48,42 @@ After the application is approved:
    | Variable | `SIGNPATH_ORGANIZATION_ID` | Organization ID shown in SignPath |
    | Variable | `SIGNPATH_PROJECT_SLUG` | Project slug in SignPath |
    | Variable | `SIGNPATH_SIGNING_POLICY_SLUG` | Signing policy slug, e.g. `release-signing` |
-   | Variable | `SIGNPATH_ARTIFACT_CONFIGURATION_SLUG` | Artifact configuration slug (may be left empty if the project has a default) |
+   | Variable | `SIGNPATH_ARTIFACT_CONFIGURATION_SLUG` | Artifact configuration for the installer |
+   | Variable | `SIGNPATH_APP_ARTIFACT_CONFIGURATION_SLUG` | Artifact configuration for `Tacos.exe` |
 
-5. Re-run the workflow (or push a tag). When `SIGNPATH_API_TOKEN` exists, the workflow signs
-   the uploaded installer and waits for the signing request to finish.
+## Two-stage signing (required for Smart App Control)
+
+A signed installer is not enough: it still contains an unsigned `Tacos.exe`, and Smart App
+Control blocks that exe when the installed app starts. The installer has to be built around an
+already-signed executable:
+
+1. Package without the installer:
+   `npx electron-builder --win --x64 --dir --publish never --config electron/builder.standalone.json`
+   → `release-standalone/win-unpacked/Tacos.exe`.
+2. Submit `win-unpacked/Tacos.exe` to SignPath with
+   `SIGNPATH_APP_ARTIFACT_CONFIGURATION_SLUG`, then replace it with the signed download.
+3. Build the installer from that directory:
+   `npx electron-builder --win --x64 --prepackaged release-standalone/win-unpacked --publish never --config electron/builder.standalone.json`
+   → `release-standalone/Tacos-Local-Setup-<version>.exe`.
+4. Submit the installer to SignPath with `SIGNPATH_ARTIFACT_CONFIGURATION_SLUG`.
+
+The workflow currently submits only the NSIS installer (step 4) — the single-stage path is
+kept so unsigned builds keep working before SignPath approves the project. Steps 1–3 must be
+wired in before the signed build can pass Smart App Control.
 
 ## Verify a signed build
 
 On Windows:
 
 ```powershell
-Get-AuthenticodeSignature .\Tacos-Local-Setup-0.1.0.exe | Format-List Status, SignerCertificate
+Get-AuthenticodeSignature .\Tacos-Local-Setup-1.0.0.exe | Format-List Status, SignerCertificate
+# After installing:
+Get-AuthenticodeSignature "$env:LOCALAPPDATA\Programs\Tacos\Tacos.exe" | Format-List Status, SignerCertificate
 ```
 
-`Status` must be `Valid`. A new certificate can still trigger a SmartScreen reputation
-warning, but Smart App Control accepts signatures from a CA in the Microsoft Trusted Root
-program.
+`Status` must be `Valid` for both. A new certificate can still trigger a SmartScreen
+reputation warning, but Smart App Control accepts signatures from a CA in the Microsoft
+Trusted Root program.
 
 ## Other signing options
 

@@ -1,4 +1,4 @@
-name: Windows installer
+name: Desktop installers
 
 on:
   workflow_dispatch:
@@ -11,11 +11,11 @@ permissions:
   actions: read
 
 concurrency:
-  group: windows-release-${{ github.ref }}
+  group: desktop-release-${{ github.ref }}
   cancel-in-progress: false
 
 jobs:
-  build:
+  windows:
     runs-on: windows-latest
     env:
       # Secrets cannot be used in step `if` conditions; expose it here and test the env var.
@@ -58,12 +58,23 @@ jobs:
           wait-for-completion: true
           output-artifact-directory: signed
 
-      - name: Upload signed installer
-        if: env.SIGNPATH_API_TOKEN != ''
+      - name: Collect the final installer
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p out
+          file=$(find signed -name '*.exe' -print -quit 2>/dev/null || true)
+          if [ -z "$file" ]; then
+            file=$(find release-standalone -maxdepth 1 -name 'Tacos-Local-Setup-*.exe' -print -quit)
+          fi
+          cp "$file" out/
+          ls -l out
+
+      - name: Upload Windows installer
         uses: actions/upload-artifact@v7
         with:
-          name: tacos-windows-x64-signed
-          path: signed/**/*.exe
+          name: tacos-windows-x64
+          path: out/*.exe
           if-no-files-found: error
           retention-days: 7
 
@@ -79,29 +90,96 @@ jobs:
               echo '```'
             } >> "$GITHUB_STEP_SUMMARY"
           else
-            echo "### Unsigned build" >> "$GITHUB_STEP_SUMMARY"
-            echo "SignPath is not configured, so this installer is **unsigned**. Windows 11 Smart App Control will block it. See [docs/windows-signing.md](https://github.com/Lin-Yuying/tacos/blob/main/docs/windows-signing.md)." >> "$GITHUB_STEP_SUMMARY"
+            {
+              echo "### Unsigned build"
+              echo "SignPath is not configured, so this installer is **unsigned**. Windows 11 Smart App Control blocks unsigned installers."
+              echo "See [docs/windows-signing.md](https://github.com/Lin-Yuying/tacos/blob/main/docs/windows-signing.md)."
+            } >> "$GITHUB_STEP_SUMMARY"
           fi
 
+  macos:
+    runs-on: macos-14
+    env:
+      # No Apple Developer certificate is configured; skip identity discovery instead of failing.
+      CSC_IDENTITY_AUTO_DISCOVERY: "false"
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@v7
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build the local (embedded server) DMG
+        run: npm run desktop:standalone:mac
+
+      - name: Upload macOS disk image
+        uses: actions/upload-artifact@v7
+        with:
+          name: tacos-macos-arm64
+          path: release-standalone/Tacos-Local-*.dmg
+          if-no-files-found: error
+          retention-days: 7
+
+  release:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: [windows, macos]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@v7
+
+      - name: Download Windows installer
+        uses: actions/download-artifact@v7
+        with:
+          name: tacos-windows-x64
+          path: dist/windows
+
+      - name: Download macOS disk image
+        uses: actions/download-artifact@v7
+        with:
+          name: tacos-macos-arm64
+          path: dist/macos
+
       - name: Publish GitHub release
-        if: startsWith(github.ref, 'refs/tags/v')
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          file=$(find signed -name '*.exe' -print -quit 2>/dev/null || true)
-          if [ -z "$file" ]; then
-            file=$(find release-standalone -name '*.exe' -print -quit)
+          tag="$GITHUB_REF_NAME"
+          mapfile -t assets < <(ls dist/windows/*.exe dist/macos/*.dmg)
+          printf 'Releasing %s with:\n' "$tag"
+          printf '  %s\n' "${assets[@]}"
+
+          if gh release view "$tag" >/dev/null 2>&1; then
+            gh release upload "$tag" "${assets[@]}" --clobber
+            exit 0
           fi
-          if [ -z "$file" ]; then
-            echo "No installer found" >&2
-            exit 1
-          fi
-          if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
-            gh release upload "$GITHUB_REF_NAME" "$file" --clobber
-          else
-            gh release create "$GITHUB_REF_NAME" "$file" \
-              --title "Tacos $GITHUB_REF_NAME" \
-              --generate-notes
-          fi
+
+          gh release create "$tag" "${assets[@]}" \
+            --title "Tacos $tag" \
+            --generate-notes
+
+          {
+            cat <<'EOF'
+          > **These builds are unsigned.** Windows 11 Smart App Control blocks the unsigned installer, and macOS warns on first launch. Code signing is tracked in [docs/windows-signing.md](https://github.com/Lin-Yuying/tacos/blob/main/docs/windows-signing.md).
+
+          ## Downloads
+
+          | Platform | File |
+          | --- | --- |
+          | Windows x64 | `Tacos-Local-Setup-*.exe` |
+          | macOS (Apple silicon) | `Tacos-Local-*-arm64.dmg` |
+
+          Both installers run Tacos with its own local server and SQLite database, so no account or cloud service is involved. On macOS, drag Tacos into Applications, then right-click → Open the first time.
+          EOF
+            echo
+            gh release view "$tag" --json body -q .body
+          } > release-notes.md
+          gh release edit "$tag" --notes-file release-notes.md

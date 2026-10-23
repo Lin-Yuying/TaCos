@@ -1,6 +1,6 @@
 {
   "name": "tacos",
-  "version": "0.1.0",
+  "version": "1.0.0",
   "private": true,
   "description": "Tacos — self-hosted issue tracker for teams and their agents",
   "license": "MIT",
@@ -20,7 +20,7 @@
     "desktop": "electron .",
     "desktop:dist": "electron-builder --mac",
     "desktop:dist:win": "electron-builder --win --x64",
-    "desktop:standalone:mac": "npm run build && npm run server:bundle && electron-builder --mac --config electron/builder.standalone.json",
+    "desktop:standalone:mac": "npm run build && npm run server:bundle && electron-builder --mac --publish never --config electron/builder.standalone.json",
     "desktop:standalone:win": "npm run build && npm run server:bundle -- --target=win32-x64 && electron-builder --win --x64 --publish never --config electron/builder.standalone.json",
     "mcp": "tsx mcp/server.ts",
     "mcp:test": "tsx scripts/test-mcp.ts"
