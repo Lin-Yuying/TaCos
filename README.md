@@ -30,8 +30,6 @@ On a fresh database Tacos seeds a demo workspace so there is something to click 
 
 | Account | Password | Role |
 | --- | --- | --- |
-| `alex` | `password123` | workspace admin (demo) |
-| `sam` | `password123` | workspace member (demo) |
 | `admin` | `admin123` | site super-admin (`/admin`) |
 
 Set `TACOS_ADMIN_PASSWORD` before the first start to give the built-in admin a different password, and set `TACOS_SEED_DEMO=0` if you do not want demo users or issues.
