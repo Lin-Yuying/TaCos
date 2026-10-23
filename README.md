@@ -2,7 +2,7 @@
 
 # Tacos
 
-A self-hosted, Linear-style issue tracker built for teams that work alongside AI agents.
+A self-hosted, issue tracker built for teams that work alongside AI agents.
 
 Tacos is not another chatbot wrapper. It is a fast, local-first tracker where humans and agents share the same backlog: people work in the web UI, agents plug in over a REST API or MCP, and every change is attributed to whoever made it.
 
