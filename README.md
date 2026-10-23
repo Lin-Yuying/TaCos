@@ -156,4 +156,4 @@ Every mutation records an event with an actor (`you`, `api:<key-name>`, or `mcp`
 
 ## License
 
-[MIT](LICENSE) © 2026 Yuying Lin. The Tacos name and otter artwork are project branding; the license covers the source code.
+[MIT](LICENSE) © 2026 Yuying Lin. 
