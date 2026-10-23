@@ -8,6 +8,7 @@ import {
   mkdirSync,
   readFileSync,
   readdirSync,
+  realpathSync,
   rmSync,
   statSync,
 } from "node:fs";
@@ -65,8 +66,25 @@ function installPrebuild(bindingDir, target) {
 rmSync(path.join(root, "dist", "server"), { recursive: true, force: true });
 mkdirSync(outDir, { recursive: true });
 
+// Next links serverExternalPackages into .next/node_modules with an absolute path into the
+// build machine. Replace every symlink with a real copy so the bundle is self-contained.
+function dereference(dir) {
+  for (const entry of readdirSync(dir, { withFileTypes: true })) {
+    const full = path.join(dir, entry.name);
+    if (entry.isSymbolicLink()) {
+      const target = realpathSync(full);
+      rmSync(full);
+      cpSync(target, full, { recursive: true });
+      dereference(full);
+    } else if (entry.isDirectory()) {
+      dereference(full);
+    }
+  }
+}
+
 // Standalone traces the server files but not the client assets or static public files.
 cpSync(standaloneDir, outDir, { recursive: true });
+dereference(outDir);
 cpSync(path.join(nextDir, "static"), path.join(outDir, ".next", "static"), { recursive: true });
 if (existsSync(path.join(root, "public"))) {
   cpSync(path.join(root, "public"), path.join(outDir, "public"), { recursive: true });
@@ -89,18 +107,31 @@ if (!/^[a-z0-9]+-(x64|arm64)$/.test(target)) {
   console.error(`[bundle-server] bad --target "${target}" (expected platform-arch).`);
   process.exit(1);
 }
-const binding = path.join(outDir, "node_modules", "better-sqlite3");
-const prebuilds = path.join(binding, "prebuilds");
-const wanted = path.join(prebuilds, `${target}.node`);
-if (!existsSync(wanted)) {
-  installPrebuild(binding, target);
-}
-for (const file of readdirSync(prebuilds)) {
-  if (file !== `${target}.node`) rmSync(path.join(prebuilds, file));
-}
-if (!existsSync(wanted)) {
-  console.error(`[bundle-server] no ${target} binding for better-sqlite3 in the payload.`);
-  process.exit(1);
+// The server requires the hashed alias under .next/node_modules, so both copies need the
+// binding for the target platform.
+const tracedModules = path.join(outDir, ".next", "node_modules");
+const bindings = [
+  path.join(outDir, "node_modules", "better-sqlite3"),
+  ...(existsSync(tracedModules)
+    ? readdirSync(tracedModules, { withFileTypes: true })
+        .filter((entry) => entry.name.startsWith("better-sqlite3"))
+        .map((entry) => path.join(tracedModules, entry.name))
+    : []),
+];
+for (const binding of bindings) {
+  if (!existsSync(path.join(binding, "package.json"))) continue;
+  const prebuilds = path.join(binding, "prebuilds");
+  mkdirSync(prebuilds, { recursive: true });
+  if (!existsSync(path.join(prebuilds, `${target}.node`))) {
+    installPrebuild(binding, target);
+  }
+  for (const file of readdirSync(prebuilds)) {
+    if (file !== `${target}.node`) rmSync(path.join(prebuilds, file));
+  }
+  if (!existsSync(path.join(prebuilds, `${target}.node`))) {
+    console.error(`[bundle-server] no ${target} binding for ${binding}.`);
+    process.exit(1);
+  }
 }
 
 const bytes = readdirSync(outDir, { recursive: true })

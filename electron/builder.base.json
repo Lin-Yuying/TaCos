@@ -3,6 +3,7 @@
   "productName": "Tacos",
   "files": ["electron/**/*", "package.json", "!node_modules/**"],
   "npmRebuild": false,
+  "afterPack": "./electron/after-pack.js",
   "directories": {
     "output": "release",
     "buildResources": "electron/assets"
