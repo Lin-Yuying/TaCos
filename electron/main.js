@@ -1,8 +1,16 @@
-const { app, BrowserWindow, Menu, ipcMain, nativeTheme, net, shell } = require("electron");
+const {
+  app,
+  BrowserWindow,
+  Menu,
+  ipcMain,
+  nativeTheme,
+  net,
+  shell,
+  utilityProcess,
+} = require("electron");
 const path = require("node:path");
 const fs = require("node:fs");
 const nodeNet = require("node:net");
-const { spawn } = require("node:child_process");
 
 const DEFAULT_SERVER = "http://localhost:3000";
 const isMac = process.platform === "darwin";
@@ -126,10 +134,8 @@ function freePort() {
 async function waitForLocalServer(base, timeoutMs, child) {
   const deadline = Date.now() + timeoutMs;
   let exitedEarly = null;
-  const onExit = (code, signal) => {
-    exitedEarly = new Error(
-      `The local Tacos server exited during startup (code ${code}${signal ? `, ${signal}` : ""}).`
-    );
+  const onExit = (code) => {
+    exitedEarly = new Error(`The local Tacos server exited during startup (code ${code}).`);
   };
   child.once("exit", onExit);
   try {
@@ -158,12 +164,13 @@ async function startLocalServer(dir) {
   fs.mkdirSync(path.dirname(logFile), { recursive: true });
   logLine(`starting local server ${dir} on 127.0.0.1:${port} (data ${dataDir})`);
 
-  // The bundled app binary doubles as the Node runtime, so the package needs no Node install.
-  const child = spawn(process.execPath, [path.join(dir, "server.js")], {
+  // Spawning process.execPath with ELECTRON_RUN_AS_NODE makes macOS register the server as
+  // a second foreground app, so the Dock bounces a generic "exec" tile for as long as it
+  // runs. utilityProcess runs the same Node code as a child with no UI of its own.
+  const child = utilityProcess.fork(path.join(dir, "server.js"), [], {
     cwd: dir,
     env: {
       ...process.env,
-      ELECTRON_RUN_AS_NODE: "1",
       NODE_ENV: "production",
       PORT: String(port),
       // Loopback only: her issues stay on her machine unless she chooses otherwise.
@@ -172,6 +179,7 @@ async function startLocalServer(dir) {
       TACOS_SEED_DEMO: "0",
     },
     stdio: ["ignore", "pipe", "pipe"],
+    serviceName: "Tacos Server",
   });
 
   const log = fs.createWriteStream(logFile, { flags: "a" });
@@ -183,9 +191,8 @@ async function startLocalServer(dir) {
   };
   child.stdout.on("data", relay);
   child.stderr.on("data", relay);
-  child.on("error", (err) => logLine(`local server spawn failed: ${err.message}`));
-  child.on("exit", (code, signal) => {
-    logLine(`local server exited code=${code} signal=${signal}`);
+  child.on("exit", (code) => {
+    logLine(`local server exited code=${code}`);
     if (localServer === child) localServer = null;
     if (mainWindow && !mainWindow.isDestroyed() && serverUrl) {
       showErrorPage(mainWindow, serverUrl, `The local Tacos server stopped (code ${code}).`);
@@ -202,7 +209,7 @@ function stopLocalServer() {
   const child = localServer;
   localServer = null;
   logLine("stopping local server");
-  child.kill("SIGTERM");
+  child.kill();
 }
 
 function tagDesktopDocument(win) {
