@@ -1,4 +1,4 @@
-<p align="right"><img src="public/brand/otter-line.png" alt="Tacos" width="80"></p>
+<p align="left"><img src="public/brand/otter-line.png" alt="Tacos" width="80"></p>
 
 # Tacos
 
