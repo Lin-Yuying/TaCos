@@ -64,31 +64,31 @@ Create a key in **Settings → Agent access**, then:
 ```bash
 # list active tasks
 curl -H "Authorization: Bearer tac_YOUR_KEY" \
-  "http://localhost:3000/api/v1/tasks?status=active&q=login"
+  "http://localhost:3000/api/v1/issues?status=active&q=login"
 
-# create an task (labels auto-create; status and priority accept friendly aliases)
-curl -X POST http://localhost:3000/api/v1/tasks \
+# create a task (labels auto-create; status and priority accept friendly aliases)
+curl -X POST http://localhost:3000/api/v1/issues \
   -H "Authorization: Bearer tac_YOUR_KEY" \
   -H "Content-Type: application/json" \
   -d '{"title":"Fix login redirect","priority":"high","labels":["Bug"],"status":"todo"}'
 
 # update by identifier
-curl -X PATCH http://localhost:3000/api/v1/tasks/CORE-7 \
+curl -X PATCH http://localhost:3000/api/v1/issues/CORE-7 \
   -H "Authorization: Bearer tac_YOUR_KEY" \
   -H "Content-Type: application/json" \
   -d '{"status":"done"}'
 
 # comment, then delete (soft delete into the workspace trash)
-curl -X POST http://localhost:3000/api/v1/tasks/CORE-7/comments \
+curl -X POST http://localhost:3000/api/v1/issues/CORE-7/comments \
   -H "Authorization: Bearer tac_YOUR_KEY" \
   -H "Content-Type: application/json" -d '{"body":"Shipped in v1.2"}'
 ```
 
 | Endpoint | Methods |
 | --- | --- |
-| `/api/v1/tasks` | `GET` (filters: `status`, `priority`, `q`, `label`, `limit`), `POST` |
-| `/api/v1/tasks/{id}` | `GET`, `PATCH`, `DELETE` — `{id}` accepts a UUID or identifier (`CORE-7`) |
-| `/api/v1/tasks/{id}/comments` | `GET`, `POST` |
+| `/api/v1/issues` | `GET` (filters: `status`, `priority`, `q`, `label`, `limit`), `POST` |
+| `/api/v1/issues/{id}` | `GET`, `PATCH`, `DELETE` — `{id}` accepts a UUID or identifier (`CORE-7`) |
+| `/api/v1/issues/{id}/comments` | `GET`, `POST` |
 | `/api/v1/labels` | `GET`, `POST` |
 | `/api/v1/me` | `GET` (key introspection) |
 
