@@ -2,7 +2,7 @@
 
 # TaCos
 
-A self-hosted, task tracker built for teams that work alongside AI agents in version 2.0.0
+A task tracker built for teams that work alongside AI agents in version 2.0.0
 
 TaCos is a fast, local-first tracker where humans and agents share the same backlog. 
 
