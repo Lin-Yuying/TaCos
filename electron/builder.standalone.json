@@ -11,10 +11,6 @@
       "filter": [
         "**/*"
       ]
-    },
-    {
-      "from": "docs/markdown-guide.html",
-      "to": "docs/markdown-guide.html"
     }
   ],
   "dmg": {

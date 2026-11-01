@@ -41,7 +41,7 @@ jobs:
         uses: actions/upload-artifact@v7
         with:
           name: tacos-windows-x64-unsigned
-          path: release-standalone/Tacos-Local-Setup-*.exe
+          path: release-standalone/TaCos-Local-Setup-*.exe
           if-no-files-found: error
           retention-days: 7
 
@@ -65,7 +65,7 @@ jobs:
           mkdir -p out
           file=$(find signed -name '*.exe' -print -quit 2>/dev/null || true)
           if [ -z "$file" ]; then
-            file=$(find release-standalone -maxdepth 1 -name 'Tacos-Local-Setup-*.exe' -print -quit)
+            file=$(find release-standalone -maxdepth 1 -name 'TaCos-Local-Setup-*.exe' -print -quit)
           fi
           cp "$file" out/
           ls -l out
@@ -122,7 +122,7 @@ jobs:
         uses: actions/upload-artifact@v7
         with:
           name: tacos-macos-arm64
-          path: release-standalone/Tacos-Local-*.dmg
+          path: release-standalone/TaCos-Local-*.dmg
           if-no-files-found: error
           retention-days: 7
 
@@ -163,7 +163,7 @@ jobs:
           fi
 
           gh release create "$tag" "${assets[@]}" \
-            --title "Tacos $tag" \
+            --title "TaCos $tag" \
             --generate-notes
 
           {
@@ -174,14 +174,14 @@ jobs:
 
           | Platform | File |
           | --- | --- |
-          | Windows x64 | `Tacos-Local-Setup-*.exe` |
-          | macOS (Apple silicon) | `Tacos-Local-*-arm64.dmg` |
+          | Windows x64 | `TaCos-Local-Setup-*.exe` |
+          | macOS (Apple silicon) | `TaCos-Local-*-arm64.dmg` |
 
-          Both installers run Tacos with its own local server and SQLite database, so no account or cloud service is involved.
+          Both installers run TaCos with its own local server and SQLite database, so no account or cloud service is involved.
 
-          **macOS:** drag Tacos into Applications and launch it once. If macOS says it cannot verify the app, allow it under **System Settings → Privacy & Security → Open Anyway**.
+          **macOS:** drag TaCos into Applications and launch it once. If macOS says it cannot verify the app, allow it under **System Settings → Privacy & Security → Open Anyway**.
 
-          **Windows:** the installer is unsigned, so Smart App Control blocks it. Use the browser against a running Tacos server until a signed build is available.
+          **Windows:** the installer is unsigned, so Smart App Control blocks it. Use the browser against a running TaCos server until a signed build is available.
           EOF
             echo
             gh release view "$tag" --json body -q .body

@@ -11,10 +11,10 @@ App Control.
 the local (embedded server) installers for both platforms. It runs when you:
 
 - start it manually from **Actions → Desktop installers → Run workflow**, or
-- push a tag like `v1.0.0`.
+- push a tag like `v2.0.0`.
 
-Every run produces a Windows NSIS installer (`Tacos-Local-Setup-<version>.exe`, x64) and a
-macOS disk image (`Tacos-Local-<version>-arm64.dmg`). If SignPath credentials are configured,
+Every run produces a Windows NSIS installer (`TaCos-Local-Setup-<version>.exe`, x64) and a
+macOS disk image (`TaCos-Local-<version>-arm64.dmg`). If SignPath credentials are configured,
 the Windows run also submits the installer for signing before uploading it. On tag pushes the
 release job attaches both files to one GitHub Release.
 
@@ -37,9 +37,9 @@ After the application is approved:
 1. In SignPath, create a project for `Lin-Yuying/tacos` and a signing policy for releases.
 2. Create **two** artifact configurations, because Smart App Control checks every executable
    it launches and SignPath does not sign files nested inside an NSIS installer:
-   - **Installer** — covers the NSIS installer `Tacos-Local-Setup-<version>.exe` as a
+   - **Installer** — covers the NSIS installer `TaCos-Local-Setup-<version>.exe` as a
      `<pe-file>`.
-   - **App executable** — covers `Tacos.exe` from the unpacked app directory as a
+   - **App executable** — covers `TaCos.exe` from the unpacked app directory as a
      `<pe-file>`.
 3. Install the SignPath GitHub App on the repository so SignPath can verify the artifact's
    origin.
@@ -52,22 +52,22 @@ After the application is approved:
    | Variable | `SIGNPATH_PROJECT_SLUG` | Project slug in SignPath |
    | Variable | `SIGNPATH_SIGNING_POLICY_SLUG` | Signing policy slug, e.g. `release-signing` |
    | Variable | `SIGNPATH_ARTIFACT_CONFIGURATION_SLUG` | Artifact configuration for the installer |
-   | Variable | `SIGNPATH_APP_ARTIFACT_CONFIGURATION_SLUG` | Artifact configuration for `Tacos.exe` |
+   | Variable | `SIGNPATH_APP_ARTIFACT_CONFIGURATION_SLUG` | Artifact configuration for `TaCos.exe` |
 
 ## Two-stage signing (required for Smart App Control)
 
-A signed installer is not enough: it still contains an unsigned `Tacos.exe`, and Smart App
+A signed installer is not enough: it still contains an unsigned `TaCos.exe`, and Smart App
 Control blocks that exe when the installed app starts. The installer has to be built around an
 already-signed executable:
 
 1. Package without the installer:
    `npx electron-builder --win --x64 --dir --publish never --config electron/builder.standalone.json`
-   → `release-standalone/win-unpacked/Tacos.exe`.
-2. Submit `win-unpacked/Tacos.exe` to SignPath with
+   → `release-standalone/win-unpacked/TaCos.exe`.
+2. Submit `win-unpacked/TaCos.exe` to SignPath with
    `SIGNPATH_APP_ARTIFACT_CONFIGURATION_SLUG`, then replace it with the signed download.
 3. Build the installer from that directory:
    `npx electron-builder --win --x64 --prepackaged release-standalone/win-unpacked --publish never --config electron/builder.standalone.json`
-   → `release-standalone/Tacos-Local-Setup-<version>.exe`.
+   → `release-standalone/TaCos-Local-Setup-<version>.exe`.
 4. Submit the installer to SignPath with `SIGNPATH_ARTIFACT_CONFIGURATION_SLUG`.
 
 The workflow currently submits only the NSIS installer (step 4) — the single-stage path is
@@ -79,9 +79,9 @@ wired in before the signed build can pass Smart App Control.
 On Windows:
 
 ```powershell
-Get-AuthenticodeSignature .\Tacos-Local-Setup-1.0.0.exe | Format-List Status, SignerCertificate
+Get-AuthenticodeSignature .\TaCos-Local-Setup-2.0.0.exe | Format-List Status, SignerCertificate
 # After installing:
-Get-AuthenticodeSignature "$env:LOCALAPPDATA\Programs\Tacos\Tacos.exe" | Format-List Status, SignerCertificate
+Get-AuthenticodeSignature "$env:LOCALAPPDATA\Programs\TaCos\TaCos.exe" | Format-List Status, SignerCertificate
 ```
 
 `Status` must be `Valid` for both. A new certificate can still trigger a SmartScreen
