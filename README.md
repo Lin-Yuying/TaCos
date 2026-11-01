@@ -2,20 +2,20 @@
 
 # TaCos
 
-A self-hosted, issue tracker built for teams that work alongside AI agents, hmm, the AI agent router will be added in future versions.
+A self-hosted, task tracker built for teams that work alongside AI agents in version 2.0.0
 
 TaCos is a fast, local-first tracker where humans and agents share the same backlog. 
 
 - **Teams and workspaces** — multiple workspaces per install, invite codes, roles, avatars, per-workspace API keys.
-- **Projects** — markdown overviews, color-coded icons, favorites, issue prefixes (`CORE-7`), and a 30-day recycle bin.
-- **Issues** — list and board views, labels, priorities, multiple assignees, comments, and a combined activity timeline.
-- **Agent-first APIs** — Bearer-key REST at `/api/v1/*` plus a stdio MCP server for Claude Code / Claude Desktop.
-- **Desktop builds** — a thin Electron shell for an existing server, or a local build that bundles its own server and SQLite database.
+- **Projects** — markdown overviews, color-coded icons, favorites, task prefixes (`CORE-7`), and a 30-day recycle bin.
+- **Tasks** — list and board views, labels, priorities, multiple assignees, comments, and a combined activity timeline.
+- **Agent-first APIs** — Bearer-key REST at `/api/v1/*` plus a stdio MCP server for Claude Code / Claude Desktop / Codex.
+- **Desktop builds** — a thin shell for an existing server, or a local build that bundles its own server and SQLite database.
 - **No migration CLI** — the SQLite schema is created and upgraded idempotently on first use.
 
 Stack: Next.js 16 (App Router, Turbopack) · React 19 · Tailwind CSS v4 · Drizzle ORM · better-sqlite3 (WAL) · cmdk · Model Context Protocol SDK.
 
-## Quick start
+## Quick start 
 
 Requires Node.js 20.9+.
 
@@ -32,7 +32,7 @@ On a fresh database Tacos seeds a demo workspace so there is something to click 
 | --- | --- | --- |
 | `admin` | `admin123` | site super-admin (`/admin`) |
 
-Set `TACOS_ADMIN_PASSWORD` before the first start to give the built-in admin a different password, and set `TACOS_SEED_DEMO=0` if you do not want demo users or issues.
+Set `TACOS_ADMIN_PASSWORD` before the first start to give the built-in admin a different password, and set `TACOS_SEED_DEMO=0` if you do not want demo users or tasks.
 
 > The demo accounts and the default admin password are development conveniences. Do not expose an instance with these credentials to a network you do not control.
 
@@ -41,7 +41,7 @@ Set `TACOS_ADMIN_PASSWORD` before the first start to give the built-in admin a d
 | Variable | Default | Purpose |
 | --- | --- | --- |
 | `TACOS_DATA_DIR` | `data/` | Directory that holds `tacos.db` (and its WAL files). |
-| `TACOS_SEED_DEMO` | `1` | Set to `0` to skip the demo workspace, users, and issues. |
+| `TACOS_SEED_DEMO` | `1` | Set to `0` to skip the demo workspace, users, and tasks. |
 | `TACOS_ADMIN_PASSWORD` | `admin123` | Password for the built-in `admin` account, applied only when it is first created. |
 | `TACOS_WORKSPACE_KEY` | `HQ` | Workspace key used by the MCP server. |
 | `PORT` / `HOSTNAME` | `3000` / all interfaces | Standard Next.js server bindings. |
@@ -62,43 +62,43 @@ Put the app behind a reverse proxy with TLS. If it is reachable from the public 
 Create a key in **Settings → Agent access**, then:
 
 ```bash
-# list active issues
+# list active tasks
 curl -H "Authorization: Bearer tac_YOUR_KEY" \
-  "http://localhost:3000/api/v1/issues?status=active&q=login"
+  "http://localhost:3000/api/v1/tasks?status=active&q=login"
 
-# create an issue (labels auto-create; status and priority accept friendly aliases)
-curl -X POST http://localhost:3000/api/v1/issues \
+# create an task (labels auto-create; status and priority accept friendly aliases)
+curl -X POST http://localhost:3000/api/v1/tasks \
   -H "Authorization: Bearer tac_YOUR_KEY" \
   -H "Content-Type: application/json" \
   -d '{"title":"Fix login redirect","priority":"high","labels":["Bug"],"status":"todo"}'
 
 # update by identifier
-curl -X PATCH http://localhost:3000/api/v1/issues/CORE-7 \
+curl -X PATCH http://localhost:3000/api/v1/tasks/CORE-7 \
   -H "Authorization: Bearer tac_YOUR_KEY" \
   -H "Content-Type: application/json" \
   -d '{"status":"done"}'
 
 # comment, then delete (soft delete into the workspace trash)
-curl -X POST http://localhost:3000/api/v1/issues/CORE-7/comments \
+curl -X POST http://localhost:3000/api/v1/tasks/CORE-7/comments \
   -H "Authorization: Bearer tac_YOUR_KEY" \
   -H "Content-Type: application/json" -d '{"body":"Shipped in v1.2"}'
 ```
 
 | Endpoint | Methods |
 | --- | --- |
-| `/api/v1/issues` | `GET` (filters: `status`, `priority`, `q`, `label`, `limit`), `POST` |
-| `/api/v1/issues/{id}` | `GET`, `PATCH`, `DELETE` — `{id}` accepts a UUID or identifier (`CORE-7`) |
-| `/api/v1/issues/{id}/comments` | `GET`, `POST` |
+| `/api/v1/tasks` | `GET` (filters: `status`, `priority`, `q`, `label`, `limit`), `POST` |
+| `/api/v1/tasks/{id}` | `GET`, `PATCH`, `DELETE` — `{id}` accepts a UUID or identifier (`CORE-7`) |
+| `/api/v1/tasks/{id}/comments` | `GET`, `POST` |
 | `/api/v1/labels` | `GET`, `POST` |
 | `/api/v1/me` | `GET` (key introspection) |
 
 Statuses: `todo`, `in_progress`, `done`, `canceled` (aliases such as `in progress` and `completed` work too). Priorities: `none|low|medium|high|urgent` or `0–4`.
 
-## MCP server (Claude Code / Claude Desktop)
+## MCP server (Claude Code / Claude Desktop /Codex)
 
 The MCP server reads the same SQLite database directly, so it works even when the web server is not running.
 
-Tools: `list_projects`, `list_members`, `list_issues`, `get_issue`, `create_issue`, `update_issue`, `delete_issue`, `add_comment`, `list_labels`, `create_label`.
+Tools: `list_projects`, `list_members`, `list_tasks`, `get_task`, `create_task`, `update_task`, `delete_task`, `add_comment`, `list_labels`, `create_label`.
 
 Claude Code:
 
@@ -142,7 +142,7 @@ Desktop binaries are not code-signed. On Windows 11, Smart App Control blocks un
 ## How it fits together
 
 ```
-src/lib/issues.ts      business logic and validation (shared by web UI, REST, MCP)
+src/lib/tasks.ts      business logic and validation (shared by web UI, REST, MCP)
 src/lib/constants.ts   client-safe constants and types (no DB imports)
 src/db/                Drizzle schema, SQLite client (WAL, auto-migrate, demo seed)
 src/app/api/v1/        agent REST surface (Bearer keys, SHA-256 hashed at rest)
@@ -152,7 +152,7 @@ mcp/server.ts          stdio MCP server → same library, actor "mcp"
 electron/              thin desktop shell and bundled-server launcher
 ```
 
-Every mutation records an event with an actor (`you`, `api:<key-name>`, or `mcp`). The issue panel merges comments and events into one timeline, so the history stays readable whether a human or an agent made the change.
+Every mutation records an event with an actor (`you`, `api:<key-name>`, or `mcp`). The task panel merges comments and events into one timeline, so the history stays readable whether a human or an agent made the change.
 
 ## License
 
