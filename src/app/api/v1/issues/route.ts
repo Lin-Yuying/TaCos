@@ -8,6 +8,7 @@ import {
   resolveAssigneeId,
   resolveAssigneeIds,
   type Priority,
+  type ReminderPreset,
   type Status,
 } from "@/lib/issues";
 
@@ -91,6 +92,9 @@ export async function POST(req: Request) {
         priority: parsePriority(body.priority) ?? (0 as Priority),
         assigneeIds: await resolveAssigneeIds(key.workspaceId, assigneeValues),
         labelNames: parseLabelNames(body.labels),
+        dueDate: typeof body.dueDate === "string" ? body.dueDate : null,
+        reminder:
+          typeof body.reminder === "string" ? (body.reminder as ReminderPreset) : null,
         project: projectParam,
       },
       { kind: "agent", label: `api:${key.name}`, via: "api" }

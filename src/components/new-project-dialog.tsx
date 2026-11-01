@@ -13,7 +13,7 @@ export function NewProjectDialog({
   workspaceId: string;
   workspaceName: string;
 }) {
-  const { projectComposerOpen, setProjectComposerOpen } = useUI();
+  const { projectComposerOpen, setProjectComposerOpen, projectComposerOnCreated } = useUI();
   const router = useRouter();
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
@@ -56,6 +56,13 @@ export function NewProjectDialog({
       return;
     }
     setProjectComposerOpen(false);
+    // Opened from the Agent composer: hand the project back so the draft stays put
+    // instead of jumping to the new project's overview.
+    if (projectComposerOnCreated) {
+      projectComposerOnCreated(result.data);
+      router.refresh();
+      return;
+    }
     router.push(`/${workspaceId}/projects/${result.data.id}`);
   }
 

@@ -2,25 +2,48 @@
 
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { Suspense, useCallback, useEffect, useRef, useState, type ReactNode } from "react";
+import {
+  Suspense,
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+  type ReactNode,
+} from "react";
+import { createPortal } from "react-dom";
 import {
   Activity,
+  BookOpen,
+  Bot,
+  Boxes,
   ChevronRight,
+  CircleHelp,
+  FileText,
   Inbox,
+  LayoutList,
   List,
   LogOut,
+  Minus,
   PanelLeftClose,
   PanelLeftOpen,
   Plus,
   Settings,
+  SlidersHorizontal,
+  Star,
   Tag,
   Trash2,
   User,
   UserRoundX,
+  Users,
   X,
 } from "lucide-react";
 import { Menu, MenuItem } from "@/components/menu";
+import { InviteDialog } from "@/components/invite-dialog";
+import { DesktopOpenFiles } from "@/components/desktop-open-files";
 import { leaveWorkspaceAction } from "@/app/auth-actions";
+import { DOCS_DELETED_EVENT } from "@/components/tab-events";
+import type { PageSummary } from "@/lib/pages";
 import { ProjectIcon, StatusIcon, WorkspaceMark } from "@/components/icons";
 import { AssigneeAvatar } from "@/components/issue-table";
 import { IssuePanelHost } from "@/components/issue-panel";
@@ -29,19 +52,36 @@ import { useUI, NOTIFICATIONS_READ } from "@/components/ui-context";
 import { DEFAULT_PROJECT_COLOR, STATUS_META, STATUS_ORDER } from "@/lib/constants";
 import type { Member, Project } from "@/lib/issues";
 
-type WorkspaceInfo = { id: string; name: string; key: string; icon: string | null; role: string };
+type WorkspaceInfo = {
+  id: string;
+  name: string;
+  key: string;
+  icon: string | null;
+  role: string;
+  createdBy: string | null;
+};
+
+// The roster keeps a fixed order — you, the workspace owner, then everyone else by join
+// order — so opening different people never shuffles the rows under the pointer.
+function orderTeam(members: Member[], viewerId: string, ownerId: string | null): Member[] {
+  const rank = (member: Member) =>
+    member.id === viewerId ? 0 : member.id === ownerId ? 1 : 2;
+  return [...members].sort((a, b) => rank(a) - rank(b));
+}
 
 function NavItem({
   href,
   active,
   icon,
   badge,
+  tag,
   children,
 }: {
   href: string;
   active: boolean;
   icon: ReactNode;
   badge?: number | null;
+  tag?: ReactNode;
   children: ReactNode;
 }) {
   return (
@@ -55,6 +95,11 @@ function NavItem({
     >
       <span className="flex w-4 shrink-0 items-center justify-center text-faint">{icon}</span>
       <span className="truncate">{children}</span>
+      {tag ? (
+        <span className="ml-auto shrink-0 rounded-full border border-border px-1.5 py-px text-[10px] text-faint">
+          {tag}
+        </span>
+      ) : null}
       {badge ? (
         <span className="ml-auto flex h-[15px] min-w-[15px] shrink-0 items-center justify-center rounded-full bg-accent px-1 text-[10px] font-semibold text-white">
           {badge > 9 ? "9+" : badge}
@@ -66,11 +111,15 @@ function NavItem({
 
 function SectionHeader({
   label,
+  icon,
   open,
   onToggle,
   action,
 }: {
   label: string;
+  // Every group carries its own glyph so the heading still reads once the sidebar is
+  // folded to a rail — the same icon comes back there as the group's only label.
+  icon: ReactNode;
   open: boolean;
   onToggle: () => void;
   action?: ReactNode;
@@ -81,12 +130,13 @@ function SectionHeader({
         type="button"
         onClick={onToggle}
         aria-expanded={open}
-        className="flex min-w-0 items-center gap-0.5 rounded px-1.5 py-0.5 text-[11px] font-medium uppercase tracking-wider text-faint transition-colors hover:text-muted"
+        className="flex min-w-0 items-center gap-1 rounded px-1.5 py-0.5 text-[11px] font-medium uppercase tracking-wider text-faint transition-colors hover:text-muted"
       >
         <ChevronRight
           size={11}
           className={`shrink-0 transition-transform ${open ? "rotate-90" : ""}`}
         />
+        <span className="flex shrink-0 items-center justify-center">{icon}</span>
         {label}
       </button>
       {action}
@@ -101,13 +151,21 @@ function SidebarNav({
   projects,
   favorites,
   members,
+  viewerId,
   unread,
+  hidden,
+  onToggleSection,
+  onInvite,
 }: {
   workspace: WorkspaceInfo;
   projects: Project[];
   favorites: Project[];
   members: Member[];
+  viewerId: string;
   unread: number | null;
+  hidden: string[];
+  onToggleSection: (key: string) => void;
+  onInvite: () => void;
 }) {
   const pathname = usePathname();
   const searchParams = useSearchParams();
@@ -143,6 +201,8 @@ function SidebarNav({
 
   const workspaceId = workspace.id;
 
+  const team = orderTeam(members, viewerId, workspace.createdBy);
+
   const link = (params: Record<string, string | undefined>) => {
     const sp = new URLSearchParams();
     if (params.view) sp.set("view", params.view);
@@ -175,10 +235,29 @@ function SidebarNav({
           Inbox
         </NavItem>
       </div>
+      {/* The two places a working day starts: your own tasks, then the docs library.
+          Both used to sit inside groups; they stay pinned here instead. */}
+      <div className="space-y-0.5 pb-1">
+        <NavItem
+          href={link({ view: "all", assignee: "me" })}
+          active={active({ view: "all", assignee: "me" })}
+          icon={<User size={14} />}
+        >
+          My Tasks
+        </NavItem>
+        <NavItem
+          href={`/${workspaceId}/docs`}
+          active={pathname.startsWith(`/${workspaceId}/docs`)}
+          icon={<BookOpen size={14} />}
+        >
+          Documents
+        </NavItem>
+      </div>
       {favorites.length > 0 && (
         <div className="pb-1">
           <SectionHeader
             label="Favorites"
+            icon={<Star size={11} />}
             open={open("favorites")}
             onToggle={() => toggleSection("favorites")}
           />
@@ -198,43 +277,42 @@ function SidebarNav({
           )}
         </div>
       )}
-      <SectionHeader
-        label="Workspace"
-        open={open("workspace")}
-        onToggle={() => toggleSection("workspace")}
-      />
-      {open("workspace") && (
-        <div className="space-y-0.5">
-          <NavItem href={link({ view: "all" })} active={active({ view: "all" })} icon={<List size={14} />}>
-            All Issues
-          </NavItem>
-          <NavItem
-            href={link({ view: "active" })}
-            active={active({ view: "active" })}
-            icon={<Activity size={14} />}
-          >
-            Active
-          </NavItem>
-          <NavItem
-            href={link({ view: "all", assignee: "me" })}
-            active={active({ view: "all", assignee: "me" })}
-            icon={<User size={14} />}
-          >
-            My Issues
-          </NavItem>
-          <NavItem
-            href={link({ view: "all", assignee: "none" })}
-            active={active({ view: "all", assignee: "none" })}
-            icon={<UserRoundX size={14} />}
-          >
-            Unassigned
-          </NavItem>
-        </div>
+      {!hidden.includes("workspace") && (
+        <>
+          <SectionHeader
+            label="Workspace"
+            icon={<LayoutList size={11} />}
+            open={open("workspace")}
+            onToggle={() => toggleSection("workspace")}
+          />
+          {open("workspace") && (
+            <div className="space-y-0.5">
+              <NavItem href={link({ view: "all" })} active={active({ view: "all" })} icon={<List size={14} />}>
+                All Tasks
+              </NavItem>
+              <NavItem
+                href={link({ view: "active" })}
+                active={active({ view: "active" })}
+                icon={<Activity size={14} />}
+              >
+                Active
+              </NavItem>
+              <NavItem
+                href={link({ view: "all", assignee: "none" })}
+                active={active({ view: "all", assignee: "none" })}
+                icon={<UserRoundX size={14} />}
+              >
+                Unassigned
+              </NavItem>
+            </div>
+          )}
+        </>
       )}
 
       <div className="mt-2">
         <SectionHeader
           label="Projects"
+          icon={<Boxes size={11} />}
           open={open("projects")}
           onToggle={() => toggleSection("projects")}
           action={
@@ -278,23 +356,94 @@ function SidebarNav({
       </div>
 
       <div className="mt-2">
-        <SectionHeader label="Your team" open={open("team")} onToggle={() => toggleSection("team")} />
+        <SectionHeader
+          label="Your team"
+          icon={<Users size={11} />}
+          open={open("team")}
+          onToggle={() => toggleSection("team")}
+          action={
+            <button
+              type="button"
+              onClick={onInvite}
+              title="Invite teammates"
+              aria-label="Invite teammates"
+              className="rounded p-1 text-faint transition-colors hover:bg-elevated hover:text-text"
+            >
+              <Plus size={13} />
+            </button>
+          }
+        />
         {open("team") && (
           <div className="space-y-0.5">
-            {members.map((member) => (
+            {team.map((member) => (
               <NavItem
                 key={member.id}
-                href={link({ view: "all", assignee: member.id })}
-                active={searchParams.get("assignee") === member.id}
+                href={`/${workspaceId}/people/${member.id}`}
+                active={
+                  pathname === `/${workspaceId}/people/${member.id}` ||
+                  searchParams.get("assignee") === member.id
+                }
                 icon={
                   <AssigneeAvatar displayName={member.displayName} avatar={member.avatar} size={16} />
                 }
+                tag={member.id === workspace.createdBy ? "Owner" : undefined}
               >
                 {member.displayName}
               </NavItem>
             ))}
           </div>
         )}
+      </div>
+
+      {/* Same idea as Notion's "Customize sidebar": sections that are useful to some
+          people but clutter for everyone else can be taken out and put back here. */}
+      <div className="px-1 pt-3">
+        <Menu
+          width={210}
+          triggerClassName="flex w-full items-center gap-2 rounded-md px-1 py-1 text-left text-[12px] text-faint transition-colors hover:bg-elevated/60 hover:text-text"
+          trigger={
+            <>
+              <span className="flex w-4 shrink-0 items-center justify-center">
+                <SlidersHorizontal size={12} />
+              </span>
+              <span className="truncate">Customize sidebar</span>
+            </>
+          }
+        >
+          {() => {
+            const shown = SIDEBAR_SECTIONS.filter((section) => !hidden.includes(section.key));
+            const available = SIDEBAR_SECTIONS.filter((section) => hidden.includes(section.key));
+            return (
+              <>
+                <div className="px-2 pb-1 pt-1 text-[11px] uppercase tracking-wide text-faint">
+                  In sidebar
+                </div>
+                {shown.map((section) => (
+                  <MenuItem key={section.key} onSelect={() => onToggleSection(section.key)}>
+                    <section.icon size={13} className="text-faint" />
+                    <span className="flex-1 truncate">{section.label}</span>
+                    <Minus size={12} className="text-faint" />
+                  </MenuItem>
+                ))}
+                {available.length > 0 && (
+                  <>
+                    <div className="my-1 border-t border-border" />
+                    <div className="px-2 pb-1 pt-1 text-[11px] uppercase tracking-wide text-faint">
+                      Available
+                    </div>
+                    {available.map((section) => (
+                      <MenuItem key={section.key} onSelect={() => onToggleSection(section.key)}>
+                        <section.icon size={13} className="text-faint" />
+                        <span className="flex-1 truncate">{section.label}</span>
+                        <Plus size={12} className="text-faint" />
+                      </MenuItem>
+                    ))}
+                  </>
+                )}
+              </>
+            );
+          }}
+        </Menu>
       </div>
     </nav>
   );
@@ -341,9 +490,11 @@ function switcherButton(open: boolean) {
 function WorkspaceSwitcher({
   workspace,
   workspaces,
+  compact,
 }: {
   workspace: WorkspaceInfo;
   workspaces: WorkspaceInfo[];
+  compact?: boolean;
 }) {
   const [leaving, setLeaving] = useState(false);
   const [leaveError, setLeaveError] = useState<string | null>(null);
@@ -369,17 +520,23 @@ function WorkspaceSwitcher({
   return (
     <Menu
       width={220}
-      triggerClassName={switcherButton}
-      trigger={(open) => (
-        <>
+      triggerClassName={(open) =>
+        compact ? `${switcherButton(open)} justify-center px-1.5` : switcherButton(open)
+      }
+      trigger={(open) =>
+        compact ? (
           <WorkspaceMark icon={workspace.icon} className="h-5 w-5" />
-          <span className="max-w-[110px] truncate text-[13px] font-semibold">{workspace.name}</span>
-          <ChevronRight
-            size={11}
-            className={`shrink-0 text-faint transition-transform ${open ? "rotate-90" : ""}`}
-          />
-        </>
-      )}
+        ) : (
+          <>
+            <WorkspaceMark icon={workspace.icon} className="h-5 w-5" />
+            <span className="max-w-[110px] truncate text-[13px] font-semibold">{workspace.name}</span>
+            <ChevronRight
+              size={11}
+              className={`shrink-0 text-faint transition-transform ${open ? "rotate-90" : ""}`}
+            />
+          </>
+        )
+      }
     >
       {(close) => (
         <>
@@ -428,40 +585,525 @@ function WorkspaceSwitcher({
   );
 }
 
+function RailLink({
+  href,
+  active,
+  label,
+  icon,
+  dot,
+  labeled,
+}: {
+  href: string;
+  active: boolean;
+  label: string;
+  icon: ReactNode;
+  dot?: boolean;
+  labeled?: boolean;
+}) {
+  const activeLook = active
+    ? "bg-elevated text-text"
+    : "text-muted hover:bg-elevated/60 hover:text-text";
+  // Past the label threshold the rail stops being a rail and reads as a compact
+  // sidebar, so the name sits next to the icon instead of hiding in a tooltip.
+  if (labeled) {
+    return (
+      <Link
+        href={href}
+        title={label}
+        aria-label={label}
+        className={`relative flex h-8 items-center gap-2 rounded-md px-2 text-[13px] font-medium transition-colors ${activeLook}`}
+      >
+        <span className="flex w-4 shrink-0 items-center justify-center">{icon}</span>
+        <span className="truncate">{label}</span>
+        {dot && <span className="ml-auto h-1.5 w-1.5 shrink-0 rounded-full bg-accent" />}
+      </Link>
+    );
+  }
+  return (
+    <Link
+      href={href}
+      title={label}
+      aria-label={label}
+      className={`relative flex h-8 w-8 items-center justify-center rounded-md transition-colors ${activeLook}`}
+    >
+      {icon}
+      {dot && (
+        <span className="absolute right-1.5 top-1.5 h-1.5 w-1.5 rounded-full bg-accent" />
+      )}
+    </Link>
+  );
+}
+
+// A group heading in the folded sidebar. "FAVORITES" cannot fit in 48px, so the group
+// keeps its glyph and — when the rail is wide enough to carry labels — the heading. The
+// group's rows cannot fit either, and widening the column to reveal them would make it
+// jump out from under the pointer, so the glyph raises a flyout instead. The panel is
+// portalled: the nav scrolls, which would clip it, and it has to sit beside the column,
+// not inside it.
+const RAIL_FLYOUT_WIDTH = 236;
+
+function RailFlyout({
+  label,
+  icon,
+  labeled,
+  children,
+}: {
+  label: string;
+  icon: ReactNode;
+  labeled: boolean;
+  children: (close: () => void) => ReactNode;
+}) {
+  const [open, setOpen] = useState(false);
+  // Null until measured, which keeps the panel invisible on its first paint.
+  const [rect, setRect] = useState<{ left: number; top: number; maxHeight: number } | null>(null);
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const panelRef = useRef<HTMLDivElement>(null);
+
+  const close = () => {
+    setOpen(false);
+    setRect(null);
+  };
+
+  useLayoutEffect(() => {
+    if (!open) return;
+    const trigger = triggerRef.current;
+    const panel = panelRef.current;
+    if (!trigger || !panel) return;
+    const gap = 8;
+    const margin = 8;
+    const anchor = trigger.getBoundingClientRect();
+    const maxHeight = window.innerHeight - margin * 2;
+    const height = Math.min(panel.scrollHeight, maxHeight);
+    setRect({
+      left: Math.max(margin, Math.min(anchor.right + gap, window.innerWidth - RAIL_FLYOUT_WIDTH - margin)),
+      top: Math.max(margin, Math.min(anchor.top - 6, window.innerHeight - height - margin)),
+      maxHeight,
+    });
+  }, [open]);
+
+  useEffect(() => {
+    if (!open) return;
+    const onDown = (e: MouseEvent) => {
+      const target = e.target as Node;
+      if (triggerRef.current?.contains(target) || panelRef.current?.contains(target)) return;
+      close();
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") close();
+    };
+    document.addEventListener("mousedown", onDown);
+    document.addEventListener("keydown", onKey);
+    window.addEventListener("resize", close);
+    window.addEventListener("scroll", close, true);
+    return () => {
+      document.removeEventListener("mousedown", onDown);
+      document.removeEventListener("keydown", onKey);
+      window.removeEventListener("resize", close);
+      window.removeEventListener("scroll", close, true);
+    };
+  }, [open]);
+
+  return (
+    <>
+      <button
+        type="button"
+        ref={triggerRef}
+        onClick={() => (open ? close() : setOpen(true))}
+        title={label}
+        aria-label={label}
+        aria-haspopup="menu"
+        aria-expanded={open}
+        className={
+          labeled
+            ? `mt-1 flex h-6 items-center gap-2 rounded px-2 text-left text-[11px] font-medium uppercase tracking-wider transition-colors ${
+                open ? "text-text" : "text-faint hover:text-muted"
+              }`
+            : `mt-0.5 flex h-7 w-8 items-center justify-center rounded-md transition-colors ${
+                open ? "bg-elevated text-text" : "text-faint hover:bg-elevated/60 hover:text-text"
+              }`
+        }
+      >
+        {labeled ? (
+          <>
+            <span className="flex w-4 shrink-0 items-center justify-center">{icon}</span>
+            <span className="truncate">{label}</span>
+          </>
+        ) : (
+          icon
+        )}
+      </button>
+      {open &&
+        createPortal(
+          <div
+            ref={panelRef}
+            role="menu"
+            aria-label={label}
+            style={{
+              left: rect?.left,
+              top: rect?.top,
+              width: RAIL_FLYOUT_WIDTH,
+              maxHeight: rect?.maxHeight,
+              visibility: rect ? "visible" : "hidden",
+            }}
+            className="fixed z-50 overflow-y-auto overflow-x-hidden rounded-lg border border-border bg-overlay p-1 shadow-xl shadow-black/10"
+          >
+            <div className="px-2 pb-1 pt-1 text-[10.5px] font-medium uppercase tracking-wider text-faint">
+              {label}
+            </div>
+            {children(close)}
+          </div>,
+          document.body,
+        )}
+    </>
+  );
+}
+
+function RailFlyoutLink({
+  href,
+  active,
+  icon,
+  tag,
+  onSelect,
+  children,
+}: {
+  href: string;
+  active: boolean;
+  icon: ReactNode;
+  tag?: ReactNode;
+  onSelect: () => void;
+  children: ReactNode;
+}) {
+  return (
+    <Link
+      href={href}
+      role="menuitem"
+      onClick={onSelect}
+      className={`flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-[13px] transition-colors ${
+        active ? "bg-elevated text-text" : "text-text hover:bg-elevated"
+      }`}
+    >
+      <span className="flex w-4 shrink-0 items-center justify-center">{icon}</span>
+      <span className="truncate">{children}</span>
+      {tag ? (
+        <span className="ml-auto shrink-0 rounded-full border border-border px-1.5 py-px text-[10px] text-faint">
+          {tag}
+        </span>
+      ) : null}
+    </Link>
+  );
+}
+
+// The sidebar folded down to icons, the way ChatGPT keeps its navigation reachable in a
+// narrow column. Labels live in the tooltip; everything else matches the full sidebar.
+// It renders the column's contents only — the shell owns the <aside> and the resize
+// handle, so the handle survives the moment the drag crosses into or out of this look.
+function SidebarRail({
+  workspace,
+  workspaces,
+  unread,
+  hidden,
+  projects,
+  favorites,
+  members,
+  viewerId,
+  width,
+}: {
+  workspace: WorkspaceInfo;
+  workspaces: WorkspaceInfo[];
+  unread: number | null;
+  hidden: string[];
+  projects: Project[];
+  favorites: Project[];
+  members: Member[];
+  viewerId: string;
+  width: number;
+}) {
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
+  const workspaceId = workspace.id;
+  const view = searchParams.get("view") ?? "all";
+  const assignee = searchParams.get("assignee") ?? "";
+  const mine =
+    pathname === `/${workspaceId}` &&
+    !searchParams.get("project") &&
+    view === "all" &&
+    assignee === "me";
+  // Dragging the rail wider turns it into a compact sidebar: labels appear, the
+  // workspace chip regains its name, and everything lines up from the left edge.
+  const labeled = width >= SIDEBAR_RAIL_LABEL_MIN;
+  const named = width >= SIDEBAR_RAIL_NAME_MIN;
+  const teamShown = !hidden.includes("team") && members.length > 0;
+  const team = orderTeam(members, viewerId, workspace.createdBy);
+
+  const divider = (
+    <div
+      aria-hidden
+      className={`my-1.5 h-px shrink-0 bg-border ${labeled ? "w-full" : "w-6"}`}
+    />
+  );
+
+  return (
+    <>
+      <div
+        className={`flex h-12 shrink-0 items-center ${labeled ? "px-2" : "justify-center"}`}
+      >
+        <WorkspaceSwitcher workspace={workspace} workspaces={workspaces} compact={!named} />
+      </div>
+      <nav
+        className={
+          labeled
+            ? "flex min-h-0 flex-1 flex-col gap-0.5 overflow-y-auto px-2 py-1"
+            : "flex min-h-0 flex-1 flex-col items-center gap-1 overflow-y-auto px-1.5 py-1"
+        }
+      >
+        <RailLink
+          href={`/${workspaceId}/notifications`}
+          active={pathname.endsWith("/notifications")}
+          label="Inbox"
+          icon={<Inbox size={16} />}
+          dot={(unread ?? 0) > 0}
+          labeled={labeled}
+        />
+        <RailLink
+          href={`/${workspaceId}/?view=all&assignee=me`}
+          active={mine}
+          label="My Tasks"
+          icon={<User size={16} />}
+          labeled={labeled}
+        />
+        <RailLink
+          href={`/${workspaceId}/docs`}
+          active={pathname.startsWith(`/${workspaceId}/docs`)}
+          label="Documents"
+          icon={<BookOpen size={16} />}
+          labeled={labeled}
+        />
+        {/* Only the groups survive the fold, not their rows: each glyph raises a
+            flyout with the group's names, leaving the column's width alone. */}
+        {(favorites.length > 0 || projects.length > 0 || teamShown) && divider}
+        {favorites.length > 0 && (
+          <RailFlyout label="Favorites" icon={<Star size={15} />} labeled={labeled}>
+            {(close) =>
+              favorites.map((project) => (
+                <RailFlyoutLink
+                  key={project.id}
+                  href={`/${workspaceId}/projects/${project.id}`}
+                  active={pathname.startsWith(`/${workspaceId}/projects/${project.id}`)}
+                  icon={<ProjectIcon color={project.color} size={14} />}
+                  onSelect={close}
+                >
+                  {project.name}
+                </RailFlyoutLink>
+              ))
+            }
+          </RailFlyout>
+        )}
+        {projects.length > 0 && (
+          <RailFlyout label="Projects" icon={<Boxes size={15} />} labeled={labeled}>
+            {(close) =>
+              projects.map((project) => (
+                <RailFlyoutLink
+                  key={project.id}
+                  href={`/${workspaceId}/projects/${project.id}`}
+                  active={pathname.startsWith(`/${workspaceId}/projects/${project.id}`)}
+                  icon={<ProjectIcon color={project.color} size={14} />}
+                  onSelect={close}
+                >
+                  {project.name}
+                </RailFlyoutLink>
+              ))
+            }
+          </RailFlyout>
+        )}
+        {teamShown && (
+          <RailFlyout label="Your team" icon={<Users size={15} />} labeled={labeled}>
+            {(close) =>
+              team.map((member) => (
+                <RailFlyoutLink
+                  key={member.id}
+                  href={`/${workspaceId}/people/${member.id}`}
+                  active={pathname === `/${workspaceId}/people/${member.id}`}
+                  icon={
+                    <AssigneeAvatar
+                      displayName={member.displayName}
+                      avatar={member.avatar}
+                      size={16}
+                    />
+                  }
+                  tag={member.id === workspace.createdBy ? "Owner" : undefined}
+                  onSelect={close}
+                >
+                  {member.displayName}
+                </RailFlyoutLink>
+              ))
+            }
+          </RailFlyout>
+        )}
+      </nav>
+      <div
+        className={
+          labeled
+            ? "flex flex-col gap-0.5 border-t border-border px-2 py-2"
+            : "flex flex-col items-center gap-1 border-t border-border px-1.5 py-2"
+        }
+      >
+        <RailLink
+          href={`/${workspaceId}/agent`}
+          active={pathname.endsWith("/agent")}
+          label="Agent"
+          icon={<Bot size={16} />}
+          labeled={labeled}
+        />
+        {!hidden.includes("help") && (
+          <RailLink
+            href={`/${workspaceId}/help`}
+            active={pathname.endsWith("/help")}
+            label="Help"
+            icon={<CircleHelp size={16} />}
+            labeled={labeled}
+          />
+        )}
+        {!hidden.includes("labels") && (
+          <RailLink
+            href={`/${workspaceId}/labels`}
+            active={pathname.endsWith("/labels")}
+            label="Labels"
+            icon={<Tag size={16} />}
+            labeled={labeled}
+          />
+        )}
+        <RailLink
+          href={`/${workspaceId}/trash`}
+          active={pathname.endsWith("/trash")}
+          label="Trash"
+          icon={<Trash2 size={16} />}
+          labeled={labeled}
+        />
+        <RailLink
+          href={`/${workspaceId}/settings`}
+          active={pathname.endsWith("/settings")}
+          label="Settings"
+          icon={<Settings size={16} />}
+          labeled={labeled}
+        />
+      </div>
+    </>
+  );
+}
+
 const TABS_KEY = "tacos.tabs.v1";
 const SIDEBAR_KEY = "tacos.sidebar.collapsed";
 const SIDEBAR_WIDTH_KEY = "tacos.sidebar.width";
-const SIDEBAR_DEFAULT = 232;
+const SIDEBAR_RAIL_WIDTH_KEY = "tacos.sidebar.railwidth";
+// Sections the sidebar can show or hide; the customize menu edits this list.
+const HIDDEN_KEY = "tacos.sidebar.hidden";
+// Pre-rail key: it listed the extras that were ON. Kept only to carry old choices over.
+const LEGACY_OPTIONAL_KEY = "tacos.sidebar.optional";
+const SIDEBAR_SECTIONS = [
+  { key: "workspace", label: "Workspace", icon: List },
+  { key: "labels", label: "Labels", icon: Tag },
+  { key: "help", label: "Help", icon: CircleHelp },
+] as const;
+// Workspace and Labels stay hidden for new accounts; Help is part of the sidebar until
+// someone takes it out.
+const DEFAULT_HIDDEN = ["workspace", "labels"];
+const SIDEBAR_DEFAULT = 216;
+// The one drag runs the whole way: SIDEBAR_MIN is where the full sidebar gives up and
+// the column turns into the icon rail, so pulling it in from a normal sidebar folds it
+// down to icons without letting go of the handle. Inside the rail, dragging wider is how
+// you get words back — past SIDEBAR_RAIL_LABEL_MIN the items grow their labels, past
+// SIDEBAR_RAIL_NAME_MIN the workspace chip does too — and past SIDEBAR_RAIL_MAX the
+// column is the full sidebar again.
 const SIDEBAR_MIN = 180;
 const SIDEBAR_MAX = 420;
+// The rail only holds 32px targets, so 48px is enough and 44px is the floor.
+const SIDEBAR_RAIL = 48;
+const SIDEBAR_RAIL_MIN = 44;
+const SIDEBAR_RAIL_MAX = SIDEBAR_MIN - 1;
+// 128 fits the longest label ("Documents") plus the icon, the gap and both paddings,
+// so a label never arrives already cut off with an ellipsis.
+const SIDEBAR_RAIL_LABEL_MIN = 128;
+const SIDEBAR_RAIL_NAME_MIN = 176;
 const MAX_TABS = 8;
 
 // The sidebar width is a per-device preference, not workspace data: the same account
 // on a laptop and a wide display wants different numbers. Restored after mount so the
 // server markup and the first client render agree.
+//
+// One width holds both looks — the column is the icon rail while it is under
+// SIDEBAR_MIN and the full sidebar above it — so a single drag can cross from one to the
+// other. Each look still remembers its own width, so the header button and a reload put
+// the column back the way that mode was left instead of dumping you at the boundary.
 function useSidebarWidth() {
   const [width, setWidth] = useState(SIDEBAR_DEFAULT);
+  const lastFull = useRef(SIDEBAR_DEFAULT);
+  const lastRail = useRef(SIDEBAR_RAIL);
 
   useEffect(() => {
     try {
-      const saved = Number(window.localStorage.getItem(SIDEBAR_WIDTH_KEY));
-      if (saved >= SIDEBAR_MIN && saved <= SIDEBAR_MAX) setWidth(saved);
+      const savedFull = Number(window.localStorage.getItem(SIDEBAR_WIDTH_KEY));
+      if (Number.isFinite(savedFull) && savedFull > 0) {
+        lastFull.current = Math.min(SIDEBAR_MAX, Math.max(SIDEBAR_MIN, savedFull));
+      }
+      const savedRail = Number(window.localStorage.getItem(SIDEBAR_RAIL_WIDTH_KEY));
+      if (Number.isFinite(savedRail) && savedRail > 0) {
+        // Clamped, not rejected: narrower builds let the rail grow past its current
+        // ceiling, and sending those users back to the default width would be a surprise.
+        lastRail.current = Math.min(SIDEBAR_RAIL_MAX, Math.max(SIDEBAR_RAIL_MIN, savedRail));
+      }
+      // The old key meant "hidden", so "1" already reads as the compact state.
+      setWidth(window.localStorage.getItem(SIDEBAR_KEY) === "1" ? lastRail.current : lastFull.current);
     } catch {
-      /* storage unavailable — keep the default width */
+      /* storage unavailable — keep the defaults */
     }
   }, []);
 
-  // Stable so the drag effect does not re-subscribe on every pixel.
-  const resize = useCallback((next: number) => {
-    setWidth(next);
+  const remember = useCallback((value: number, compact: boolean) => {
     try {
-      window.localStorage.setItem(SIDEBAR_WIDTH_KEY, String(next));
+      window.localStorage.setItem(compact ? SIDEBAR_RAIL_WIDTH_KEY : SIDEBAR_WIDTH_KEY, String(value));
+      window.localStorage.setItem(SIDEBAR_KEY, compact ? "1" : "0");
     } catch {
       /* storage unavailable — the width still applies to this page view */
     }
   }, []);
 
-  return [width, resize] as const;
+  // Stable so the drag effect does not re-subscribe on every pixel. It only moves the
+  // column; what was chosen is recorded on release, because a drag that ends in the rail
+  // has passed through the full sidebar's widths on its way in and must not leave the
+  // last of those behind as "the" full width.
+  const resize = useCallback((next: number) => {
+    setWidth(Math.min(SIDEBAR_MAX, Math.max(SIDEBAR_RAIL_MIN, next)));
+  }, []);
+
+  const commit = useCallback(
+    (next: number) => {
+      const value = Math.min(SIDEBAR_MAX, Math.max(SIDEBAR_RAIL_MIN, next));
+      const compact = value < SIDEBAR_MIN;
+      if (compact) lastRail.current = value;
+      else lastFull.current = value;
+      remember(value, compact);
+    },
+    [remember]
+  );
+
+  // The header button jumps between the two looks rather than stepping pixels. Collapsing
+  // always lands on the minimum rail: "collapse" reads as "get out of the way", so a rail
+  // that was once dragged wide enough to show labels must not come back instead. Expanding
+  // still restores the width the full sidebar was left at.
+  const toggle = useCallback(() => {
+    setWidth((current) => {
+      const compact = current >= SIDEBAR_MIN;
+      if (!compact) {
+        remember(lastFull.current, false);
+        return lastFull.current;
+      }
+      lastRail.current = SIDEBAR_RAIL;
+      remember(SIDEBAR_RAIL, true);
+      return SIDEBAR_RAIL;
+    });
+  }, [remember]);
+
+  return { width, rail: width < SIDEBAR_MIN, resize, commit, toggle };
 }
 
 /**
@@ -469,17 +1111,38 @@ function useSidebarWidth() {
  * `window` because the strip is only 6px wide and slides out from under the cursor as
  * soon as the sidebar grows.
  */
-function SidebarResizer({ width, onWidth }: { width: number; onWidth: (next: number) => void }) {
+function SidebarResizer({
+  width,
+  min,
+  max,
+  resetTo,
+  onWidth,
+  onDone,
+}: {
+  width: number;
+  min: number;
+  max: number;
+  resetTo: number;
+  onWidth: (next: number) => void;
+  onDone: (next: number) => void;
+}) {
   const [dragging, setDragging] = useState(false);
   const origin = useRef({ x: 0, width: 0 });
+  // The width the pointer last produced: releasing decides what to remember, and a
+  // press without a move means "the width it already has".
+  const latest = useRef(width);
 
   useEffect(() => {
     if (!dragging) return;
     const move = (e: PointerEvent) => {
       const next = origin.current.width + e.clientX - origin.current.x;
-      onWidth(Math.min(SIDEBAR_MAX, Math.max(SIDEBAR_MIN, next)));
+      latest.current = Math.min(max, Math.max(min, next));
+      onWidth(latest.current);
     };
-    const stop = () => setDragging(false);
+    const stop = () => {
+      onDone(latest.current);
+      setDragging(false);
+    };
     window.addEventListener("pointermove", move);
     window.addEventListener("pointerup", stop);
     window.addEventListener("pointercancel", stop);
@@ -490,7 +1153,7 @@ function SidebarResizer({ width, onWidth }: { width: number; onWidth: (next: num
       window.removeEventListener("pointercancel", stop);
       document.body.style.userSelect = "";
     };
-  }, [dragging, onWidth]);
+  }, [dragging, max, min, onDone, onWidth]);
 
   return (
     <div
@@ -501,32 +1164,53 @@ function SidebarResizer({ width, onWidth }: { width: number; onWidth: (next: num
       onPointerDown={(e) => {
         e.preventDefault();
         origin.current = { x: e.clientX, width };
+        latest.current = width;
         setDragging(true);
       }}
-      onDoubleClick={() => onWidth(SIDEBAR_DEFAULT)}
+      onDoubleClick={() => {
+        onWidth(resetTo);
+        onDone(resetTo);
+      }}
       className="group absolute -right-[3px] top-0 z-20 h-full w-1.5 cursor-col-resize"
     >
+      {/* The edge already sits next to the content card's own border, so a strong line
+          here read as a second, darker divider running the full height. Hover only
+          hints at the boundary; the line belongs to the drag itself. */}
       <div
-        className={`h-full w-full transition-colors ${
-          dragging ? "bg-accent/40" : "bg-transparent group-hover:bg-accent/20"
+        className={`mx-auto h-full transition-colors ${
+          dragging ? "w-0.5 bg-accent/45" : "w-px group-hover:bg-border"
         }`}
       />
     </div>
   );
 }
 
-function tabMeta(key: string, workspace: WorkspaceInfo, projects: Project[], members: Member[]) {
+function tabMeta(
+  key: string,
+  workspace: WorkspaceInfo,
+  projects: Project[],
+  members: Member[],
+  pages: PageSummary[]
+) {
   const [pathname, query = ""] = key.split("?");
   const params = new URLSearchParams(query);
   const view = params.get("view") ?? "all";
   if (pathname === `/${workspace.id}`) {
     const assignee = params.get("assignee");
-    if (view === "all" && assignee === "me") return { label: "My Issues", icon: <User size={13} /> };
+    if (view === "all" && assignee === "me") return { label: "My Tasks", icon: <User size={13} /> };
     if (view === "all" && assignee === "none")
       return { label: "Unassigned", icon: <UserRoundX size={13} /> };
     if (view === "all" && assignee) {
       const member = members.find((m) => m.id === assignee);
-      if (member) return { label: member.displayName, icon: <User size={13} /> };
+      if (member)
+        return {
+          label: member.displayName,
+          // The generic person glyph stands for "me" (My Tasks); a named person's tab
+          // shows their own face so two teammate tabs are told apart at a glance.
+          icon: (
+            <AssigneeAvatar displayName={member.displayName} avatar={member.avatar} size={16} />
+          ),
+        };
     }
     const projectId = params.get("project");
     if (view === "all" && projectId) {
@@ -537,7 +1221,19 @@ function tabMeta(key: string, workspace: WorkspaceInfo, projects: Project[], mem
     if (status)
       return { label: STATUS_META[status].label, icon: <StatusIcon status={status} size={13} /> };
     if (view === "active") return { label: "Active", icon: <Activity size={13} /> };
-    return { label: "All Issues", icon: <List size={13} /> };
+    return { label: "All Tasks", icon: <List size={13} /> };
+  }
+  const personPage = pathname.match(new RegExp(`^/${workspace.id}/people/([^/]+)$`));
+  if (personPage) {
+    const member = members.find((m) => m.id === personPage[1]);
+    return member
+      ? {
+          label: member.displayName,
+          icon: (
+            <AssigneeAvatar displayName={member.displayName} avatar={member.avatar} size={16} />
+          ),
+        }
+      : { label: "Person", icon: <User size={13} /> };
   }
   const projectPage = pathname.match(new RegExp(`^/${workspace.id}/projects/([^/]+)(?:/issues)?$`));
   if (projectPage) {
@@ -546,29 +1242,42 @@ function tabMeta(key: string, workspace: WorkspaceInfo, projects: Project[], mem
       return { label: project.name, icon: <ProjectIcon color={project.color} size={13} /> };
     return { label: "Project", icon: <ProjectIcon color={DEFAULT_PROJECT_COLOR} size={13} /> };
   }
-  if (pathname.endsWith("/settings")) return { label: "Settings", icon: <Settings size={13} /> };  if (pathname.endsWith("/labels")) return { label: "Labels", icon: <Tag size={13} /> };
+  if (pathname.endsWith("/settings")) return { label: "Settings", icon: <Settings size={13} /> };
+  if (pathname.endsWith("/agent")) return { label: "Agent", icon: <Bot size={13} /> };
+  if (pathname.endsWith("/labels")) return { label: "Labels", icon: <Tag size={13} /> };
   if (pathname.endsWith("/trash")) return { label: "Trash", icon: <Trash2 size={13} /> };
+  if (pathname.endsWith("/help")) return { label: "Help", icon: <CircleHelp size={13} /> };
   if (pathname.endsWith("/notifications"))
     return { label: "Inbox", icon: <Inbox size={13} /> };
-  return { label: "Issues", icon: <List size={13} /> };
+  const docPage = pathname.match(new RegExp(`^/${workspace.id}/docs/([^/]+)$`));
+  if (docPage) {
+    const page = pages.find((candidate) => candidate.id === docPage[1]);
+    return page
+      ? { label: page.title, icon: <span>{page.icon ?? <FileText size={13} />}</span> }
+      : { label: "Doc", icon: <FileText size={13} /> };
+  }
+  if (pathname === `/${workspace.id}/docs`) return { label: "Documents", icon: <BookOpen size={13} /> };
+  return { label: "Tasks", icon: <List size={13} /> };
 }
 
 function TabBar({
   workspace,
   projects,
   members,
+  pages,
   user,
-  sidebarOpen,
+  rail,
   sidebarWidth,
-  onToggleSidebar,
+  onToggleRail,
 }: {
   workspace: WorkspaceInfo;
   projects: Project[];
   members: Member[];
+  pages: PageSummary[];
   user: UserInfo;
-  sidebarOpen: boolean;
+  rail: boolean;
   sidebarWidth: number;
-  onToggleSidebar: () => void;
+  onToggleRail: () => void;
 }) {
   const router = useRouter();
   const pathname = usePathname();
@@ -576,6 +1285,9 @@ function TabBar({
   const { setPaletteOpen } = useUI();
   const [tabs, setTabs] = useState<string[] | null>(null);
   const justClosed = useRef<string | null>(null);
+  // Where the app sits when nothing is open. It is deliberately not a tab: the strip
+  // is empty, and this page offers the ways back in.
+  const startKey = `/${workspace.id}/start`;
 
   // Search text and label filters change too often to deserve their own tab.
   const keyParams = new URLSearchParams();
@@ -590,7 +1302,8 @@ function TabBar({
   // Different URLs can show the same page (a project's Overview and Issues, or
   // `?view=all` vs none); tabs are unique by what they display, not by URL.
   const sameTab = (a: string, b: string) =>
-    tabMeta(a, workspace, projects, members).label === tabMeta(b, workspace, projects, members).label;
+    tabMeta(a, workspace, projects, members, pages).label ===
+    tabMeta(b, workspace, projects, members, pages).label;
 
   useEffect(() => {
     try {
@@ -605,9 +1318,12 @@ function TabBar({
 
   useEffect(() => {
     if (tabs === null) return;
-    // Closing the page you are on lands you on its neighbour; neither should be
-    // re-added just because the route moved underneath the user.
+    // Closing the page you are on drops its tab before the router lands somewhere else;
+    // during that gap the old URL must not be added straight back. Once the route has
+    // actually moved on the guard is spent, so revisiting the page later opens it again.
+    if (justClosed.current !== null && current !== justClosed.current) justClosed.current = null;
     if (current === justClosed.current) return;
+    if (current === startKey) return;
     if (tabs.includes(current)) return;
     const existing = tabs.findIndex((key) => sameTab(key, current));
     if (existing >= 0) {
@@ -627,6 +1343,23 @@ function TabBar({
     }
   }, [tabs, workspace.id]);
 
+  // Projects and pages can vanish outside this window (another device, a purge). A
+  // restored tab for one of them would only redirect or 404, so drop it on sight.
+  useEffect(() => {
+    if (tabs === null) return;
+    const liveProjects = new Set(projects.map((project) => project.id));
+    const livePages = new Set(pages.map((page) => page.id));
+    const alive = (key: string) => {
+      const project = key.match(new RegExp(`^/${workspace.id}/projects/([^/?]+)`));
+      if (project && !liveProjects.has(project[1])) return false;
+      const page = key.match(new RegExp(`^/${workspace.id}/docs/([^/?]+)`));
+      if (page && !livePages.has(page[1])) return false;
+      return true;
+    };
+    if (tabs.every(alive)) return;
+    setTabs(tabs.filter(alive));
+  }, [tabs, projects, pages, workspace.id]);
+
   const visible = tabs ?? [];
 
   function closeTab(key: string) {
@@ -635,32 +1368,59 @@ function TabBar({
     setTabs(rest);
     if (key !== current) return;
     justClosed.current = key;
-    router.push(rest[Math.max(0, Math.min(index, rest.length - 1))] ?? `/${workspace.id}`);
+    // Closing the last tab leaves nothing to show, so the workspace falls back to the
+    // start page instead of silently opening All Tasks.
+    router.push(rest[Math.max(0, Math.min(index, rest.length - 1))] ?? startKey);
   }
+
+  // A deleted doc must not leave a dead route in the strip: drop its tab (and any
+  // subpage tabs that went with it) and activate the neighbour, like closing a tab.
+  useEffect(() => {
+    const onDocsDeleted = (event: Event) => {
+      const pageIds = (event as CustomEvent<{ pageIds?: string[] }>).detail?.pageIds;
+      if (!pageIds?.length || tabs === null) return;
+      const dead = new Set(pageIds);
+      const pattern = new RegExp(`^/${workspace.id}/docs/([^/?]+)`);
+      const isDead = (key: string) => {
+        const match = key.match(pattern);
+        return Boolean(match && dead.has(match[1]));
+      };
+      const index = tabs.findIndex(isDead);
+      if (index < 0) {
+        router.push(`/${workspace.id}/docs`);
+        return;
+      }
+      const rest = tabs.filter((key) => !isDead(key));
+      justClosed.current = tabs[index];
+      setTabs(rest);
+      router.push(rest[Math.max(0, Math.min(index, rest.length - 1))] ?? startKey);
+    };
+    window.addEventListener(DOCS_DELETED_EVENT, onDocsDeleted);
+    return () => window.removeEventListener(DOCS_DELETED_EVENT, onDocsDeleted);
+  }, [tabs, workspace.id, startKey, router]);
 
   return (
     <header className="app-windowbar flex h-12 shrink-0 items-center bg-surface pr-3">
       {/* Same width as the sidebar, so the tabs line up with the content column. */}
       <div
-        style={sidebarOpen ? { width: sidebarWidth } : undefined}
-        className={`app-windowbar-left flex shrink-0 items-center px-3 ${
-          sidebarOpen ? "" : "w-auto"
-        }`}
+        style={{ width: sidebarWidth }}
+        data-rail={rail ? "true" : undefined}
+        className="app-windowbar-left flex shrink-0 items-center px-3"
       >
         <button
           type="button"
-          onClick={onToggleSidebar}
-          title={sidebarOpen ? "Hide sidebar" : "Show sidebar"}
-          aria-label={sidebarOpen ? "Hide sidebar" : "Show sidebar"}
+          onClick={onToggleRail}
+          title={rail ? "Expand sidebar" : "Collapse to icons"}
+          aria-label={rail ? "Expand sidebar" : "Collapse to icons"}
           className="shrink-0 rounded-md p-1.5 text-muted transition-colors hover:bg-elevated hover:text-text"
         >
-          {sidebarOpen ? <PanelLeftClose size={16} /> : <PanelLeftOpen size={16} />}
+          {rail ? <PanelLeftOpen size={16} /> : <PanelLeftClose size={16} />}
         </button>
       </div>
 
       <div className="app-tabstrip flex min-w-0 flex-1 items-center gap-1.5 overflow-hidden pl-1.5">
         {visible.map((key) => {
-          const { label, icon } = tabMeta(key, workspace, projects, members);
+          const { label, icon } = tabMeta(key, workspace, projects, members, pages);
           const isActive = key === current;
           return (
             <div
@@ -706,7 +1466,16 @@ function TabBar({
       </button>
 
       <div className="ml-1 flex shrink-0 items-center gap-1">
-        <UserMenu user={user} />
+        <UserMenu
+          user={user}
+          adminUrl={
+            user.siteRole === "admin"
+              ? "/admin"
+              : workspace.role === "admin"
+                ? `/admin/${workspace.id}`
+                : null
+          }
+        />
       </div>
     </header>
   );
@@ -719,6 +1488,8 @@ export function WorkspaceShell({
   projects,
   favorites,
   members,
+  pages,
+  joinCode,
   children,
 }: {
   workspace: WorkspaceInfo;
@@ -727,93 +1498,173 @@ export function WorkspaceShell({
   projects: Project[];
   favorites: Project[];
   members: Member[];
+  pages: PageSummary[];
+  joinCode: string | null;
   children: ReactNode;
 }) {
   const pathname = usePathname();
-  const [sidebarOpen, setSidebarOpen] = useState(true);
-  const [sidebarWidth, resizeSidebar] = useSidebarWidth();
+  const { panelExpanded } = useUI();
+  // One width, two looks, like ChatGPT: under SIDEBAR_MIN the column is the icon rail.
+  const {
+    width: sidebarWidth,
+    rail,
+    resize: resizeSidebar,
+    commit: commitSidebar,
+    toggle: toggleRail,
+  } = useSidebarWidth();
   const unread = useUnreadNotifications(workspace.id);
+  const [hiddenSections, setHiddenSections] = useState<string[]>(DEFAULT_HIDDEN);
+  const [inviteOpen, setInviteOpen] = useState(false);
 
   useEffect(() => {
     try {
-      setSidebarOpen(window.localStorage.getItem(SIDEBAR_KEY) !== "1");
+      const raw = window.localStorage.getItem(HIDDEN_KEY);
+      if (raw) {
+        const saved = JSON.parse(raw);
+        if (Array.isArray(saved)) {
+          setHiddenSections(saved.filter((key) => typeof key === "string"));
+        }
+      } else {
+        // Carry over the pre-rail list, which named the extras that were visible. No
+        // list at all means a fresh account, so the defaults above stand.
+        const legacyRaw = window.localStorage.getItem(LEGACY_OPTIONAL_KEY);
+        const legacy = legacyRaw ? JSON.parse(legacyRaw) : null;
+        if (Array.isArray(legacy)) {
+          const shown = legacy.filter((key) => typeof key === "string");
+          // Help had no switch back then — it was always in the sidebar.
+          if (!shown.includes("help")) shown.push("help");
+          setHiddenSections(SIDEBAR_SECTIONS.map((s) => s.key).filter((key) => !shown.includes(key)));
+        }
+      }
     } catch {
-      /* storage unavailable — keep the sidebar open */
+      /* storage unavailable — keep the defaults */
     }
   }, []);
 
-  function toggleSidebar() {
-    setSidebarOpen((open) => {
+  function toggleSection(key: string) {
+    setHiddenSections((prev) => {
+      const next = prev.includes(key) ? prev.filter((k) => k !== key) : [...prev, key];
       try {
-        window.localStorage.setItem(SIDEBAR_KEY, open ? "1" : "0");
+        window.localStorage.setItem(HIDDEN_KEY, JSON.stringify(next));
       } catch {
         /* storage unavailable — the choice still applies to this page view */
       }
-      return !open;
+      return next;
     });
   }
 
   return (
     <div className="flex h-full flex-col">
+      <DesktopOpenFiles workspaceId={workspace.id} />
       <Suspense fallback={<div className="h-12 shrink-0 bg-surface" />}>
         <TabBar
           workspace={workspace}
           projects={projects}
           members={members}
+          pages={pages}
           user={user}
-          sidebarOpen={sidebarOpen}
+          rail={rail}
           sidebarWidth={sidebarWidth}
-          onToggleSidebar={toggleSidebar}
+          onToggleRail={toggleRail}
         />
       </Suspense>
 
       <div className="flex min-h-0 flex-1 bg-surface">
-        {sidebarOpen && (
-          <aside
-            style={{ width: sidebarWidth }}
-            className="relative flex shrink-0 flex-col bg-surface"
-          >
-            <div className="flex h-12 shrink-0 items-center px-3">
-              <WorkspaceSwitcher workspace={workspace} workspaces={workspaces} />
-            </div>
+        {/*
+          One column, one handle: the same drag runs from the full sidebar down to the
+          icon rail, so the <aside> and its resizer stay mounted while the contents swap
+          between the two looks. Unmounting them would drop the pointer mid-drag.
+        */}
+        <aside
+          style={{ width: sidebarWidth }}
+          className="relative flex shrink-0 flex-col bg-surface"
+        >
+          {rail ? (
+            <SidebarRail
+              workspace={workspace}
+              workspaces={workspaces}
+              unread={unread}
+              hidden={hiddenSections}
+              projects={projects}
+              favorites={favorites}
+              members={members}
+              viewerId={user.id}
+              width={sidebarWidth}
+            />
+          ) : (
+            <>
+              <div className="flex h-12 shrink-0 items-center px-3">
+                <WorkspaceSwitcher workspace={workspace} workspaces={workspaces} />
+              </div>
 
-            <Suspense fallback={<nav className="flex-1 px-2 py-3" />}>
-              <SidebarNav
-                workspace={workspace}
-                projects={projects}
-                favorites={favorites}
-                members={members}
-                unread={unread}
-              />
-            </Suspense>
+              <Suspense fallback={<nav className="flex-1 px-2 py-3" />}>
+                <SidebarNav
+                  workspace={workspace}
+                  projects={projects}
+                  favorites={favorites}
+                  members={members}
+                  viewerId={user.id}
+                  unread={unread}
+                  hidden={hiddenSections}
+                  onToggleSection={toggleSection}
+                  onInvite={() => setInviteOpen(true)}
+                />
+              </Suspense>
 
-            <div className="space-y-0.5 border-t border-border px-2 py-2">
-              <NavItem
-                href={`/${workspace.id}/labels`}
-                active={pathname.endsWith("/labels")}
-                icon={<Tag size={14} />}
-              >
-                Labels
-              </NavItem>
-              <NavItem
-                href={`/${workspace.id}/trash`}
-                active={pathname.endsWith("/trash")}
-                icon={<Trash2 size={14} />}
-              >
-                Trash
-              </NavItem>
-              <NavItem
-                href={`/${workspace.id}/settings`}
-                active={pathname.endsWith("/settings")}
-                icon={<Settings size={14} />}
-              >
-                Settings
-              </NavItem>
-            </div>
+              <div className="space-y-0.5 border-t border-border px-2 py-2">
+                <NavItem
+                  href={`/${workspace.id}/agent`}
+                  active={pathname.endsWith("/agent")}
+                  icon={<Bot size={14} />}
+                >
+                  Agent
+                </NavItem>
+                {!hiddenSections.includes("help") && (
+                  <NavItem
+                    href={`/${workspace.id}/help`}
+                    active={pathname.endsWith("/help")}
+                    icon={<CircleHelp size={14} />}
+                  >
+                    Help
+                  </NavItem>
+                )}
+                {!hiddenSections.includes("labels") && (
+                  <NavItem
+                    href={`/${workspace.id}/labels`}
+                    active={pathname.endsWith("/labels")}
+                    icon={<Tag size={14} />}
+                  >
+                    Labels
+                  </NavItem>
+                )}
+                <NavItem
+                  href={`/${workspace.id}/trash`}
+                  active={pathname.endsWith("/trash")}
+                  icon={<Trash2 size={14} />}
+                >
+                  Trash
+                </NavItem>
+                <NavItem
+                  href={`/${workspace.id}/settings`}
+                  active={pathname.endsWith("/settings")}
+                  icon={<Settings size={14} />}
+                >
+                  Settings
+                </NavItem>
+              </div>
+            </>
+          )}
 
-            <SidebarResizer width={sidebarWidth} onWidth={resizeSidebar} />
-          </aside>
-        )}
+          {/* The handle spans both looks and resets to whichever one is on screen. */}
+          <SidebarResizer
+            width={sidebarWidth}
+            min={SIDEBAR_RAIL_MIN}
+            max={SIDEBAR_MAX}
+            resetTo={rail ? SIDEBAR_RAIL : SIDEBAR_DEFAULT}
+            onWidth={resizeSidebar}
+            onDone={commitSidebar}
+          />
+        </aside>
 
         {/*
           Linear frames the workspace as a panel: the sidebar and the tab bar share one
@@ -821,12 +1672,26 @@ export function WorkspaceShell({
           with its own border and rounded corners, floating in a small gutter.
         */}
         <main className="flex min-w-0 flex-1 flex-col p-2 pt-1">
-          <div className="flex min-h-0 flex-1 overflow-hidden rounded-xl border border-border bg-bg shadow-[0_1px_2px_rgba(0,0,0,0.05)]">
-            {children}
+          {/* The list and the issue are separate cards with a gutter, the way Linear
+              splits a view from its detail pane — not one card cut by a divider. */}
+          <div className="@container relative flex min-h-0 flex-1 gap-2">
+            {!panelExpanded && (
+              <div className="@container flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-xl border border-border bg-bg shadow-[0_1px_2px_rgba(0,0,0,0.05)]">
+                {children}
+              </div>
+            )}
             <IssuePanelHost workspaceId={workspace.id} currentUserId={user.id} />
           </div>
         </main>
       </div>
+
+      {inviteOpen && (
+        <InviteDialog
+          workspaceName={workspace.name}
+          joinCode={joinCode}
+          onClose={() => setInviteOpen(false)}
+        />
+      )}
     </div>
   );
 }

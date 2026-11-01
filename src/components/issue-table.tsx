@@ -1,10 +1,13 @@
 "use client";
 
+import Link from "next/link";
+import { useParams } from "next/navigation";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useUI, isTyping } from "@/components/ui-context";
 import { AddIssueButton } from "@/components/add-issue-button";
 import { LabelPill, PriorityIcon, StatusIcon, ViaBadge, STATUS_META } from "@/components/icons";
 import { STATUS_ORDER, PRIORITY_NAMES } from "@/lib/constants";
+import { builtinAvatarId, builtinAvatarSrc } from "@/lib/avatars";
 import type { Assignee, IssueWithLabels } from "@/lib/issues";
 import { issueRef, timeAgo } from "@/lib/format";
 
@@ -22,13 +25,32 @@ export function AssigneeAvatar({
   displayName,
   avatar,
   size = 18,
+  href,
 }: {
   displayName: string;
   avatar?: string | null;
   size?: number;
+  href?: string;
 }) {
-  if (avatar) {
-    return (
+  const builtin = builtinAvatarId(avatar);
+  let face;
+  if (builtin) {
+    face = (
+      <span
+        className="flex shrink-0 items-center justify-center overflow-hidden rounded-full bg-[#f4f0e8] ring-1 ring-black/[0.06]"
+        style={{ width: size, height: size }}
+        title={displayName}
+      >
+        <img
+          src={builtinAvatarSrc(builtin)}
+          alt=""
+          draggable={false}
+          className="h-full w-full object-cover"
+        />
+      </span>
+    );
+  } else if (avatar) {
+    face = (
       <img
         src={avatar}
         alt=""
@@ -37,16 +59,36 @@ export function AssigneeAvatar({
         style={{ width: size, height: size }}
       />
     );
+  } else {
+    face = (
+      <span
+        className="flex shrink-0 items-center justify-center rounded-full bg-elevated font-semibold text-muted"
+        style={{ width: size, height: size, fontSize: size * 0.42 }}
+        title={displayName}
+      >
+        {initials(displayName)}
+      </span>
+    );
   }
+  if (!href) return face;
   return (
-    <span
-      className="flex shrink-0 items-center justify-center rounded-full bg-elevated font-semibold text-muted"
-      style={{ width: size, height: size, fontSize: size * 0.42 }}
+    <Link
+      href={href}
       title={displayName}
+      onClick={(event) => event.stopPropagation()}
+      className="shrink-0 rounded-full transition-opacity hover:opacity-80"
     >
-      {initials(displayName)}
-    </span>
+      {face}
+    </Link>
   );
+}
+
+// Same destination as clicking a name under "Your team" in the sidebar.
+export function useAssigneeHref() {
+  const params = useParams<{ workspaceId?: string }>();
+  const workspaceId = params?.workspaceId;
+  return (userId: string) =>
+    workspaceId ? `/${workspaceId}/people/${userId}` : undefined;
 }
 
 // Overlapping avatars for issues with more than one assignee.
@@ -54,10 +96,12 @@ export function AssigneeStack({
   assignees,
   size = 18,
   max = 3,
+  hrefFor,
 }: {
   assignees: Assignee[];
   size?: number;
   max?: number;
+  hrefFor?: (userId: string) => string | undefined;
 }) {
   if (assignees.length === 0) return null;
   const shown = assignees.slice(0, max);
@@ -81,6 +125,7 @@ export function AssigneeStack({
             displayName={assignee.displayName}
             avatar={assignee.avatar}
             size={size}
+            href={hrefFor?.(assignee.id)}
           />
         </span>
       ))}
@@ -91,6 +136,7 @@ export function AssigneeStack({
 
 export function IssueTable({ issues }: { issues: IssueWithLabels[] }) {
   const { openIssue, openIssueId, setFocused } = useUI();
+  const assigneeHref = useAssigneeHref();
   const [focusIndex, setFocusIndex] = useState<number | null>(null);
   const rowRefs = useRef<(HTMLDivElement | null)[]>([]);
 
@@ -159,7 +205,7 @@ export function IssueTable({ issues }: { issues: IssueWithLabels[] }) {
     <div className="flex-1 overflow-y-auto">
       {groups.map((group) => (
         <div key={group.status}>
-          <div className="sticky top-0 z-10 flex items-center gap-2 border-b border-border bg-bg/95 px-4 py-1.5 backdrop-blur">
+          <div className="sticky top-0 z-10 flex items-center gap-2 border-b border-border bg-bg/95 px-6 py-1.5 backdrop-blur">
             <StatusIcon status={group.status} size={13} />
             <span className="text-[12px] font-medium text-muted">
               {STATUS_META[group.status].label}
@@ -185,7 +231,7 @@ export function IssueTable({ issues }: { issues: IssueWithLabels[] }) {
                   openIssue(issue.id);
                 }}
                 onMouseEnter={() => setFocusIndex(index)}
-                className={`flex cursor-default items-center gap-2.5 px-4 py-[7px] text-[13px] transition-colors ${
+                className={`flex cursor-default items-center gap-2.5 px-6 py-[7px] text-[13px] transition-colors ${
                   focused ? "bg-row-active" : opened ? "bg-surface" : "hover:bg-elevated/40"
                 } ${opened ? "border-l-2 border-l-accent" : "border-l-2 border-l-transparent"}`}
               >
@@ -205,18 +251,35 @@ export function IssueTable({ issues }: { issues: IssueWithLabels[] }) {
                 </span>
                 <span className="flex w-[128px] shrink-0 items-center gap-1.5">
                   {issue.assignees.length === 1 ? (
-                    <>
-                      <AssigneeAvatar
-                        displayName={issue.assignees[0].displayName}
-                        avatar={issue.assignees[0].avatar}
-                      />
-                      <span className="min-w-0 truncate text-[12px] text-muted">
-                        {issue.assignees[0].displayName}
-                      </span>
-                    </>
+                    (() => {
+                      const assignee = issue.assignees[0];
+                      const href = assigneeHref(assignee.id);
+                      const face = (
+                        <>
+                          <AssigneeAvatar
+                            displayName={assignee.displayName}
+                            avatar={assignee.avatar}
+                          />
+                          <span className="min-w-0 truncate text-[12px] text-muted">
+                            {assignee.displayName}
+                          </span>
+                        </>
+                      );
+                      return href ? (
+                        <Link
+                          href={href}
+                          onClick={(event) => event.stopPropagation()}
+                          className="flex min-w-0 items-center gap-1.5 rounded transition-colors hover:text-text"
+                        >
+                          {face}
+                        </Link>
+                      ) : (
+                        <span className="flex min-w-0 items-center gap-1.5">{face}</span>
+                      );
+                    })()
                   ) : issue.assignees.length > 1 ? (
                     <>
-                      <AssigneeStack assignees={issue.assignees} />
+                      <AssigneeStack assignees={issue.assignees} hrefFor={assigneeHref} />
                       <span className="truncate text-[12px] text-muted">
                         {issue.assignees.length} assignees
                       </span>

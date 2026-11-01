@@ -8,13 +8,18 @@ const inter = Inter({
 });
 
 export const metadata: Metadata = {
-  title: "Tacos",
+  title: "TaCos",
   description: "Agent-first issue tracking for teams",
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en" className={`${inter.variable} h-full antialiased`}>
+    // The desktop shell tags <html> with data-desktop before React hydrates.
+    <html
+      lang="en"
+      className={`${inter.variable} h-full antialiased`}
+      suppressHydrationWarning
+    >
       <body className="h-full">{children}</body>
     </html>
   );

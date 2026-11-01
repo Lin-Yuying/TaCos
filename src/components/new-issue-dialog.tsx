@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { usePathname, useSearchParams } from "next/navigation";
-import { Users, X } from "lucide-react";
+import { LoaderCircle, Sparkles, Users, X } from "lucide-react";
 import { useUI } from "@/components/ui-context";
 import { Menu, MenuItem } from "@/components/menu";
 import {
@@ -15,11 +15,12 @@ import {
 } from "@/components/icons";
 import { AssigneeAvatar, AssigneeStack } from "@/components/issue-table";
 import { createIssueAction } from "@/app/actions";
+import { draftIssueAction } from "@/app/ai-actions";
 import { STATUS_ORDER, type Priority, type Status } from "@/lib/constants";
 import type { Label, Member, Project } from "@/lib/issues";
 
 export function NewIssueDialog({ workspaceId }: { workspaceId: string }) {
-  const { composerOpen, composerStatus, setComposerOpen, openIssue } = useUI();
+  const { composerOpen, composerStatus, composerSeed, setComposerOpen, openIssue, aiReady } = useUI();
   const searchParams = useSearchParams();
   const pathname = usePathname();
   // Opened from a project's Overview page, the composer should stay in that project.
@@ -37,17 +38,25 @@ export function NewIssueDialog({ workspaceId }: { workspaceId: string }) {
   const [members, setMembers] = useState<Member[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [aiOpen, setAiOpen] = useState(false);
+  const [aiPrompt, setAiPrompt] = useState("");
+  const [aiBusy, setAiBusy] = useState(false);
+  const [aiError, setAiError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!composerOpen) return;
-    setTitle("");
-    setDescription("");
+    setTitle(composerSeed?.title ?? "");
+    setDescription(composerSeed?.description ?? "");
     setStatus(composerStatus ?? "todo");
     setPriority(0);
     setAssigneeIds([]);
     setLabelNames([]);
     setError(null);
     setBusy(false);
+    setAiOpen(false);
+    setAiPrompt("");
+    setAiBusy(false);
+    setAiError(null);
     fetch(`/api/internal/${workspaceId}/projects`)
       .then((res) => res.json())
       .then((data: Project[]) => {
@@ -65,7 +74,7 @@ export function NewIssueDialog({ workspaceId }: { workspaceId: string }) {
       .then((res) => res.json())
       .then((data) => setMembers(data as Member[]))
       .catch(() => setMembers([]));
-  }, [composerOpen, composerStatus, workspaceId, activeProjectId]);
+  }, [composerOpen, composerStatus, composerSeed, workspaceId, activeProjectId]);
 
   useEffect(() => {
     if (!composerOpen) return;
@@ -96,6 +105,9 @@ export function NewIssueDialog({ workspaceId }: { workspaceId: string }) {
     });
     setBusy(false);
     if (result.ok) {
+      // Pages that opened the composer from a passage use this to drop the task
+      // reference exactly where the passage was.
+      composerSeed?.onCreated?.(result.data);
       setComposerOpen(false);
       openIssue(result.data.id);
     } else {
@@ -104,6 +116,30 @@ export function NewIssueDialog({ workspaceId }: { workspaceId: string }) {
   }
 
   const project = projects.find((p) => p.id === projectId);
+
+  async function aiDraft() {
+    if (!aiPrompt.trim() || aiBusy) return;
+    setAiBusy(true);
+    setAiError(null);
+    const result = await draftIssueAction(workspaceId, {
+      prompt: aiPrompt,
+      projectId: projectId || undefined,
+    });
+    setAiBusy(false);
+    if (!result.ok) {
+      setAiError(result.error);
+      return;
+    }
+    const task = result.data;
+    setTitle(task.title);
+    setDescription(task.description);
+    setPriority(task.priority);
+    if (task.labels.length > 0) {
+      setLabelNames((prev) => [...new Set([...prev, ...task.labels])]);
+    }
+    setAiOpen(false);
+    setAiPrompt("");
+  }
 
   return (
     <>
@@ -120,7 +156,7 @@ export function NewIssueDialog({ workspaceId }: { workspaceId: string }) {
         >
           <div className="flex items-center justify-between border-b border-border px-4 py-2 text-[12px] text-faint">
             <span>
-              New issue
+              New task
               {project ? (
                 <span className="ml-1 inline-flex items-center gap-1 text-muted">
                   <ProjectIcon color={project.color} size={12} />
@@ -158,6 +194,54 @@ export function NewIssueDialog({ workspaceId }: { workspaceId: string }) {
               rows={4}
               className="mt-2 w-full resize-none bg-transparent text-[13px] leading-relaxed text-muted placeholder:text-faint"
             />
+            {aiReady && (
+              <div className="mt-2">
+                {aiOpen ? (
+                  <div className="flex items-center gap-1.5">
+                    <input
+                      autoFocus
+                      value={aiPrompt}
+                      onChange={(event) => setAiPrompt(event.target.value)}
+                      onKeyDown={(event) => {
+                        if (event.key === "Enter") {
+                          event.preventDefault();
+                          void aiDraft();
+                        }
+                        if (event.key === "Escape") setAiOpen(false);
+                      }}
+                      placeholder="Describe the task, e.g. 修复微信登录回调偶发失败"
+                      className="min-w-0 flex-1 rounded-md border border-border bg-elevated/40 px-2.5 py-1.5 text-[12.5px] text-text placeholder:text-faint focus:border-border-strong"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => void aiDraft()}
+                      disabled={!aiPrompt.trim() || aiBusy}
+                      className="flex shrink-0 items-center gap-1 rounded-md bg-accent px-2.5 py-1.5 text-[12px] font-medium text-white disabled:opacity-40"
+                    >
+                      {aiBusy ? <LoaderCircle size={11} className="animate-spin" /> : <Sparkles size={11} />}
+                      {aiBusy ? "Drafting…" : "Draft"}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setAiOpen(false)}
+                      aria-label="Close AI draft"
+                      className="shrink-0 rounded p-1 text-faint hover:bg-elevated hover:text-text"
+                    >
+                      <X size={13} />
+                    </button>
+                  </div>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => setAiOpen(true)}
+                    className="flex items-center gap-1 rounded-md px-1.5 py-1 text-[12px] text-muted transition-colors hover:bg-elevated hover:text-text"
+                  >
+                    <Sparkles size={12} /> AI draft
+                  </button>
+                )}
+                {aiError && <div className="mt-1 text-[11.5px] text-danger">{aiError}</div>}
+              </div>
+            )}
             <div className="mt-3 flex flex-wrap items-center gap-2">
               <Menu
                 width={200}
@@ -373,7 +457,7 @@ export function NewIssueDialog({ workspaceId }: { workspaceId: string }) {
                   disabled={!title.trim() || !project || busy}
                   className="rounded-md bg-accent px-3 py-1.5 text-[13px] font-medium text-white transition-colors hover:bg-accent-hover disabled:opacity-40"
                 >
-                  Create issue
+                  Create task
                   <span className="ml-2 text-[11px] opacity-75">⌘↵</span>
                 </button>
               </div>

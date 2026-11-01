@@ -1,5 +1,5 @@
 // Assembles the Next standalone server into a self-contained folder the desktop app can
-// ship inside its bundle: payload/server.js runs Tacos with no Node install on the target
+// ship inside its bundle: payload/server.js runs TaCos with no Node install on the target
 // machine.
 import {
   copyFileSync,
@@ -89,6 +89,9 @@ cpSync(path.join(nextDir, "static"), path.join(outDir, ".next", "static"), { rec
 if (existsSync(path.join(root, "public"))) {
   cpSync(path.join(root, "public"), path.join(outDir, "public"), { recursive: true });
 }
+// Work mode spawns this shim from a computed path, so tracing never picks it up. Without
+// it a packaged server would answer every tool call with "the bridge is missing".
+cpSync(path.join(root, "scripts", "agent-mcp.mjs"), path.join(outDir, "agent-mcp.mjs"));
 
 // File tracing can still pick up the checkout's live database. A shipped copy would hand
 // the installer someone else's accounts, so drop it and refuse to finish if any survives.

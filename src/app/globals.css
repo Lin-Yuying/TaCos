@@ -15,6 +15,13 @@
   --color-danger: #d93025;
   --color-row-active: #f3f3f3;
 
+  /* Code tokens stay muted enough to sit inside a page, not on top of it. */
+  --color-code-keyword: #9a6dd7;
+  --color-code-builtin: #2563b8;
+  --color-code-string: #0f7b64;
+  --color-code-number: #b45309;
+  --color-code-comment: #9b9a97;
+
   --font-sans: var(--font-inter), -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   --font-mono: ui-monospace, "SF Mono", SFMono-Regular, Menlo, monospace;
 }
@@ -39,6 +46,15 @@ body {
 
 ::selection {
   background: color-mix(in srgb, var(--color-text) 16%, transparent);
+}
+
+/* Passages in the Overview description that carry an anchored comment. */
+::highlight(overview-comment) {
+  background-color: #fdeab3;
+  text-decoration: underline;
+  text-decoration-color: #d9b64e;
+  text-decoration-thickness: 2px;
+  text-underline-offset: 2px;
 }
 
 /*
@@ -141,6 +157,14 @@ html[data-desktop] .app-windowbar {
 html[data-desktop] .app-windowbar .app-windowbar-left {
   padding-left: 78px;
   -webkit-app-region: drag;
+}
+
+/* The icon rail is narrower than the traffic-light inset, so its segment has to
+   grow: a narrow rail pushed the collapse button onto the first tab, where it could
+   not be clicked. 78px lights + 28px button + 12px right padding. The rail is
+   draggable, but it tops out below this floor, so the rule keeps holding. */
+html[data-desktop] .app-windowbar .app-windowbar-left[data-rail="true"] {
+  min-width: 118px;
 }
 
 html[data-desktop] .app-windowbar .app-windowbar-left > * {

@@ -72,7 +72,7 @@ async function IssuesView({
   });
 
   return (
-    <div className="flex min-w-0 flex-1 flex-col">
+    <div className="flex min-h-0 min-w-0 flex-1 flex-col">
       <ListHeader
         view={view === "all" || view === "active" ? view : (view as Status)}
         q={q}
@@ -81,9 +81,9 @@ async function IssuesView({
         projectParam={project?.id ?? projectId}
         projectName={project?.name}
         assigneeParam={assigneeParam}
-        assigneeName={assigneeMember?.displayName}
+        assigneeName={assigneeParam === "me" ? user.displayName : assigneeMember?.displayName}
       />
-      <IssueLayout issues={issues} />
+      <IssueLayout issues={issues} workspaceId={workspaceId} currentUserId={user.id} />
     </div>
   );
 }

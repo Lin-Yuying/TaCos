@@ -22,7 +22,7 @@ async function View({ params }: { params: Promise<{ workspaceId: string }> }) {
   const { workspaceId } = await params;
   const user = await getSessionUser();
   if (!user) redirect("/login");
-  await requireWorkspace(workspaceId);
+  const ctx = await requireWorkspace(workspaceId);
   const [projects, issues] = await Promise.all([
     listTrashedProjects(workspaceId),
     listTrashedIssues(workspaceId),
@@ -38,6 +38,7 @@ async function View({ params }: { params: Promise<{ workspaceId: string }> }) {
       <TrashView
         workspaceId={workspaceId}
         userId={user.id}
+        isOwner={ctx.workspace.createdBy === user.id}
         projects={projects}
         issues={issues}
       />

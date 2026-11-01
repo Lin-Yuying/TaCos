@@ -1,0 +1,95 @@
+"use server";
+
+import { revalidatePath } from "next/cache";
+import { requireWorkspace } from "@/lib/auth";
+import {
+  createPage,
+  deletePage,
+  importMarkdownPage,
+  setPageShared,
+  updatePage,
+  type DocPage,
+  type ImportedPage,
+} from "@/lib/pages";
+import type { ActionResult } from "./actions";
+
+function refresh(workspaceId: string) {
+  revalidatePath(`/${workspaceId}`, "layout");
+}
+
+async function run<T>(fn: () => Promise<T>): Promise<ActionResult<T>> {
+  try {
+    return { ok: true, data: await fn() };
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : "Something went wrong" };
+  }
+}
+
+export async function createPageAction(
+  workspaceId: string,
+  options: { parentId?: string | null; projectId?: string | null } = {}
+): Promise<ActionResult<DocPage>> {
+  return run(async () => {
+    const { user } = await requireWorkspace(workspaceId);
+    const page = await createPage(workspaceId, user.id, {
+      parentId: options.parentId ?? null,
+      projectId: options.projectId ?? null,
+    });
+    refresh(workspaceId);
+    return page;
+  });
+}
+
+export async function importMarkdownAction(
+  workspaceId: string,
+  file: { path: string; content: string }
+): Promise<ActionResult<ImportedPage>> {
+  return run(async () => {
+    const { user } = await requireWorkspace(workspaceId);
+    // The browser refreshes the sidebar once the whole batch lands, so a folder import
+    // does not revalidate the layout for every single file.
+    return importMarkdownPage(workspaceId, user.id, file);
+  });
+}
+
+export async function updatePageAction(
+  workspaceId: string,
+  pageId: string,
+  patch: { title?: string; doc?: string; icon?: string | null }
+): Promise<ActionResult<DocPage>> {
+  return run(async () => {
+    const { user } = await requireWorkspace(workspaceId);
+    const page = await updatePage(workspaceId, pageId, user.id, patch);
+    // A body save lands every time typing pauses. Revalidating here re-rendered the whole
+    // workspace layout on that beat — a visible flash while the writer is still in the
+    // document — and nothing outside the editor reads the body. Only the title and icon
+    // show up in the sidebar, so only those need the refresh.
+    if (patch.title !== undefined || patch.icon !== undefined) refresh(workspaceId);
+    return page;
+  });
+}
+
+export async function setPageSharedAction(
+  workspaceId: string,
+  pageId: string,
+  shared: boolean
+): Promise<ActionResult<DocPage>> {
+  return run(async () => {
+    const { user } = await requireWorkspace(workspaceId);
+    const page = await setPageShared(workspaceId, pageId, user.id, shared);
+    refresh(workspaceId);
+    return page;
+  });
+}
+
+export async function deletePageAction(
+  workspaceId: string,
+  pageId: string
+): Promise<ActionResult<string[]>> {
+  return run(async () => {
+    const { user } = await requireWorkspace(workspaceId);
+    const deleted = await deletePage(workspaceId, pageId, user.id);
+    refresh(workspaceId);
+    return deleted;
+  });
+}

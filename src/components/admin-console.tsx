@@ -115,7 +115,7 @@ export function AdminConsole({
           className="ml-auto inline-flex items-center gap-1 rounded-md px-2 py-1 text-[12px] text-muted transition-colors hover:bg-elevated hover:text-text"
         >
           <ArrowLeft size={13} />
-          {homeUrl === "/onboarding" ? "Create / join a workspace" : "Back to issues"}
+          {homeUrl === "/onboarding" ? "Create / join a workspace" : "Back"}
         </Link>
       </header>
 

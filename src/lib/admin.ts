@@ -12,6 +12,7 @@ import {
   workspaceMembers,
 } from "@/db/schema";
 import { TacosError } from "./issues";
+import { BUILTIN_AVATARS, nextFreeAvatar } from "./avatars";
 
 export type SiteMember = {
   id: string;
@@ -80,11 +81,17 @@ export async function createSiteMember(input: {
   if (taken.length > 0) throw new TacosError("Username is already taken", 409);
 
   const id = crypto.randomUUID();
+  const existing = await db.select({ avatar: users.avatar }).from(users);
   await db.insert(users).values({
     id,
     username,
     displayName,
     passwordHash: hashPassword(input.password),
+    // A fresh account gets an animal nobody else on this server is using yet.
+    avatar: nextFreeAvatar(
+      existing.map((row) => row.avatar),
+      crypto.randomInt(BUILTIN_AVATARS.length)
+    ),
     role: "member",
     createdAt: new Date().toISOString(),
   });

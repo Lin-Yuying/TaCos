@@ -8,12 +8,14 @@ import {
   listUserWorkspaces,
   setLastWorkspace,
 } from "@/lib/auth";
-import { listFavoriteProjects, listMembers, listProjects } from "@/lib/issues";
+import { listFavoriteProjects, listMembers, listProjects, getJoinCode } from "@/lib/issues";
+import { listPageTree } from "@/lib/pages";
 import { UIProvider } from "@/components/ui-context";
 import { WorkspaceShell } from "@/components/workspace-shell";
 import { NewIssueDialog } from "@/components/new-issue-dialog";
 import { NewProjectDialog } from "@/components/new-project-dialog";
 import { CommandPalette } from "@/components/command-palette";
+import { aiReady } from "@/lib/ai";
 
 // Auth-gated shell: every request must resolve the session before rendering.
 // Blocking navigation is correct here, so opt out of instant-navigation checks.
@@ -46,21 +48,33 @@ export default async function WorkspaceLayout({
     await setLastWorkspace(user.id, active.id);
   }
   // Server-sourced so router.refresh() after create/delete updates the sidebar list.
-  const [projects, members, favorites] = await Promise.all([
-    listProjects(workspaceId),
+  const [projects, members, favorites, pages, aiEnabled, joinCode] = await Promise.all([
+    listProjects(workspaceId, user.id),
     listMembers(workspaceId),
     listFavoriteProjects(workspaceId, user.id),
+    listPageTree(workspaceId, user.id),
+    aiReady(workspaceId),
+    getJoinCode(workspaceId),
   ]);
 
   return (
-    <UIProvider>
+    <UIProvider aiReady={aiEnabled}>
       <WorkspaceShell
-        workspace={{ id: active.id, name: active.name, key: active.key, icon: active.icon, role: active.role }}
+        workspace={{
+          id: active.id,
+          name: active.name,
+          key: active.key,
+          icon: active.icon,
+          role: active.role,
+          createdBy: active.createdBy,
+        }}
         user={user}
         workspaces={workspaces}
         projects={projects}
         favorites={favorites}
         members={members}
+        pages={pages}
+        joinCode={joinCode}
       >
         {children}
       </WorkspaceShell>

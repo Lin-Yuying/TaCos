@@ -3,25 +3,31 @@
 import { Star } from "lucide-react";
 import { ProjectIcon } from "@/components/icons";
 
-export type ProjectTab = "overview" | "issues";
+export type ProjectTab = "overview" | "issues" | "documents";
 
 const TABS: { key: ProjectTab; label: string }[] = [
   { key: "overview", label: "Overview" },
-  { key: "issues", label: "Issues" },
+  { key: "issues", label: "Tasks" },
+  { key: "documents", label: "Documents" },
 ];
 
 export function ProjectHeader({
   project,
   tab,
   issueCount,
+  documentCount,
   favorite,
+  canViewOverview,
   onTab,
   onToggleFavorite,
 }: {
   project: { name: string; color: string };
   tab: ProjectTab;
   issueCount: number;
+  documentCount: number;
   favorite: boolean;
+  // Without a grant, the Overview pill is not shown at all — the document is private.
+  canViewOverview: boolean;
   onTab: (tab: ProjectTab) => void;
   onToggleFavorite: () => void;
 }) {
@@ -44,7 +50,7 @@ export function ProjectHeader({
         </button>
       </div>
       <nav className="mt-2 flex items-center gap-1.5">
-        {TABS.map((item) => {
+        {TABS.filter((item) => item.key !== "overview" || canViewOverview).map((item) => {
           const active = item.key === tab;
           return (
             <button
@@ -52,7 +58,7 @@ export function ProjectHeader({
               type="button"
               onClick={() => onTab(item.key)}
               aria-current={active ? "page" : undefined}
-              className={`flex items-center gap-1.5 rounded-full border px-3 py-1 text-[12.5px] transition-colors ${
+              className={`flex items-center gap-1.5 rounded-full border px-3 py-1 text-[12px] transition-colors ${
                 active
                   ? "border-transparent bg-elevated font-medium text-text"
                   : "border-border text-muted hover:border-border-strong hover:text-text"
@@ -61,6 +67,9 @@ export function ProjectHeader({
               {item.label}
               {item.key === "issues" && (
                 <span className={active ? "text-muted" : "text-faint"}>{issueCount}</span>
+              )}
+              {item.key === "documents" && documentCount > 0 && (
+                <span className={active ? "text-muted" : "text-faint"}>{documentCount}</span>
               )}
             </button>
           );

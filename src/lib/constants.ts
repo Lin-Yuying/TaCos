@@ -55,3 +55,15 @@ export const PROJECT_COLORS = [
 ];
 
 export const DEFAULT_PROJECT_COLOR = PROJECT_COLORS[0];
+
+// How long before a task's due date it should remind. Stored as the preset so the
+// reminder keeps sliding with the due date instead of pinning an absolute moment.
+export type ReminderPreset = "12h" | "1d" | "3d" | "5d" | "7d";
+export const REMINDER_PRESETS: ReminderPreset[] = ["12h", "1d", "3d", "5d", "7d"];
+export const REMINDER_META: Record<ReminderPreset, { label: string; hours: number }> = {
+  "12h": { label: "12 hours before", hours: 12 },
+  "1d": { label: "1 day before", hours: 24 },
+  "3d": { label: "3 days before", hours: 72 },
+  "5d": { label: "5 days before", hours: 120 },
+  "7d": { label: "7 days before", hours: 168 },
+};

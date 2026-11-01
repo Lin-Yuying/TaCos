@@ -22,6 +22,7 @@ import {
   resolveAssigneeIds,
   updateIssue,
   type Priority,
+  type ReminderPreset,
   type Status,
 } from "../src/lib/issues";
 
@@ -174,9 +175,14 @@ server.registerTool(
         .optional()
         .describe("Assign several people at once; takes precedence over assignee"),
       labels: z.array(z.string()).optional().describe("Label names to attach"),
+      dueDate: z.string().optional().describe("Due date as YYYY-MM-DD"),
+      reminder: z
+        .enum(["12h", "1d", "3d", "5d", "7d"])
+        .optional()
+        .describe("How long before the due date to remind"),
     },
   },
-  async ({ title, description, project, status, priority, assignee, assignees, labels }) =>
+  async ({ title, description, project, status, priority, assignee, assignees, labels, dueDate, reminder }) =>
     guard(async () => {
       const workspaceId = await getWorkspaceId();
       const assigneeValues = assignees ?? (assignee ? [assignee] : []);
@@ -190,6 +196,8 @@ server.registerTool(
           priority: parsePriority(priority) ?? 0,
           assigneeIds: await resolveAssigneeIds(workspaceId, assigneeValues),
           labelNames: labels,
+          dueDate,
+          reminder,
         },
         AGENT
       );
@@ -214,9 +222,17 @@ server.registerTool(
         .optional()
         .describe("Full replacement list of assignees; empty array to unassign"),
       labels: z.array(z.string()).optional().describe("Full replacement list of label names"),
+      dueDate: z
+        .string()
+        .optional()
+        .describe("Due date as YYYY-MM-DD; empty string clears it"),
+      reminder: z
+        .string()
+        .optional()
+        .describe("How long before the due date to remind: 12h, 1d, 3d, 5d, 7d; empty string clears it"),
     },
   },
-  async ({ id, title, description, status, priority, assignee, assignees, labels }) =>
+  async ({ id, title, description, status, priority, assignee, assignees, labels, dueDate, reminder }) =>
     guard(async () => {
       const workspaceId = await getWorkspaceId();
       let assigneeIds: string[] | undefined;
@@ -239,6 +255,14 @@ server.registerTool(
           priority: parsePriority(priority),
           assigneeIds,
           labelNames: labels,
+          dueDate:
+            dueDate === undefined ? undefined : dueDate === "" ? null : dueDate,
+          reminder:
+            reminder === undefined
+              ? undefined
+              : reminder === ""
+                ? null
+                : (reminder as ReminderPreset),
         },
         AGENT
       );

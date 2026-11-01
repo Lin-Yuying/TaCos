@@ -4,11 +4,12 @@ import { existsSync, mkdirSync } from "node:fs";
 import path from "node:path";
 import crypto from "node:crypto";
 import { DEFAULT_PROJECT_COLOR, PROJECT_COLORS } from "../lib/constants";
+import { BUILTIN_AVATAR_PREFIX, builtinAvatarId, nextFreeAvatar } from "../lib/avatars";
 import * as schema from "./schema";
 
 // A packaged desktop install cannot write next to its read-only app bundle, so the
 // data directory comes from the environment and only falls back to the repo checkout.
-const DATA_DIR = process.env.TACOS_DATA_DIR
+export const DATA_DIR = process.env.TACOS_DATA_DIR
   ? path.resolve(process.env.TACOS_DATA_DIR)
   : path.join(process.cwd(), "data");
 
@@ -44,6 +45,7 @@ CREATE TABLE IF NOT EXISTS workspaces (
   key TEXT NOT NULL UNIQUE,
   icon TEXT,
   created_by TEXT,
+  members_see_all_tasks INTEGER NOT NULL DEFAULT 1,
   created_at TEXT NOT NULL
 );
 
@@ -94,6 +96,73 @@ CREATE TABLE IF NOT EXISTS favorites (
 );
 CREATE INDEX IF NOT EXISTS favorites_user_idx ON favorites (user_id);
 
+CREATE TABLE IF NOT EXISTS project_grants (
+  project_id TEXT NOT NULL,
+  user_id TEXT NOT NULL,
+  role TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  PRIMARY KEY (project_id, user_id)
+);
+CREATE INDEX IF NOT EXISTS project_grants_user_idx ON project_grants (user_id);
+
+CREATE TABLE IF NOT EXISTS overview_comments (
+  id TEXT PRIMARY KEY,
+  project_id TEXT NOT NULL,
+  author_id TEXT NOT NULL,
+  body TEXT NOT NULL,
+  quote TEXT,
+  occurrence INTEGER NOT NULL DEFAULT 1,
+  created_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS overview_comments_project_idx ON overview_comments (project_id);
+
+CREATE TABLE IF NOT EXISTS overview_doc_edits (
+  id TEXT PRIMARY KEY,
+  project_id TEXT NOT NULL,
+  user_id TEXT NOT NULL,
+  doc_before TEXT NOT NULL,
+  doc_after TEXT NOT NULL,
+  created_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS overview_doc_edits_project_idx ON overview_doc_edits (project_id);
+
+CREATE TABLE IF NOT EXISTS overview_doc_edit_views (
+  project_id TEXT NOT NULL,
+  user_id TEXT NOT NULL,
+  seen_at TEXT NOT NULL,
+  PRIMARY KEY (project_id, user_id)
+);
+
+-- The Resources row on a project overview: attached documents and links, in the order
+-- they were added. A document resource points at a page; the title is read live.
+CREATE TABLE IF NOT EXISTS project_resources (
+  id TEXT PRIMARY KEY,
+  project_id TEXT NOT NULL,
+  kind TEXT NOT NULL,
+  title TEXT NOT NULL,
+  url TEXT,
+  page_id TEXT,
+  created_by TEXT NOT NULL,
+  created_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS project_resources_project_idx ON project_resources (project_id);
+
+CREATE TABLE IF NOT EXISTS pages (
+  id TEXT PRIMARY KEY,
+  workspace_id TEXT NOT NULL,
+  parent_id TEXT,
+  project_id TEXT,
+  title TEXT NOT NULL,
+  icon TEXT,
+  doc TEXT NOT NULL DEFAULT '',
+  created_by TEXT NOT NULL,
+  shared INTEGER NOT NULL DEFAULT 0,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS pages_workspace_idx ON pages (workspace_id);
+CREATE INDEX IF NOT EXISTS pages_parent_idx ON pages (parent_id);
+
 CREATE TABLE IF NOT EXISTS issues (
   id TEXT PRIMARY KEY,
   workspace_id TEXT NOT NULL,
@@ -106,7 +175,10 @@ CREATE TABLE IF NOT EXISTS issues (
   priority INTEGER NOT NULL DEFAULT 0,
   created_by TEXT,
   created_via TEXT NOT NULL DEFAULT 'web',
+  due_date TEXT,
+  reminder TEXT,
   deleted_at TEXT,
+  position REAL NOT NULL DEFAULT 0,
   created_at TEXT NOT NULL,
   updated_at TEXT NOT NULL
 );
@@ -182,6 +254,68 @@ CREATE TABLE IF NOT EXISTS api_keys (
   revoked_at TEXT
 );
 CREATE INDEX IF NOT EXISTS api_keys_workspace_idx ON api_keys (workspace_id);
+
+-- Agent conversations live beside the workspace they belong to: each one is bound to a
+-- project, the way a Codex thread is bound to a folder. Messages and the work trajectory
+-- (commands, file changes, tool calls) are kept so a thread can be reopened later.
+CREATE TABLE IF NOT EXISTS agent_threads (
+  id TEXT PRIMARY KEY,
+  workspace_id TEXT NOT NULL,
+  project_id TEXT NOT NULL,
+  title TEXT NOT NULL DEFAULT '',
+  mode TEXT NOT NULL DEFAULT 'chat',
+  engine TEXT NOT NULL DEFAULT 'codex',
+  visibility TEXT NOT NULL DEFAULT 'private',
+  created_by TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS agent_threads_workspace_idx ON agent_threads (workspace_id, updated_at);
+
+-- Pin and unread belong to the viewer, so two members can arrange a shared thread
+-- differently. A missing row means "not pinned, read".
+CREATE TABLE IF NOT EXISTS agent_thread_flags (
+  thread_id TEXT NOT NULL,
+  user_id TEXT NOT NULL,
+  pinned_at TEXT,
+  unread INTEGER NOT NULL DEFAULT 0,
+  PRIMARY KEY (thread_id, user_id)
+);
+
+CREATE TABLE IF NOT EXISTS agent_messages (
+  id TEXT PRIMARY KEY,
+  thread_id TEXT NOT NULL,
+  role TEXT NOT NULL,
+  content TEXT NOT NULL DEFAULT '',
+  created_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS agent_messages_thread_idx ON agent_messages (thread_id);
+
+CREATE TABLE IF NOT EXISTS agent_steps (
+  id TEXT PRIMARY KEY,
+  thread_id TEXT NOT NULL,
+  message_id TEXT NOT NULL,
+  kind TEXT NOT NULL,
+  title TEXT NOT NULL,
+  detail TEXT,
+  status TEXT NOT NULL DEFAULT 'running',
+  created_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS agent_steps_thread_idx ON agent_steps (thread_id);
+CREATE INDEX IF NOT EXISTS agent_steps_message_idx ON agent_steps (message_id);
+
+-- One AI provider per workspace. The key is stored encrypted with a secret that lives
+-- beside the database, never in the repository or in the browser.
+CREATE TABLE IF NOT EXISTS ai_settings (
+  workspace_id TEXT PRIMARY KEY,
+  base_url TEXT NOT NULL,
+  model TEXT NOT NULL,
+  api_key TEXT NOT NULL,
+  enabled INTEGER NOT NULL DEFAULT 1,
+  updated_at TEXT NOT NULL,
+  engine TEXT NOT NULL DEFAULT 'api',
+  proxy TEXT NOT NULL DEFAULT ''
+);
 `;
 
 export function hashPassword(password: string): string {
@@ -211,7 +345,7 @@ function seed(sqlite: Database.Database) {
   const wsId = crypto.randomUUID();
   sqlite
     .prepare("INSERT INTO workspaces (id, name, key, created_at) VALUES (?, ?, ?, ?)")
-    .run(wsId, "Tacos", "HQ", now);
+    .run(wsId, "TaCos", "HQ", now);
 
   sqlite
     .prepare(
@@ -468,10 +602,36 @@ function ensureSuperAdmin(sqlite: Database.Database) {
     .run(
       crypto.randomUUID(),
       BUILT_IN_ADMIN,
-      "Tacos Admin",
+      "TaCos Admin",
       hashPassword(process.env.TACOS_ADMIN_PASSWORD || "admin123"),
       new Date().toISOString()
     );
+}
+
+// Every account starts with a taco ingredient so a new server never shows a wall of
+// initials. Uploads are kept; blank avatars — and avatars still pointing at the
+// retired animal set — are replaced, and no two users on the same server share one
+// until the library runs out.
+function ensureInitialAvatars(sqlite: Database.Database) {
+  const rows = sqlite
+    .prepare("SELECT id, avatar FROM users ORDER BY created_at, id")
+    .all() as Array<{ id: string; avatar: string | null }>;
+  const update = sqlite.prepare("UPDATE users SET avatar = ? WHERE id = ?");
+  const taken: Array<string | null> = [];
+  const pending: typeof rows = [];
+  for (const row of rows) {
+    const builtin = builtinAvatarId(row.avatar);
+    if (builtin) {
+      taken.push(row.avatar);
+    } else if (!row.avatar || row.avatar.startsWith(BUILTIN_AVATAR_PREFIX)) {
+      pending.push(row);
+    }
+  }
+  for (const row of pending) {
+    const avatar = nextFreeAvatar(taken);
+    update.run(avatar, row.id);
+    taken.push(avatar);
+  }
 }
 
 function bootstrap(sqlite: Database.Database) {
@@ -484,11 +644,33 @@ function bootstrap(sqlite: Database.Database) {
   addColumnIfMissing(sqlite, "workspaces", "created_by", "TEXT");
   addColumnIfMissing(sqlite, "workspaces", "deleted_at", "TEXT");
   addColumnIfMissing(sqlite, "workspaces", "deleted_by", "TEXT");
+  addColumnIfMissing(
+    sqlite,
+    "workspaces",
+    "members_see_all_tasks",
+    "INTEGER NOT NULL DEFAULT 1"
+  );
   addColumnIfMissing(sqlite, "projects", "created_by", "TEXT");
   addColumnIfMissing(sqlite, "projects", "deleted_at", "TEXT");
   addColumnIfMissing(sqlite, "projects", "description", "TEXT NOT NULL DEFAULT ''");
   addColumnIfMissing(sqlite, "projects", "doc", "TEXT NOT NULL DEFAULT ''");
   addColumnIfMissing(sqlite, "issues", "deleted_at", "TEXT");
+  addColumnIfMissing(sqlite, "issues", "position", "REAL NOT NULL DEFAULT 0");
+  addColumnIfMissing(sqlite, "issues", "due_date", "TEXT");
+  addColumnIfMissing(sqlite, "issues", "reminder", "TEXT");
+  // Inline comments quote the passage they belong to instead of storing offsets, which
+  // would drift as soon as the overview is edited.
+  addColumnIfMissing(sqlite, "ai_settings", "engine", "TEXT NOT NULL DEFAULT 'api'");
+  addColumnIfMissing(sqlite, "ai_settings", "proxy", "TEXT NOT NULL DEFAULT ''");
+  addColumnIfMissing(sqlite, "overview_comments", "quote", "TEXT");
+  addColumnIfMissing(sqlite, "overview_comments", "occurrence", "INTEGER NOT NULL DEFAULT 1");
+  // A conversation remembers which Codex model, reasoning effort and approval mode it runs on.
+  addColumnIfMissing(sqlite, "agent_threads", "model", "TEXT NOT NULL DEFAULT ''");
+  addColumnIfMissing(sqlite, "agent_threads", "effort", "TEXT NOT NULL DEFAULT ''");
+  addColumnIfMissing(sqlite, "agent_threads", "approval", "TEXT NOT NULL DEFAULT 'ask'");
+  if (addColumnIfMissing(sqlite, "pages", "project_id", "TEXT")) {
+    sqlite.exec("CREATE INDEX IF NOT EXISTS pages_project_idx ON pages (project_id)");
+  }
   const addedIssueCreator = addColumnIfMissing(sqlite, "issues", "created_by", "TEXT");
   if (!hadIssueAssignees && hasColumn(sqlite, "issues", "assignee_id")) {
     // Old boards held exactly one assignee per issue; carry it into the join table.
@@ -547,6 +729,10 @@ function bootstrap(sqlite: Database.Database) {
   // before the superuser, otherwise a fresh install gets an empty demo workspace.
   seed(sqlite);
   ensureSuperAdmin(sqlite);
+  ensureInitialAvatars(sqlite);
+  // Rows that predate manual ordering (and freshly seeded demo issues) get a slot in
+  // insertion order. New issues are created with MAX(position) + 1, so they never hit 0.
+  sqlite.exec("UPDATE issues SET position = rowid * 1000 WHERE position = 0");
   // Nothing older than this column recorded who made a workspace, so the first admin owns
   // it — including the demo workspace, whose rows are inserted above.
   sqlite

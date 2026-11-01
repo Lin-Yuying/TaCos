@@ -5,6 +5,11 @@ import { revalidatePath } from "next/cache";
 import { eq } from "drizzle-orm";
 import { getDb, verifyPassword } from "@/db/client";
 import { users } from "@/db/schema";
+import {
+  BUILTIN_AVATAR_PREFIX,
+  builtinAvatarId,
+  nextFreeAvatar,
+} from "@/lib/avatars";
 import { createSiteMember } from "@/lib/admin";
 import {
   createSession,
@@ -101,14 +106,27 @@ export async function saveAvatarAction(
   return run(async () => {
     const user = await getSessionUser();
     if (!user) throw new TacosError("Not signed in", 401);
+    const db = getDb();
     let stored: string | null = null;
-    if (avatar != null) {
-      if (!AVATAR_DATA_URL.test(avatar) || avatar.length > MAX_AVATAR_CHARS) {
-        throw new TacosError("Avatar must be a PNG, JPEG or WebP image under 200 KB");
+    if (avatar == null) {
+      // Removing an upload returns to an animal nobody else on this server uses.
+      const everyone = await db.select({ id: users.id, avatar: users.avatar }).from(users);
+      stored = nextFreeAvatar(
+        everyone.filter((row) => row.id !== user.id).map((row) => row.avatar)
+      );
+    } else {
+      const builtin = builtinAvatarId(avatar);
+      if (builtin) {
+        stored = `${BUILTIN_AVATAR_PREFIX}${builtin}`;
+      } else if (AVATAR_DATA_URL.test(avatar) && avatar.length <= MAX_AVATAR_CHARS) {
+        stored = avatar;
+      } else {
+        throw new TacosError(
+          "Pick one of the taco ingredients, or upload a PNG, JPEG or WebP image under 200 KB"
+        );
       }
-      stored = avatar;
     }
-    await getDb()
+    await db
       .update(users)
       .set({ avatar: stored })
       .where(eq(users.id, user.id));

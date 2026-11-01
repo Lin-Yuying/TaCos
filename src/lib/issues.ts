@@ -1,5 +1,18 @@
 import crypto from "node:crypto";
-import { and, eq, inArray, isNotNull, isNull, lt, or, sql } from "drizzle-orm";
+import {
+  and,
+  desc,
+  eq,
+  gt,
+  inArray,
+  isNotNull,
+  isNull,
+  lt,
+  ne,
+  notInArray,
+  or,
+  sql,
+} from "drizzle-orm";
 import { getDb } from "../db/client";
 import {
   apiKeys,
@@ -12,6 +25,10 @@ import {
   joinCodes,
   labels,
   notifications,
+  overviewComments,
+  overviewDocEditViews,
+  overviewDocEdits,
+  projectGrants,
   projectMembers,
   projects,
   users,
@@ -22,14 +39,16 @@ import {
   LABEL_COLORS,
   PROJECT_COLORS,
   DEFAULT_PROJECT_COLOR,
+  REMINDER_PRESETS,
   STATUS_ORDER,
   type Priority,
+  type ReminderPreset,
   type Status,
   type Via,
 } from "./constants";
 
-export { LABEL_COLORS, PRIORITY_NAMES, STATUS_ORDER, STATUS_META } from "./constants";
-export type { Priority, Status, Via } from "./constants";
+export { LABEL_COLORS, PRIORITY_NAMES, REMINDER_PRESETS, REMINDER_META, STATUS_ORDER, STATUS_META } from "./constants";
+export type { Priority, ReminderPreset, Status, Via } from "./constants";
 
 export class TacosError extends Error {
   status: number;
@@ -73,6 +92,9 @@ export type Issue = {
   projectKey: string;
   projectName: string;
   assignees: Assignee[];
+  // YYYY-MM-DD, chosen from the calendar in the task panel
+  dueDate: string | null;
+  reminder: ReminderPreset | null;
   // null for agent-created issues; the creator and assignees own status changes
   createdBy: string | null;
   createdVia: Via;
@@ -569,11 +591,92 @@ const projectColumns = {
   createdBy: projects.createdBy,
 };
 
-export async function listProjects(workspaceId: string): Promise<Project[]> {
+type WorkspaceFacts = { ownerId: string | null; seeAll: boolean; role: string | null };
+
+async function workspaceFacts(
+  workspaceId: string,
+  viewerId?: string | null
+): Promise<WorkspaceFacts> {
+  const db = getDb();
+  const [ws] = await db
+    .select({ ownerId: workspaces.createdBy, seeAll: workspaces.membersSeeAllTasks })
+    .from(workspaces)
+    .where(eq(workspaces.id, workspaceId))
+    .limit(1);
+  if (!ws) throw new TacosError("Workspace not found", 404);
+  let role: string | null = null;
+  if (viewerId) {
+    const [membership] = await db
+      .select({ role: workspaceMembers.role })
+      .from(workspaceMembers)
+      .where(
+        and(
+          eq(workspaceMembers.workspaceId, workspaceId),
+          eq(workspaceMembers.userId, viewerId)
+        )
+      )
+      .limit(1);
+    role = membership?.role ?? null;
+  }
+  return { ownerId: ws.ownerId ?? null, seeAll: ws.seeAll === 1, role };
+}
+
+export async function getMembersSeeAllTasks(workspaceId: string): Promise<boolean> {
+  return (await workspaceFacts(workspaceId)).seeAll;
+}
+
+export async function setMembersSeeAllTasks(workspaceId: string, enabled: boolean) {
+  await getDb()
+    .update(workspaces)
+    .set({ membersSeeAllTasks: enabled ? 1 : 0 })
+    .where(eq(workspaces.id, workspaceId));
+}
+
+// Agents (API keys/MCP) and workspace admins always see everything; when the owner
+// closes the workspace-wide switch, a plain member is limited to projects they own
+// or were added to.
+export async function seesAllTasks(
+  workspaceId: string,
+  viewerId?: string | null
+): Promise<boolean> {
+  if (!viewerId) return true;
+  const facts = await workspaceFacts(workspaceId, viewerId);
+  return facts.seeAll || facts.ownerId === viewerId || (facts.role ?? "member") === "admin";
+}
+
+function ownProjectCondition(viewerId: string) {
+  return sql`EXISTS (
+    SELECT 1 FROM projects visible
+    WHERE visible.id = ${projects.id} AND visible.deleted_at IS NULL AND (
+      visible.created_by = ${viewerId} OR EXISTS (
+        SELECT 1 FROM project_members visible_member
+        WHERE visible_member.project_id = visible.id AND visible_member.user_id = ${viewerId}
+      )
+    )
+  )`;
+}
+
+function ownIssueProjectCondition(viewerId: string) {
+  return sql`EXISTS (
+    SELECT 1 FROM projects visible
+    WHERE visible.id = ${issues.projectId} AND visible.deleted_at IS NULL AND (
+      visible.created_by = ${viewerId} OR EXISTS (
+        SELECT 1 FROM project_members visible_member
+        WHERE visible_member.project_id = visible.id AND visible_member.user_id = ${viewerId}
+      )
+    )
+  )`;
+}
+
+export async function listProjects(workspaceId: string, viewerId?: string): Promise<Project[]> {
+  const conditions = [eq(projects.workspaceId, workspaceId), isNull(projects.deletedAt)];
+  if (viewerId && !(await seesAllTasks(workspaceId, viewerId))) {
+    conditions.push(ownProjectCondition(viewerId));
+  }
   return getDb()
     .select(projectColumns)
     .from(projects)
-    .where(and(eq(projects.workspaceId, workspaceId), isNull(projects.deletedAt)))
+    .where(and(...conditions))
     .orderBy(projects.createdAt);
 }
 
@@ -633,21 +736,60 @@ export async function listTeamProjects(workspaceId: string, userId: string): Pro
   return [...mine.filter((p) => p.role === "lead"), ...mine.filter((p) => p.role === "member")];
 }
 
+export type PersonProject = Project & { role: "owner" | "member" };
+
+// A person's page shows the projects they created and the ones they were added to.
+// A task or comment in a project they never joined is not the same thing as belonging
+// to it, so unlike listTeamProjects this one asks project_members directly.
+export async function listPersonProjects(
+  workspaceId: string,
+  userId: string
+): Promise<PersonProject[]> {
+  const rows = await getDb()
+    .select({
+      ...projectColumns,
+      joined: sql<number>`EXISTS (
+        SELECT 1 FROM project_members pm
+        WHERE pm.project_id = ${projects.id} AND pm.user_id = ${userId}
+      )`,
+    })
+    .from(projects)
+    .where(and(eq(projects.workspaceId, workspaceId), isNull(projects.deletedAt)))
+    .orderBy(projects.createdAt);
+  return rows
+    .filter((row) => row.createdBy === userId || Number(row.joined) === 1)
+    .map((row) => ({
+      id: row.id,
+      workspaceId: row.workspaceId,
+      name: row.name,
+      key: row.key,
+      color: row.color,
+      description: row.description,
+      createdBy: row.createdBy,
+      role: (row.createdBy === userId ? "owner" : "member") as PersonProject["role"],
+    }))
+    .sort((a, b) => (a.role === b.role ? 0 : a.role === "owner" ? -1 : 1));
+}
+
 // The sidebar's Favorites group: projects this user starred, newest star first.
 // Trashed projects drop out of the list but keep their row, so un-trashing brings the
 // star back.
 export async function listFavoriteProjects(workspaceId: string, userId: string): Promise<Project[]> {
+  const conditions = [
+    eq(favorites.userId, userId),
+    eq(projects.workspaceId, workspaceId),
+    isNull(projects.deletedAt),
+  ];
+  // A star outlives access: unstar-raising still works, but the project stays hidden
+  // while the owner keeps this member out of it.
+  if (!(await seesAllTasks(workspaceId, userId))) {
+    conditions.push(ownProjectCondition(userId));
+  }
   return getDb()
     .select(projectColumns)
     .from(favorites)
     .innerJoin(projects, eq(projects.id, favorites.projectId))
-    .where(
-      and(
-        eq(favorites.userId, userId),
-        eq(projects.workspaceId, workspaceId),
-        isNull(projects.deletedAt)
-      )
-    )
+    .where(and(...conditions))
     .orderBy(sql`${favorites.createdAt} DESC`);
 }
 
@@ -761,16 +903,23 @@ export async function createProject(input: {
 // Deleting is reversible: the project (and with it its issues) leaves every list
 // until it is restored or purged from the trash. Only the person who made the
 // project gets to decide that — everyone else can still work in it.
-async function assertProjectCreator(workspaceId: string, projectId: string, userId: string) {
+// The project's creator, or the workspace owner, may delete it. The owner already
+// answers for the whole team, so a project left behind by a member must not become a
+// row in Trash that nobody can ever clear.
+async function assertProjectOwner(workspaceId: string, projectId: string, userId: string) {
   const project = await findProjectById(workspaceId, projectId);
   if (!project) throw new TacosError("Project not found", 404);
-  if (project.createdBy !== userId) {
-    throw new TacosError("Only the project creator can delete this project", 403);
-  }
+  if (project.createdBy === userId) return;
+  const [workspace] = await getDb()
+    .select({ createdBy: workspaces.createdBy })
+    .from(workspaces)
+    .where(eq(workspaces.id, workspaceId));
+  if (workspace?.createdBy === userId) return;
+  throw new TacosError("Only the project creator or the workspace owner can delete this project", 403);
 }
 
 export async function trashProject(workspaceId: string, projectId: string, userId: string) {
-  await assertProjectCreator(workspaceId, projectId, userId);
+  await assertProjectOwner(workspaceId, projectId, userId);
   await getDb()
     .update(projects)
     .set({ deletedAt: nowIso() })
@@ -790,9 +939,12 @@ export async function restoreProject(workspaceId: string, projectId: string) {
 export async function updateProject(
   workspaceId: string,
   projectId: string,
-  patch: { name?: string; description?: string; doc?: string; color?: string }
+  patch: { name?: string; description?: string; doc?: string; color?: string },
+  viewerId?: string,
+  opts?: { forceNewHistory?: boolean }
 ): Promise<Project> {
   const next: Partial<typeof projects.$inferInsert> = {};
+  let docEdit: { before: string; after: string } | null = null;
   if (patch.name != null) {
     const trimmed = patch.name.trim();
     if (!trimmed) throw new TacosError("Project name is required");
@@ -803,8 +955,23 @@ export async function updateProject(
     next.description = patch.description.trim().slice(0, 500);
   }
   if (patch.doc != null) {
+    // The Overview document is gated separately from the project itself: only the
+    // creator, a workspace admin, or a grant holder with "edit" may rewrite it.
+    if (viewerId) {
+      const access = await getOverviewAccess(workspaceId, projectId, viewerId);
+      if (!access.canEdit) throw new TacosError("You cannot edit this project overview", 403);
+    }
     if (patch.doc.length > 50_000) throw new TacosError("Document is too long (50k characters max)");
-    next.doc = patch.doc;
+    const [current] = await getDb()
+      .select({ doc: projects.doc })
+      .from(projects)
+      .where(and(eq(projects.workspaceId, workspaceId), eq(projects.id, projectId)))
+      .limit(1);
+    const before = current?.doc ?? "";
+    if (patch.doc !== before) {
+      next.doc = patch.doc;
+      docEdit = { before, after: patch.doc };
+    }
   }
   if (patch.color != null) {
     if (!PROJECT_COLORS.includes(patch.color)) throw new TacosError("Unknown project color");
@@ -820,6 +987,14 @@ export async function updateProject(
     .update(projects)
     .set(next)
     .where(and(eq(projects.workspaceId, workspaceId), eq(projects.id, projectId)));
+  if (docEdit && viewerId) {
+    try {
+      await recordDocEdit(projectId, viewerId, docEdit.before, docEdit.after, opts?.forceNewHistory);
+    } catch (err) {
+      // History must never block the document save itself.
+      console.error("[updateProject] failed to record doc edit:", err);
+    }
+  }
   const updated = await findProjectById(workspaceId, projectId);
   if (!updated) throw new TacosError("Project not found", 404);
   return updated;
@@ -832,6 +1007,426 @@ async function findProjectById(workspaceId: string, projectId: string): Promise<
     .where(and(eq(projects.workspaceId, workspaceId), eq(projects.id, projectId)))
     .limit(1);
   return row ?? null;
+}
+
+// --- project Overview access ---
+
+export type OverviewRole = "comment" | "edit";
+
+export type OverviewAccess = {
+  canView: boolean;
+  canComment: boolean;
+  canEdit: boolean;
+  // Who may hand the Overview to somebody else: the project creator and workspace admins.
+  manage: boolean;
+  role: OverviewRole | null;
+};
+
+const NO_OVERVIEW_ACCESS: OverviewAccess = {
+  canView: false,
+  canComment: false,
+  canEdit: false,
+  manage: false,
+  role: null,
+};
+
+export async function getOverviewAccess(
+  workspaceId: string,
+  projectId: string,
+  viewerId: string
+): Promise<OverviewAccess> {
+  const project = await findProjectRow(workspaceId, projectId);
+  if (!project) return NO_OVERVIEW_ACCESS;
+  const facts = await workspaceFacts(workspaceId, viewerId);
+  if (
+    project.createdBy === viewerId ||
+    facts.ownerId === viewerId ||
+    facts.role === "admin"
+  ) {
+    return { canView: true, canComment: true, canEdit: true, manage: true, role: "edit" };
+  }
+  const [grant] = await getDb()
+    .select({ role: projectGrants.role })
+    .from(projectGrants)
+    .where(and(eq(projectGrants.projectId, projectId), eq(projectGrants.userId, viewerId)))
+    .limit(1);
+  if (!grant) return NO_OVERVIEW_ACCESS;
+  const role: OverviewRole = grant.role === "edit" ? "edit" : "comment";
+  return {
+    canView: true,
+    canComment: true,
+    canEdit: role === "edit",
+    manage: false,
+    role,
+  };
+}
+
+export type OverviewGrant = {
+  userId: string;
+  displayName: string;
+  avatar: string | null;
+  role: OverviewRole;
+};
+
+export async function listOverviewGrants(
+  workspaceId: string,
+  projectId: string
+): Promise<OverviewGrant[]> {
+  const rows = await getDb()
+    .select({
+      userId: projectGrants.userId,
+      displayName: users.displayName,
+      avatar: users.avatar,
+      role: projectGrants.role,
+    })
+    .from(projectGrants)
+    .innerJoin(users, eq(users.id, projectGrants.userId))
+    .where(eq(projectGrants.projectId, projectId))
+    .orderBy(projectGrants.createdAt);
+  return rows.map((row) => ({
+    ...row,
+    role: row.role === "edit" ? "edit" : "comment",
+  }));
+}
+
+export async function setOverviewGrant(
+  workspaceId: string,
+  projectId: string,
+  actorId: string,
+  userId: string,
+  role: OverviewRole
+) {
+  const access = await getOverviewAccess(workspaceId, projectId, actorId);
+  if (!access.manage) throw new TacosError("Only the project owner can share the overview", 403);
+  if (role !== "comment" && role !== "edit") throw new TacosError("Unknown permission");
+  const project = await findProjectRow(workspaceId, projectId);
+  if (!project) throw new TacosError("Project not found", 404);
+  if (project.createdBy === userId) return;
+  const [membership] = await getDb()
+    .select({ userId: workspaceMembers.userId })
+    .from(workspaceMembers)
+    .where(
+      and(
+        eq(workspaceMembers.workspaceId, workspaceId),
+        eq(workspaceMembers.userId, userId)
+      )
+    )
+    .limit(1);
+  if (!membership) throw new TacosError("Only workspace members can be invited to the overview");
+  await getDb()
+    .insert(projectGrants)
+    .values({ projectId, userId, role, createdAt: nowIso() })
+    .onConflictDoUpdate({ target: [projectGrants.projectId, projectGrants.userId], set: { role } });
+}
+
+export async function removeOverviewGrant(
+  workspaceId: string,
+  projectId: string,
+  actorId: string,
+  userId: string
+) {
+  const access = await getOverviewAccess(workspaceId, projectId, actorId);
+  if (!access.manage) throw new TacosError("Only the project owner can change access", 403);
+  await getDb()
+    .delete(projectGrants)
+    .where(and(eq(projectGrants.projectId, projectId), eq(projectGrants.userId, userId)));
+}
+
+export type OverviewComment = {
+  id: string;
+  body: string;
+  createdAt: string;
+  quote: string | null;
+  occurrence: number;
+  author: Assignee | null;
+};
+
+export async function listOverviewComments(
+  workspaceId: string,
+  projectId: string
+): Promise<OverviewComment[]> {
+  const rows = await getDb()
+    .select({
+      id: overviewComments.id,
+      body: overviewComments.body,
+      createdAt: overviewComments.createdAt,
+      quote: overviewComments.quote,
+      occurrence: overviewComments.occurrence,
+      authorId: users.id,
+      username: users.username,
+      displayName: users.displayName,
+      avatar: users.avatar,
+    })
+    .from(overviewComments)
+    .leftJoin(users, eq(users.id, overviewComments.authorId))
+    .where(eq(overviewComments.projectId, projectId))
+    .orderBy(overviewComments.createdAt);
+  return rows.map((row) => ({
+    id: row.id,
+    body: row.body,
+    createdAt: row.createdAt,
+    quote: row.quote ?? null,
+    occurrence: row.occurrence ?? 1,
+    author: row.authorId
+      ? {
+          id: row.authorId,
+          username: row.username ?? "",
+          displayName: row.displayName ?? "",
+          avatar: row.avatar ?? null,
+        }
+      : null,
+  }));
+}
+
+export async function addOverviewComment(
+  workspaceId: string,
+  projectId: string,
+  viewerId: string,
+  body: string,
+  anchor?: { quote: string; occurrence: number }
+): Promise<OverviewComment[]> {
+  const access = await getOverviewAccess(workspaceId, projectId, viewerId);
+  if (!access.canComment) throw new TacosError("You cannot comment on this overview", 403);
+  const text = body.trim();
+  if (!text) throw new TacosError("Comment cannot be empty");
+  if (text.length > 5_000) throw new TacosError("Comment is too long (5k characters max)");
+  const quote = anchor?.quote.trim() ?? "";
+  await getDb().insert(overviewComments).values({
+    id: crypto.randomUUID(),
+    projectId,
+    authorId: viewerId,
+    body: text,
+    quote: quote ? quote.slice(0, 1_000) : null,
+    occurrence: quote ? Math.max(1, Math.floor(anchor?.occurrence ?? 1)) : 1,
+    createdAt: nowIso(),
+  });
+  return listOverviewComments(workspaceId, projectId);
+}
+
+export async function removeOverviewComment(
+  workspaceId: string,
+  projectId: string,
+  viewerId: string,
+  commentId: string
+): Promise<OverviewComment[]> {
+  const access = await getOverviewAccess(workspaceId, projectId, viewerId);
+  const [row] = await getDb()
+    .select({ projectId: overviewComments.projectId, authorId: overviewComments.authorId })
+    .from(overviewComments)
+    .where(eq(overviewComments.id, commentId))
+    .limit(1);
+  if (!row || row.projectId !== projectId) throw new TacosError("Comment not found", 404);
+  // The author can take back their own words; managing the overview covers everyone else's.
+  if (row.authorId !== viewerId && !access.manage) {
+    throw new TacosError("You cannot delete this comment", 403);
+  }
+  await getDb().delete(overviewComments).where(eq(overviewComments.id, commentId));
+  return listOverviewComments(workspaceId, projectId);
+}
+
+// --- Overview edit history ---
+
+export type OverviewDocEdit = {
+  id: string;
+  createdAt: string;
+  added: number;
+  removed: number;
+  // Concrete lines for the History panel, clipped so a giant rewrite does not ship the
+  // whole document to the browser. `added`/`removed` keep the real totals.
+  addedLines: string[];
+  removedLines: string[];
+  author: Assignee | null;
+};
+
+// Edits by the same author within a few minutes are folded into one row so a typing
+// session reads as a single History entry instead of one per debounce save.
+async function recordDocEdit(
+  projectId: string,
+  userId: string,
+  before: string,
+  after: string,
+  forceNew = false
+) {
+  const db = getDb();
+  const now = nowIso();
+  const [latest] = await db
+    .select({ id: overviewDocEdits.id, userId: overviewDocEdits.userId, createdAt: overviewDocEdits.createdAt })
+    .from(overviewDocEdits)
+    .where(eq(overviewDocEdits.projectId, projectId))
+    .orderBy(desc(overviewDocEdits.createdAt))
+    .limit(1);
+  const isSameSession =
+    !forceNew &&
+    latest &&
+    latest.userId === userId &&
+    Date.parse(now) - Date.parse(latest.createdAt) < 5 * 60_000;
+  if (isSameSession) {
+    await db
+      .update(overviewDocEdits)
+      .set({ docAfter: after, createdAt: now })
+      .where(eq(overviewDocEdits.id, latest.id));
+  } else {
+    await db.insert(overviewDocEdits).values({
+      id: crypto.randomUUID(),
+      projectId,
+      userId,
+      docBefore: before,
+      docAfter: after,
+      createdAt: now,
+    });
+  }
+  // Keep only the newest 100 rows per project. (Bare `OFFSET` is not valid SQLite —
+  // it needs a LIMIT — so pick the keepers and delete the rest.)
+  const keep = await db
+    .select({ id: overviewDocEdits.id })
+    .from(overviewDocEdits)
+    .where(eq(overviewDocEdits.projectId, projectId))
+    .orderBy(desc(overviewDocEdits.createdAt))
+    .limit(100);
+  if (keep.length >= 100) {
+    await db
+      .delete(overviewDocEdits)
+      .where(
+        and(
+          eq(overviewDocEdits.projectId, projectId),
+          notInArray(overviewDocEdits.id, keep.map((row) => row.id))
+        )
+      );
+  }
+}
+
+// Multiset line compare: good enough for a "±N lines" history badge, and it doesn't
+// care about reordering the way a sequential diff would.
+const MAX_DIFF_LINES = 8;
+const MAX_DIFF_LINE_CHARS = 160;
+
+function lineDiff(before: string, after: string): {
+  added: number;
+  removed: number;
+  addedLines: string[];
+  removedLines: string[];
+} {
+  const tally = (doc: string) => {
+    const counts = new Map<string, number>();
+    for (const line of doc.split("\n")) counts.set(line, (counts.get(line) ?? 0) + 1);
+    return counts;
+  };
+  const a = tally(before);
+  const b = tally(after);
+  // Lines that occur more often on one side than the other are the changed ones. Walking
+  // in document order keeps the panel's diff readable.
+  const extra = (lines: string[], other: Map<string, number>) => {
+    const seen = new Map<string, number>();
+    const out: string[] = [];
+    for (const line of lines) {
+      const n = (seen.get(line) ?? 0) + 1;
+      seen.set(line, n);
+      if (n > (other.get(line) ?? 0)) out.push(line);
+    }
+    return out;
+  };
+  const clip = (lines: string[]) =>
+    lines
+      .slice(0, MAX_DIFF_LINES)
+      .map((line) => (line.length > MAX_DIFF_LINE_CHARS ? `${line.slice(0, MAX_DIFF_LINE_CHARS - 1)}…` : line));
+  const addedLines = extra(after.split("\n"), a);
+  const removedLines = extra(before.split("\n"), b);
+  return {
+    added: addedLines.length,
+    removed: removedLines.length,
+    addedLines: clip(addedLines),
+    removedLines: clip(removedLines),
+  };
+}
+
+export async function listOverviewDocEdits(
+  workspaceId: string,
+  projectId: string
+): Promise<OverviewDocEdit[]> {
+  const rows = await getDb()
+    .select({
+      id: overviewDocEdits.id,
+      docBefore: overviewDocEdits.docBefore,
+      docAfter: overviewDocEdits.docAfter,
+      createdAt: overviewDocEdits.createdAt,
+      authorId: users.id,
+      username: users.username,
+      displayName: users.displayName,
+      avatar: users.avatar,
+    })
+    .from(overviewDocEdits)
+    .leftJoin(users, eq(users.id, overviewDocEdits.userId))
+    .where(eq(overviewDocEdits.projectId, projectId))
+    .orderBy(desc(overviewDocEdits.createdAt))
+    .limit(100);
+  return rows.map((row) => ({
+    id: row.id,
+    createdAt: row.createdAt,
+    ...lineDiff(row.docBefore, row.docAfter),
+    author: row.authorId
+      ? {
+          id: row.authorId,
+          username: row.username ?? "",
+          displayName: row.displayName ?? "",
+          avatar: row.avatar ?? null,
+        }
+      : null,
+  }));
+}
+
+// Undo an entry by writing its "before" text back as a new edit. It goes through the
+// normal update path, so the same canEdit check and history recording apply.
+export async function restoreOverviewDocEdit(
+  workspaceId: string,
+  projectId: string,
+  editId: string,
+  viewerId: string
+): Promise<string> {
+  const [row] = await getDb()
+    .select({ docBefore: overviewDocEdits.docBefore })
+    .from(overviewDocEdits)
+    .where(and(eq(overviewDocEdits.projectId, projectId), eq(overviewDocEdits.id, editId)))
+    .limit(1);
+  if (!row) throw new TacosError("History entry not found", 404);
+  await updateProject(workspaceId, projectId, { doc: row.docBefore }, viewerId, {
+    // A restore is its own act, not more typing: keep it visible in the list even when
+    // the same person edited a moment ago.
+    forceNewHistory: true,
+  });
+  return row.docBefore;
+}
+
+export async function markDocEditsSeen(projectId: string, userId: string): Promise<void> {
+  const now = nowIso();
+  await getDb()
+    .insert(overviewDocEditViews)
+    .values({ projectId, userId, seenAt: now })
+    .onConflictDoUpdate({
+      target: [overviewDocEditViews.projectId, overviewDocEditViews.userId],
+      set: { seenAt: now },
+    });
+}
+
+// Others' edits made since this viewer last opened History; no row yet means they have
+// never looked, so everything by other people is new to them.
+export async function countUnseenDocEdits(projectId: string, userId: string): Promise<number> {
+  const db = getDb();
+  const [view] = await db
+    .select({ seenAt: overviewDocEditViews.seenAt })
+    .from(overviewDocEditViews)
+    .where(and(eq(overviewDocEditViews.projectId, projectId), eq(overviewDocEditViews.userId, userId)))
+    .limit(1);
+  const [row] = await db
+    .select({ n: sql<number>`count(*)` })
+    .from(overviewDocEdits)
+    .where(
+      and(
+        eq(overviewDocEdits.projectId, projectId),
+        ne(overviewDocEdits.userId, userId),
+        view ? gt(overviewDocEdits.createdAt, view.seenAt) : undefined
+      )
+    );
+  return Number(row?.n ?? 0);
 }
 
 export type ProjectMember = {
@@ -900,7 +1495,7 @@ export async function removeProjectMember(
 }
 
 export async function purgeProject(workspaceId: string, projectId: string, userId: string) {
-  await assertProjectCreator(workspaceId, projectId, userId);
+  await assertProjectOwner(workspaceId, projectId, userId);
   const db = getDb();
   const rows = await db
     .select({ id: issues.id })
@@ -1126,6 +1721,8 @@ async function toIssueRows(workspaceId: string, rows: IssueRow[]): Promise<Issue
       projectKey: project?.key ?? "?",
       projectName: project?.name ?? "Unknown",
       assignees: assigneesByIssue.get(row.id) ?? [],
+      dueDate: row.dueDate ?? null,
+      reminder: (row.reminder as ReminderPreset | null) ?? null,
       createdBy: row.createdBy,
       createdVia: row.createdVia as Via,
       createdAt: row.createdAt,
@@ -1140,28 +1737,34 @@ export type ListFilters = {
   priority?: Priority;
   projectId?: string;
   assigneeId?: string | null; // null = unassigned
-  createdByUserId?: string; // "My issues" (assigned or created) handled by caller
+  createdByUserId?: string; // "My tasks" (assigned or created) handled by caller
   q?: string;
   label?: string;
   limit?: number;
+  // The signed-in user. Omitted by agents, which are unrestricted; when present it
+  // applies the workspace's task-visibility setting.
+  viewerId?: string;
 };
 
 // Totals for a project's Overview page; grouped in SQL so the count stays right
 // however large the backlog gets.
 export async function countIssuesByStatus(
   workspaceId: string,
-  projectId: string
+  projectId: string,
+  viewerId?: string
 ): Promise<Record<Status, number> & { total: number }> {
+  const conditions = [
+    eq(issues.workspaceId, workspaceId),
+    eq(issues.projectId, projectId),
+    isNull(issues.deletedAt),
+  ];
+  if (viewerId && !(await seesAllTasks(workspaceId, viewerId))) {
+    conditions.push(ownIssueProjectCondition(viewerId));
+  }
   const rows = await getDb()
     .select({ status: issues.status, n: sql<number>`COUNT(*)` })
     .from(issues)
-    .where(
-      and(
-        eq(issues.workspaceId, workspaceId),
-        eq(issues.projectId, projectId),
-        isNull(issues.deletedAt)
-      )
-    )
+    .where(and(...conditions))
     .groupBy(issues.status);
   const counts = { total: 0 } as Record<Status, number> & { total: number };
   for (const status of STATUS_ORDER) counts[status] = 0;
@@ -1183,6 +1786,9 @@ export async function listIssues(
     isNull(issues.deletedAt),
     sql`EXISTS (SELECT 1 FROM projects WHERE projects.id = ${issues.projectId} AND projects.deleted_at IS NULL)`,
   ];
+  if (filters.viewerId && !(await seesAllTasks(workspaceId, filters.viewerId))) {
+    conditions.push(ownIssueProjectCondition(filters.viewerId));
+  }
 
   if (filters.status === "active") {
     conditions.push(inArray(issues.status, ["todo", "in_progress"]));
@@ -1241,8 +1847,10 @@ export async function listIssues(
     const sa = STATUS_ORDER.indexOf(a.status as Status);
     const sb = STATUS_ORDER.indexOf(b.status as Status);
     if (sa !== sb) return sa - sb;
-    if (a.priority !== b.priority) return b.priority - a.priority;
-    return b.updatedAt.localeCompare(a.updatedAt);
+    // Manual board order wins: new issues are created at the top and dragging a card
+    // persists its slot, so priority is no longer the sort key here.
+    if (a.position !== b.position) return b.position - a.position;
+    return b.createdAt.localeCompare(a.createdAt);
   });
   const limited = filters.limit ? sorted.slice(0, filters.limit) : sorted;
   return toIssueRows(workspaceId, limited);
@@ -1274,11 +1882,27 @@ export async function findIssueRow(workspaceId: string, idOrIdentifier: string):
 
 export async function getIssueDetail(
   workspaceId: string,
-  idOrIdentifier: string
+  idOrIdentifier: string,
+  viewerId?: string
 ): Promise<IssueDetail | null> {
   const row = await findIssueRow(workspaceId, idOrIdentifier);
   if (!row) return null;
   const db = getDb();
+  if (viewerId && !(await seesAllTasks(workspaceId, viewerId))) {
+    // Same rule as the list: a member outside the project cannot open its tasks by id.
+    const [visible] = await db
+      .select({ id: projects.id })
+      .from(projects)
+      .where(
+        and(
+          eq(projects.id, row.projectId),
+          isNull(projects.deletedAt),
+          ownProjectCondition(viewerId)
+        )
+      )
+      .limit(1);
+    if (!visible) return null;
+  }
   const [withLabels] = await toIssueRows(workspaceId, [row]);
   const memberMap = await membersById(workspaceId);
   const commentRows = await db
@@ -1370,6 +1994,8 @@ export type CreateIssueInput = {
   priority?: Priority;
   assigneeIds?: string[];
   labelNames?: string[];
+  dueDate?: string | null;
+  reminder?: ReminderPreset | null;
   project: string;
 };
 export type UpdateIssueInput = {
@@ -1379,6 +2005,34 @@ export type UpdateIssueInput = {
   priority?: Priority;
   assigneeIds?: string[];
   labelNames?: string[];
+  dueDate?: string | null;
+  reminder?: ReminderPreset | null;
+};
+
+function normalizeDueDate(value: unknown): string | null {
+  if (value === null || value === undefined || value === "") return null;
+  const text = String(value).trim();
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(text)) {
+    throw new TacosError("Due date must be a calendar date (YYYY-MM-DD)");
+  }
+  return text;
+}
+
+function normalizeReminder(value: unknown): ReminderPreset | null {
+  if (value === null || value === undefined || value === "") return null;
+  const text = String(value);
+  if (!REMINDER_PRESETS.includes(text as ReminderPreset)) {
+    throw new TacosError(`Reminder must be one of ${REMINDER_PRESETS.join(", ")}`);
+  }
+  return text as ReminderPreset;
+}
+
+// A board drop: land between `beforeId` (the card above) and `afterId` (the card
+// below), optionally in another status column.
+export type MoveIssueInput = {
+  status?: Status;
+  beforeId?: string | null;
+  afterId?: string | null;
 };
 
 export async function createIssue(
@@ -1403,6 +2057,8 @@ export async function createIssue(
   const status = input.status ?? "todo";
   const priority = input.priority ?? 0;
   const description = input.description ?? "";
+  const dueDate = normalizeDueDate(input.dueDate);
+  const reminder = dueDate ? normalizeReminder(input.reminder) : null;
   const id = crypto.randomUUID();
   const now = nowIso();
   const actorUserId = actor.kind === "user" ? actor.userId : null;
@@ -1419,11 +2075,12 @@ export async function createIssue(
 
   const db = getDb();
   await db.run(sql`INSERT INTO issues
-    (id, workspace_id, project_id, number, identifier, title, description, status, priority, created_by, created_via, created_at, updated_at)
+    (id, workspace_id, project_id, number, identifier, title, description, status, priority, due_date, reminder, created_by, created_via, created_at, updated_at, position)
     VALUES (${id}, ${workspaceId}, ${project.id},
       (SELECT COALESCE(MAX(number), 0) + 1 FROM issues WHERE project_id = ${project.id}),
-      'pending', ${title}, ${description}, ${status}, ${priority},
-      ${actorUserId}, ${actor.kind === "agent" ? actor.via : "web"}, ${now}, ${now})`);
+      'pending', ${title}, ${description}, ${status}, ${priority}, ${dueDate}, ${reminder},
+      ${actorUserId}, ${actor.kind === "agent" ? actor.via : "web"}, ${now}, ${now},
+      (SELECT COALESCE(MAX(position), 0) + 1 FROM issues WHERE workspace_id = ${workspaceId}))`);
   await db.run(
     sql`UPDATE issues SET identifier = ${project.key} || '-' || number WHERE id = ${id}`
   );
@@ -1452,18 +2109,15 @@ export async function createIssue(
 // (API keys, MCP) stay unrestricted so automated work can still progress.
 async function assertCanChangeStatus(row: IssueRow, actor: MutationActor) {
   if (actor.kind === "agent") return;
-  if (row.createdBy === actor.userId) return;
   const assigned = await getDb()
     .select({ userId: issueAssignees.userId })
     .from(issueAssignees)
     .where(eq(issueAssignees.issueId, row.id));
   if (assigned.some((entry) => entry.userId === actor.userId)) return;
-  // Agent-created issues with nobody assigned have no human owner to protect.
-  if (!row.createdBy && assigned.length === 0) return;
   throw new TacosError(
-    "Only the issue's creator or assignees can change its status",
+    "Only assignees can change an issue's status",
     403,
-    "Ask the creator or one of the assignees to move it"
+    "Ask one of the assignees to move it, or assign yourself first"
   );
 }
 
@@ -1526,6 +2180,26 @@ export async function updateIssue(
       type: "priority_changed",
       data: { from: row.priority, to: patch.priority },
     });
+  }
+  if (patch.dueDate !== undefined) {
+    const dueDate = normalizeDueDate(patch.dueDate);
+    if (dueDate !== (row.dueDate ?? null)) {
+      sets.dueDate = dueDate;
+      changes.push({ type: "due_changed", data: { from: row.dueDate, to: dueDate } });
+      // A reminder without a deadline has nothing to count back from.
+      if (!dueDate && row.reminder) {
+        sets.reminder = null;
+        changes.push({ type: "reminder_changed", data: { from: row.reminder, to: null } });
+      }
+    }
+  }
+  if (patch.reminder !== undefined) {
+    const effectiveDue = sets.dueDate !== undefined ? sets.dueDate : row.dueDate;
+    const reminder = effectiveDue ? normalizeReminder(patch.reminder) : null;
+    if (reminder !== (row.reminder ?? null)) {
+      sets.reminder = reminder;
+      changes.push({ type: "reminder_changed", data: { from: row.reminder, to: reminder } });
+    }
   }
   if (patch.assigneeIds !== undefined) {
     const nextIds = [...new Set(patch.assigneeIds)];
@@ -1607,6 +2281,76 @@ export async function updateIssue(
   return detail;
 }
 
+export async function moveIssue(
+  workspaceId: string,
+  idOrIdentifier: string,
+  input: MoveIssueInput,
+  actor: MutationActor
+): Promise<IssueDetail> {
+  const row = await findIssueRow(workspaceId, idOrIdentifier);
+  if (!row) throw new TacosError(`Issue "${idOrIdentifier}" not found`, 404);
+
+  const db = getDb();
+  const sets: Record<string, unknown> = {};
+  const changes: Array<{ type: string; data: Record<string, unknown> }> = [];
+
+  if (input.status && input.status !== row.status) {
+    await assertCanChangeStatus(row, actor);
+    sets.status = input.status;
+    changes.push({ type: "status_changed", data: { from: row.status, to: input.status } });
+  }
+
+  // Positions only matter relative to the two cards the drop landed between, so read
+  // just those instead of renumbering the whole column.
+  const neighbourIds = [input.beforeId, input.afterId].filter(
+    (value): value is string => typeof value === "string" && value.length > 0 && value !== row.id
+  );
+  const neighbourRows =
+    neighbourIds.length > 0
+      ? await db
+          .select({ id: issues.id, position: issues.position })
+          .from(issues)
+          .where(and(eq(issues.workspaceId, workspaceId), inArray(issues.id, neighbourIds)))
+      : [];
+  const positionById = new Map(neighbourRows.map((entry) => [entry.id, entry.position]));
+  const above = input.beforeId && input.beforeId !== row.id ? positionById.get(input.beforeId) : undefined;
+  const below = input.afterId && input.afterId !== row.id ? positionById.get(input.afterId) : undefined;
+
+  let position: number;
+  if (above !== undefined && below !== undefined) {
+    position = (above + below) / 2;
+  } else if (above !== undefined) {
+    // Dropped at the bottom of the column.
+    position = above - 1;
+  } else if (below !== undefined) {
+    // Dropped at the top of the column.
+    position = below + 1;
+  } else {
+    const [top] = await db
+      .select({ max: sql<number>`COALESCE(MAX(position), 0)` })
+      .from(issues)
+      .where(eq(issues.workspaceId, workspaceId));
+    position = Number(top?.max ?? 0) + 1;
+  }
+
+  if (position !== row.position) {
+    sets.position = position;
+    if (changes.length === 0) changes.push({ type: "reordered", data: {} });
+  }
+
+  if (Object.keys(sets).length > 0) {
+    sets.updatedAt = nowIso();
+    await db.update(issues).set(sets).where(eq(issues.id, row.id));
+    for (const change of changes) {
+      await recordEvent(row.id, change.type, change.data, actor);
+    }
+  }
+
+  const detail = await getIssueDetail(workspaceId, row.id);
+  if (!detail) throw new TacosError("Issue disappeared while moving", 500);
+  return detail;
+}
+
 // Deleting an issue sends it to the Trash rather than erasing it: comments and history
 // stay attached so a restore brings the issue back exactly as it was.
 export async function deleteIssue(workspaceId: string, idOrIdentifier: string): Promise<Issue> {
@@ -1628,11 +2372,33 @@ export async function deleteIssue(workspaceId: string, idOrIdentifier: string): 
     projectKey: "",
     projectName: "",
     assignees: [],
+    dueDate: row.dueDate ?? null,
+    reminder: (row.reminder as ReminderPreset | null) ?? null,
     createdBy: row.createdBy,
     createdVia: row.createdVia as Via,
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
   };
+}
+
+// Documents keep referencing a task after it lands in the Trash. The Overview uses
+// these titles to fall back to plain text instead of drawing a dead chip.
+export async function trashedIssueTitles(
+  workspaceId: string,
+  ids: string[]
+): Promise<Record<string, string>> {
+  if (ids.length === 0) return {};
+  const rows = await getDb()
+    .select({ id: issues.id, title: issues.title })
+    .from(issues)
+    .where(
+      and(
+        eq(issues.workspaceId, workspaceId),
+        inArray(issues.id, ids),
+        isNotNull(issues.deletedAt)
+      )
+    );
+  return Object.fromEntries(rows.map((row) => [row.id, row.title]));
 }
 
 export type TrashedIssue = {
@@ -1874,6 +2640,26 @@ export async function markNotificationRead(
         eq(notifications.userId, userId),
         eq(notifications.id, notificationId),
         isNull(notifications.readAt)
+      )
+    );
+}
+
+// Same recipient-only scoping as markNotificationRead: a row is personal, and a
+// deletion notice may belong to a workspace the user can no longer open.
+export async function deleteNotification(userId: string, notificationId: string) {
+  await getDb()
+    .delete(notifications)
+    .where(and(eq(notifications.userId, userId), eq(notifications.id, notificationId)));
+}
+
+export async function clearNotifications(workspaceId: string, userId: string) {
+  await getDb()
+    .delete(notifications)
+    .where(
+      and(
+        eq(notifications.userId, userId),
+        // Exactly the set the inbox lists and the badge counts.
+        or(eq(notifications.workspaceId, workspaceId), eq(notifications.type, "workspace_deleted"))
       )
     );
 }

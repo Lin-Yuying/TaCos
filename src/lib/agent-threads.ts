@@ -1,0 +1,611 @@
+import crypto from "node:crypto";
+import { and, asc, desc, eq, inArray, isNull, or } from "drizzle-orm";
+import { getDb } from "@/db/client";
+import { agentMessages, agentSteps, agentThreadFlags, agentThreads, projects, users } from "@/db/schema";
+import { TacosError } from "./issues";
+
+// Agent conversations are TaCos records, not browser state: a thread is bound to a
+// project, carries its chat history and the work trajectory, and can be reopened from
+// the Agent tab. Private threads stay with their author; shared ones are readable by
+// every member of the workspace.
+
+export type AgentMode = "chat" | "work";
+export type AgentVisibility = "private" | "shared";
+// ask: every write waits for a card; auto: only risky ones ask; full: nothing asks.
+export type AgentApproval = "ask" | "auto" | "full";
+
+export type AgentThread = {
+  id: string;
+  workspaceId: string;
+  projectId: string;
+  projectName: string;
+  projectKey: string;
+  projectColor: string;
+  title: string;
+  mode: AgentMode;
+  engine: string;
+  model: string;
+  effort: string;
+  approval: AgentApproval;
+  visibility: AgentVisibility;
+  createdBy: string;
+  createdByName: string;
+  mine: boolean;
+  createdAt: string;
+  updatedAt: string;
+  messageCount: number;
+  // Per viewer: a shared thread can be pinned by one member and not by another.
+  pinnedAt: string | null;
+  unread: boolean;
+};
+
+export type AgentStepRecord = {
+  id: string;
+  kind: "command" | "file" | "tool" | "info";
+  title: string;
+  detail: string | null;
+  status: "running" | "done" | "error" | "denied";
+  createdAt: string;
+};
+
+export type AgentMessageRecord = {
+  id: string;
+  role: "user" | "assistant";
+  content: string;
+  createdAt: string;
+  steps: AgentStepRecord[];
+};
+
+export type AgentThreadDetail = AgentThread & { messages: AgentMessageRecord[] };
+
+const MAX_TITLE = 80;
+
+function asMode(value: unknown): AgentMode {
+  return value === "work" ? "work" : "chat";
+}
+
+function asVisibility(value: unknown): AgentVisibility {
+  return value === "shared" ? "shared" : "private";
+}
+
+function asApproval(value: unknown): AgentApproval {
+  return value === "auto" || value === "full" ? value : "ask";
+}
+
+function asStepKind(value: string): AgentStepRecord["kind"] {
+  return value === "command" || value === "file" || value === "tool" ? value : "info";
+}
+
+function asStepStatus(value: string): AgentStepRecord["status"] {
+  return value === "done" || value === "error" || value === "denied" ? value : "running";
+}
+
+function titleFrom(text: string): string {
+  const flat = text.replace(/\s+/g, " ").trim();
+  return flat.length > MAX_TITLE ? `${flat.slice(0, MAX_TITLE - 1)}…` : flat;
+}
+
+function visibleTo(userId: string) {
+  return or(eq(agentThreads.visibility, "shared"), eq(agentThreads.createdBy, userId));
+}
+
+export async function startAgentThread(input: {
+  workspaceId: string;
+  projectId: string;
+  mode: AgentMode;
+  visibility: AgentVisibility;
+  engine: string;
+  // Empty means "use whatever the CLI is configured with" — the honest default when the
+  // browser never picked a model.
+  model?: string;
+  effort?: string;
+  approval?: AgentApproval;
+  userId: string;
+}): Promise<AgentThread> {
+  const db = getDb();
+  // An empty project id means "no project": a plain conversation over the whole
+  // workspace. Work mode still needs a project, because every TaCos write has one.
+  const projectId = input.projectId.trim();
+  if (projectId) {
+    const [project] = await db
+      .select({ id: projects.id })
+      .from(projects)
+      .where(and(eq(projects.id, projectId), eq(projects.workspaceId, input.workspaceId)))
+      .limit(1);
+    if (!project) throw new TacosError("Project not found", 404);
+  } else if (asMode(input.mode) === "work") {
+    throw new TacosError("Work needs a project", 400, "Pick a project, or start in Chat mode.");
+  }
+
+  const id = crypto.randomUUID();
+  const now = new Date().toISOString();
+  await db.insert(agentThreads).values({
+    id,
+    workspaceId: input.workspaceId,
+    projectId,
+    title: "",
+    mode: asMode(input.mode),
+    engine: input.engine || "codex",
+    model: (input.model ?? "").trim(),
+    effort: (input.effort ?? "").trim(),
+    approval: asApproval(input.approval),
+    visibility: asVisibility(input.visibility),
+    createdBy: input.userId,
+    createdAt: now,
+    updatedAt: now,
+  });
+  const thread = await getAgentThread(input.workspaceId, input.userId, id);
+  if (!thread) throw new TacosError("Could not open the conversation", 500);
+  return thread;
+}
+
+export async function listAgentThreads(
+  workspaceId: string,
+  userId: string,
+  projectId?: string
+): Promise<AgentThread[]> {
+  const db = getDb();
+  const conditions = [eq(agentThreads.workspaceId, workspaceId), visibleTo(userId)];
+  if (projectId) conditions.push(eq(agentThreads.projectId, projectId));
+  const rows = await db
+    .select({
+      thread: agentThreads,
+      projectName: projects.name,
+      projectKey: projects.key,
+      projectColor: projects.color,
+      authorName: users.displayName,
+      pinnedAt: agentThreadFlags.pinnedAt,
+      unread: agentThreadFlags.unread,
+    })
+    .from(agentThreads)
+    .leftJoin(projects, eq(projects.id, agentThreads.projectId))
+    .innerJoin(users, eq(users.id, agentThreads.createdBy))
+    .leftJoin(
+      agentThreadFlags,
+      and(eq(agentThreadFlags.threadId, agentThreads.id), eq(agentThreadFlags.userId, userId))
+    )
+    .where(and(...conditions))
+    .orderBy(desc(agentThreads.updatedAt))
+    .limit(100);
+  if (rows.length === 0) return [];
+  const counts = await db
+    .select({ threadId: agentMessages.threadId, id: agentMessages.id })
+    .from(agentMessages)
+    .where(
+      inArray(
+        agentMessages.threadId,
+        rows.map((row) => row.thread.id)
+      )
+    );
+  const countByThread = new Map<string, number>();
+  for (const row of counts) {
+    countByThread.set(row.threadId, (countByThread.get(row.threadId) ?? 0) + 1);
+  }
+  return rows.map(({ thread, ...rest }) => threadRow(thread, rest, userId, countByThread.get(thread.id) ?? 0));
+}
+
+function threadOnly(detail: AgentThreadDetail): AgentThread {
+  const copy = { ...detail };
+  delete (copy as Partial<AgentThreadDetail>).messages;
+  return copy;
+}
+
+function threadRow(
+  thread: typeof agentThreads.$inferSelect,
+  meta: {
+    projectName: string | null;
+    projectKey: string | null;
+    projectColor: string | null;
+    authorName: string;
+    pinnedAt: string | null;
+    unread: number | null;
+  },
+  userId: string,
+  messageCount: number
+): AgentThread {
+  return {
+    id: thread.id,
+    workspaceId: thread.workspaceId,
+    projectId: thread.projectId,
+    projectName: meta.projectName ?? "",
+    projectKey: meta.projectKey ?? "",
+    projectColor: meta.projectColor ?? "",
+    title: thread.title,
+    mode: asMode(thread.mode),
+    engine: thread.engine,
+    model: thread.model,
+    effort: thread.effort,
+    approval: asApproval(thread.approval),
+    visibility: asVisibility(thread.visibility),
+    createdBy: thread.createdBy,
+    createdByName: meta.authorName,
+    mine: thread.createdBy === userId,
+    createdAt: thread.createdAt,
+    updatedAt: thread.updatedAt,
+    messageCount,
+    pinnedAt: meta.pinnedAt ?? null,
+    unread: Boolean(meta.unread),
+  };
+}
+
+// The viewer must still be able to read the thread; a private thread belongs to its author.
+async function requireThreadRow(
+  workspaceId: string,
+  userId: string,
+  threadId: string
+): Promise<{ thread: AgentThread; messages: AgentMessageRecord[] }> {
+  const db = getDb();
+  const [row] = await db
+    .select({
+      thread: agentThreads,
+      projectName: projects.name,
+      projectKey: projects.key,
+      projectColor: projects.color,
+      authorName: users.displayName,
+      pinnedAt: agentThreadFlags.pinnedAt,
+      unread: agentThreadFlags.unread,
+    })
+    .from(agentThreads)
+    .leftJoin(projects, eq(projects.id, agentThreads.projectId))
+    .innerJoin(users, eq(users.id, agentThreads.createdBy))
+    .leftJoin(
+      agentThreadFlags,
+      and(eq(agentThreadFlags.threadId, agentThreads.id), eq(agentThreadFlags.userId, userId))
+    )
+    .where(
+      and(
+        eq(agentThreads.id, threadId),
+        eq(agentThreads.workspaceId, workspaceId),
+        visibleTo(userId)
+      )
+    )
+    .limit(1);
+  if (!row) throw new TacosError("Conversation not found", 404);
+
+  const messages = await db
+    .select()
+    .from(agentMessages)
+    .where(eq(agentMessages.threadId, threadId))
+    .orderBy(asc(agentMessages.createdAt), asc(agentMessages.id));
+  const steps = await db
+    .select()
+    .from(agentSteps)
+    .where(eq(agentSteps.threadId, threadId))
+    .orderBy(asc(agentSteps.createdAt), asc(agentSteps.id));
+  const stepsByMessage = new Map<string, AgentStepRecord[]>();
+  for (const step of steps) {
+    const list = stepsByMessage.get(step.messageId) ?? [];
+    list.push({
+      id: step.id,
+      kind: asStepKind(step.kind),
+      title: step.title,
+      detail: step.detail ?? null,
+      status: asStepStatus(step.status),
+      createdAt: step.createdAt,
+    });
+    stepsByMessage.set(step.messageId, list);
+  }
+  return {
+    thread: threadRow(row.thread, row, userId, messages.length),
+    messages: messages.map((message) => ({
+      id: message.id,
+      role: message.role === "assistant" ? "assistant" : "user",
+      content: message.content,
+      createdAt: message.createdAt,
+      steps: stepsByMessage.get(message.id) ?? [],
+    })),
+  };
+}
+
+export async function getAgentThread(
+  workspaceId: string,
+  userId: string,
+  threadId: string
+): Promise<AgentThreadDetail> {
+  const { thread, messages } = await requireThreadRow(workspaceId, userId, threadId);
+  return { ...thread, messages };
+}
+
+export async function renameAgentThread(
+  workspaceId: string,
+  userId: string,
+  threadId: string,
+  title: string
+): Promise<AgentThread> {
+  const { thread } = await requireThreadRow(workspaceId, userId, threadId);
+  if (!thread.mine) throw new TacosError("Only the author can rename this conversation", 403);
+  const next = title.replace(/\s+/g, " ").trim().slice(0, MAX_TITLE);
+  if (!next) throw new TacosError("Title cannot be empty");
+  await getDb()
+    .update(agentThreads)
+    .set({ title: next, updatedAt: new Date().toISOString() })
+    .where(eq(agentThreads.id, threadId));
+  return threadOnly(await getAgentThread(workspaceId, userId, threadId));
+}
+
+export async function setAgentThreadVisibility(
+  workspaceId: string,
+  userId: string,
+  threadId: string,
+  visibility: AgentVisibility
+): Promise<AgentThread> {
+  const { thread } = await requireThreadRow(workspaceId, userId, threadId);
+  if (!thread.mine) throw new TacosError("Only the author can share this conversation", 403);
+  await getDb()
+    .update(agentThreads)
+    .set({ visibility: asVisibility(visibility), updatedAt: new Date().toISOString() })
+    .where(eq(agentThreads.id, threadId));
+  return threadOnly(await getAgentThread(workspaceId, userId, threadId));
+}
+
+export async function setAgentThreadMode(
+  workspaceId: string,
+  userId: string,
+  threadId: string,
+  mode: AgentMode
+): Promise<AgentThread> {
+  const { thread } = await requireThreadRow(workspaceId, userId, threadId);
+  if (!thread.mine) throw new TacosError("Only the author can change this conversation", 403);
+  if (asMode(mode) === "work" && !thread.projectId) {
+    throw new TacosError("Work needs a project", 400, "This conversation is not bound to one.");
+  }
+  await getDb()
+    .update(agentThreads)
+    .set({ mode: asMode(mode), updatedAt: new Date().toISOString() })
+    .where(eq(agentThreads.id, threadId));
+  return threadOnly(await getAgentThread(workspaceId, userId, threadId));
+}
+
+const MAX_MODEL = 80;
+
+export async function setAgentThreadModel(
+  workspaceId: string,
+  userId: string,
+  threadId: string,
+  model: string,
+  effort: string
+): Promise<AgentThread> {
+  const { thread } = await requireThreadRow(workspaceId, userId, threadId);
+  if (!thread.mine) throw new TacosError("Only the author can change this conversation", 403);
+  await getDb()
+    .update(agentThreads)
+    .set({
+      model: model.trim().slice(0, MAX_MODEL),
+      effort: effort.trim().slice(0, MAX_MODEL),
+      updatedAt: new Date().toISOString(),
+    })
+    .where(eq(agentThreads.id, threadId));
+  return threadOnly(await getAgentThread(workspaceId, userId, threadId));
+}
+
+export async function setAgentThreadApproval(
+  workspaceId: string,
+  userId: string,
+  threadId: string,
+  approval: AgentApproval
+): Promise<AgentThread> {
+  const { thread } = await requireThreadRow(workspaceId, userId, threadId);
+  if (!thread.mine) throw new TacosError("Only the author can change this conversation", 403);
+  await getDb()
+    .update(agentThreads)
+    .set({ approval: asApproval(approval), updatedAt: new Date().toISOString() })
+    .where(eq(agentThreads.id, threadId));
+  return threadOnly(await getAgentThread(workspaceId, userId, threadId));
+}
+
+// Rebinding a conversation is how the composer's project chip works: the next turn reads
+// and writes whatever project the chip shows, so the old project is never touched again.
+export async function setAgentThreadProject(
+  workspaceId: string,
+  userId: string,
+  threadId: string,
+  projectId: string
+): Promise<AgentThread> {
+  const { thread } = await requireThreadRow(workspaceId, userId, threadId);
+  if (!thread.mine) throw new TacosError("Only the author can change this conversation", 403);
+  const next = projectId.trim();
+  if (next) {
+    const [project] = await getDb()
+      .select({ id: projects.id })
+      .from(projects)
+      .where(
+        and(eq(projects.id, next), eq(projects.workspaceId, workspaceId), isNull(projects.deletedAt))
+      )
+      .limit(1);
+    if (!project) throw new TacosError("Project not found", 404);
+  }
+  await getDb()
+    .update(agentThreads)
+    .set({
+      projectId: next,
+      // "Don't work in a project" is a Chat-only conversation: Work has nothing to edit.
+      ...(next || thread.mode !== "work" ? {} : { mode: "chat" as const }),
+      updatedAt: new Date().toISOString(),
+    })
+    .where(eq(agentThreads.id, threadId));
+  return threadOnly(await getAgentThread(workspaceId, userId, threadId));
+}
+
+// Pinning is a viewer preference, so anyone who can read the thread may set it — including
+// on someone else's shared conversation.
+export async function setAgentThreadPinned(
+  workspaceId: string,
+  userId: string,
+  threadId: string,
+  pinned: boolean
+): Promise<AgentThread> {
+  await requireThreadRow(workspaceId, userId, threadId);
+  await getDb()
+    .insert(agentThreadFlags)
+    .values({ threadId, userId, pinnedAt: pinned ? new Date().toISOString() : null, unread: 0 })
+    .onConflictDoUpdate({
+      target: [agentThreadFlags.threadId, agentThreadFlags.userId],
+      set: { pinnedAt: pinned ? new Date().toISOString() : null },
+    });
+  return threadOnly(await getAgentThread(workspaceId, userId, threadId));
+}
+
+export async function setAgentThreadUnread(
+  workspaceId: string,
+  userId: string,
+  threadId: string,
+  unread: boolean
+): Promise<AgentThread> {
+  await requireThreadRow(workspaceId, userId, threadId);
+  const flag = unread ? 1 : 0;
+  await getDb()
+    .insert(agentThreadFlags)
+    .values({ threadId, userId, pinnedAt: null, unread: flag })
+    .onConflictDoUpdate({
+      target: [agentThreadFlags.threadId, agentThreadFlags.userId],
+      set: { unread: flag },
+    });
+  return threadOnly(await getAgentThread(workspaceId, userId, threadId));
+}
+
+export async function deleteAgentThread(
+  workspaceId: string,
+  userId: string,
+  threadId: string
+): Promise<void> {
+  const { thread } = await requireThreadRow(workspaceId, userId, threadId);
+  if (!thread.mine) throw new TacosError("Only the author can delete this conversation", 403);
+  const db = getDb();
+  await db.delete(agentSteps).where(eq(agentSteps.threadId, threadId));
+  await db.delete(agentMessages).where(eq(agentMessages.threadId, threadId));
+  await db.delete(agentThreadFlags).where(eq(agentThreadFlags.threadId, threadId));
+  await db.delete(agentThreads).where(eq(agentThreads.id, threadId));
+}
+
+// --- turn accounting -------------------------------------------------------
+
+export type TurnThread = {
+  id: string;
+  workspaceId: string;
+  projectId: string;
+  projectName: string;
+  projectKey: string;
+  mode: AgentMode;
+  engine: string;
+  model: string;
+  effort: string;
+  approval: AgentApproval;
+  createdBy: string;
+  messages: { role: "user" | "assistant"; content: string }[];
+};
+
+// What /api/ai/chat needs to run a turn: the binding, the mode, and the history as it
+// was stored — the browser does not get to rewrite its own past.
+export async function loadThreadForTurn(
+  workspaceId: string,
+  userId: string,
+  threadId: string,
+  historyLimit = 30
+): Promise<TurnThread> {
+  const { thread, messages } = await requireThreadRow(workspaceId, userId, threadId);
+  const history = messages
+    .filter((message) => message.content.trim())
+    .slice(-historyLimit)
+    .map((message) => ({ role: message.role, content: message.content }));
+  return {
+    id: thread.id,
+    workspaceId: thread.workspaceId,
+    projectId: thread.projectId,
+    projectName: thread.projectName,
+    projectKey: thread.projectKey,
+    mode: thread.mode,
+    engine: thread.engine,
+    model: thread.model,
+    effort: thread.effort,
+    approval: thread.approval,
+    createdBy: thread.createdBy,
+    messages: history,
+  };
+}
+
+export async function appendAgentMessage(input: {
+  threadId: string;
+  role: "user" | "assistant";
+  content: string;
+}): Promise<string> {
+  const id = crypto.randomUUID();
+  const now = new Date().toISOString();
+  const db = getDb();
+  await db.insert(agentMessages).values({
+    id,
+    threadId: input.threadId,
+    role: input.role,
+    content: input.content,
+    createdAt: now,
+  });
+  // The first question names the thread; later turns only bump ordering.
+  const [thread] = await db
+    .select({ title: agentThreads.title })
+    .from(agentThreads)
+    .where(eq(agentThreads.id, input.threadId))
+    .limit(1);
+  if (thread && !thread.title && input.role === "user") {
+    await db
+      .update(agentThreads)
+      .set({ title: titleFrom(input.content), updatedAt: now })
+      .where(eq(agentThreads.id, input.threadId));
+  } else {
+    await db
+      .update(agentThreads)
+      .set({ updatedAt: now })
+      .where(eq(agentThreads.id, input.threadId));
+  }
+  return id;
+}
+
+export async function updateAgentMessage(messageId: string, content: string): Promise<void> {
+  await getDb().update(agentMessages).set({ content }).where(eq(agentMessages.id, messageId));
+}
+
+// A turn that produced no text at all (provider error, immediate cancel) leaves no reply
+// behind; an empty assistant bubble would just confuse the history.
+export async function removeAgentMessage(messageId: string): Promise<void> {
+  const db = getDb();
+  await db.delete(agentSteps).where(eq(agentSteps.messageId, messageId));
+  await db.delete(agentMessages).where(eq(agentMessages.id, messageId));
+}
+
+export async function appendAgentStep(input: {
+  threadId: string;
+  messageId: string;
+  kind: AgentStepRecord["kind"];
+  title: string;
+  detail?: string | null;
+  status?: AgentStepRecord["status"];
+}): Promise<string> {
+  const id = crypto.randomUUID();
+  await getDb().insert(agentSteps).values({
+    id,
+    threadId: input.threadId,
+    messageId: input.messageId,
+    kind: input.kind,
+    title: input.title,
+    detail: input.detail ?? null,
+    status: input.status ?? "running",
+    createdAt: new Date().toISOString(),
+  });
+  return id;
+}
+
+export async function finishAgentStep(
+  stepId: string,
+  status: AgentStepRecord["status"],
+  detail?: string | null
+): Promise<void> {
+  await getDb()
+    .update(agentSteps)
+    .set({ status, ...(detail !== undefined ? { detail } : {}) })
+    .where(eq(agentSteps.id, stepId));
+}
+
+export async function setThreadEngine(threadId: string, engine: string): Promise<void> {
+  await getDb()
+    .update(agentThreads)
+    .set({ engine, updatedAt: new Date().toISOString() })
+    .where(eq(agentThreads.id, threadId));
+}

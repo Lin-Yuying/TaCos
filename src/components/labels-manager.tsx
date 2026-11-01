@@ -98,7 +98,7 @@ export function LabelsManager({
                 }
                 className="text-[12px] text-faint hover:text-muted"
               >
-                {label.issueCount} issue{label.issueCount === 1 ? "" : "s"}
+                {label.issueCount} task{label.issueCount === 1 ? "" : "s"}
               </button>
               <button
                 type="button"

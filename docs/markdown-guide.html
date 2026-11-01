@@ -1,0 +1,413 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>TaCos · Markdown 语法速查</title>
+    <style>
+      :root {
+        --bg: #ffffff;
+        --surface: #f9f9f9;
+        --elevated: #f0f0f0;
+        --border: #e5e5e5;
+        --border-strong: #d0d0d0;
+        --text: #0d0d0d;
+        --muted: #5d5d5d;
+        --faint: #8f8f8f;
+      }
+      * {
+        box-sizing: border-box;
+      }
+      html {
+        color-scheme: light;
+      }
+      body {
+        margin: 0;
+        background: var(--bg);
+        color: var(--text);
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC",
+          "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+        font-size: 14px;
+        line-height: 1.65;
+        letter-spacing: -0.005em;
+      }
+      main {
+        max-width: 780px;
+        margin: 0 auto;
+        padding: 48px 24px 80px;
+      }
+      header {
+        padding-bottom: 20px;
+        border-bottom: 1px solid var(--border);
+        margin-bottom: 32px;
+      }
+      h1 {
+        margin: 0 0 6px;
+        font-size: 26px;
+        letter-spacing: -0.02em;
+      }
+      .sub {
+        margin: 0;
+        color: var(--muted);
+      }
+      h2 {
+        margin: 38px 0 12px;
+        font-size: 17px;
+        letter-spacing: -0.01em;
+      }
+      p {
+        margin: 10px 0;
+        color: var(--muted);
+      }
+      p.lead {
+        color: var(--text);
+      }
+      table {
+        width: 100%;
+        border-collapse: collapse;
+        margin: 12px 0 4px;
+        font-size: 13.5px;
+      }
+      th,
+      td {
+        text-align: left;
+        vertical-align: top;
+        padding: 9px 12px;
+        border-bottom: 1px solid var(--border);
+      }
+      th {
+        color: var(--faint);
+        font-weight: 500;
+        font-size: 12px;
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+        background: var(--surface);
+      }
+      tr:last-child td {
+        border-bottom: 0;
+      }
+      td:first-child {
+        white-space: nowrap;
+        width: 34%;
+      }
+      code,
+      kbd {
+        font-family: ui-monospace, "SF Mono", SFMono-Regular, Menlo, Consolas, monospace;
+        font-size: 12.5px;
+      }
+      code {
+        background: var(--elevated);
+        border-radius: 4px;
+        padding: 1.5px 5px;
+      }
+      kbd {
+        display: inline-block;
+        padding: 1px 6px;
+        border: 1px solid var(--border-strong);
+        border-bottom-width: 2px;
+        border-radius: 5px;
+        background: var(--bg);
+        color: var(--text);
+        font-size: 11.5px;
+        line-height: 1.6;
+        white-space: nowrap;
+      }
+      .note {
+        margin: 18px 0;
+        padding: 12px 14px;
+        border: 1px solid var(--border);
+        border-radius: 10px;
+        background: var(--surface);
+        color: var(--muted);
+        font-size: 13px;
+      }
+      .note strong {
+        color: var(--text);
+        font-weight: 600;
+      }
+      ul {
+        margin: 8px 0;
+        padding-left: 20px;
+        color: var(--muted);
+      }
+      li {
+        margin: 5px 0;
+      }
+      pre {
+        margin: 12px 0;
+        padding: 14px 16px;
+        overflow-x: auto;
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: 10px;
+        font-family: ui-monospace, "SF Mono", SFMono-Regular, Menlo, Consolas, monospace;
+        font-size: 12.5px;
+        line-height: 1.55;
+      }
+      .cols {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 16px;
+      }
+      .cols > div {
+        border: 1px solid var(--border);
+        border-radius: 10px;
+        padding: 12px 14px;
+        background: var(--surface);
+      }
+      .cols h3 {
+        margin: 0 0 6px;
+        font-size: 12px;
+        font-weight: 600;
+        color: var(--faint);
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+      }
+      .cols p {
+        margin: 0;
+        color: var(--text);
+        font-size: 13.5px;
+      }
+      footer {
+        margin-top: 44px;
+        padding-top: 16px;
+        border-top: 1px solid var(--border);
+        color: var(--faint);
+        font-size: 12px;
+      }
+      @media (max-width: 620px) {
+        .cols {
+          grid-template-columns: 1fr;
+        }
+        td:first-child {
+          width: 42%;
+        }
+      }
+      @media print {
+        main {
+          padding: 0;
+        }
+        .note,
+        pre,
+        .cols > div {
+          break-inside: avoid;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <header>
+        <h1>TaCos · Markdown 语法速查</h1>
+        <p class="sub">项目 Overview 与说明文档使用的全部语法，以及 Notion 风格的输入快捷键。</p>
+      </header>
+
+      <p class="lead">
+        在 Overview 里，你不需要先写 Markdown 再预览：输入的标记会立刻变成对应的样式，
+        语法符号在光标移开后自动隐藏。把光标移回文字里，符号会重新出现，方便修改。
+      </p>
+
+      <div class="note">
+        <strong>用 <code>/</code> 打开命令菜单。</strong>
+        在任何空行输入 <code>/</code>，可以选标题、列表、待办、引用、代码块、分割线，
+        也可以用方向键选择后回车。记不住语法时，这是最快的入口。
+      </div>
+
+      <h2>输入即转换</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>输入</th>
+            <th>变成</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><code>#</code> + 空格</td>
+            <td>一级标题（<code>##</code> 二级，<code>###</code> 三级）</td>
+          </tr>
+          <tr>
+            <td><code>-</code> + 空格</td>
+            <td>圆点列表（<code>*</code> + 空格、<code>+</code> + 空格 同样有效）</td>
+          </tr>
+          <tr>
+            <td><code>1.</code> + 空格</td>
+            <td>有序列表，回车后自动接着编号</td>
+          </tr>
+          <tr>
+            <td><code>[]</code> + 空格</td>
+            <td>待办事项；也可以用 <code>- [ ]</code> + 空格</td>
+          </tr>
+          <tr>
+            <td><code>&gt;</code> + 空格</td>
+            <td>引用块</td>
+          </tr>
+          <tr>
+            <td><code>```</code> + 空格</td>
+            <td>代码输入框（先写语言，例如 <code>```js</code> + 空格，可获得 JS 代码块）</td>
+          </tr>
+          <tr>
+            <td><code>---</code></td>
+            <td>分割线</td>
+          </tr>
+        </tbody>
+      </table>
+      <p>
+        如果标记没有自动转换，把光标放到行首按 <kbd>Enter</kbd> 也可以完成转换：
+        <code>-</code> 会变成列表，<code>```</code> 会变成代码块。
+      </p>
+
+      <h2>键盘操作</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>按键</th>
+            <th>作用</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><kbd>Tab</kbd></td>
+            <td>缩进当前行（列表整体缩进一级；代码块内为选中的每一行加两个空格）</td>
+          </tr>
+          <tr>
+            <td><kbd>Shift</kbd> + <kbd>Tab</kbd></td>
+            <td>减少缩进，把嵌套的列表或代码行退一级</td>
+          </tr>
+          <tr>
+            <td><kbd>Enter</kbd></td>
+            <td>新建一段；在列表里继续下一项；在空列表项上按一次退回上一级，再按一次结束列表</td>
+          </tr>
+          <tr>
+            <td><kbd>Shift</kbd> + <kbd>Enter</kbd></td>
+            <td>在同一段内换行（代码块内直接按 <kbd>Enter</kbd> 换行）</td>
+          </tr>
+          <tr>
+            <td><kbd>⌘</kbd>/<kbd>Ctrl</kbd> + <kbd>B</kbd></td>
+            <td>加粗选中的文字</td>
+          </tr>
+          <tr>
+            <td><kbd>⌘</kbd>/<kbd>Ctrl</kbd> + <kbd>I</kbd></td>
+            <td>斜体</td>
+          </tr>
+          <tr>
+            <td><kbd>⌘</kbd>/<kbd>Ctrl</kbd> + <kbd>E</kbd></td>
+            <td>行内代码</td>
+          </tr>
+          <tr>
+            <td><kbd>⌘</kbd>/<kbd>Ctrl</kbd> + <kbd>Enter</kbd></td>
+            <td>结束当前块的编辑</td>
+          </tr>
+          <tr>
+            <td><kbd>↑</kbd> / <kbd>↓</kbd></td>
+            <td>在行首或行尾继续按，会跳到上一块或下一块</td>
+          </tr>
+          <tr>
+            <td>拖拽 / <kbd>⌘</kbd>+<kbd>A</kbd> ×2</td>
+            <td>跨块选择；选中后可整体删除、复制或缩进</td>
+          </tr>
+          <tr>
+            <td><kbd>Backspace</kbd> / <kbd>Delete</kbd></td>
+            <td>删除选中的块</td>
+          </tr>
+          <tr>
+            <td><kbd>Esc</kbd></td>
+            <td>取消选择或结束编辑</td>
+          </tr>
+        </tbody>
+      </table>
+      <p>
+        点击任意一块即可编辑；点击文档末尾的空白处，会像 Notion 一样在最后新起一行。
+        编辑内容会自动保存，右上角出现 <strong>Saved</strong> 表示已经写入。
+      </p>
+
+      <h2>行内格式</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>写法</th>
+            <th>效果</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><code>**粗体**</code></td>
+            <td><strong>粗体</strong></td>
+          </tr>
+          <tr>
+            <td><code>*斜体*</code> 或 <code>_斜体_</code></td>
+            <td><em>斜体</em></td>
+          </tr>
+          <tr>
+            <td><code>~~删除线~~</code></td>
+            <td><s>删除线</s></td>
+          </tr>
+          <tr>
+            <td><code>`行内代码`</code></td>
+            <td><code>行内代码</code></td>
+          </tr>
+          <tr>
+            <td><code>[文字](https://example.com)</code></td>
+            <td>链接（只允许 http、https、mailto）</td>
+          </tr>
+          <tr>
+            <td><code>&lt;https://example.com&gt;</code></td>
+            <td>自动链接</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <h2>组合示例</h2>
+      <div class="cols">
+        <div>
+          <h3>你输入的</h3>
+          <pre>## 发布计划
+- 完成登录页
+- 写发布说明
+  - 截图
+- [ ] 通知客户
+&gt; 周五之前完成
+---
+```js
+npm run build
+```</pre>
+        </div>
+        <div>
+          <h3>页面上的样子</h3>
+          <p>
+            <strong>发布计划</strong><br />
+            • 完成登录页<br />
+            • 写发布说明<br />
+            &nbsp;&nbsp;&nbsp;◦ 截图<br />
+            ☐ 通知客户<br />
+            ▏周五之前完成<br />
+            ——————<br />
+            <code>npm run build</code>
+          </p>
+        </div>
+      </div>
+
+      <h2>列表嵌套</h2>
+      <p>
+        在列表项上按 <kbd>Tab</kbd> 会嵌套到上一项的下一级，按 <kbd>Shift</kbd> +
+        <kbd>Tab</kbd> 退回。最多四级。回车新建的下一项会沿用当前层级；在空列表项上回车，
+        会先退一级，退到最外层再回车就结束列表。
+      </p>
+
+      <h2>代码块</h2>
+      <p>
+        输入 <code>```</code> 再按空格，会得到一个带边框的代码输入框。代码块里的
+        <kbd>Tab</kbd> 给选中的行加两个空格，<kbd>Shift</kbd> + <kbd>Tab</kbd> 去掉它们；
+        <kbd>Enter</kbd> 是普通换行，不会拆成新的文档块。
+      </p>
+
+      <h2>保存</h2>
+      <p>
+        Overview 的修改会自动保存，不需要按钮。离开页面时尚未发出的写入也会立即补上，
+        所以直接关窗口不会丢失最后一次编辑。
+      </p>
+
+      <footer>TaCos 1.0 · 这份文档随安装包一起提供，可离线查阅。</footer>
+    </main>
+  </body>
+</html>

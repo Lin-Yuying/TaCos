@@ -3,17 +3,30 @@ import { redirect } from "next/navigation";
 import { getSessionUser, requireWorkspace } from "@/lib/auth";
 import {
   countIssuesByStatus,
+  countUnseenDocEdits,
+  getOverviewAccess,
   getProject,
   isFavoriteProject,
   listIssues,
   listMembers,
+  listOverviewComments,
+  listOverviewDocEdits,
+  listOverviewGrants,
   listProjectMembers,
+  listProjects,
+  trashedIssueTitles,
+  type OverviewComment,
+  type OverviewDocEdit,
+  type OverviewGrant,
 } from "@/lib/issues";
 import { ProjectWorkspace } from "@/components/project-workspace";
+import { referencedIssueIds } from "@/lib/markdown";
+import { listProjectPageTree } from "@/lib/pages";
+import { listProjectResources, type ProjectResource } from "@/lib/resources";
 import type { ProjectTab } from "@/components/project-header";
 
 // Both the project route and its legacy /issues sub-route render this, so the
-// Overview/Issues pills can switch in place instead of navigating.
+// Overview/Tasks pills can switch in place instead of navigating.
 export async function ProjectPage({
   params,
   initialTab,
@@ -30,13 +43,40 @@ export async function ProjectPage({
   const project = await getProject(workspaceId, projectId);
   if (!project) redirect(`/${workspaceId}`);
 
-  const [counts, members, projectMembers, issues, favorite] = await Promise.all([
-    countIssuesByStatus(workspaceId, project.id),
-    listMembers(workspaceId),
-    listProjectMembers(workspaceId, project.id),
-    listIssues(workspaceId, { projectId: project.id }),
-    isFavoriteProject(workspaceId, user.id, project.id),
-  ]);
+  // When the owner turns off workspace-wide task visibility, a member outside this
+  // project cannot open it — the same check the sidebar and lists use.
+  const [visible, counts, members, projectMembers, issues, favorite, access, documents] =
+    await Promise.all([
+      listProjects(workspaceId, user.id),
+      countIssuesByStatus(workspaceId, project.id, user.id),
+      listMembers(workspaceId),
+      listProjectMembers(workspaceId, project.id),
+      listIssues(workspaceId, { projectId: project.id, viewerId: user.id }),
+      isFavoriteProject(workspaceId, user.id, project.id),
+      getOverviewAccess(workspaceId, project.id, user.id),
+      listProjectPageTree(workspaceId, project.id, user.id),
+    ]);
+  if (!visible.some((candidate) => candidate.id === project.id)) {
+    redirect(`/${workspaceId}`);
+  }
+
+  const [grants, comments, edits, unseenDocEdits, resources, trashedTitles]: [
+    OverviewGrant[],
+    OverviewComment[],
+    OverviewDocEdit[],
+    number,
+    ProjectResource[],
+    Record<string, string>,
+  ] = access.canView
+    ? await Promise.all([
+        listOverviewGrants(workspaceId, project.id),
+        listOverviewComments(workspaceId, project.id),
+        listOverviewDocEdits(workspaceId, project.id),
+        countUnseenDocEdits(project.id, user.id),
+        listProjectResources(workspaceId, project.id, user.id),
+        trashedIssueTitles(workspaceId, referencedIssueIds(project.doc)),
+      ])
+    : [[], [], [], 0, [], {}];
 
   return (
     // Keyed by project: the tab, the star and the filters are per-project state, and
@@ -49,8 +89,17 @@ export async function ProjectPage({
       members={projectMembers}
       workspaceMembers={members}
       issues={issues}
-      initialTab={initialTab}
+      documents={documents}
+      currentUserId={user.id}
+      initialTab={access.canView ? initialTab : "issues"}
       initialFavorite={favorite}
+      access={access}
+      grants={grants}
+      comments={comments}
+      edits={edits}
+      unseenDocEdits={unseenDocEdits}
+      resources={resources}
+      trashedTitles={trashedTitles}
     />
   );
 }

@@ -1,4 +1,4 @@
-<p align="left"><img src="public/brand/otter-line.png" alt="Tacos" width="80"></p> 
+<p align="left"><img src="public/brand/otter-line.png" alt="TaCos" width="80"></p> 
 
 # TaCos
 
@@ -26,7 +26,7 @@ npm run dev          # http://localhost:3000
 
 The database lives at `data/tacos.db` and is created on first run.
 
-On a fresh database Tacos seeds a demo workspace so there is something to click around:
+On a fresh database TaCos seeds a demo workspace so there is something to click around:
 
 | Account | Password | Role |
 | --- | --- | --- |

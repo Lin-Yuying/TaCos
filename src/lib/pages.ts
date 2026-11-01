@@ -1,0 +1,408 @@
+import crypto from "node:crypto";
+import { and, eq, inArray, or } from "drizzle-orm";
+import { getDb } from "../db/client";
+import { pages } from "../db/schema";
+import { TacosError, getProject, nowIso } from "./issues";
+
+export type DocPage = {
+  id: string;
+  workspaceId: string;
+  parentId: string | null;
+  projectId: string | null;
+  title: string;
+  icon: string | null;
+  doc: string;
+  createdBy: string;
+  shared: boolean;
+  createdAt: string;
+  updatedAt: string;
+};
+
+// What the sidebar and the child-page list need; the body is left in the database.
+export type PageSummary = Omit<DocPage, "doc" | "workspaceId"> & { depth: number };
+
+export type PageRef = { id: string; title: string; icon: string | null };
+
+type PageRow = typeof pages.$inferSelect;
+
+function toPage(row: PageRow): DocPage {
+  return { ...row, shared: row.shared === 1 };
+}
+
+// A page is readable by its author or, once shared, by the whole workspace. Every
+// caller has already proved workspace membership, so "shared" needs no further check.
+export function pageVisible(page: DocPage, viewerId: string): boolean {
+  return page.shared || page.createdBy === viewerId;
+}
+
+async function findPage(workspaceId: string, pageId: string): Promise<DocPage | null> {
+  const [row] = await getDb()
+    .select()
+    .from(pages)
+    .where(and(eq(pages.workspaceId, workspaceId), eq(pages.id, pageId)))
+    .limit(1);
+  return row ? toPage(row) : null;
+}
+
+export async function listPages(workspaceId: string, viewerId: string): Promise<DocPage[]> {
+  const rows = await getDb()
+    .select()
+    .from(pages)
+    .where(
+      and(
+        eq(pages.workspaceId, workspaceId),
+        or(eq(pages.shared, 1), eq(pages.createdBy, viewerId))
+      )
+    )
+    .orderBy(pages.createdAt);
+  return rows.map(toPage);
+}
+
+// The sidebar wants a tree in reading order, not a flat list in creation order:
+// children sit directly under their parent, indented by depth.
+export function pageTree(items: DocPage[]): PageSummary[] {
+  const byParent = new Map<string | null, DocPage[]>();
+  for (const page of items) {
+    const key = page.parentId && items.some((p) => p.id === page.parentId) ? page.parentId : null;
+    const bucket = byParent.get(key) ?? [];
+    bucket.push(page);
+    byParent.set(key, bucket);
+  }
+  const out: PageSummary[] = [];
+  const walk = (parentId: string | null, depth: number) => {
+    for (const page of byParent.get(parentId) ?? []) {
+      out.push({
+        id: page.id,
+        parentId: page.parentId,
+        projectId: page.projectId,
+        title: page.title,
+        icon: page.icon,
+        createdBy: page.createdBy,
+        shared: page.shared,
+        createdAt: page.createdAt,
+        updatedAt: page.updatedAt,
+        depth,
+      });
+      walk(page.id, Math.min(depth + 1, 6));
+    }
+  };
+  walk(null, 0);
+  return out;
+}
+
+export async function listPageTree(workspaceId: string, viewerId: string): Promise<PageSummary[]> {
+  return pageTree(await listPages(workspaceId, viewerId));
+}
+
+export async function getPage(
+  workspaceId: string,
+  pageId: string,
+  viewerId: string
+): Promise<DocPage | null> {
+  const page = await findPage(workspaceId, pageId);
+  if (!page || !pageVisible(page, viewerId)) return null;
+  return page;
+}
+
+export async function listChildPages(
+  workspaceId: string,
+  parentId: string,
+  viewerId: string
+): Promise<PageSummary[]> {
+  const all = await listPages(workspaceId, viewerId);
+  return all
+    .filter((page) => page.parentId === parentId)
+    .map((page) => ({
+      id: page.id,
+      parentId: page.parentId,
+      projectId: page.projectId,
+      title: page.title,
+      icon: page.icon,
+      createdBy: page.createdBy,
+      shared: page.shared,
+      createdAt: page.createdAt,
+      updatedAt: page.updatedAt,
+      depth: 0,
+    }));
+}
+
+export async function listProjectPageTree(
+  workspaceId: string,
+  projectId: string,
+  viewerId: string
+): Promise<PageSummary[]> {
+  const all = await listPages(workspaceId, viewerId);
+  return pageTree(all.filter((page) => page.projectId === projectId));
+}
+
+export async function createPage(
+  workspaceId: string,
+  viewerId: string,
+  input: { parentId?: string | null; projectId?: string | null; title?: string; doc?: string } = {}
+): Promise<DocPage> {
+  const db = getDb();
+  const parentId: string | null = input.parentId ?? null;
+  let projectId: string | null = input.projectId ?? null;
+  if (parentId) {
+    const parent = await getPage(workspaceId, parentId, viewerId);
+    if (!parent) throw new TacosError("Parent page not found", 404);
+    // Subpages live wherever their parent lives; a project doc's children are project docs.
+    if (projectId === null) projectId = parent.projectId;
+  }
+  if (projectId && !(await getProject(workspaceId, projectId))) {
+    throw new TacosError("Project not found", 404);
+  }
+  let title = (input.title ?? "").trim().slice(0, 120) || "Untitled";
+  // A trailing number keeps "Untitled" pages distinguishable when several are created
+  // in a row — [[Untitled]] would otherwise always open the oldest one.
+  if (title === "Untitled") {
+    const existing = new Set(
+      (await listPages(workspaceId, viewerId)).map((page) => page.title.toLowerCase())
+    );
+    let n = 2;
+    while (existing.has(title.toLowerCase())) title = `Untitled ${n++}`;
+  }
+  const id = crypto.randomUUID();
+  const at = nowIso();
+  await db.insert(pages).values({
+    id,
+    workspaceId,
+    parentId,
+    projectId,
+    title,
+    icon: null,
+    doc: input.doc ?? "",
+    createdBy: viewerId,
+    shared: 0,
+    createdAt: at,
+    updatedAt: at,
+  });
+  const created = await findPage(workspaceId, id);
+  if (!created) throw new TacosError("Page not found", 404);
+  return created;
+}
+
+const MARKDOWN_FILE = /\.(md|markdown|mdx|txt)$/i;
+
+/** Folder segments plus the file's stem: `notes/guide/intro.md` → ["notes", "guide", "intro"]. */
+export function importSegments(path: string): string[] {
+  const parts = path
+    .replace(/\\/g, "/")
+    .split("/")
+    .map((part) => part.trim())
+    .filter((part) => part && part !== "." && part !== "..");
+  const stem = (parts.pop() ?? "Untitled").replace(MARKDOWN_FILE, "");
+  return [...parts, stem || "Untitled"].map((part) => part.slice(0, 120));
+}
+
+/** An imported file names its page from its own H1; that heading leaves the body. */
+export function splitImportedMarkdown(stem: string, content: string): { title: string; doc: string } {
+  const text = content.replace(/^\uFEFF/, "").replace(/\r\n/g, "\n");
+  const lines = text.split("\n");
+  let first = 0;
+  while (first < lines.length && lines[first].trim() === "") first += 1;
+  const heading = /^#\s+(.+?)\s*#*$/.exec(lines[first] ?? "");
+  if (!heading) return { title: stem, doc: text };
+  let body = first + 1;
+  while (body < lines.length && lines[body].trim() === "") body += 1;
+  return { title: heading[1].trim().slice(0, 120) || stem, doc: lines.slice(body).join("\n") };
+}
+
+async function siblingPage(
+  workspaceId: string,
+  viewerId: string,
+  parentId: string | null,
+  title: string
+): Promise<DocPage | null> {
+  const visible = await listPages(workspaceId, viewerId);
+  return (
+    visible.find(
+      (page) => page.parentId === parentId && page.title.toLowerCase() === title.toLowerCase()
+    ) ?? null
+  );
+}
+
+export type ImportedPage = { id: string; title: string; created: boolean };
+
+// A reference table imported from a research folder is a legitimate one-megabyte-ish
+// document, so the cap only stops a runaway body — it must not decide what can be read.
+// The server-action body limit in next.config.ts has to stay above it.
+export const MAX_DOC_CHARS = 1_000_000;
+
+function assertDocSize(doc: string): void {
+  if (doc.length > MAX_DOC_CHARS)
+    throw new TacosError(`Document is too long (${MAX_DOC_CHARS / 1_000_000}M characters max)`);
+}
+
+/**
+ * One Markdown file per call: a server action's request body is capped, and a folder
+ * import can be much larger. A page that already exists is left untouched rather than
+ * overwritten — a repeated import reports it as skipped.
+ */
+export async function importMarkdownPage(
+  workspaceId: string,
+  viewerId: string,
+  input: { path: string; content: string }
+): Promise<ImportedPage> {
+  const segments = importSegments(input.path);
+  const stem = segments.pop() ?? "Untitled";
+  const { title, doc } = splitImportedMarkdown(stem, input.content);
+  assertDocSize(doc);
+
+  let parentId: string | null = null;
+  for (const folder of segments) {
+    const existing = await siblingPage(workspaceId, viewerId, parentId, folder);
+    parentId = existing?.id ?? (await createPage(workspaceId, viewerId, { parentId, title: folder })).id;
+  }
+
+  const existing = await siblingPage(workspaceId, viewerId, parentId, title);
+  if (existing) return { id: existing.id, title: existing.title, created: false };
+  const page = await createPage(workspaceId, viewerId, { parentId, title, doc });
+  return { id: page.id, title: page.title, created: true };
+}
+
+/** Authors always may edit; a shared page is a small team wiki, so members may too. */
+export function canEditPage(page: DocPage, viewerId: string): boolean {
+  return page.createdBy === viewerId || page.shared;
+}
+
+export async function updatePage(
+  workspaceId: string,
+  pageId: string,
+  viewerId: string,
+  patch: { title?: string; doc?: string; icon?: string | null }
+): Promise<DocPage> {
+  const page = await getPage(workspaceId, pageId, viewerId);
+  if (!page) throw new TacosError("Page not found", 404);
+  if (!canEditPage(page, viewerId)) throw new TacosError("You cannot edit this page", 403);
+
+  const next: Partial<typeof pages.$inferInsert> = {};
+  if (patch.title != null) {
+    const title = patch.title.trim().slice(0, 120);
+    if (!title) throw new TacosError("Page title is required");
+    next.title = title;
+  }
+  if (patch.doc != null) {
+    assertDocSize(patch.doc);
+    next.doc = patch.doc;
+  }
+  if (patch.icon !== undefined) {
+    const icon = patch.icon?.trim() ?? "";
+    if (icon.length > 8) throw new TacosError("Pick a single emoji as the page icon");
+    next.icon = icon || null;
+  }
+  if (Object.keys(next).length === 0) return page;
+  next.updatedAt = nowIso();
+  await getDb()
+    .update(pages)
+    .set(next)
+    .where(and(eq(pages.workspaceId, workspaceId), eq(pages.id, pageId)));
+  const updated = await findPage(workspaceId, pageId);
+  if (!updated) throw new TacosError("Page not found", 404);
+  return updated;
+}
+
+export async function descendantsOf(workspaceId: string, pageId: string): Promise<DocPage[]> {
+  const all = await getDb().select().from(pages).where(eq(pages.workspaceId, workspaceId));
+  const out: DocPage[] = [];
+  const seen = new Set([pageId]);
+  let frontier = [pageId];
+  while (frontier.length) {
+    const next: string[] = [];
+    for (const row of all) {
+      if (row.parentId && frontier.includes(row.parentId) && !seen.has(row.id)) {
+        seen.add(row.id);
+        out.push(toPage(row));
+        next.push(row.id);
+      }
+    }
+    frontier = next;
+  }
+  return out;
+}
+
+/** Sharing a page shares its whole subtree; unsharing takes it back with it. */
+export async function setPageShared(
+  workspaceId: string,
+  pageId: string,
+  viewerId: string,
+  shared: boolean
+): Promise<DocPage> {
+  const page = await getPage(workspaceId, pageId, viewerId);
+  if (!page) throw new TacosError("Page not found", 404);
+  if (page.createdBy !== viewerId) throw new TacosError("Only the page owner can change sharing", 403);
+  const ids = [pageId, ...(await descendantsOf(workspaceId, pageId)).map((p) => p.id)];
+  await getDb()
+    .update(pages)
+    .set({ shared: shared ? 1 : 0 })
+    .where(and(eq(pages.workspaceId, workspaceId), inArray(pages.id, ids)));
+  const updated = await findPage(workspaceId, pageId);
+  if (!updated) throw new TacosError("Page not found", 404);
+  return updated;
+}
+
+export async function deletePage(
+  workspaceId: string,
+  pageId: string,
+  viewerId: string
+): Promise<string[]> {
+  const page = await getPage(workspaceId, pageId, viewerId);
+  if (!page) throw new TacosError("Page not found", 404);
+  if (page.createdBy !== viewerId) throw new TacosError("Only the page owner can delete it", 403);
+  const ids = [pageId, ...(await descendantsOf(workspaceId, pageId)).map((p) => p.id)];
+  await getDb()
+    .delete(pages)
+    .where(and(eq(pages.workspaceId, workspaceId), inArray(pages.id, ids)));
+  return ids;
+}
+
+/** Backlinks and [[Title]] need a cheap title → page lookup for the viewer. */
+export async function listPageRefs(workspaceId: string, viewerId: string): Promise<PageRef[]> {
+  const rows = await getDb()
+    .select({ id: pages.id, title: pages.title, icon: pages.icon })
+    .from(pages)
+    .where(
+      and(
+        eq(pages.workspaceId, workspaceId),
+        or(eq(pages.shared, 1), eq(pages.createdBy, viewerId))
+      )
+    )
+    .orderBy(pages.createdAt);
+  return rows;
+}
+
+/**
+ * Resolves every page reference in a document to the page it points at. Used by the
+ * reader so `[[Title]]` and `![[Title]]` never need a database call while rendering.
+ */
+export function pageLookup(refs: PageRef[]): Record<string, PageRef> {
+  const out: Record<string, PageRef> = {};
+  for (const ref of refs) {
+    out[ref.id] = ref;
+    const key = ref.title.trim().toLowerCase();
+    if (!(key in out)) out[key] = ref;
+  }
+  return out;
+}
+
+export async function pageEmbedSources(
+  workspaceId: string,
+  viewerId: string,
+  doc: string
+): Promise<Record<string, string>> {
+  const refs = await listPageRefs(workspaceId, viewerId);
+  const lookup = pageLookup(refs);
+  const ids = new Set<string>();
+  for (const match of doc.matchAll(/!\[\[([^\]\n|]+)(?:\|([^\]]+))?\]\]/g)) {
+    const byId = match[2] ? lookup[match[2].trim()] : undefined;
+    const byTitle = lookup[match[1].trim().toLowerCase()];
+    const target = byId ?? byTitle;
+    if (target) ids.add(target.id);
+  }
+  const out: Record<string, string> = {};
+  for (const id of ids) {
+    const page = await getPage(workspaceId, id, viewerId);
+    if (page) out[id] = page.doc;
+  }
+  return out;
+}

@@ -11,10 +11,14 @@
       "filter": [
         "**/*"
       ]
+    },
+    {
+      "from": "docs/markdown-guide.html",
+      "to": "docs/markdown-guide.html"
     }
   ],
   "dmg": {
-    "title": "Tacos (Local)",
+    "title": "TaCos (Local)",
     "artifactName": "${productName}-Local-${version}-${arch}.${ext}"
   },
   "nsis": {

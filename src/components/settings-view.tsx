@@ -2,12 +2,13 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { Copy, Check, Pencil, RefreshCw, Trash2, Upload } from "lucide-react";
+import { Copy, Check, Pencil, RefreshCw, Sparkles, Trash2, Upload } from "lucide-react";
 import {
   createApiKeyAction,
   createProjectAction,
   revokeApiKeyAction,
   saveWorkspaceIconAction,
+  setMembersSeeAllTasksAction,
   trashProjectAction,
   updateProjectAction,
 } from "@/app/actions";
@@ -18,10 +19,18 @@ import {
   setMemberRoleAction,
   deleteWorkspaceAction,
 } from "@/app/auth-actions";
+import { saveAiSettingsAction, testAiConnectionAction } from "@/app/ai-actions";
+import {
+  AI_PRESETS,
+  type AiEngine,
+  type AiProviderId,
+  type AiSettingsView,
+} from "@/lib/ai-constants";
 import { AssigneeAvatar } from "@/components/issue-table";
 import { ProjectIcon, WorkspaceMark } from "@/components/icons";
 import { WorkspaceTrashList } from "@/components/workspace-trash-list";
 import type { ApiKeyRecord, DeletedWorkspace, Member, Project } from "@/lib/issues";
+import { BUILTIN_AVATARS, BUILTIN_AVATAR_LABELS, builtinAvatarId } from "@/lib/avatars";
 import { formatDate, timeAgo } from "@/lib/format";
 
 function CopyButton({ text }: { text: string }) {
@@ -92,6 +101,12 @@ function toSquareDataUrl(file: File): Promise<string> {
   });
 }
 
+function engineLabel(engine: AiEngine, model: string): string {
+  if (engine === "codex") return "Codex";
+  if (engine === "pi") return "Pi";
+  return model || "API";
+}
+
 export function SettingsView({
   workspace,
   role,
@@ -100,6 +115,8 @@ export function SettingsView({
   projects,
   keys,
   joinCode,
+  membersSeeAllTasks,
+  ai,
   isOwner,
   nextWorkspaceHref,
   deletedWorkspaces,
@@ -111,6 +128,8 @@ export function SettingsView({
   projects: Project[];
   keys: ApiKeyRecord[];
   joinCode: string | null;
+  membersSeeAllTasks: boolean;
+  ai: AiSettingsView;
   isOwner: boolean;
   nextWorkspaceHref: string;
   deletedWorkspaces: DeletedWorkspace[];
@@ -132,6 +151,17 @@ export function SettingsView({
   const [deleteError, setDeleteError] = useState<string | null>(null);
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [deleteWord, setDeleteWord] = useState("");
+  const [seeAll, setSeeAll] = useState(membersSeeAllTasks);
+  const [aiProvider, setAiProvider] = useState<AiProviderId>(ai.provider);
+  const [aiBaseUrl, setAiBaseUrl] = useState(ai.baseUrl || AI_PRESETS[0].baseUrl);
+  const [aiModel, setAiModel] = useState(ai.model || AI_PRESETS[0].model);
+  const [aiKey, setAiKey] = useState("");
+  const [aiEngine, setAiEngine] = useState<AiEngine>(ai.engine);
+  const [aiProxy, setAiProxy] = useState(ai.proxy);
+  const [aiEnabled, setAiEnabled] = useState(ai.updatedAt ? ai.enabled : true);
+  const [aiBusy, setAiBusy] = useState<"save" | "test" | null>(null);
+  const [aiError, setAiError] = useState<string | null>(null);
+  const [aiNotice, setAiNotice] = useState<string | null>(null);
 
   const origin = typeof window !== "undefined" ? window.location.origin : "http://localhost:3000";
 
@@ -159,6 +189,67 @@ export function SettingsView({
     if (!window.confirm(`Revoke key "${key.name}"? Agents using it will lose access.`)) return;
     await revokeApiKeyAction(workspace.id, key.id);
     router.refresh();
+  }
+
+  function pickAiProvider(id: AiProviderId) {
+    setAiProvider(id);
+    const preset = AI_PRESETS.find((entry) => entry.id === id);
+    if (preset && id !== "custom") {
+      setAiBaseUrl(preset.baseUrl);
+      setAiModel(preset.model);
+    }
+    setAiError(null);
+    setAiNotice(null);
+  }
+
+  async function saveAi() {
+    if (!isAdmin || aiBusy) return;
+    setAiBusy("save");
+    setAiError(null);
+    setAiNotice(null);
+    const result =
+      aiEngine === "api"
+        ? await saveAiSettingsAction(workspace.id, {
+            engine: "api",
+            proxy: aiProxy,
+            baseUrl: aiBaseUrl,
+            model: aiModel,
+            ...(aiKey.trim() ? { apiKey: aiKey.trim() } : {}),
+            enabled: aiEnabled,
+          })
+        : await saveAiSettingsAction(workspace.id, {
+            engine: aiEngine,
+            proxy: aiProxy,
+            enabled: aiEnabled,
+          });
+    setAiBusy(null);
+    if (!result.ok) {
+      setAiError(result.error);
+      return;
+    }
+    setAiKey("");
+    setAiNotice(`Saved — ${engineLabel(result.data.engine, result.data.model)}`);
+    router.refresh();
+  }
+
+  async function testAi() {
+    if (!isAdmin || aiBusy) return;
+    setAiBusy("test");
+    setAiError(null);
+    setAiNotice(null);
+    const result = await testAiConnectionAction(workspace.id, {
+      baseUrl: aiBaseUrl,
+      model: aiModel,
+      ...(aiKey.trim() ? { apiKey: aiKey.trim() } : {}),
+    });
+    setAiBusy(null);
+    if (!result.ok) {
+      setAiError(result.error);
+      return;
+    }
+    setAiNotice(
+      `Connected — ${result.data.model} replied${result.data.sample ? `: “${result.data.sample}”` : "."}`
+    );
   }
 
   async function addProject() {
@@ -242,7 +333,20 @@ export function SettingsView({
     const result = await saveAvatarAction(null);
     setBusy(false);
     if (result.ok) {
-      setAvatar(null);
+      setAvatar(result.data.avatar);
+      router.refresh();
+    } else {
+      setAvatarError(result.error);
+    }
+  }
+
+  async function chooseAvatar(value: string) {
+    setBusy(true);
+    setAvatarError(null);
+    const result = await saveAvatarAction(value);
+    setBusy(false);
+    if (result.ok) {
+      setAvatar(result.data.avatar);
       router.refresh();
     } else {
       setAvatarError(result.error);
@@ -279,6 +383,17 @@ export function SettingsView({
     } else {
       setIconError(result.error);
     }
+  }
+
+  async function toggleSeeAll(next: boolean) {
+    setSeeAll(next);
+    const result = await setMembersSeeAllTasksAction(workspace.id, next);
+    if (!result.ok) {
+      setSeeAll(!next);
+      setProjError(result.error);
+      return;
+    }
+    router.refresh();
   }
 
   const curlExample = `curl -H "Authorization: Bearer tac_YOUR_KEY" \\
@@ -367,23 +482,54 @@ export function SettingsView({
                     }}
                   />
                 </label>
-                {avatar && (
+                {avatar && !builtinAvatarId(avatar) && (
                   <button
                     type="button"
                     onClick={() => void clearAvatar()}
                     className="rounded-md px-2 py-1 text-[12px] text-faint transition-colors hover:text-danger"
                   >
-                    Remove
+                    Remove image
                   </button>
                 )}
               </div>
               {avatarError && <div className="mt-1 text-[12px] text-danger">{avatarError}</div>}
             </div>
           </div>
+          <div className="rounded-lg border border-border p-4">
+            <div className="text-[12px] font-medium text-muted">Avatar library</div>
+            <div className="mt-0.5 text-[11.5px] text-faint">
+              Every account starts with its own taco ingredient. Pick another one, or upload a picture above.
+            </div>
+            <div className="mt-3 flex flex-wrap gap-1.5">
+              {BUILTIN_AVATARS.map((id) => {
+                const active = builtinAvatarId(avatar) === id;
+                return (
+                  <button
+                    key={id}
+                    type="button"
+                    disabled={busy}
+                    title={BUILTIN_AVATAR_LABELS[id]}
+                    aria-label={BUILTIN_AVATAR_LABELS[id]}
+                    aria-pressed={active}
+                    onClick={() => void chooseAvatar(`builtin:${id}`)}
+                    className={`rounded-full p-0.5 transition ${
+                      active ? "ring-2 ring-accent" : "hover:bg-elevated"
+                    } ${busy ? "opacity-50" : ""}`}
+                  >
+                    <AssigneeAvatar
+                      displayName={BUILTIN_AVATAR_LABELS[id]}
+                      avatar={`builtin:${id}`}
+                      size={30}
+                    />
+                  </button>
+                );
+              })}
+            </div>
+          </div>
           <p className="text-[12px] leading-relaxed text-faint">
             Your picture shows as a circle next to your name in issue rows, timelines and the
-            member list. It is cropped to a square and resized to 128×128 in the browser before
-            being saved.
+            member list. Uploaded images are cropped to a square and resized to 128×128 in the
+            browser before being saved.
           </p>
         </section>
 
@@ -465,6 +611,44 @@ export function SettingsView({
         </section>
 
         <section className="space-y-3">
+          <h2 className="text-[13px] font-semibold">Task visibility</h2>
+          <div className="flex items-center gap-4 rounded-lg border border-border p-4">
+            <div className="min-w-0 flex-1">
+              <div className="text-[13px] font-medium">
+                {seeAll ? "Everyone sees all tasks" : "Members only see their projects"}
+              </div>
+              <p className="mt-0.5 text-[12px] leading-relaxed text-muted">
+                {seeAll
+                  ? "Every workspace member can open every project and its tasks."
+                  : "A member only sees tasks in projects they created or joined. Owners and admins still see everything."}
+              </p>
+            </div>
+            <button
+              type="button"
+              role="switch"
+              aria-checked={seeAll}
+              aria-label="Let every member see all tasks"
+              disabled={!isAdmin}
+              onClick={() => void toggleSeeAll(!seeAll)}
+              className={`relative h-5 w-9 shrink-0 rounded-full transition-colors disabled:opacity-40 ${
+                seeAll ? "bg-accent" : "bg-border-strong"
+              }`}
+            >
+              <span
+                className={`absolute top-0.5 h-4 w-4 rounded-full bg-white shadow transition-all ${
+                  seeAll ? "left-[18px]" : "left-0.5"
+                }`}
+              />
+            </button>
+          </div>
+          <p className="text-[12px] leading-relaxed text-faint">
+            {isAdmin
+              ? "Turn this off to hand out tasks per project. Agents using API keys or MCP always see everything."
+              : "Only workspace admins can change who sees tasks."}
+          </p>
+        </section>
+
+        <section className="space-y-3">
           <h2 className="text-[13px] font-semibold">Projects</h2>
           <div className="divide-y divide-border rounded-lg border border-border">
             {projects.map((project) => {
@@ -507,8 +691,8 @@ export function SettingsView({
                           className="shrink-0 text-faint opacity-0 transition-opacity group-hover:opacity-100"
                         />
                       </button>
-                      {/* Only the person who created the project gets to delete it. */}
-                      {project.createdBy === currentUser.id && (
+                      {/* The project creator, or the workspace owner, may delete it. */}
+                      {(project.createdBy === currentUser.id || isOwner) && (
                         <button
                           type="button"
                           onClick={() => void removeProject(project)}
@@ -548,6 +732,236 @@ export function SettingsView({
             </button>
           </div>
           {projError && <div className="text-[12px] text-danger">{projError}</div>}
+        </section>
+
+        <section className="space-y-3">
+          <div className="flex items-center gap-2">
+            <h2 className="text-[13px] font-semibold">AI assistant</h2>
+            {ai.configured || ai.cli.some((status) => status.installed && status.signedIn) ? (
+              <span
+                className={`rounded-full px-2 py-0.5 text-[11px] font-medium ${
+                  ai.enabled ? "bg-accent/10 text-accent" : "bg-elevated text-faint"
+                }`}
+              >
+                {ai.enabled ? "On" : "Off"}
+              </span>
+            ) : (
+              <span className="rounded-full bg-elevated px-2 py-0.5 text-[11px] text-faint">
+                Not configured
+              </span>
+            )}
+          </div>
+          <p className="text-[13px] leading-relaxed text-muted">
+            Powers the Agent tab, drafts tasks from a sentence, and rewrites Markdown in projects
+            and docs. The Agent can also drive a Codex or Pi CLI that is already signed in on this
+            server, so no API key is needed. Keys are stored encrypted and never reach the browser.
+          </p>
+
+          {isAdmin ? (
+            <div className="space-y-3 rounded-lg border border-border p-4">
+              <div className="space-y-1 text-[12px] text-muted">
+                <span>Agent engine</span>
+                <div className="grid gap-2 sm:grid-cols-3">
+                  {(
+                    [
+                      {
+                        id: "api" as AiEngine,
+                        label: "API key",
+                        sub: ai.configured ? ai.model : "Not configured",
+                        ready: ai.configured,
+                      },
+                      ...ai.cli.map((status) => ({
+                        id: status.engine as AiEngine,
+                        label: status.label,
+                        sub: !status.installed
+                          ? "Not installed"
+                          : status.signedIn
+                            ? (status.model ?? status.account ?? "Signed in")
+                            : "Not signed in",
+                        ready: status.installed && status.signedIn,
+                      })),
+                    ]
+                  ).map((option) => (
+                    <button
+                      key={option.id}
+                      type="button"
+                      onClick={() => {
+                        setAiEngine(option.id);
+                        setAiError(null);
+                        setAiNotice(null);
+                      }}
+                      className={`rounded-md border px-3 py-2 text-left transition-colors ${
+                        aiEngine === option.id
+                          ? "border-border-strong bg-elevated"
+                          : "border-border hover:bg-elevated/60"
+                      }`}
+                    >
+                      <span className="flex items-center gap-1.5 text-[12.5px] font-medium">
+                        <span
+                          className="h-1.5 w-1.5 rounded-full"
+                          style={{ background: option.ready ? "#2f7d4f" : "var(--color-border-strong)" }}
+                        />
+                        {option.label}
+                      </span>
+                      <span className="mt-0.5 block truncate text-[11px] text-faint">
+                        {option.sub}
+                      </span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {aiEngine === "api" ? (
+                <>
+                  <div className="grid grid-cols-2 gap-2">
+                    <label className="space-y-1 text-[12px] text-muted">
+                      <span>Provider</span>
+                      <select
+                        value={aiProvider}
+                        onChange={(e) => pickAiProvider(e.target.value as AiProviderId)}
+                        className="w-full rounded-md border border-border bg-elevated/50 px-2.5 py-1.5 text-[13px] text-text focus:border-border-strong"
+                      >
+                        {AI_PRESETS.map((preset) => (
+                          <option key={preset.id} value={preset.id}>
+                            {preset.label}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                    <label className="space-y-1 text-[12px] text-muted">
+                      <span>Model</span>
+                      <input
+                        value={aiModel}
+                        onChange={(e) => setAiModel(e.target.value)}
+                        placeholder="deepseek-chat"
+                        className="w-full rounded-md border border-border bg-elevated/50 px-2.5 py-1.5 text-[13px] text-text placeholder:text-faint focus:border-border-strong"
+                      />
+                    </label>
+                  </div>
+
+                  <label className="block space-y-1 text-[12px] text-muted">
+                    <span>Base URL</span>
+                    <input
+                      value={aiBaseUrl}
+                      onChange={(e) => setAiBaseUrl(e.target.value)}
+                      placeholder="https://api.deepseek.com/v1"
+                      spellCheck={false}
+                      className="w-full rounded-md border border-border bg-elevated/50 px-2.5 py-1.5 font-mono text-[12.5px] text-text placeholder:text-faint focus:border-border-strong"
+                    />
+                    <span className="block text-[11.5px] text-faint">
+                      {AI_PRESETS.find((preset) => preset.id === aiProvider)?.hint ??
+                        "Requests go to {baseUrl}/chat/completions."}
+                    </span>
+                  </label>
+
+                  <label className="block space-y-1 text-[12px] text-muted">
+                    <span>API key</span>
+                    <input
+                      type="password"
+                      value={aiKey}
+                      onChange={(e) => setAiKey(e.target.value)}
+                      autoComplete="off"
+                      placeholder={
+                        ai.configured && ai.keyHint
+                          ? `Stored ${ai.keyHint} — leave blank to keep`
+                          : "sk-…"
+                      }
+                      className="w-full rounded-md border border-border bg-elevated/50 px-2.5 py-1.5 font-mono text-[12px] text-text placeholder:text-faint focus:border-border-strong"
+                    />
+                  </label>
+                </>
+              ) : (
+                (() => {
+                  const status = ai.cli.find((entry) => entry.engine === aiEngine);
+                  if (!status) return null;
+                  return (
+                    <div className="space-y-2 rounded-md bg-elevated/60 p-3 text-[12.5px] leading-relaxed">
+                      <div className="flex items-center gap-1.5 font-medium text-text">
+                        {status.label} CLI
+                        <span
+                          className={`rounded-full px-2 py-0.5 text-[11px] ${
+                            status.installed && status.signedIn
+                              ? "bg-accent/10 text-accent"
+                              : "bg-elevated text-faint"
+                          }`}
+                        >
+                          {!status.installed ? "Not installed" : status.signedIn ? "Signed in" : "Not signed in"}
+                        </span>
+                      </div>
+                      {status.binary && (
+                        <div className="truncate font-mono text-[11.5px] text-faint">{status.binary}</div>
+                      )}
+                      {status.hint && <div className="text-muted">{status.hint}</div>}
+                      {status.installed && status.signedIn && (
+                        <div className="text-faint">
+                          Uses the login from this server&apos;s own {status.label} install — no key is
+                          stored in TaCos.
+                        </div>
+                      )}
+                    </div>
+                  );
+                })()
+              )}
+
+              {aiEngine !== "api" && (
+                <label className="block space-y-1 text-[12px] text-muted">
+                  <span>Proxy (optional)</span>
+                  <input
+                    value={aiProxy}
+                    onChange={(e) => setAiProxy(e.target.value)}
+                    placeholder="http://127.0.0.1:7890"
+                    spellCheck={false}
+                    className="w-full rounded-md border border-border bg-elevated/50 px-2.5 py-1.5 font-mono text-[12px] text-text placeholder:text-faint focus:border-border-strong"
+                  />
+                  <span className="block text-[11.5px] text-faint">
+                    Codex and Pi reach their provider directly. Set a local proxy when this machine
+                    needs one.
+                  </span>
+                </label>
+              )}
+
+              <div className="flex flex-wrap items-center gap-3">
+                <label className="flex items-center gap-2 text-[13px] text-muted">
+                  <input
+                    type="checkbox"
+                    checked={aiEnabled}
+                    onChange={(e) => setAiEnabled(e.target.checked)}
+                    className="h-3.5 w-3.5 accent-[#0d0d0d]"
+                  />
+                  Enable AI assistant
+                </label>
+                <div className="ml-auto flex items-center gap-2">
+                  {aiEngine === "api" && (
+                    <button
+                      type="button"
+                      onClick={() => void testAi()}
+                      disabled={aiBusy !== null || !aiBaseUrl.trim() || !aiModel.trim()}
+                      className="rounded-md border border-border px-2.5 py-1.5 text-[12.5px] font-medium text-muted transition-colors hover:border-border-strong hover:text-text disabled:opacity-40"
+                    >
+                      {aiBusy === "test" ? "Testing…" : "Test connection"}
+                    </button>
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => void saveAi()}
+                    disabled={aiBusy !== null || (aiEngine === "api" && (!aiBaseUrl.trim() || !aiModel.trim()))}
+                    className="flex items-center gap-1 rounded-md bg-accent px-3 py-1.5 text-[12.5px] font-medium text-white transition-colors hover:bg-accent-hover disabled:opacity-40"
+                  >
+                    <Sparkles size={12} />
+                    {aiBusy === "save" ? "Saving…" : "Save"}
+                  </button>
+                </div>
+              </div>
+              {aiError && <div className="text-[12px] text-danger">{aiError}</div>}
+              {aiNotice && <div className="text-[12px] text-[#2f7d4f]">{aiNotice}</div>}
+            </div>
+          ) : (
+            <div className="rounded-lg border border-border p-4 text-[13px] text-muted">
+              {ai.enabled && (ai.configured || ai.cli.some((status) => status.installed && status.signedIn))
+                ? "The AI assistant is available in this workspace. A workspace admin manages the provider and key."
+                : "AI is not available in this workspace yet. Ask a workspace admin to configure it."}
+            </div>
+          )}
         </section>
 
         <section className="space-y-3">

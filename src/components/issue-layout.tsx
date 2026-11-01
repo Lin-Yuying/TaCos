@@ -57,8 +57,20 @@ function Empty() {
   );
 }
 
-export function IssueLayout({ issues }: { issues: IssueWithLabels[] }) {
+export function IssueLayout({
+  issues,
+  workspaceId,
+  currentUserId,
+}: {
+  issues: IssueWithLabels[];
+  workspaceId: string;
+  currentUserId: string;
+}) {
   const { layout } = useUI();
   if (issues.length === 0) return <Empty />;
-  return layout === "board" ? <IssueBoard issues={issues} /> : <IssueTable issues={issues} />;
+  return layout === "board" ? (
+    <IssueBoard issues={issues} workspaceId={workspaceId} currentUserId={currentUserId} />
+  ) : (
+    <IssueTable issues={issues} />
+  );
 }

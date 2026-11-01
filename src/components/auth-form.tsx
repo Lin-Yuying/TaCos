@@ -35,7 +35,7 @@ export function AuthForm({ mode }: { mode: "login" | "register" }) {
       <div className="w-[360px] max-w-[92vw]">
         <div className="mb-6 flex items-center gap-3">
           <OtterMark className="h-10 w-10" />
-          <span className="text-[15px] font-semibold tracking-tight">Tacos</span>
+          <span className="text-[15px] font-semibold tracking-tight">TaCos</span>
         </div>
         <h1 className="text-[22px] font-semibold tracking-tight">
           {mode === "login" ? "Sign in" : "Create your account"}

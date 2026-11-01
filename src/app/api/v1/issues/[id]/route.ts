@@ -9,6 +9,7 @@ import {
   resolveAssigneeIds,
   updateIssue,
 } from "@/lib/issues";
+import type { ReminderPreset } from "@/lib/constants";
 
 type Ctx = { params: Promise<{ id: string }> };
 
@@ -62,6 +63,18 @@ export async function PATCH(req: Request, ctx: Ctx) {
         priority: parsePriority(body.priority),
         assigneeIds,
         labelNames: parseLabelNames(body.labels),
+        dueDate:
+          body.dueDate === undefined
+            ? undefined
+            : typeof body.dueDate === "string" && body.dueDate.trim() !== ""
+              ? body.dueDate
+              : null,
+        reminder:
+          body.reminder === undefined
+            ? undefined
+            : typeof body.reminder === "string" && body.reminder.trim() !== ""
+              ? (body.reminder as ReminderPreset)
+              : null,
       },
       { kind: "agent", label: `api:${key.name}`, via: "api" }
     );

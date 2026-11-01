@@ -65,7 +65,7 @@ export function CommandPalette({ workspaceId }: { workspaceId: string }) {
               autoFocus
               value={query}
               onValueChange={setQuery}
-              placeholder="Search issues or run a command…"
+              placeholder="Search tasks or run a command…"
             />
           </div>
           <Command.List className="max-h-[380px] overflow-y-auto p-1 pb-2">
@@ -104,13 +104,13 @@ export function CommandPalette({ workspaceId }: { workspaceId: string }) {
 
             <Command.Group heading="Actions">
               <Command.Item
-                value="new issue create"
+                value="new task create"
                 onSelect={() => {
                   setComposerOpen(true);
                   close();
                 }}
               >
-                <span className="text-accent">+</span> New issue
+                <span className="text-accent">+</span> New task
               </Command.Item>
               {focused &&
                 STATUS_ORDER.map((status) => (
@@ -147,7 +147,7 @@ export function CommandPalette({ workspaceId }: { workspaceId: string }) {
                   close();
                 }}
               >
-                Go to All Issues
+                Go to All Tasks
               </Command.Item>
               <Command.Item
                 value="my issues"

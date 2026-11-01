@@ -1,9 +1,25 @@
 {
   "appId": "app.tacos.desktop",
-  "productName": "Tacos",
+  "productName": "TaCos",
   "files": ["electron/**/*", "package.json", "!node_modules/**"],
+  "extraResources": [
+    {
+      "from": "docs/markdown-guide.html",
+      "to": "docs/markdown-guide.html"
+    }
+  ],
   "npmRebuild": false,
   "afterPack": "./electron/after-pack.js",
+  "fileAssociations": [
+    {
+      "ext": ["md", "markdown", "mdx", "txt"],
+      "name": "Markdown Document",
+      "description": "Markdown document",
+      "mimeType": "text/markdown",
+      "role": "Editor",
+      "rank": "Alternate"
+    }
+  ],
   "directories": {
     "output": "release",
     "buildResources": "electron/assets"
@@ -14,7 +30,12 @@
     "target": [{ "target": "dmg", "arch": ["arm64"] }]
   },
   "dmg": {
-    "title": "Tacos"
+    "title": "TaCos",
+    "window": { "width": 560, "height": 320 },
+    "contents": [
+      { "x": 140, "y": 150 },
+      { "x": 420, "y": 150, "type": "link", "path": "/Applications" }
+    ]
   },
   "win": {
     "icon": "electron/assets/icon.ico",

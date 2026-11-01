@@ -4,11 +4,13 @@ import { redirect } from "next/navigation";
 import { getSessionUser, listUserWorkspaces, requireWorkspace } from "@/lib/auth";
 import {
   getJoinCode,
+  getMembersSeeAllTasks,
   listApiKeys,
   listDeletedWorkspaces,
   listMembers,
   listProjects,
 } from "@/lib/issues";
+import { getAiSettingsView } from "@/lib/ai";
 import { SettingsView } from "@/components/settings-view";
 
 export default async function SettingsPage({
@@ -29,14 +31,17 @@ async function View({ params }: { params: Promise<{ workspaceId: string }> }) {
   const user = await getSessionUser();
   if (!user) redirect("/login");
   const ws = await requireWorkspace(workspaceId);
-  const [members, projects, keys, joinCode, allWorkspaces, deletedWorkspaces] = await Promise.all([
-    listMembers(workspaceId),
-    listProjects(workspaceId),
-    listApiKeys(workspaceId),
-    getJoinCode(workspaceId),
-    listUserWorkspaces(ws.user.id),
-    listDeletedWorkspaces(ws.user.id),
-  ]);
+  const [members, projects, keys, joinCode, allWorkspaces, deletedWorkspaces, seeAll, ai] =
+    await Promise.all([
+      listMembers(workspaceId),
+      listProjects(workspaceId),
+      listApiKeys(workspaceId),
+      getJoinCode(workspaceId),
+      listUserWorkspaces(ws.user.id),
+      listDeletedWorkspaces(ws.user.id),
+      getMembersSeeAllTasks(workspaceId),
+      getAiSettingsView(workspaceId),
+    ]);
   // Where deleting this workspace lands you: the next team you belong to, or the
   // create/join screen when it was your last one.
   const next = allWorkspaces.find((other) => other.id !== workspaceId);
@@ -49,6 +54,8 @@ async function View({ params }: { params: Promise<{ workspaceId: string }> }) {
       projects={projects}
       keys={keys}
       joinCode={joinCode}
+      membersSeeAllTasks={seeAll}
+      ai={ai}
       isOwner={ws.workspace.createdBy === ws.user.id}
       nextWorkspaceHref={next ? `/${next.id}` : "/onboarding"}
       deletedWorkspaces={deletedWorkspaces}

@@ -15,11 +15,14 @@ import type { TrashedIssue, TrashedProject } from "@/lib/issues";
 export function TrashView({
   workspaceId,
   userId,
+  isOwner,
   projects,
   issues,
 }: {
   workspaceId: string;
   userId: string;
+  // The workspace owner may clear anything in the bin, not only the projects they created.
+  isOwner: boolean;
   projects: TrashedProject[];
   issues: TrashedIssue[];
 }) {
@@ -34,7 +37,7 @@ export function TrashView({
     if (
       !window.confirm(
         `Delete "${project.name}" and its ${project.issueCount} ${
-          project.issueCount === 1 ? "issue" : "issues"
+          project.issueCount === 1 ? "task" : "tasks"
         } permanently? This cannot be undone.`
       )
     )
@@ -70,28 +73,43 @@ export function TrashView({
         {issues.length > 0 && (
           <div className="divide-y divide-border rounded-lg border border-border">
             {issues.map((issue) => (
-              <div key={issue.id} className="flex items-center gap-3 px-4 py-2.5">
-                <StatusIcon status={issue.status} size={14} />
-                <span className="shrink-0 text-[12px] text-faint">{issueRef(issue)}</span>
-                <span className="truncate text-[13px]">{issue.title}</span>
-                <span className="flex shrink-0 items-center gap-1.5 text-[12px] text-faint">
-                  <ProjectIcon color={issue.projectColor} size={12} />
-                  {issue.projectName} · deleted {formatDate(issue.deletedAt)}
+              <div key={issue.id} className="flex items-start gap-3 px-4 py-2.5">
+                <span className="mt-[3px] flex shrink-0 items-center">
+                  <StatusIcon status={issue.status} size={14} />
                 </span>
-                <button
-                  type="button"
-                  onClick={() => void restoreIssue(issue)}
-                  className="ml-auto flex shrink-0 items-center gap-1 rounded-md border border-border px-2 py-1 text-[12px] text-muted transition-colors hover:border-border-strong hover:text-text"
-                >
-                  <RotateCcw size={12} /> Restore
-                </button>
-                <button
-                  type="button"
-                  onClick={() => void purgeIssue(issue)}
-                  className="flex shrink-0 items-center gap-1 rounded-md px-2 py-1 text-[12px] text-faint transition-colors hover:bg-elevated hover:text-danger"
-                >
-                  <Trash2 size={12} /> Delete forever
-                </button>
+                <div className="min-w-0 flex-1">
+                  <div className="flex min-w-0 items-baseline gap-2">
+                    <span className="shrink-0 text-[12px] text-faint">{issueRef(issue)}</span>
+                    <span className="truncate text-[13px]">{issue.title}</span>
+                  </div>
+                  <div className="mt-0.5 flex min-w-0 items-center gap-1.5 text-[12px] text-faint">
+                    <span className="flex shrink-0 items-center">
+                      <ProjectIcon color={issue.projectColor} size={12} />
+                    </span>
+                    <span className="truncate">{issue.projectName}</span>
+                    <span className="shrink-0">· deleted {formatDate(issue.deletedAt)}</span>
+                  </div>
+                </div>
+                <div className="flex shrink-0 items-center gap-1">
+                  <button
+                    type="button"
+                    onClick={() => void restoreIssue(issue)}
+                    title="Restore"
+                    aria-label={`Restore ${issueRef(issue)}`}
+                    className="rounded-md border border-border p-1.5 text-faint transition-colors hover:border-border-strong hover:text-text"
+                  >
+                    <RotateCcw size={13} />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => void purgeIssue(issue)}
+                    title="Delete forever"
+                    aria-label={`Delete ${issueRef(issue)} forever`}
+                    className="rounded-md p-1.5 text-faint transition-colors hover:bg-elevated hover:text-danger"
+                  >
+                    <Trash2 size={13} />
+                  </button>
+                </div>
               </div>
             ))}
           </div>
@@ -99,30 +117,39 @@ export function TrashView({
         {projects.length > 0 && (
           <div className="divide-y divide-border rounded-lg border border-border">
             {projects.map((project) => (
-              <div key={project.id} className="flex items-center gap-3 px-4 py-2.5">
-                <ProjectIcon color={project.color} size={15} />
-                <span className="truncate text-[13px]">{project.name}</span>
-                <span className="shrink-0 text-[12px] text-faint">
-                  {project.issueCount} {project.issueCount === 1 ? "issue" : "issues"} · deleted{" "}
-                  {formatDate(project.deletedAt)}
+              <div key={project.id} className="flex items-start gap-3 px-4 py-2.5">
+                <span className="mt-[2px] flex shrink-0 items-center">
+                  <ProjectIcon color={project.color} size={15} />
                 </span>
-                <button
-                  type="button"
-                  onClick={() => void restoreProject(project)}
-                  className="ml-auto flex shrink-0 items-center gap-1 rounded-md border border-border px-2 py-1 text-[12px] text-muted transition-colors hover:border-border-strong hover:text-text"
-                >
-                  <RotateCcw size={12} /> Restore
-                </button>
-                {/* Permanently removing a project stays the creator's decision. */}
-                {project.createdBy === userId && (
+                <div className="min-w-0 flex-1">
+                  <div className="truncate text-[13px]">{project.name}</div>
+                  <div className="mt-0.5 text-[12px] text-faint">
+                    {project.issueCount} {project.issueCount === 1 ? "task" : "tasks"} · deleted{" "}
+                    {formatDate(project.deletedAt)}
+                  </div>
+                </div>
+                <div className="flex shrink-0 items-center gap-1">
                   <button
                     type="button"
-                    onClick={() => void purgeProject(project)}
-                    className="flex shrink-0 items-center gap-1 rounded-md px-2 py-1 text-[12px] text-faint transition-colors hover:bg-elevated hover:text-danger"
+                    onClick={() => void restoreProject(project)}
+                    title="Restore"
+                    aria-label={`Restore ${project.name}`}
+                    className="rounded-md border border-border p-1.5 text-faint transition-colors hover:border-border-strong hover:text-text"
                   >
-                    <Trash2 size={12} /> Delete forever
+                    <RotateCcw size={13} />
                   </button>
-                )}
+                  {(project.createdBy === userId || isOwner) && (
+                    <button
+                      type="button"
+                      onClick={() => void purgeProject(project)}
+                      title="Delete forever"
+                      aria-label={`Delete ${project.name} forever`}
+                      className="rounded-md p-1.5 text-faint transition-colors hover:bg-elevated hover:text-danger"
+                    >
+                      <Trash2 size={13} />
+                    </button>
+                  )}
+                </div>
               </div>
             ))}
           </div>

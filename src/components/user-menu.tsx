@@ -20,27 +20,56 @@ export type UserInfo = {
 const AVATAR_BUTTON =
   "flex h-8 w-8 items-center justify-center rounded-full bg-[linear-gradient(to_bottom,#ffffff,#f0f0f0)] shadow-[inset_0_1px_0_rgba(255,255,255,0.9),0_1px_2px_rgba(0,0,0,0.16),0_3px_8px_rgba(0,0,0,0.10)] ring-1 ring-black/[0.06] transition-all duration-150 hover:-translate-y-px hover:shadow-[inset_0_1px_0_rgba(255,255,255,0.9),0_2px_4px_rgba(0,0,0,0.18),0_6px_14px_rgba(0,0,0,0.12)] active:translate-y-0 active:bg-[linear-gradient(to_bottom,#f2f2f2,#ffffff)] active:shadow-[inset_0_1px_3px_rgba(0,0,0,0.22)]";
 
-export function UserMenu({ user, workspaceUrl }: { user: UserInfo; workspaceUrl?: string }) {
+export function UserMenu({
+  user,
+  workspaceUrl,
+  adminUrl,
+}: {
+  user: UserInfo;
+  workspaceUrl?: string;
+  // Where "Admin console" goes for this person: the site console for a site admin, the
+  // workspace-scoped one for a workspace admin, nothing for everyone else.
+  adminUrl?: string | null;
+}) {
   const isSiteAdmin = user.siteRole === "admin";
   const [people, setPeople] = useState<SwitchUser[] | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [switching, setSwitching] = useState<string | null>(null);
 
   useEffect(() => {
     let active = true;
-    void listSwitchableUsersAction().then((result) => {
-      if (!active) return;
-      if (result.ok) setPeople(result.data.users);
-      else setError(result.error);
-    });
+    void listSwitchableUsersAction().then(
+      (result) => {
+        if (!active) return;
+        if (result.ok) setPeople(result.data.users);
+        else setError(result.error);
+      },
+      () => {
+        if (active) setError("Could not reach the server. Reload the page and try again.");
+      },
+    );
     return () => {
       active = false;
     };
   }, []);
 
   async function switchTo(id: string) {
-    const result = await switchUserAction(id);
-    if (result.ok) window.location.href = result.data.url;
-    else setError(result.error);
+    if (switching) return;
+    setSwitching(id);
+    setError(null);
+    try {
+      const result = await switchUserAction(id);
+      if (result.ok) {
+        window.location.href = result.data.url;
+        return;
+      }
+      setError(result.error);
+    } catch {
+      // A build or restart in between can leave this tab holding an action the server
+      // no longer knows; without this the click would just do nothing.
+      setError("Could not switch accounts. Reload the page and try again.");
+    }
+    setSwitching(null);
   }
 
   return (
@@ -60,6 +89,12 @@ export function UserMenu({ user, workspaceUrl }: { user: UserInfo; workspaceUrl?
             <div className="text-[13px] font-medium text-text">{user.displayName}</div>
             <div className="text-[11px] text-faint">@{user.username}</div>
           </div>
+
+          {/* Above the list: a tall switch list can push a closing message out of view. */}
+          {switching && (
+            <div className="px-2 pb-1 text-[11px] text-faint">Switching account…</div>
+          )}
+          {error && <div className="px-2 pb-1 text-[11px] text-danger">{error}</div>}
 
           {workspaceUrl && (
             <MenuItem
@@ -106,13 +141,13 @@ export function UserMenu({ user, workspaceUrl }: { user: UserInfo; workspaceUrl?
             </>
           )}
 
-          {isSiteAdmin && (
+          {adminUrl && (
             <>
               <div className="my-1 border-t border-border" />
               <MenuItem
                 onSelect={() => {
                   close();
-                  window.location.href = "/admin";
+                  window.location.href = adminUrl;
                 }}
               >
                 <ShieldCheck size={13} /> Admin console
@@ -134,7 +169,6 @@ export function UserMenu({ user, workspaceUrl }: { user: UserInfo; workspaceUrl?
           >
             <LogOut size={13} /> Sign out
           </MenuItem>
-          {error && <div className="px-2 py-1 text-[11px] text-danger">{error}</div>}
         </>
       )}
     </Menu>

@@ -1,0 +1,208 @@
+"use server";
+
+import { revalidatePath } from "next/cache";
+import { requireAdmin, requireWorkspace } from "@/lib/auth";
+import { clearSkillCache } from "@/lib/cli-agents";
+import { createSkillFile, deleteSkillFile } from "@/lib/skill-files";
+import type { AgentSkill } from "@/lib/ai-constants";
+import {
+  deleteAgentThread,
+  renameAgentThread,
+  setAgentThreadApproval,
+  setAgentThreadMode,
+  setAgentThreadModel,
+  setAgentThreadPinned,
+  setAgentThreadProject,
+  setAgentThreadUnread,
+  setAgentThreadVisibility,
+  startAgentThread,
+  type AgentApproval,
+  type AgentMode,
+  type AgentThread,
+  type AgentVisibility,
+} from "@/lib/agent-threads";
+import type { ActionResult } from "./actions";
+
+function refresh(workspaceId: string) {
+  revalidatePath(`/${workspaceId}/agent`, "page");
+}
+
+async function run<T>(fn: () => Promise<T>): Promise<ActionResult<T>> {
+  try {
+    return { ok: true, data: await fn() };
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : "Something went wrong" };
+  }
+}
+
+export async function startAgentThreadAction(
+  workspaceId: string,
+  input: {
+    projectId: string;
+    mode: AgentMode;
+    visibility: AgentVisibility;
+    engine: string;
+    model?: string;
+    effort?: string;
+    approval?: AgentApproval;
+  }
+): Promise<ActionResult<AgentThread>> {
+  return run(async () => {
+    const { user } = await requireWorkspace(workspaceId);
+    const thread = await startAgentThread({ ...input, workspaceId, userId: user.id });
+    refresh(workspaceId);
+    return thread;
+  });
+}
+
+export async function renameAgentThreadAction(
+  workspaceId: string,
+  threadId: string,
+  title: string
+): Promise<ActionResult<AgentThread>> {
+  return run(async () => {
+    const { user } = await requireWorkspace(workspaceId);
+    const thread = await renameAgentThread(workspaceId, user.id, threadId, title);
+    refresh(workspaceId);
+    return thread;
+  });
+}
+
+export async function setAgentThreadVisibilityAction(
+  workspaceId: string,
+  threadId: string,
+  visibility: AgentVisibility
+): Promise<ActionResult<AgentThread>> {
+  return run(async () => {
+    const { user } = await requireWorkspace(workspaceId);
+    const thread = await setAgentThreadVisibility(workspaceId, user.id, threadId, visibility);
+    refresh(workspaceId);
+    return thread;
+  });
+}
+
+export async function setAgentThreadModeAction(
+  workspaceId: string,
+  threadId: string,
+  mode: AgentMode
+): Promise<ActionResult<AgentThread>> {
+  return run(async () => {
+    const { user } = await requireWorkspace(workspaceId);
+    const thread = await setAgentThreadMode(workspaceId, user.id, threadId, mode);
+    refresh(workspaceId);
+    return thread;
+  });
+}
+
+export async function setAgentThreadProjectAction(
+  workspaceId: string,
+  threadId: string,
+  projectId: string
+): Promise<ActionResult<AgentThread>> {
+  return run(async () => {
+    const { user } = await requireWorkspace(workspaceId);
+    const thread = await setAgentThreadProject(workspaceId, user.id, threadId, projectId);
+    refresh(workspaceId);
+    return thread;
+  });
+}
+
+export async function setAgentThreadModelAction(
+  workspaceId: string,
+  threadId: string,
+  model: string,
+  effort: string
+): Promise<ActionResult<AgentThread>> {
+  return run(async () => {
+    const { user } = await requireWorkspace(workspaceId);
+    const thread = await setAgentThreadModel(workspaceId, user.id, threadId, model, effort);
+    refresh(workspaceId);
+    return thread;
+  });
+}
+
+export async function setAgentThreadApprovalAction(
+  workspaceId: string,
+  threadId: string,
+  approval: AgentApproval
+): Promise<ActionResult<AgentThread>> {
+  return run(async () => {
+    const { user } = await requireWorkspace(workspaceId);
+    const thread = await setAgentThreadApproval(workspaceId, user.id, threadId, approval);
+    refresh(workspaceId);
+    return thread;
+  });
+}
+
+export async function setAgentThreadPinnedAction(
+  workspaceId: string,
+  threadId: string,
+  pinned: boolean
+): Promise<ActionResult<AgentThread>> {
+  return run(async () => {
+    const { user } = await requireWorkspace(workspaceId);
+    const thread = await setAgentThreadPinned(workspaceId, user.id, threadId, pinned);
+    refresh(workspaceId);
+    return thread;
+  });
+}
+
+export async function setAgentThreadUnreadAction(
+  workspaceId: string,
+  threadId: string,
+  unread: boolean
+): Promise<ActionResult<AgentThread>> {
+  return run(async () => {
+    const { user } = await requireWorkspace(workspaceId);
+    const thread = await setAgentThreadUnread(workspaceId, user.id, threadId, unread);
+    refresh(workspaceId);
+    return thread;
+  });
+}
+
+export async function deleteAgentThreadAction(
+  workspaceId: string,
+  threadId: string
+): Promise<ActionResult<{ id: string }>> {
+  return run(async () => {
+    const { user } = await requireWorkspace(workspaceId);
+    await deleteAgentThread(workspaceId, user.id, threadId);
+    refresh(workspaceId);
+    return { id: threadId };
+  });
+}
+
+// Skills live on the machine that runs the server, so changing them is a settings-level
+// operation: workspace admins only, and only for the folders TaCos itself owns.
+export async function createAgentSkillAction(
+  workspaceId: string,
+  input: { name: string; description: string; instructions: string }
+): Promise<ActionResult<AgentSkill>> {
+  return run(async () => {
+    await requireAdmin(workspaceId);
+    const created = createSkillFile(input);
+    clearSkillCache();
+    refresh(workspaceId);
+    const skill: AgentSkill = {
+      name: created.name,
+      path: created.path,
+      description: created.description,
+      scope: "user",
+      managed: true,
+    };
+    return skill;
+  });
+}
+
+export async function deleteAgentSkillAction(
+  workspaceId: string,
+  skillPath: string
+): Promise<ActionResult<{ name: string }>> {
+  return run(async () => {
+    await requireAdmin(workspaceId);
+    const removed = deleteSkillFile(skillPath);
+    clearSkillCache();
+    refresh(workspaceId);
+    return removed;
+  });
+}

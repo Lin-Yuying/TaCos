@@ -1,8 +1,9 @@
 {
   "name": "tacos",
-  "version": "1.0.0",
+  "productName": "TaCos",
+  "version": "2.0.0",
   "private": true,
-  "description": "Tacos — self-hosted issue tracker for teams and their agents",
+  "description": "TaCos — self-hosted issue tracker for teams and their agents",
   "license": "MIT",
   "author": "Yuying Lin",
   "repository": {
@@ -18,8 +19,8 @@
     "start": "next start",
     "lint": "eslint",
     "desktop": "electron .",
-    "desktop:dist": "electron-builder --mac",
-    "desktop:dist:win": "electron-builder --win --x64",
+    "desktop:dist": "electron-builder --mac --config electron/builder.base.json",
+    "desktop:dist:win": "electron-builder --win --x64 --config electron/builder.base.json",
     "desktop:standalone:mac": "npm run build && npm run server:bundle && electron-builder --mac --publish never --config electron/builder.standalone.json",
     "desktop:standalone:win": "npm run build && npm run server:bundle -- --target=win32-x64 && electron-builder --win --x64 --publish never --config electron/builder.standalone.json",
     "mcp": "tsx mcp/server.ts",

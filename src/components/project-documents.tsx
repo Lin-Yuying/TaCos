@@ -1,0 +1,90 @@
+"use client";
+
+import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { useState } from "react";
+import { FileText, Lock, Plus, Users } from "lucide-react";
+import { createPageAction } from "@/app/pages-actions";
+import { timeAgo } from "@/lib/format";
+import type { PageSummary } from "@/lib/pages";
+
+export function ProjectDocuments({
+  workspaceId,
+  projectId,
+  pages,
+}: {
+  workspaceId: string;
+  projectId: string;
+  pages: PageSummary[];
+}) {
+  const router = useRouter();
+  const [error, setError] = useState<string | null>(null);
+  const [creating, setCreating] = useState(false);
+
+  async function createPage() {
+    setCreating(true);
+    const result = await createPageAction(workspaceId, { projectId });
+    setCreating(false);
+    if (!result.ok) {
+      setError(result.error);
+      return;
+    }
+    router.push(`/${workspaceId}/docs/${result.data.id}`);
+  }
+
+  return (
+    <div className="flex-1 overflow-y-auto">
+      <div className="w-full px-6 pb-8 pt-2">
+        <div className="flex items-center justify-between gap-3">
+          <div>
+            <h2 className="text-[15px] font-semibold tracking-tight">Documents</h2>
+            <p className="mt-0.5 text-[12.5px] text-muted">
+              Pages created here belong to this project. They stay private until you share
+              them with the workspace.
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={() => void createPage()}
+            disabled={creating}
+            className="flex shrink-0 items-center gap-1 rounded-md border border-border px-2.5 py-1.5 text-[12.5px] font-medium text-muted transition-colors hover:border-border-strong hover:text-text disabled:opacity-50"
+          >
+            <Plus size={13} /> New page
+          </button>
+        </div>
+
+        {error && <div className="mt-3 text-[12px] text-danger">{error}</div>}
+
+        {pages.length === 0 ? (
+          <p className="mt-8 text-[13px] text-faint">
+            No documents in this project yet — create one to keep notes, specs or links
+            next to the tasks.
+          </p>
+        ) : (
+          <div className="mt-5 space-y-0.5">
+            {pages.map((page) => (
+              <Link
+                key={page.id}
+                href={`/${workspaceId}/docs/${page.id}`}
+                style={{ paddingLeft: 8 + page.depth * 18 }}
+                className="flex items-center gap-2 rounded-md py-1.5 pr-2 text-[13.5px] text-text transition-colors hover:bg-elevated/60"
+              >
+                <span className="flex w-4 shrink-0 justify-center text-[13px]">
+                  {page.icon ?? <FileText size={13} className="text-faint" />}
+                </span>
+                <span className="truncate">{page.title}</span>
+                <span className="ml-auto flex shrink-0 items-center gap-2 text-[11px] text-faint">
+                  <span>{timeAgo(page.updatedAt)}</span>
+                  <span className="flex items-center gap-1">
+                    {page.shared ? <Users size={11} /> : <Lock size={11} />}
+                    {page.shared ? "Shared" : "Private"}
+                  </span>
+                </span>
+              </Link>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}

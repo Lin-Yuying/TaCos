@@ -18,8 +18,8 @@ export function AddIssueButton({ status }: { status: Status }) {
         e.stopPropagation();
         setComposerOpen(true, status);
       }}
-      title={`New ${label.toLowerCase()} issue`}
-      aria-label={`New ${label.toLowerCase()} issue`}
+      title={`New ${label.toLowerCase()} task`}
+      aria-label={`New ${label.toLowerCase()} task`}
       className="ml-auto shrink-0 rounded p-0.5 text-faint transition-colors hover:bg-elevated hover:text-text"
     >
       <Plus size={14} />

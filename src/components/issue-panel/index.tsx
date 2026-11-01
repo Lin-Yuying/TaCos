@@ -1,0 +1,244 @@
+"use client";
+
+import { useEffect, useRef, useState } from "react";
+import { ISSUE_DELETED, useUI, type DeletedIssue } from "@/components/ui-context";
+import { addCommentAction, deleteIssueAction, updateIssueDetailAction } from "@/app/actions";
+import type { Label, Member } from "@/lib/issues";
+import { PanelHeader } from "./header";
+import { PropertiesRow } from "./properties";
+import { DueRow } from "./due-row";
+import { DescriptionSection } from "./description";
+import { ChangelogSection } from "./changelog";
+import { CommentsSection } from "./comments";
+import type { FlatDetail, IssuePatch } from "./types";
+
+export function IssuePanelHost({
+  workspaceId,
+  currentUserId,
+}: {
+  workspaceId: string;
+  currentUserId: string;
+}) {
+  const { openIssueId, closeIssue, panelExpanded, setPanelExpanded } = useUI();
+  if (!openIssueId) return null;
+  // Below ~600px of card width a side-by-side split leaves neither column usable, so
+  // the panel becomes an opaque sheet over the list instead of a cramped second column.
+  return (
+    <aside
+      className={`flex min-h-0 flex-col overflow-hidden rounded-xl border border-border bg-bg shadow-[0_1px_2px_rgba(0,0,0,0.05)] ${
+        panelExpanded
+          ? "min-w-0 flex-1"
+          : "w-[min(50%,460px)] min-w-[280px] shrink-0 @max-[600px]:absolute @max-[600px]:inset-0 @max-[600px]:z-20 @max-[600px]:w-auto @max-[600px]:min-w-0"
+      }`}
+    >
+      <IssuePanel
+        key={openIssueId}
+        workspaceId={workspaceId}
+        currentUserId={currentUserId}
+        id={openIssueId}
+        onClose={closeIssue}
+        expanded={panelExpanded}
+        onToggleExpanded={() => setPanelExpanded(!panelExpanded)}
+      />
+    </aside>
+  );
+}
+
+function IssuePanel({
+  workspaceId,
+  currentUserId,
+  id,
+  onClose,
+  expanded,
+  onToggleExpanded,
+}: {
+  workspaceId: string;
+  currentUserId: string;
+  id: string;
+  onClose: () => void;
+  expanded: boolean;
+  onToggleExpanded: () => void;
+}) {
+  const [detail, setDetail] = useState<FlatDetail | null>(null);
+  const [notFound, setNotFound] = useState(false);
+  const [allLabels, setAllLabels] = useState<Label[]>([]);
+  const [members, setMembers] = useState<Member[]>([]);
+  const [comment, setComment] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const scrollRef = useRef<HTMLDivElement | null>(null);
+  const { toast } = useUI();
+
+  // A task that vanished underneath the panel (deleted here, on another device, or from
+  // the Inbox) has nothing left to show — close the pane and say so instead of leaving
+  // an empty "not found" card sitting in the split view.
+  useEffect(() => {
+    if (!notFound) return;
+    toast("Task deleted — it is in Trash");
+    onClose();
+  }, [notFound, toast, onClose]);
+
+  const scrollToComposer = () => {
+    const el = scrollRef.current;
+    if (!el) return;
+    el.scrollTop = el.scrollHeight;
+  };
+
+  // The panel is remounted per issue id, so loading state starts clean without resets here.
+  useEffect(() => {
+    let cancelled = false;
+    fetch(`/api/internal/${workspaceId}/issues/${encodeURIComponent(id)}`)
+      .then(async (res) => {
+        if (res.status === 404) {
+          if (!cancelled) setNotFound(true);
+          return null;
+        }
+        return res.json();
+      })
+      .then((data) => {
+        if (!cancelled && data) setDetail(data as FlatDetail);
+      })
+      .catch(() => {
+        if (!cancelled) setError("Failed to load task");
+      });
+    fetch(`/api/internal/${workspaceId}/labels`)
+      .then((res) => res.json())
+      .then((data) => !cancelled && setAllLabels(data as Label[]))
+      .catch(() => {});
+    fetch(`/api/internal/${workspaceId}/members`)
+      .then((res) => res.json())
+      .then((data) => !cancelled && setMembers(data as Member[]))
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [id, workspaceId]);
+
+  async function update(patch: IssuePatch) {
+    if (!detail) return false;
+    setBusy(true);
+    const result = await updateIssueDetailAction(workspaceId, detail.id, patch);
+    setBusy(false);
+    if (result.ok) {
+      setDetail({ ...result.data.issue, comments: result.data.comments, events: result.data.events });
+      return true;
+    }
+    setError(result.error);
+    return false;
+  }
+
+  async function submitComment() {
+    if (!detail || !comment.trim() || busy) return;
+    setBusy(true);
+    const result = await addCommentAction(workspaceId, detail.id, comment);
+    setBusy(false);
+    if (result.ok) {
+      setComment("");
+      setDetail({ ...result.data.issue, comments: result.data.comments, events: result.data.events });
+      requestAnimationFrame(scrollToComposer);
+    } else {
+      setError(result.error);
+    }
+  }
+
+  async function remove() {
+    if (!detail) return;
+    const result = await deleteIssueAction(workspaceId, detail.id);
+    if (!result.ok) {
+      setError(result.error);
+      return;
+    }
+    // Documents that reference this task turn the chip back into text right away,
+    // rather than waiting for the refreshed page to replace the task list.
+    window.dispatchEvent(
+      new CustomEvent<DeletedIssue>(ISSUE_DELETED, {
+        detail: { id: result.data, identifier: detail.identifier, title: detail.title },
+      })
+    );
+    toast("Task deleted — it is in Trash");
+    onClose();
+  }
+
+  if (notFound) {
+    return <div className="flex-1 p-5 text-[13px] text-muted">Loading…</div>;
+  }
+
+  if (!detail) {
+    return <div className="flex-1 p-5 text-[13px] text-muted">Loading…</div>;
+  }
+
+  const comments = [...detail.comments].sort((a, b) =>
+    a.createdAt.localeCompare(b.createdAt)
+  );
+  // "commented" events duplicate the comment bodies above, so the changelog only
+  // carries the field changes and state transitions.
+  const changelog = detail.events
+    .filter((event) => event.type !== "commented")
+    .sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+
+  const canChangeStatus = detail.assignees.some(
+    (assignee) => assignee.id === currentUserId
+  );
+
+  return (
+    <div className="flex min-h-0 flex-1 flex-col">
+      <PanelHeader
+        detail={detail}
+        canChangeStatus={canChangeStatus}
+        onUpdate={update}
+        onRemove={() => void remove()}
+        onClose={onClose}
+        expanded={expanded}
+        onToggleExpanded={onToggleExpanded}
+      />
+
+      <div ref={scrollRef} className="flex min-h-0 flex-1 flex-col space-y-5 overflow-y-auto p-4">
+        <input
+          key={`${detail.id}-title`}
+          defaultValue={detail.title}
+          placeholder="Task title"
+          onBlur={(e) => {
+            const title = e.target.value.trim();
+            if (title && title !== detail.title) void update({ title });
+          }}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") {
+              e.preventDefault();
+              e.currentTarget.blur();
+            }
+          }}
+          className="w-full bg-transparent text-[17px] font-semibold text-text"
+        />
+
+        <PropertiesRow
+          detail={detail}
+          members={members}
+          allLabels={allLabels}
+          onUpdate={update}
+        />
+
+        <DueRow detail={detail} onUpdate={update} />
+
+        <DescriptionSection
+          workspaceId={workspaceId}
+          issueId={id}
+          description={detail.description}
+          onUpdate={update}
+        />
+
+        <div className="shrink-0 space-y-2 border-t border-border pt-4">
+          <ChangelogSection events={changelog} />
+          <CommentsSection
+            comments={comments}
+            comment={comment}
+            busy={busy}
+            onCommentChange={setComment}
+            onSubmit={() => void submitComment()}
+          />
+        </div>
+
+        {error && <div className="text-[12px] text-danger">{error}</div>}
+      </div>
+    </div>
+  );
+}

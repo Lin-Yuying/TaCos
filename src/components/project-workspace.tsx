@@ -7,9 +7,21 @@ import { IssueLayout, LayoutToggle } from "@/components/issue-layout";
 import { toggleProjectFavoriteAction } from "@/app/actions";
 import { ProjectHeader, type ProjectTab } from "@/components/project-header";
 import { ProjectOverview } from "@/components/project-overview";
+import { ProjectDocuments } from "@/components/project-documents";
 import { STATUS_META, type Status } from "@/lib/constants";
 import { issueRef } from "@/lib/format";
-import type { IssueWithLabels, Member, Project, ProjectMember } from "@/lib/issues";
+import type { PageSummary } from "@/lib/pages";
+import type { ProjectResource } from "@/lib/resources";
+import type {
+  IssueWithLabels,
+  Member,
+  OverviewAccess,
+  OverviewComment,
+  OverviewDocEdit,
+  OverviewGrant,
+  Project,
+  ProjectMember,
+} from "@/lib/issues";
 
 type Counts = Record<Status, number> & { total: number };
 type ProjectDetail = Project & { doc: string; createdBy: string | null };
@@ -21,8 +33,17 @@ export function ProjectWorkspace({
   members,
   workspaceMembers,
   issues,
+  documents,
+  currentUserId,
   initialTab,
   initialFavorite,
+  access,
+  grants,
+  comments,
+  edits,
+  unseenDocEdits,
+  resources,
+  trashedTitles,
 }: {
   workspaceId: string;
   project: ProjectDetail;
@@ -30,8 +51,17 @@ export function ProjectWorkspace({
   members: ProjectMember[];
   workspaceMembers: Member[];
   issues: IssueWithLabels[];
+  documents: PageSummary[];
+  currentUserId: string;
   initialTab: ProjectTab;
   initialFavorite: boolean;
+  access: OverviewAccess;
+  grants: OverviewGrant[];
+  comments: OverviewComment[];
+  edits: OverviewDocEdit[];
+  unseenDocEdits: number;
+  resources: ProjectResource[];
+  trashedTitles: Record<string, string>;
 }) {
   const [tab, setTab] = useState<ProjectTab>(initialTab);
   const [status, setStatus] = useState<Status | null>(null);
@@ -61,12 +91,14 @@ export function ProjectWorkspace({
   }, [issues, status, q]);
 
   return (
-    <div className="flex min-w-0 flex-1 flex-col">
+    <div className="flex min-h-0 min-w-0 flex-1 flex-col">
       <ProjectHeader
         project={project}
         tab={tab}
         issueCount={counts.total}
+        documentCount={documents.length}
         favorite={favorite}
+        canViewOverview={access.canView}
         onTab={(next) => {
           setTab(next);
           if (next === "issues") setStatus(null);
@@ -77,17 +109,28 @@ export function ProjectWorkspace({
         <ProjectOverview
           workspaceId={workspaceId}
           project={project}
-          counts={counts}
           members={members}
           workspaceMembers={workspaceMembers}
-          onFilterStatus={(next) => {
-            setStatus(next);
-            setTab("issues");
-          }}
+          issues={issues}
+          documents={documents}
+          resources={resources}
+          trashedTitles={trashedTitles}
+          access={access}
+          grants={grants}
+          comments={comments}
+          edits={edits}
+          unseenDocEdits={unseenDocEdits}
+          currentUserId={currentUserId}
+        />
+      ) : tab === "documents" ? (
+        <ProjectDocuments
+          workspaceId={workspaceId}
+          projectId={project.id}
+          pages={documents}
         />
       ) : (
         <>
-          <header className="flex h-12 shrink-0 items-center gap-2 border-b border-border px-4">
+          <header className="flex h-12 shrink-0 items-center gap-2 border-b border-border px-6">
             {status ? (
               <button
                 type="button"
@@ -99,7 +142,7 @@ export function ProjectWorkspace({
                 <X size={11} className="text-faint" />
               </button>
             ) : (
-              <span className="text-[13px] font-medium text-muted">All issues</span>
+              <span className="text-[13px] font-medium text-muted">All tasks</span>
             )}
             <span className="rounded-full bg-elevated px-2 py-0.5 text-[11px] text-muted">
               {shown.length}
@@ -110,7 +153,7 @@ export function ProjectWorkspace({
                 <input
                   value={q}
                   onChange={(e) => setQ(e.target.value)}
-                  placeholder="Search issues…"
+                  placeholder="Search tasks…"
                   className="w-full bg-transparent text-[13px] text-text placeholder:text-faint"
                 />
                 {q && (
@@ -127,7 +170,7 @@ export function ProjectWorkspace({
               <LayoutToggle />
             </div>
           </header>
-          <IssueLayout issues={shown} />
+          <IssueLayout issues={shown} workspaceId={workspaceId} currentUserId={currentUserId} />
         </>
       )}
     </div>
