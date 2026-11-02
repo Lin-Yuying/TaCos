@@ -205,7 +205,7 @@ export function IssueTable({ issues }: { issues: IssueWithLabels[] }) {
     <div className="flex-1 overflow-y-auto">
       {groups.map((group) => (
         <div key={group.status}>
-          <div className="sticky top-0 z-10 flex items-center gap-2 border-b border-border bg-bg/95 px-6 py-1.5 backdrop-blur">
+          <div className="sticky top-0 z-10 flex items-center gap-2 border-b border-border bg-bg/95 px-10 py-1.5 backdrop-blur lg:px-20 xl:px-32">
             <StatusIcon status={group.status} size={13} />
             <span className="text-[12px] font-medium text-muted">
               {STATUS_META[group.status].label}
@@ -231,7 +231,7 @@ export function IssueTable({ issues }: { issues: IssueWithLabels[] }) {
                   openIssue(issue.id);
                 }}
                 onMouseEnter={() => setFocusIndex(index)}
-                className={`flex cursor-default items-center gap-2.5 px-6 py-[7px] text-[13px] transition-colors ${
+                className={`flex cursor-default items-center gap-2.5 px-10 py-[7px] text-[13px] transition-colors lg:px-20 xl:px-32 ${
                   focused ? "bg-row-active" : opened ? "bg-surface" : "hover:bg-elevated/40"
                 } ${opened ? "border-l-2 border-l-accent" : "border-l-2 border-l-transparent"}`}
               >
@@ -249,7 +249,7 @@ export function IssueTable({ issues }: { issues: IssueWithLabels[] }) {
                     {PRIORITY_NAMES[issue.priority]}
                   </span>
                 </span>
-                <span className="flex w-[128px] shrink-0 items-center gap-1.5">
+                <span className="flex w-[146px] shrink-0 items-center gap-1.5">
                   {issue.assignees.length === 1 ? (
                     (() => {
                       const assignee = issue.assignees[0];
@@ -278,12 +278,17 @@ export function IssueTable({ issues }: { issues: IssueWithLabels[] }) {
                       );
                     })()
                   ) : issue.assignees.length > 1 ? (
-                    <>
-                      <AssigneeStack assignees={issue.assignees} hrefFor={assigneeHref} />
-                      <span className="truncate text-[12px] text-muted">
-                        {issue.assignees.length} assignees
+                    // Names, not a count: the row already shows who is on the task at
+                    // a glance, without opening the panel to find out.
+                    <span
+                      title={issue.assignees.map((assignee) => assignee.displayName).join(", ")}
+                      className="flex min-w-0 items-center gap-1.5"
+                    >
+                      <AssigneeStack assignees={issue.assignees} max={2} hrefFor={assigneeHref} />
+                      <span className="min-w-0 truncate text-[12px] text-muted">
+                        {issue.assignees.map((assignee) => assignee.displayName).join(", ")}
                       </span>
-                    </>
+                    </span>
                   ) : null}
                 </span>
                 <span className="flex w-[112px] shrink-0 items-center justify-end gap-1">

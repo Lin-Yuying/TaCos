@@ -4,11 +4,11 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
-  Check,
   Link2,
   Lock,
+  Maximize2,
+  Minimize2,
   Paperclip,
-  Pencil,
   Plus,
   Sparkles,
   Trash2,
@@ -17,6 +17,7 @@ import {
 import { Menu, MenuItem } from "@/components/menu";
 import { Markdown, type PageContext, type PageRefEntry } from "@/components/markdown";
 import { MarkdownEditor } from "@/components/markdown-editor";
+import { AssigneeAvatar } from "@/components/issue-table";
 import { AiEditPanel } from "@/components/ai-assist";
 import { useUI } from "@/components/ui-context";
 import {
@@ -26,7 +27,7 @@ import {
   updatePageAction,
 } from "@/app/pages-actions";
 import { announceDocsDeleted } from "@/components/tab-events";
-import type { DocPage, PageSummary } from "@/lib/pages";
+import type { DocPage, PageAuthor, PageSummary } from "@/lib/pages";
 
 const ICONS = ["📄", "📘", "📝", "🗂️", "🧭", "🚀", "🧪", "🌱", "🍅", "✨", "🐙", "🔭"];
 
@@ -47,19 +48,36 @@ function placedPageKeys(doc: string): Set<string> {
 export function DocPageView({
   workspaceId,
   page,
+  author,
   canEdit,
   isOwner,
   subpages,
   ctx,
   refs,
+  onClose,
+  onOpenPage,
+  onDeleted,
+  expanded,
+  onToggleExpanded,
 }: {
   workspaceId: string;
   page: DocPage;
+  author?: PageAuthor | null;
   canEdit: boolean;
   isOwner: boolean;
   subpages: PageSummary[];
   ctx: PageContext;
   refs: PageRefEntry[];
+  // Set when the page sits in the side pane instead of its own tab: the header gains a
+  // close button, and page references swap the pane's content instead of navigating.
+  onClose?: () => void;
+  onOpenPage?: (id: string) => void;
+  // Same controls as a task's pane, in the same order: delete, expand, close.
+  expanded?: boolean;
+  onToggleExpanded?: () => void;
+  // A page deleted from the pane must close it, but the event that drops dead tabs
+  // would also navigate away from the page the pane is sitting beside.
+  onDeleted?: (pageIds: string[]) => void;
 }) {
   const router = useRouter();
   const { aiReady } = useUI();
@@ -67,7 +85,6 @@ export function DocPageView({
   const [icon, setIcon] = useState(page.icon);
   const [shared, setShared] = useState(page.shared);
   const [doc, setDoc] = useState(page.doc);
-  const [editing, setEditing] = useState(canEdit && page.doc.trim() === "");
   const [saved, setSaved] = useState(false);
   const [aiPanel, setAiPanel] = useState<{ x: number; y: number } | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -146,13 +163,19 @@ export function DocPageView({
       setError(result.error);
       return;
     }
-    announceDocsDeleted(result.data);
+    if (onDeleted) onDeleted(result.data);
+    else announceDocsDeleted(result.data);
   }
 
   async function addSubpage() {
     const result = await createPageAction(workspaceId, { parentId: page.id });
     if (!result.ok) {
       setError(result.error);
+      return;
+    }
+    if (onOpenPage) {
+      onOpenPage(result.data.id);
+      router.refresh();
       return;
     }
     router.push(`/${workspaceId}/docs/${result.data.id}`);
@@ -164,7 +187,6 @@ export function DocPageView({
     const syntax = embed ? `![[${reference.title}|${reference.id}]]` : `[[${reference.title}|${reference.id}]]`;
     const next = doc.trim() ? `${doc.replace(/\s+$/, "")}\n\n${syntax}` : syntax;
     editDoc(next);
-    setEditing(true);
   }
 
   // Putting the reference at the top of the text keeps the row where the list showed
@@ -185,11 +207,19 @@ export function DocPageView({
   function acceptAi(text: string, action: string) {
     const next = action === "continue" && doc.trim() ? `${doc.replace(/\s+$/, "")}\n\n${text}` : text;
     editDoc(next);
-    setEditing(true);
     setAiPanel(null);
   }
 
   const base = `/${workspaceId}/docs/`;
+  // A pane is a narrow column: the header drops its labels and keeps the glyphs, or the
+  // row wraps and the buttons lose their words.
+  const compact = Boolean(onClose);
+  // References inside the pane open in the pane, so following one never loses the page
+  // you were reading.
+  const pageCtx = useMemo<PageContext>(
+    () => (onOpenPage ? { ...ctx, onOpen: onOpenPage } : ctx),
+    [ctx, onOpenPage]
+  );
   const parent = page.parentId ? refs.find((ref) => ref.id === page.parentId) ?? null : null;
   const placed = useMemo(() => placedPageKeys(doc), [doc]);
   const unplaced = subpages.filter(
@@ -199,13 +229,27 @@ export function DocPageView({
   return (
     <div className="flex min-h-0 flex-1 flex-col">
       <header className="flex h-11 shrink-0 items-center gap-2 border-b border-border px-4 text-[12px] text-muted">
-        <span className="flex items-center gap-1">
+        <span
+          className="flex shrink-0 items-center gap-1"
+          title={shared ? "Shared with the workspace" : "Private"}
+        >
           {shared ? <Users size={13} /> : <Lock size={13} />}
-          {shared ? "Shared with the workspace" : "Private"}
+          {!compact && (shared ? "Shared with the workspace" : "Private")}
         </span>
-        <span className="text-faint">·</span>
-        <span className="truncate">{parent ? `Docs / ${parent.title}` : "Docs"}</span>
-        <div className="ml-auto flex items-center gap-2">
+        {!compact && <span className="text-faint">·</span>}
+        <span className="flex min-w-0 flex-1 items-center gap-2">
+          <span className="min-w-0 truncate">{parent ? `Docs / ${parent.title}` : "Docs"}</span>
+          {/* A shared document says whose it is right where it says what it is. */}
+          {author && (
+            <span data-doc-author className="flex shrink-0 items-center gap-1 text-[12px] text-muted">
+              <AssigneeAvatar displayName={author.displayName} avatar={author.avatar} size={14} />
+              <span className="max-w-[160px] truncate">
+                by {isOwner ? "you" : author.displayName}
+              </span>
+            </span>
+          )}
+        </span>
+        <div className="ml-auto flex shrink-0 items-center gap-2">
           <span
             className={`text-[11.5px] text-faint transition-opacity duration-300 ${
               saved ? "opacity-100" : "opacity-0"
@@ -217,32 +261,24 @@ export function DocPageView({
             <button
               type="button"
               onClick={(event) => openAi(event.currentTarget)}
+              title="AI"
+              aria-label="AI"
               className="flex items-center gap-1 rounded-md border border-border px-2 py-1 text-[12px] font-medium text-muted transition-colors hover:border-border-strong hover:text-text"
             >
-              <Sparkles size={12} /> AI
-            </button>
-          )}
-          {canEdit && (
-            <button
-              type="button"
-              onClick={() => {
-                if (editing) flushDoc();
-                setEditing(!editing);
-              }}
-              className="flex items-center gap-1 rounded-md border border-border px-2 py-1 text-[12px] font-medium text-muted transition-colors hover:border-border-strong hover:text-text"
-            >
-              {editing ? <Check size={12} /> : <Pencil size={12} />}
-              {editing ? "Done" : "Edit"}
+              <Sparkles size={12} />
+              {!compact && "AI"}
             </button>
           )}
           {isOwner && (
             <button
               type="button"
               onClick={() => void toggleShared()}
+              title={shared ? "Make private" : "Share with the workspace"}
+              aria-label={shared ? "Make private" : "Share with the workspace"}
               className="flex items-center gap-1 rounded-md border border-border px-2 py-1 text-[12px] font-medium text-muted transition-colors hover:border-border-strong hover:text-text"
             >
               {shared ? <Lock size={12} /> : <Users size={12} />}
-              {shared ? "Make private" : "Share"}
+              {!compact && (shared ? "Private" : "Share")}
             </button>
           )}
           {isOwner && (
@@ -251,9 +287,31 @@ export function DocPageView({
               onClick={() => void removePage()}
               aria-label="Delete page"
               title="Delete page"
-              className="rounded-md border border-border p-1 text-muted transition-colors hover:border-border-strong hover:text-danger"
+              className="rounded-md p-1.5 text-muted transition-colors hover:bg-elevated hover:text-danger"
             >
-              <Trash2 size={14} />
+              <Trash2 size={15} />
+            </button>
+          )}
+          {onToggleExpanded && (
+            <button
+              type="button"
+              onClick={onToggleExpanded}
+              title={expanded ? "Shrink panel" : "Expand panel"}
+              aria-label={expanded ? "Shrink panel" : "Expand panel"}
+              className="rounded-md p-1.5 text-muted transition-colors hover:bg-elevated hover:text-text"
+            >
+              {expanded ? <Minimize2 size={15} /> : <Maximize2 size={15} />}
+            </button>
+          )}
+          {onClose && (
+            <button
+              type="button"
+              onClick={onClose}
+              aria-label="Close document"
+              title="Close document"
+              className="rounded-md px-1.5 py-1 text-[16px] leading-none text-muted transition-colors hover:bg-elevated hover:text-text"
+            >
+              ×
             </button>
           )}
         </div>
@@ -276,7 +334,13 @@ export function DocPageView({
       )}
 
       <div className="flex-1 overflow-y-auto">
-        <div className="mx-auto w-full max-w-3xl px-5 py-8">
+        {/* A pane is measured by its own width, not the window's, so the reading
+            margins it would use on a full tab would leave no text at all. */}
+        <div
+          className={`w-full pb-8 pt-6 ${
+            onClose ? "px-5" : "px-10 lg:px-20 xl:px-32"
+          }`}
+        >
           <div className="flex items-start gap-3">
             <Menu
               width={196}
@@ -305,19 +369,23 @@ export function DocPageView({
                 </div>
               )}
             </Menu>
-            <input
-              value={title}
-              onChange={(event) => setTitle(event.target.value)}
-              onBlur={() => void saveTitle()}
-              onKeyDown={(event) => {
-                if (event.key === "Enter") event.currentTarget.blur();
-                if (event.key === "Escape") setTitle(page.title);
-              }}
-              readOnly={!canEdit}
-              aria-label="Page title"
-              className="min-w-0 flex-1 rounded-md bg-transparent text-[28px] font-semibold leading-tight tracking-tight text-text placeholder:text-faint hover:bg-elevated/40 focus:bg-bg focus:outline-none"
-              placeholder="Untitled"
-            />
+            <div className="min-w-0 flex-1">
+              <input
+                value={title}
+                onChange={(event) => setTitle(event.target.value)}
+                onBlur={() => void saveTitle()}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter") event.currentTarget.blur();
+                  if (event.key === "Escape") setTitle(page.title);
+                }}
+                readOnly={!canEdit}
+                aria-label="Page title"
+                className={`w-full rounded-md bg-transparent font-semibold leading-tight tracking-tight text-text placeholder:text-faint hover:bg-elevated/40 focus:bg-bg focus:outline-none ${
+                  compact ? "text-[22px]" : "text-[28px]"
+                }`}
+                placeholder="Untitled"
+              />
+            </div>
           </div>
 
           {error && <div className="mt-3 text-[12px] text-danger">{error}</div>}
@@ -335,6 +403,11 @@ export function DocPageView({
                   >
                     <Link
                       href={`${base}${child.id}`}
+                      onClick={(event) => {
+                        if (!onOpenPage) return;
+                        event.preventDefault();
+                        onOpenPage(child.id);
+                      }}
                       className="flex min-w-0 flex-1 items-center gap-2"
                     >
                       <span className="shrink-0">{child.icon ?? "📄"}</span>
@@ -358,7 +431,9 @@ export function DocPageView({
               </div>
             )}
 
-            {editing && canEdit ? (
+            {/* Anything you can edit opens in the editor directly — there is no
+                read/edit toggle to switch out of, so the caret is where you click. */}
+            {canEdit ? (
               <>
                 <MarkdownEditor
                   value={doc}
@@ -393,11 +468,9 @@ export function DocPageView({
             ) : (
               <>
                 {doc.trim() ? (
-                  <Markdown source={doc} pages={ctx} storageId={`doc:${page.id}`} />
+                  <Markdown source={doc} pages={pageCtx} storageId={`doc:${page.id}`} />
                 ) : (
-                  <p className="text-[13.5px] text-faint">
-                    {canEdit ? "This page is empty — press Edit to start writing." : "This page is empty."}
-                  </p>
+                  <p className="text-[13.5px] text-faint">This page is empty.</p>
                 )}
               </>
             )}

@@ -34,7 +34,7 @@ export function ProjectDocuments({
 
   return (
     <div className="flex-1 overflow-y-auto">
-      <div className="w-full px-6 pb-8 pt-2">
+      <div className="w-full px-10 pb-8 pt-6 lg:px-20 xl:px-32">
         <div className="flex items-center justify-between gap-3">
           <div>
             <h2 className="text-[15px] font-semibold tracking-tight">Documents</h2>

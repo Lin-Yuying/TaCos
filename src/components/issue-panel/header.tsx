@@ -79,20 +79,20 @@ export function PanelHeader({
         </button>
         <button
           type="button"
-          onClick={onClose}
-          className="rounded-md px-1.5 py-1 text-[16px] leading-none text-muted transition-colors hover:bg-elevated hover:text-text"
-          aria-label="Close panel"
-        >
-          ×
-        </button>
-        <button
-          type="button"
           onClick={onToggleExpanded}
           title={expanded ? "Shrink panel" : "Expand panel"}
           aria-label={expanded ? "Shrink panel" : "Expand panel"}
           className="rounded-md p-1.5 text-muted transition-colors hover:bg-elevated hover:text-text"
         >
           {expanded ? <Minimize2 size={15} /> : <Maximize2 size={15} />}
+        </button>
+        <button
+          type="button"
+          onClick={onClose}
+          className="rounded-md px-1.5 py-1 text-[16px] leading-none text-muted transition-colors hover:bg-elevated hover:text-text"
+          aria-label="Close panel"
+        >
+          ×
         </button>
       </div>
     </div>

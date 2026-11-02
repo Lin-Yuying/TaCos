@@ -21,7 +21,13 @@ import {
 } from "@/lib/issues";
 import { ProjectWorkspace } from "@/components/project-workspace";
 import { referencedIssueIds } from "@/lib/markdown";
-import { listProjectPageTree } from "@/lib/pages";
+import {
+  listPageRefs,
+  listProjectPageTree,
+  pageEmbedSources,
+  pageLookup,
+} from "@/lib/pages";
+import type { PageContext } from "@/components/markdown";
 import { listProjectResources, type ProjectResource } from "@/lib/resources";
 import type { ProjectTab } from "@/components/project-header";
 
@@ -60,12 +66,14 @@ export async function ProjectPage({
     redirect(`/${workspaceId}`);
   }
 
-  const [grants, comments, edits, unseenDocEdits, resources, trashedTitles]: [
+  const [grants, comments, edits, unseenDocEdits, resources, trashedTitles, pageRefs, embeds]: [
     OverviewGrant[],
     OverviewComment[],
     OverviewDocEdit[],
     number,
     ProjectResource[],
+    Record<string, string>,
+    Awaited<ReturnType<typeof listPageRefs>>,
     Record<string, string>,
   ] = access.canView
     ? await Promise.all([
@@ -75,8 +83,17 @@ export async function ProjectPage({
         countUnseenDocEdits(project.id, user.id),
         listProjectResources(workspaceId, project.id, user.id),
         trashedIssueTitles(workspaceId, referencedIssueIds(project.doc)),
+        // Same context the docs pages build, so `[[…]]` and `![[…]]` typed into the
+        // Overview resolve to the documents the reader may open.
+        listPageRefs(workspaceId, user.id),
+        pageEmbedSources(workspaceId, user.id, project.doc),
       ])
-    : [[], [], [], 0, [], {}];
+    : [[], [], [], 0, [], {}, [], {}];
+  const pages: PageContext = {
+    lookup: pageLookup(pageRefs),
+    base: `/${workspaceId}/docs/`,
+    embeds,
+  };
 
   return (
     // Keyed by project: the tab, the star and the filters are per-project state, and
@@ -90,6 +107,7 @@ export async function ProjectPage({
       workspaceMembers={members}
       issues={issues}
       documents={documents}
+      pages={pages}
       currentUserId={user.id}
       initialTab={access.canView ? initialTab : "issues"}
       initialFavorite={favorite}

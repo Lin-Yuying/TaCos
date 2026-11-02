@@ -75,6 +75,7 @@ export type Project = {
   name: string;
   key: string;
   color: string;
+  icon: string | null;
   description: string;
   createdBy: string | null;
 };
@@ -587,6 +588,7 @@ const projectColumns = {
   name: projects.name,
   key: projects.key,
   color: projects.color,
+  icon: projects.icon,
   description: projects.description,
   createdBy: projects.createdBy,
 };
@@ -764,6 +766,7 @@ export async function listPersonProjects(
       name: row.name,
       key: row.key,
       color: row.color,
+      icon: row.icon,
       description: row.description,
       createdBy: row.createdBy,
       role: (row.createdBy === userId ? "owner" : "member") as PersonProject["role"],
@@ -892,6 +895,7 @@ export async function createProject(input: {
     name,
     key: deriveProjectKey(name, siblings.map((sibling) => sibling.key)),
     color,
+    icon: null,
     description: (input.description ?? "").trim().slice(0, 500),
     createdBy: input.createdBy,
     createdAt: nowIso(),
@@ -939,7 +943,7 @@ export async function restoreProject(workspaceId: string, projectId: string) {
 export async function updateProject(
   workspaceId: string,
   projectId: string,
-  patch: { name?: string; description?: string; doc?: string; color?: string },
+  patch: { name?: string; description?: string; doc?: string; color?: string; icon?: string | null },
   viewerId?: string,
   opts?: { forceNewHistory?: boolean }
 ): Promise<Project> {
@@ -977,6 +981,12 @@ export async function updateProject(
     if (!PROJECT_COLORS.includes(patch.color)) throw new TacosError("Unknown project color");
     next.color = patch.color;
   }
+  if (patch.icon !== undefined) {
+    // Same rule as a document's page icon: one emoji, or null to fall back to the cube.
+    const icon = patch.icon?.trim() ?? "";
+    if (icon.length > 8) throw new TacosError("Pick a single emoji as the project icon");
+    next.icon = icon || null;
+  }
   if (Object.keys(next).length === 0) {
     const unchanged = await findProjectById(workspaceId, projectId);
     if (!unchanged) throw new TacosError("Project not found", 404);
@@ -1011,7 +1021,7 @@ async function findProjectById(workspaceId: string, projectId: string): Promise<
 
 // --- project Overview access ---
 
-export type OverviewRole = "comment" | "edit";
+export type OverviewRole = "view" | "comment" | "edit";
 
 export type OverviewAccess = {
   canView: boolean;
@@ -1051,14 +1061,18 @@ export async function getOverviewAccess(
     .where(and(eq(projectGrants.projectId, projectId), eq(projectGrants.userId, viewerId)))
     .limit(1);
   if (!grant) return NO_OVERVIEW_ACCESS;
-  const role: OverviewRole = grant.role === "edit" ? "edit" : "comment";
+  const role = normalizeOverviewRole(grant.role);
   return {
     canView: true,
-    canComment: true,
+    canComment: role !== "view",
     canEdit: role === "edit",
     manage: false,
     role,
   };
+}
+
+function normalizeOverviewRole(stored: string): OverviewRole {
+  return stored === "edit" ? "edit" : stored === "view" ? "view" : "comment";
 }
 
 export type OverviewGrant = {
@@ -1085,7 +1099,7 @@ export async function listOverviewGrants(
     .orderBy(projectGrants.createdAt);
   return rows.map((row) => ({
     ...row,
-    role: row.role === "edit" ? "edit" : "comment",
+    role: normalizeOverviewRole(row.role),
   }));
 }
 
@@ -1098,7 +1112,9 @@ export async function setOverviewGrant(
 ) {
   const access = await getOverviewAccess(workspaceId, projectId, actorId);
   if (!access.manage) throw new TacosError("Only the project owner can share the overview", 403);
-  if (role !== "comment" && role !== "edit") throw new TacosError("Unknown permission");
+  if (role !== "view" && role !== "comment" && role !== "edit") {
+    throw new TacosError("Unknown permission");
+  }
   const project = await findProjectRow(workspaceId, projectId);
   if (!project) throw new TacosError("Project not found", 404);
   if (project.createdBy === userId) return;
@@ -1539,13 +1555,14 @@ export async function getProject(
 ): Promise<(Project & { doc: string }) | null> {
   const row = await findProjectRow(workspaceId, idOrKey);
   if (!row) return null;
-  const { id, workspaceId: ws, name, key, color, description, doc, createdBy } = row;
+  const { id, workspaceId: ws, name, key, color, icon, description, doc, createdBy } = row;
   return {
     id,
     workspaceId: ws,
     name,
     key,
     color,
+    icon,
     description,
     doc,
     createdBy: createdBy ?? null,

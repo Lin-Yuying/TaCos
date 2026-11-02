@@ -1,7 +1,7 @@
 import crypto from "node:crypto";
 import { and, eq, inArray, or } from "drizzle-orm";
 import { getDb } from "../db/client";
-import { pages } from "../db/schema";
+import { pages, users } from "../db/schema";
 import { TacosError, getProject, nowIso } from "./issues";
 
 export type DocPage = {
@@ -22,6 +22,9 @@ export type DocPage = {
 export type PageSummary = Omit<DocPage, "doc" | "workspaceId"> & { depth: number };
 
 export type PageRef = { id: string; title: string; icon: string | null };
+
+// The one identity a shared page shows its reader: who wrote it.
+export type PageAuthor = { id: string; displayName: string; avatar: string | null };
 
 type PageRow = typeof pages.$inferSelect;
 
@@ -102,6 +105,17 @@ export async function getPage(
   const page = await findPage(workspaceId, pageId);
   if (!page || !pageVisible(page, viewerId)) return null;
   return page;
+}
+
+// Who wrote the page, for the "Created by" line under a document's title. Read from
+// users rather than workspace_members: a page outlives its author's membership.
+export async function pageAuthor(userId: string): Promise<PageAuthor | null> {
+  const [row] = await getDb()
+    .select({ id: users.id, displayName: users.displayName, avatar: users.avatar })
+    .from(users)
+    .where(eq(users.id, userId))
+    .limit(1);
+  return row ?? null;
 }
 
 export async function listChildPages(

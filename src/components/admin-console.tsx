@@ -119,8 +119,8 @@ export function AdminConsole({
         </Link>
       </header>
 
-      <main className="flex-1 overflow-y-auto p-6">
-        <div className="mx-auto max-w-3xl space-y-8">
+      <main className="flex-1 overflow-y-auto px-10 pb-10 pt-6 lg:px-20 xl:px-32">
+        <div className="space-y-8">
           {(notice || error) && (
             <div className={`text-[12px] ${error ? "text-danger" : "text-muted"}`}>
               {error ?? notice}

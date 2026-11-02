@@ -47,6 +47,7 @@ import type { PageSummary } from "@/lib/pages";
 import { ProjectIcon, StatusIcon, WorkspaceMark } from "@/components/icons";
 import { AssigneeAvatar } from "@/components/issue-table";
 import { IssuePanelHost } from "@/components/issue-panel";
+import { DocPanelHost } from "@/components/doc-panel";
 import { UserMenu, type UserInfo } from "@/components/user-menu";
 import { useUI, NOTIFICATIONS_READ } from "@/components/ui-context";
 import { DEFAULT_PROJECT_COLOR, STATUS_META, STATUS_ORDER } from "@/lib/constants";
@@ -154,6 +155,7 @@ function SidebarNav({
   viewerId,
   unread,
   hidden,
+  width,
   onToggleSection,
   onInvite,
 }: {
@@ -164,6 +166,9 @@ function SidebarNav({
   viewerId: string;
   unread: number | null;
   hidden: string[];
+  // The column's current width: the Customize menu is as wide as the sidebar itself,
+  // so it has to follow a drag rather than guess a number.
+  width: number;
   onToggleSection: (key: string) => void;
   onInvite: () => void;
 }) {
@@ -268,7 +273,7 @@ function SidebarNav({
                   key={project.id}
                   href={`/${workspaceId}/projects/${project.id}`}
                   active={pathname.startsWith(`/${workspaceId}/projects/${project.id}`)}
-                  icon={<ProjectIcon color={project.color} size={14} />}
+                  icon={<ProjectIcon color={project.color} icon={project.icon} size={14} />}
                 >
                   {project.name}
                 </NavItem>
@@ -346,7 +351,7 @@ function SidebarNav({
                 key={project.id}
                 href={`/${workspaceId}/projects/${project.id}`}
                 active={pathname.startsWith(`/${workspaceId}/projects/${project.id}`)}
-                icon={<ProjectIcon color={project.color} size={14} />}
+                icon={<ProjectIcon color={project.color} icon={project.icon} size={14} />}
               >
                 {project.name}
               </NavItem>
@@ -399,7 +404,10 @@ function SidebarNav({
           people but clutter for everyone else can be taken out and put back here. */}
       <div className="px-1 pt-3">
         <Menu
-          width={210}
+          width={width}
+          // Undo the nav's px-2 and this row's px-1 so the panel's edges are the
+          // sidebar's edges, not the trigger's.
+          offset={-12}
           triggerClassName="flex w-full items-center gap-2 rounded-md px-1 py-1 text-left text-[12px] text-faint transition-colors hover:bg-elevated/60 hover:text-text"
           trigger={
             <>
@@ -889,7 +897,7 @@ function SidebarRail({
                   key={project.id}
                   href={`/${workspaceId}/projects/${project.id}`}
                   active={pathname.startsWith(`/${workspaceId}/projects/${project.id}`)}
-                  icon={<ProjectIcon color={project.color} size={14} />}
+                  icon={<ProjectIcon color={project.color} icon={project.icon} size={14} />}
                   onSelect={close}
                 >
                   {project.name}
@@ -906,7 +914,7 @@ function SidebarRail({
                   key={project.id}
                   href={`/${workspaceId}/projects/${project.id}`}
                   active={pathname.startsWith(`/${workspaceId}/projects/${project.id}`)}
-                  icon={<ProjectIcon color={project.color} size={14} />}
+                  icon={<ProjectIcon color={project.color} icon={project.icon} size={14} />}
                   onSelect={close}
                 >
                   {project.name}
@@ -1215,7 +1223,7 @@ function tabMeta(
     const projectId = params.get("project");
     if (view === "all" && projectId) {
       const project = projects.find((p) => p.id === projectId);
-      if (project) return { label: project.name, icon: <ProjectIcon color={project.color} size={13} /> };
+      if (project) return { label: project.name, icon: <ProjectIcon color={project.color} icon={project.icon} size={13} /> };
     }
     const status = STATUS_ORDER.find((s) => s === view);
     if (status)
@@ -1239,7 +1247,7 @@ function tabMeta(
   if (projectPage) {
     const project = projects.find((p) => p.id === projectPage[1]);
     if (project)
-      return { label: project.name, icon: <ProjectIcon color={project.color} size={13} /> };
+      return { label: project.name, icon: <ProjectIcon color={project.color} icon={project.icon} size={13} /> };
     return { label: "Project", icon: <ProjectIcon color={DEFAULT_PROJECT_COLOR} size={13} /> };
   }
   if (pathname.endsWith("/settings")) return { label: "Settings", icon: <Settings size={13} /> };
@@ -1285,6 +1293,10 @@ function TabBar({
   const { setPaletteOpen } = useUI();
   const [tabs, setTabs] = useState<string[] | null>(null);
   const justClosed = useRef<string | null>(null);
+  // Closing a tab returns to the page it was opened from, not to whichever tab happens to
+  // sit next to it in the strip — a doc opened from an Overview goes back to that Overview.
+  const cameFrom = useRef<string | null>(null);
+  const lastKey = useRef<string | null>(null);
   // Where the app sits when nothing is open. It is deliberately not a tab: the strip
   // is empty, and this page offers the ways back in.
   const startKey = `/${workspace.id}/start`;
@@ -1315,6 +1327,13 @@ function TabBar({
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [workspace.id]);
+
+  useEffect(() => {
+    if (lastKey.current !== current) {
+      cameFrom.current = lastKey.current;
+      lastKey.current = current;
+    }
+  }, [current]);
 
   useEffect(() => {
     if (tabs === null) return;
@@ -1368,9 +1387,14 @@ function TabBar({
     setTabs(rest);
     if (key !== current) return;
     justClosed.current = key;
-    // Closing the last tab leaves nothing to show, so the workspace falls back to the
-    // start page instead of silently opening All Tasks.
-    router.push(rest[Math.max(0, Math.min(index, rest.length - 1))] ?? startKey);
+    // The tab this one was opened from is the way back; a strip neighbour is only the
+    // fallback when that tab has been closed too. Closing the last tab leaves nothing to
+    // show, so the workspace falls back to the start page instead of All Tasks.
+    const back =
+      cameFrom.current && cameFrom.current !== key && rest.includes(cameFrom.current)
+        ? cameFrom.current
+        : rest[Math.max(0, Math.min(index, rest.length - 1))];
+    router.push(back ?? startKey);
   }
 
   // A deleted doc must not leave a dead route in the strip: drop its tab (and any
@@ -1606,6 +1630,7 @@ export function WorkspaceShell({
                   viewerId={user.id}
                   unread={unread}
                   hidden={hiddenSections}
+                  width={sidebarWidth}
                   onToggleSection={toggleSection}
                   onInvite={() => setInviteOpen(true)}
                 />
@@ -1681,6 +1706,7 @@ export function WorkspaceShell({
               </div>
             )}
             <IssuePanelHost workspaceId={workspace.id} currentUserId={user.id} />
+            <DocPanelHost workspaceId={workspace.id} />
           </div>
         </main>
       </div>

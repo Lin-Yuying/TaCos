@@ -84,6 +84,8 @@ export const projects = sqliteTable(
     key: text("key").notNull(),
     // cube colour shown next to the project, drawn from PROJECT_COLORS
     color: text("color").notNull().default("#8b5cf6"),
+    // optional emoji picked by the team, drawn instead of the cube
+    icon: text("icon"),
     // one-line summary shown under the project title
     description: text("description").notNull().default(""),
     // the Overview page's markdown document

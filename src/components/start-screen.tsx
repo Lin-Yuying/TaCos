@@ -146,7 +146,7 @@ export function StartScreen({
                 <JumpRow
                   key={project.id}
                   href={`/${workspaceId}/projects/${project.id}`}
-                  icon={<ProjectIcon color={project.color} size={15} />}
+                  icon={<ProjectIcon color={project.color} icon={project.icon} size={15} />}
                   title={project.name}
                   divider={index > 0}
                 />

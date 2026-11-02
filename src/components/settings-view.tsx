@@ -404,8 +404,8 @@ export function SettingsView({
   const claudeCodeCmd = `claude mcp add tacos -- npx tsx /absolute/path/to/tacos/mcp/server.ts`;
 
   return (
-    <div className="flex-1 overflow-y-auto p-6">
-      <div className="mx-auto max-w-2xl space-y-10">
+    <div className="flex-1 overflow-y-auto px-10 pb-10 pt-6 lg:px-20 xl:px-32">
+      <div className="space-y-10">
         <header className="flex items-center gap-3">
           <h1 className="text-[16px] font-semibold">Workspace settings</h1>
           <span className="rounded-full bg-elevated px-2 py-0.5 text-[11px] text-muted">
@@ -655,7 +655,7 @@ export function SettingsView({
               const editing = renaming && renaming.id === project.id ? renaming : null;
               return (
                 <div key={project.id} className="flex items-center gap-3 px-4 py-2.5">
-                  <ProjectIcon color={project.color} size={15} />
+                  <ProjectIcon color={project.color} icon={project.icon} size={15} />
                   {editing ? (
                     <>
                       <input

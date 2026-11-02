@@ -1,7 +1,9 @@
 "use client";
 
+import type { ReactNode } from "react";
 import { Star } from "lucide-react";
 import { ProjectIcon } from "@/components/icons";
+import { Menu } from "@/components/menu";
 
 export type ProjectTab = "overview" | "issues" | "documents";
 
@@ -11,6 +13,13 @@ const TABS: { key: ProjectTab; label: string }[] = [
   { key: "documents", label: "Documents" },
 ];
 
+// Same idea as a document's page icon: pick one emoji, or fall back to the cube.
+const ICONS = [
+  "🚀", "🧪", "🐟", "🌱", "📦", "🎯",
+  "🧭", "💡", "🛠️", "🔬", "📊", "🎨",
+  "🧬", "🏗️", "🗺️", "⚡", "🔥", "☕",
+];
+
 export function ProjectHeader({
   project,
   tab,
@@ -18,23 +27,77 @@ export function ProjectHeader({
   documentCount,
   favorite,
   canViewOverview,
+  canPickIcon,
+  onPickIcon,
   onTab,
   onToggleFavorite,
+  meta,
+  metaMenu,
 }: {
-  project: { name: string; color: string };
+  project: { name: string; color: string; icon: string | null };
   tab: ProjectTab;
   issueCount: number;
   documentCount: number;
   favorite: boolean;
   // Without a grant, the Overview pill is not shown at all — the document is private.
   canViewOverview: boolean;
+  canPickIcon: boolean;
+  onPickIcon: (icon: string | null) => void;
   onTab: (tab: ProjectTab) => void;
   onToggleFavorite: () => void;
+  // Properties and Resources sit under the pills so the header reads top to bottom:
+  // title, tabs, then what the project is made of.
+  meta?: ReactNode;
+  // Restores a row the reader folded away; only rendered while one is hidden.
+  metaMenu?: ReactNode;
 }) {
+  const mark = <ProjectIcon color={project.color} icon={project.icon} size={22} />;
   return (
-    <header className="shrink-0 border-b border-border px-4 pb-2 pt-3">
+    <header className="shrink-0 border-b border-border px-4 pb-3 pt-3">
+      {/* Every header row hangs from the card's own gutter, so the pills and the
+          properties line up under the icon rather than one column in. */}
       <div className="flex items-center gap-2.5">
-        <ProjectIcon color={project.color} size={22} />
+        {canPickIcon ? (
+          <Menu
+            width={232}
+            triggerClassName="shrink-0 rounded-md p-0.5 transition-colors hover:bg-elevated"
+            trigger={<span title="Change icon">{mark}</span>}
+          >
+            {(close) => (
+              <div className="p-1">
+                <div className="grid grid-cols-6 gap-1">
+                  {ICONS.map((emoji) => (
+                    <button
+                      key={emoji}
+                      type="button"
+                      onClick={() => {
+                        close();
+                        onPickIcon(emoji);
+                      }}
+                      className="rounded p-1 text-[18px] transition-colors hover:bg-elevated"
+                    >
+                      {emoji}
+                    </button>
+                  ))}
+                </div>
+                {project.icon && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      close();
+                      onPickIcon(null);
+                    }}
+                    className="mt-1 w-full rounded px-2 py-1.5 text-left text-[12px] text-muted transition-colors hover:bg-elevated hover:text-text"
+                  >
+                    Use the cube instead
+                  </button>
+                )}
+              </div>
+            )}
+          </Menu>
+        ) : (
+          <span className="shrink-0 p-0.5">{mark}</span>
+        )}
         <h1 className="truncate text-[20px] font-semibold tracking-tight">{project.name}</h1>
         <button
           type="button"
@@ -74,7 +137,10 @@ export function ProjectHeader({
             </button>
           );
         })}
+        {/* A folded properties row costs no height, so its way back lives here. */}
+        {metaMenu && <div className="ml-auto">{metaMenu}</div>}
       </nav>
+      {meta}
     </header>
   );
 }

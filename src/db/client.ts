@@ -654,6 +654,7 @@ function bootstrap(sqlite: Database.Database) {
   addColumnIfMissing(sqlite, "projects", "deleted_at", "TEXT");
   addColumnIfMissing(sqlite, "projects", "description", "TEXT NOT NULL DEFAULT ''");
   addColumnIfMissing(sqlite, "projects", "doc", "TEXT NOT NULL DEFAULT ''");
+  addColumnIfMissing(sqlite, "projects", "icon", "TEXT");
   addColumnIfMissing(sqlite, "issues", "deleted_at", "TEXT");
   addColumnIfMissing(sqlite, "issues", "position", "REAL NOT NULL DEFAULT 0");
   addColumnIfMissing(sqlite, "issues", "due_date", "TEXT");

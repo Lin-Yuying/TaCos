@@ -116,7 +116,7 @@ export function NotificationsView({
           )}
         </div>
       </header>
-      <div className="mx-auto max-w-2xl divide-y divide-border">
+      <div className="divide-y divide-border px-10 pb-8 lg:px-20 xl:px-32">
         {visible.length === 0 && (
           <div className="p-6 text-[13px] text-faint">
             Nothing yet — you&apos;ll see mentions, assignments, and comments here.

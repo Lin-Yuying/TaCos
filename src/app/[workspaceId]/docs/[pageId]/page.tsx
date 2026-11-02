@@ -7,6 +7,7 @@ import {
   getPage,
   listChildPages,
   listPageRefs,
+  pageAuthor,
   pageEmbedSources,
   pageLookup,
 } from "@/lib/pages";
@@ -38,10 +39,11 @@ async function DocContent({
   const page = await getPage(workspaceId, pageId, user.id);
   if (!page) notFound();
 
-  const [subpages, refs, embeds] = await Promise.all([
+  const [subpages, refs, embeds, author] = await Promise.all([
     listChildPages(workspaceId, page.id, user.id),
     listPageRefs(workspaceId, user.id),
     pageEmbedSources(workspaceId, user.id, page.doc),
+    pageAuthor(page.createdBy),
   ]);
 
   return (
@@ -49,6 +51,7 @@ async function DocContent({
       key={page.id}
       workspaceId={workspaceId}
       page={page}
+      author={author}
       canEdit={canEditPage(page, user.id)}
       isOwner={page.createdBy === user.id}
       subpages={subpages}

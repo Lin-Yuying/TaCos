@@ -12,6 +12,8 @@ import {
 import {
   CheckSquare,
   Code,
+  FileText,
+  GripVertical,
   Heading1,
   Heading2,
   Heading3,
@@ -21,7 +23,12 @@ import {
   Quote,
   Type,
 } from "lucide-react";
-import { MarkdownBlock, type IssueContext } from "@/components/markdown";
+import {
+  MarkdownBlock,
+  type IssueContext,
+  type PageContext,
+  type PageRefEntry,
+} from "@/components/markdown";
 import {
   CodeCopyButton,
   CodeLanguageMenu,
@@ -63,10 +70,20 @@ type Command = {
   keywords: string;
   insert: string;
   icon: React.ComponentType<{ size?: number | string; className?: string }>;
+  // Some entries only open a second step (the doc picker) instead of writing a marker.
+  stage?: "pages";
 };
 
 const COMMANDS: Command[] = [
   { label: "Text", hint: "Plain paragraph", keywords: "plain body p", insert: "", icon: Type },
+  {
+    label: "Document",
+    hint: "Link a doc from this workspace",
+    keywords: "doc page embed link reference",
+    insert: "",
+    icon: FileText,
+    stage: "pages",
+  },
   { label: "Heading 1", hint: "Large section title", keywords: "h1 title", insert: "# ", icon: Heading1 },
   { label: "Heading 2", hint: "Medium section title", keywords: "h2 subtitle", insert: "## ", icon: Heading2 },
   { label: "Heading 3", hint: "Small section title", keywords: "h3", insert: "### ", icon: Heading3 },
@@ -193,13 +210,28 @@ function editBlocks(src: string): string[] {
 function joinBlocks(blocks: string[]): string {
   let out = "";
   let prev: string | null = null;
+  let blanks = 0;
   for (const block of blocks) {
+    // An empty block is a line the author left blank; it is written as one extra
+    // newline on top of the ordinary blank-line separator, which is what `splitBlocks`
+    // reads back as an empty block.
+    if (block.trim() === "") {
+      blanks += 1;
+      continue;
+    }
     const kind = block.includes("\n") ? null : splitMarker(block).marker.kind;
-    const continues = kind !== null && LIST_KINDS.has(kind) && kind === prev;
-    out += out === "" ? block : `${continues ? "\n" : "\n\n"}${block}`;
+    const continues = blanks === 0 && kind !== null && LIST_KINDS.has(kind) && kind === prev;
+    if (out === "") out = block;
+    else if (continues) out += `\n${block}`;
+    else out += `\n\n${"\n".repeat(blanks)}${block}`;
+    blanks = 0;
     prev = kind;
   }
-  return out.replace(/\s+$/, "");
+  // A document that ends on a blank line keeps it: two newlines per trailing empty
+  // block, the same count `splitBlocks` reads back as one. A document with no lines at
+  // all stays empty instead of becoming whitespace.
+  const tail = blanks > 0 && out !== "" ? "\n".repeat(blanks + 1) : "";
+  return out.replace(/\s+$/, "") + tail;
 }
 
 // Same indentation rule for a block that is not currently open in the textarea. Code
@@ -472,6 +504,38 @@ function textOffsetIn(root: HTMLElement, container: Node, offsetInNode: number):
   return null;
 }
 
+/** The nearest ancestor that actually scrolls the page content. */
+function scrollParent(node: HTMLElement | null): HTMLElement | null {
+  let el = node?.parentElement ?? null;
+  while (el) {
+    const { overflowY } = getComputedStyle(el);
+    if ((overflowY === "auto" || overflowY === "scroll") && el.scrollHeight > el.clientHeight) {
+      return el;
+    }
+    el = el.parentElement;
+  }
+  return null;
+}
+
+/** Where a collapsed caret at `offset` sits inside the mirror, in viewport coordinates. */
+function caretRectIn(root: HTMLElement, offset: number): DOMRect | null {
+  // A caret parked on a line break has no glyph, so a Range there reports 0×0 — which
+  // would read as the top of the page and scroll the wrong way. Measure a throwaway copy
+  // of the mirror instead: same classes, same width, ending in a zero-width character at
+  // the caret, whose box is the caret's own line.
+  const text = root.textContent ?? "";
+  const mirror = root.cloneNode(false) as HTMLElement;
+  mirror.style.visibility = "hidden";
+  mirror.textContent = text.slice(0, Math.max(0, Math.min(text.length, offset)));
+  const marker = document.createElement("span");
+  marker.textContent = "\u200b";
+  mirror.appendChild(marker);
+  root.parentElement?.appendChild(mirror);
+  const rect = marker.getBoundingClientRect();
+  mirror.remove();
+  return rect.height > 0 ? rect : null;
+}
+
 const PLACEHOLDER: Record<Marker["kind"], string> = {
   none: "Type / for commands",
   heading: "Heading",
@@ -498,9 +562,8 @@ function textClass(marker: Marker): string {
 // a heading carries `mb-1.5` (its `first:` top margin always applies here, since every
 // block is its own wrapper). The editable line has to reserve the same space, empty or
 // not: if the open line is a different height from the one it replaced, everything under
-// it slides on every click. A list dot is a 13px glyph with 3px of top padding, so a
-// finished list row is 2px taller than its text; `min-h` gives the editable row that
-// same overhang.
+// it slides on every click. A finished list row is 24px tall — a 13.5px line next to a
+// `min-h-[24px]` glyph column — so a list's editable row keeps that same `min-h`.
 function editRhythm(marker: Marker): string {
   if (marker.kind === "heading") return "mb-1.5";
   if (marker.kind === "bullet" || marker.kind === "ordered") return "my-1.5 min-h-[24px]";
@@ -530,6 +593,54 @@ function shortcutStyle(event: React.KeyboardEvent): PassageStyle | null {
   // Strikethrough lives on ⌘⇧X; ⌘X must stay Cut.
   if (style === "strike" && !event.shiftKey) return null;
   return style;
+}
+
+// The slash menu's second step. It lives outside the editor so the picker's buttons
+// are plain props: the parent's handlers are the ones that touch the line being typed.
+function PagePickerMenu({
+  docs,
+  emptyHint,
+  selected,
+  onPick,
+  onHover,
+}: {
+  docs: PageRefEntry[];
+  emptyHint: string;
+  selected: number;
+  onPick: (entry: PageRefEntry) => void;
+  onHover: (index: number) => void;
+}) {
+  return (
+    <div className="absolute left-2 top-full z-20 mt-1 max-h-[min(60vh,360px)] w-72 max-w-[calc(100%-1rem)] overflow-y-auto rounded-lg border border-border bg-overlay shadow-lg shadow-black/10">
+      <div className="border-b border-border px-2.5 py-1.5 text-[11px] uppercase tracking-wide text-faint">
+        Documents
+      </div>
+      {docs.length === 0 ? (
+        <div className="px-2.5 py-2 text-[12px] text-faint">{emptyHint}</div>
+      ) : (
+        docs.map((entry, i) => (
+          <button
+            key={entry.id}
+            type="button"
+            // mousedown fires before the textarea's blur, which would close the editor
+            onMouseDown={(e) => {
+              e.preventDefault();
+              onPick(entry);
+            }}
+            onMouseEnter={() => onHover(i)}
+            className={`flex w-full items-center gap-2.5 px-2.5 py-1.5 text-left text-[13px] ${
+              selected === i ? "bg-elevated" : ""
+            }`}
+          >
+            <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md border border-border text-[15px] text-muted">
+              {entry.icon || <FileText size={14} />}
+            </span>
+            <span className="min-w-0 truncate">{entry.title}</span>
+          </button>
+        ))
+      )}
+    </div>
+  );
 }
 
 export type MarkdownEditorHandle = {
@@ -565,6 +676,8 @@ export const MarkdownEditor = forwardRef<
     onChange: (next: string) => void;
     placeholder?: string;
     issues?: IssueContext;
+    // Docs the page may insert: `[[title|id]]` renders a link, `![[title|id]]` embeds.
+    pages?: PageContext;
     onTextSelection?: (selection: DraftSelection | null) => void;
     // A drag across blocks selects the blocks themselves, not a text range, so the page
     // needs its own signal to float the formatting toolbar over them.
@@ -575,7 +688,7 @@ export const MarkdownEditor = forwardRef<
     onRedo?: () => boolean;
   }
 >(function MarkdownEditor(
-  { value, onChange, placeholder, issues, onTextSelection, onBlockSelection, onUndo, onRedo },
+  { value, onChange, placeholder, issues, pages, onTextSelection, onBlockSelection, onUndo, onRedo },
   ref
 ) {
   const [blocks, setBlocks] = useState<string[]>(() => editBlocks(value));
@@ -583,11 +696,23 @@ export const MarkdownEditor = forwardRef<
   const [marker, setMarker] = useState<Marker>({ kind: "none", depth: 0 });
   const [draft, setDraft] = useState("");
   const [caret, setCaret] = useState(0);
-  const [menu, setMenu] = useState<{ query: string; selected: number } | null>(null);
+  const [menu, setMenu] = useState<{
+    query: string;
+    selected: number;
+    stage: "blocks" | "pages";
+    // Where the doc picker's filter text starts on the line, so Escape can take it back.
+    filterFrom?: number;
+  } | null>(null);
+  // Index of the block whose grip is being dragged, plus the gap it would land in.
+  const [dragBlock, setDragBlock] = useState<number | null>(null);
+  const [drop, setDrop] = useState<{ index: number; top: number } | null>(null);
   // Block range picked by dragging across the document, or by a second ⌘A. While it is
   // set nothing is being edited, so the keystrokes below act on whole blocks.
   const [range, setRange] = useState<{ from: number; to: number } | null>(null);
   const areaRef = useRef<HTMLTextAreaElement | null>(null);
+  // The block menu scrolls once the list is taller than the viewport allows; a new query
+  // has to start at the top again, or the first entries stay hidden above the fold.
+  const menuRef = useRef<HTMLDivElement | null>(null);
   const ghostRef = useRef<HTMLDivElement | null>(null);
   // The line-number column drawn beside the open code block.
   const gutterRef = useRef<HTMLDivElement | null>(null);
@@ -630,6 +755,23 @@ export const MarkdownEditor = forwardRef<
     draftPast.current = [];
     draftFuture.current = [];
   }, [value]);
+
+  useEffect(() => {
+    if (menuRef.current) menuRef.current.scrollTop = 0;
+  }, [menu?.stage, menu?.query]);
+
+  // Arrow keys can walk the list past the fold, so the highlighted entry is kept in view.
+  useEffect(() => {
+    const box = menuRef.current;
+    if (!box || menu?.stage !== "blocks") return;
+    const item = box.querySelector<HTMLElement>(`[data-command-index="${menu.selected}"]`);
+    if (!item) return;
+    const top = item.offsetTop;
+    if (top < box.scrollTop) box.scrollTop = top;
+    else if (top + item.offsetHeight > box.scrollTop + box.clientHeight) {
+      box.scrollTop = top + item.offsetHeight - box.clientHeight;
+    }
+  }, [menu?.selected, menu?.stage]);
 
   // A block range has no text selection behind it, so the page cannot see where to float
   // its toolbar. Report the top-left corner of the first selected block instead.
@@ -796,6 +938,36 @@ export const MarkdownEditor = forwardRef<
     setCaret(clamped);
   }, [editing, draft]);
 
+  // A line typed past the fold has nowhere to go on its own: the open textarea is
+  // already as tall as its text, so the browser has no scrollbar of its own to move and
+  // the page stays put. Walk the page's scroll container by hand whenever the caret
+  // leaves the visible band, keeping a line of air under it.
+  function revealCaret() {
+    const area = areaRef.current;
+    const ghost = ghostRef.current;
+    if (!area || !ghost || document.activeElement !== area) return;
+    const scroller = scrollParent(wrapRef.current);
+    if (!scroller) return;
+    const view = scroller.getBoundingClientRect();
+    const box = caretRectIn(ghost, area.selectionStart ?? 0) ?? ghost.getBoundingClientRect();
+    const margin = 24;
+    if (box.bottom > view.bottom - margin) {
+      scroller.scrollTop += box.bottom - (view.bottom - margin);
+    } else if (box.top < view.top + margin) {
+      scroller.scrollTop -= view.top + margin - box.top;
+    }
+  }
+
+  // Every way the caret moves — typing, Enter growing the block, arrows between lines,
+  // a click — ends here. Follow it, or a line typed past the fold keeps running out of
+  // sight while the page sits still.
+  useLayoutEffect(() => {
+    revealCaret();
+    // A wrapped line settles a frame after its height is written; look again once it has.
+    const frame = requestAnimationFrame(revealCaret);
+    return () => cancelAnimationFrame(frame);
+  }, [editing, draft, marker, caret]);
+
   // A drag can end outside the document, so the mouse is tracked on the window.
   useEffect(() => {
     const stop = () => {
@@ -806,7 +978,20 @@ export const MarkdownEditor = forwardRef<
   }, []);
 
   // Empty documents still show one line to work on.
-  const doc = blocks.length > 0 ? blocks : [""];
+  const doc = useMemo(() => (blocks.length > 0 ? blocks : [""]), [blocks]);
+  // A numbered item is drawn on its own here, so it takes its number from its place in
+  // the run: the `n` stored in the source goes stale as soon as an item above is added
+  // or removed, while the finished list always counts from 1.
+  const orderedRun = useMemo(() => {
+    const runs: number[] = [];
+    let count = 0;
+    for (const block of doc) {
+      const kind = block.includes("\n") ? null : splitMarker(block).marker.kind;
+      count = kind === "ordered" ? count + 1 : 0;
+      runs.push(count);
+    }
+    return runs;
+  }, [doc]);
 
   // A selection inside the textarea never reaches `window.getSelection()`, so the page
   // gets the range (and a spot for the toolbar) from the field itself.
@@ -835,16 +1020,8 @@ export const MarkdownEditor = forwardRef<
   }
 
   function rememberScroll() {
-    let el: HTMLElement | null = wrapRef.current?.parentElement ?? null;
-    while (el) {
-      const { overflowY } = getComputedStyle(el);
-      if ((overflowY === "auto" || overflowY === "scroll") && el.scrollHeight > el.clientHeight) {
-        openScroll.current = { el, top: el.scrollTop };
-        return;
-      }
-      el = el.parentElement;
-    }
-    openScroll.current = null;
+    const el = scrollParent(wrapRef.current);
+    openScroll.current = el ? { el, top: el.scrollTop } : null;
   }
 
   function openBlock(index: number, text: string) {
@@ -887,8 +1064,7 @@ export const MarkdownEditor = forwardRef<
         const raw = isBlank(marker, draft) ? "" : joinMarker(marker, draft);
         if ((list[editing] ?? "") !== raw) {
           list = list.slice();
-          if (raw === "") list.splice(editing, 1);
-          else list[editing] = raw;
+          list[editing] = raw;
         }
       }
       if (areaRef.current === document.activeElement) skipBlur.current = true;
@@ -918,9 +1094,22 @@ export const MarkdownEditor = forwardRef<
     const raw = isBlank(marker, draft) ? "" : joinMarker(marker, draft);
     if ((doc[index] ?? "") === raw) return;
     const next = doc.slice();
-    if (raw === "") next.splice(index, 1);
-    else next[index] = raw;
+    // A line emptied and then left behind stays as a blank line; only Backspace at the
+    // start of a line removes one, so clicking away never eats what the author typed.
+    next[index] = raw;
     commit(next);
+  }
+
+  // A marker is the block's type, and it lives outside `draft`: adopting one ("# ", "```",
+  // "- ") leaves the words untouched even though the block has changed. Store it right
+  // away, or an empty code block or list row has nothing to save when the line closes —
+  // clicking another line then quietly turned it back into a plain blank line.
+  function commitMarker(nextMarker: Marker, body: string) {
+    if (editing === null) return;
+    const list = doc.slice();
+    list[editing] = joinMarker(nextMarker, body);
+    commit(list);
+    untouched.current = body;
   }
 
   function closeEdit(index: number) {
@@ -968,17 +1157,12 @@ export const MarkdownEditor = forwardRef<
     // textarea drops it instead: the block falls back to its stored text, so words deleted
     // in the open line come back and words typed there disappear.
     let list = doc;
-    let target = index;
+    const target = index;
     if (editing !== null && draft !== untouched.current) {
       const raw = isBlank(marker, draft) ? "" : joinMarker(marker, draft);
       if ((list[editing] ?? "") !== raw) {
         list = list.slice();
-        if (raw === "") {
-          list.splice(editing, 1);
-          if (target > editing) target -= 1;
-        } else {
-          list[editing] = raw;
-        }
+        list[editing] = raw;
         commit(list);
       }
     }
@@ -994,14 +1178,18 @@ export const MarkdownEditor = forwardRef<
     if (marker.kind === "none") {
       const fence = FENCE_ONLY.exec(draft);
       if (fence) {
-        setMarker({ kind: "code", depth: 0, lang: fence[1] });
+        const opened: Marker = { kind: "code", depth: 0, lang: fence[1] };
+        setMarker(opened);
         setDraft("");
+        commitMarker(opened, "");
         caretRef.current = 0;
         return;
       }
       if (/^\s*[-*+]\s*$/.test(draft)) {
-        setMarker({ kind: "bullet", depth: depthOfIndent(/^\s*/.exec(draft)![0]) });
+        const bullet: Marker = { kind: "bullet", depth: depthOfIndent(/^\s*/.exec(draft)![0]) };
+        setMarker(bullet);
         setDraft("");
+        commitMarker(bullet, "");
         caretRef.current = 0;
         return;
       }
@@ -1071,20 +1259,62 @@ export const MarkdownEditor = forwardRef<
   function updateMenu(area: HTMLTextAreaElement, text: string) {
     const pos = area.selectionStart ?? text.length;
     const lineStart = text.lastIndexOf("\n", pos - 1) + 1;
+    // The doc picker stays open while you type: what is typed on the line filters it.
+    if (menu?.stage === "pages") {
+      setMenu({
+        query: text.slice(lineStart, pos).toLowerCase(),
+        selected: 0,
+        stage: "pages",
+        filterFrom: menu.filterFrom,
+      });
+      return;
+    }
     const match = SLASH.exec(text.slice(lineStart, pos));
-    setMenu(match ? { query: match[1].toLowerCase(), selected: 0 } : null);
+    setMenu(match ? { query: match[1].toLowerCase(), selected: 0, stage: "blocks" } : null);
   }
 
   function visibleCommands() {
-    if (!menu) return [];
+    if (!menu || menu.stage !== "blocks") return [];
+    // The doc picker needs a page set to pick from, and a code block has no blocks
+    // inside it to insert into.
+    const commands =
+      pages && marker.kind !== "code" ? COMMANDS : COMMANDS.filter((c) => !c.stage);
     const query = menu.query.trim();
-    if (!query) return COMMANDS.slice(0, 8);
-    return COMMANDS.filter(
-      (c) => c.label.toLowerCase().includes(query) || c.keywords.includes(query),
-    ).slice(0, 8);
+    // Every block type stays in the list — an earlier 8-entry cap hid Quote, Code and
+    // Divider once the doc entry was added. The menu scrolls instead of cutting them.
+    if (!query) return commands;
+    return commands.filter((c) => c.label.toLowerCase().includes(query) || c.keywords.includes(query));
+  }
+
+  // One entry per doc: `lookup` holds each page twice (by id and by bare title).
+  function pageChoices(): PageRefEntry[] {
+    if (!menu || menu.stage !== "pages") return [];
+    const seen = new Set<string>();
+    const all: PageRefEntry[] = [];
+    for (const ref of Object.values(pages?.lookup ?? {})) {
+      if (seen.has(ref.id)) continue;
+      seen.add(ref.id);
+      all.push(ref);
+    }
+    const query = menu.query.trim();
+    const found = query ? all.filter((ref) => ref.title.toLowerCase().includes(query)) : all;
+    return found.slice(0, 8);
   }
 
   function applyCommand(command: Command) {
+    if (command.stage === "pages") {
+      const area = areaRef.current;
+      const pos = area?.selectionStart ?? draft.length;
+      const lineStart = draft.lastIndexOf("\n", pos - 1) + 1;
+      const lineEnd = draft.indexOf("\n", pos);
+      const end = lineEnd === -1 ? draft.length : lineEnd;
+      // Take "/document" off the line; the next keystrokes filter the picker instead.
+      const next = `${draft.slice(0, lineStart)}${draft.slice(pos, end)}${draft.slice(end)}`;
+      setDraft(next);
+      setMenu({ query: "", selected: 0, stage: "pages", filterFrom: lineStart });
+      caretRef.current = lineStart;
+      return;
+    }
     const area = areaRef.current;
     const pos = area?.selectionStart ?? draft.length;
     const lineStart = draft.lastIndexOf("\n", pos - 1) + 1;
@@ -1111,6 +1341,71 @@ export const MarkdownEditor = forwardRef<
     // The caret stays between the new marker and the text it was put in front of.
     const caretInBody = lineStart + head.length + command.insert.length;
     caretRef.current = Math.max(0, parsed.body.length - (body.length - caretInBody));
+  }
+
+  // The line the picker filtered on becomes the reference itself; `[[title|id]]` is the
+  // same form the docs page's "Link a page" button writes.
+  function insertPage(ref: PageRefEntry) {
+    const area = areaRef.current;
+    const pos = area?.selectionStart ?? draft.length;
+    const lineStart = draft.lastIndexOf("\n", pos - 1) + 1;
+    const lineEnd = draft.indexOf("\n", pos);
+    const end = lineEnd === -1 ? draft.length : lineEnd;
+    const link = `[[${ref.title}|${ref.id}]]`;
+    const body = `${draft.slice(0, lineStart)}${link}${draft.slice(end)}`;
+    const parsed = splitMarker(body);
+    setMarker(parsed.marker);
+    setDraft(parsed.body);
+    setMenu(null);
+    caretRef.current = Math.max(0, Math.min(parsed.body.length, lineStart + link.length));
+    if (editing !== null) {
+      const list = doc.slice();
+      list[editing] = joinMarker(parsed.marker, parsed.body);
+      commit(list);
+      untouched.current = parsed.body;
+    }
+  }
+
+  // Escape leaves the line as it was before the picker opened: the words typed while
+  // filtering were a search, not prose.
+  function cancelPagePicker() {
+    const anchor = menu?.filterFrom ?? null;
+    setMenu(null);
+    if (anchor === null) return;
+    const area = areaRef.current;
+    const pos = area?.selectionStart ?? draft.length;
+    if (pos <= anchor) return;
+    setDraft(`${draft.slice(0, anchor)}${draft.slice(pos)}`);
+    caretRef.current = anchor;
+  }
+
+  // Drop index for a pointer Y: the block whose upper half was crossed, or the end.
+  function dropAt(clientY: number): { index: number; top: number } | null {
+    const root = wrapRef.current;
+    if (!root) return null;
+    const nodes = Array.from(root.querySelectorAll<HTMLElement>("[data-block-index]"));
+    if (nodes.length === 0) return null;
+    const rootTop = root.getBoundingClientRect().top;
+    for (const node of nodes) {
+      const rect = node.getBoundingClientRect();
+      if (clientY < rect.top + rect.height / 2) {
+        return { index: Number(node.dataset.blockIndex), top: rect.top - rootTop };
+      }
+    }
+    const last = nodes[nodes.length - 1];
+    const rect = last.getBoundingClientRect();
+    return { index: Number(last.dataset.blockIndex) + 1, top: rect.bottom - rootTop };
+  }
+
+  // `to` is a gap index (0..doc.length); the block leaves its old slot first.
+  function moveBlock(from: number, to: number) {
+    const target = Math.max(0, Math.min(doc.length, to > from ? to - 1 : to));
+    if (target === from) return;
+    const list = doc.slice();
+    const [moved] = list.splice(from, 1);
+    if (moved === undefined) return;
+    list.splice(target, 0, moved);
+    commit(list);
   }
 
   // ⇧⌘Z / ⌘Z inside the open line: first walk back the programmatic formatting this line
@@ -1330,6 +1625,27 @@ export const MarkdownEditor = forwardRef<
     const area = e.currentTarget;
     const visible = visibleCommands();
 
+    if (menu?.stage === "pages") {
+      const choices = pageChoices();
+      if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+        e.preventDefault();
+        if (choices.length === 0) return;
+        const step = e.key === "ArrowDown" ? 1 : -1;
+        setMenu({ ...menu, selected: (menu.selected + step + choices.length) % choices.length });
+        return;
+      }
+      if (choices.length > 0 && (e.key === "Enter" || e.key === "Tab")) {
+        e.preventDefault();
+        insertPage(choices[menu.selected] ?? choices[0]);
+        return;
+      }
+      if (e.key === "Escape") {
+        e.preventDefault();
+        cancelPagePicker();
+        return;
+      }
+    }
+
     if (menu && visible.length > 0) {
       if (e.key === "ArrowDown") {
         e.preventDefault();
@@ -1540,6 +1856,7 @@ export const MarkdownEditor = forwardRef<
         const stripped = value.length - adopted.body.length;
         setMarker(adopted.marker);
         setDraft(adopted.body);
+        commitMarker(adopted.marker, adopted.body);
         caretRef.current = Math.max(0, pos - stripped);
         return;
       }
@@ -1548,6 +1865,9 @@ export const MarkdownEditor = forwardRef<
   }
 
   function onPaste(area: HTMLTextAreaElement, pasted: string) {
+    // Inside a code block a newline is code, not a block break: the clipboard goes in
+    // exactly as typed, the way the textarea would insert it.
+    if (marker.kind === "code") return false;
     const text = pasted.replace(/\r\n/g, "\n").replace(/\t/g, INDENT);
     if (!text.includes("\n")) return false;
     // Multi-line Markdown lands as real blocks instead of one paragraph with newlines.
@@ -1612,8 +1932,7 @@ export const MarkdownEditor = forwardRef<
         let source = emitted.current;
         if (willWrite) {
           blocks = doc.slice();
-          if (raw === "") blocks.splice(editing, 1);
-          else blocks[editing] = raw;
+          blocks[editing] = raw;
           source = joinBlocks(blocks);
         }
         // Same numbering a rendered selection uses: count the quote in the visible text
@@ -1685,14 +2004,52 @@ export const MarkdownEditor = forwardRef<
         suppressClick.current = true;
         setRange({ from: Math.min(drag.current.from, index), to: Math.max(drag.current.from, index) });
       }}
-      className="space-y-0.5 outline-none"
+      onDragStart={() => {
+        // A line still open would be re-serialized underneath the drop.
+        if (editing !== null) closeEdit(editing);
+      }}
+      onDragOver={(e) => {
+        if (dragBlock === null) return;
+        e.preventDefault();
+        e.dataTransfer.dropEffect = "move";
+        const at = dropAt(e.clientY);
+        if (!at) return;
+        setDrop((current) =>
+          current && current.index === at.index && current.top === at.top ? current : at,
+        );
+      }}
+      onDragLeave={(e) => {
+        if (e.currentTarget.contains(e.relatedTarget as Node | null)) return;
+        if (e.currentTarget.contains(e.relatedTarget as Node | null)) return;
+        setDrop(null);
+      }}
+      onDrop={(e) => {
+        if (dragBlock === null) return;
+        e.preventDefault();
+        const to = drop?.index ?? null;
+        setDragBlock(null);
+        setDrop(null);
+        if (to !== null) moveBlock(dragBlock, to);
+      }}
+      className="relative space-y-0.5 outline-none"
     >
+      {dragBlock !== null && drop && (
+        <div
+          aria-hidden
+          className="pointer-events-none absolute inset-x-0 z-10 h-0.5 rounded-full bg-accent"
+          style={{ top: drop.top }}
+        />
+      )}
       {doc.map((block, index) => {
         if (editing === index) {
           const visible = visibleCommands();
           // The open line keeps the vertical rhythm of the line it replaced — even while
           // it is empty — so clicking into a line never moves the document under it.
-          const rhythm = editRhythm(marker);
+          // A blank line closes as a short row rather than as a paragraph with its own
+          // margins, so the open line has to draw that same row: opening a blank line at
+          // paragraph height shoved everything below it down a line.
+          const compactBlank = marker.kind === "none" && isBlank(marker, draft);
+          const rhythm = compactBlank ? "" : editRhythm(marker);
           const area = (
             <div className="relative">
               <div
@@ -1755,8 +2112,22 @@ export const MarkdownEditor = forwardRef<
             </div>
           );
 
-          const menuNode = menu && visible.length > 0 && (
-            <div className="absolute left-2 top-full z-20 mt-1 max-h-[min(60vh,360px)] w-72 max-w-[calc(100%-1rem)] overflow-y-auto rounded-lg border border-border bg-overlay shadow-lg shadow-black/10">
+          const docs = pageChoices();
+          const menuNode = menu?.stage === "pages" ? (
+            <PagePickerMenu
+              docs={docs}
+              emptyHint={menu.query.trim() ? "No matching documents" : "No documents yet"}
+              selected={menu.selected}
+              onPick={insertPage}
+              onHover={(i) =>
+                setMenu((m) => (m && m.stage === "pages" ? { ...m, selected: i } : m))
+              }
+            />
+          ) : menu && visible.length > 0 && (
+            <div
+              ref={menuRef}
+              className="absolute left-2 top-full z-20 mt-1 max-h-[min(70vh,540px)] w-72 max-w-[calc(100%-1rem)] overflow-y-auto rounded-lg border border-border bg-overlay shadow-lg shadow-black/10"
+            >
               <div className="border-b border-border px-2.5 py-1.5 text-[11px] uppercase tracking-wide text-faint">
                 Basic blocks
               </div>
@@ -1764,13 +2135,14 @@ export const MarkdownEditor = forwardRef<
                 <button
                   key={command.label}
                   type="button"
+                  data-command-index={i}
                   // mousedown fires before the textarea's blur, which would close the editor
                   onMouseDown={(e) => {
                     e.preventDefault();
                     applyCommand(command);
                   }}
                   onMouseEnter={() => setMenu((m) => (m ? { ...m, selected: i } : m))}
-                  className={`flex w-full items-center gap-2.5 px-2.5 py-1.5 text-left text-[13px] ${
+                  className={`flex w-full items-center gap-2.5 px-2.5 py-1 text-left text-[13px] ${
                     menu.selected === i ? "bg-elevated" : ""
                   }`}
                 >
@@ -1855,7 +2227,7 @@ export const MarkdownEditor = forwardRef<
             marker.kind === "bullet"
               ? "•"
               : marker.kind === "ordered"
-                ? `${marker.n}.`
+                ? `${(index > 0 ? orderedRun[index - 1] : 0) + 1}.`
                 : marker.kind === "todo"
                   ? ""
                   : null;
@@ -1863,21 +2235,25 @@ export const MarkdownEditor = forwardRef<
             <div
               key={index}
               data-block-index={index}
-              className="relative flex items-start gap-2 px-2 py-0.5"
+              className={`relative flex items-start gap-2 px-2 ${
+                compactBlank ? "my-1.5 min-h-[22px]" : "py-0.5"
+              }`}
               style={{ marginLeft: marker.depth * INDENT_PX }}
             >
               {glyph !== null && (
                 // The dot starts on the line's own left edge (the same place the text
                 // began before the marker was typed); numbers stay right-aligned so
                 // 9. and 10. line up the way Notion does.
-                // The open line carries its `my-1.5` on the text column, while a finished
-                // list carries the same 6px above the whole row. Give the glyph that
-                // space too, or the box drops 6px the moment Enter commits the line.
+                // Glyph and body share font metrics, so their baselines meet; the open
+                // line's text column carries `my-1.5`, and the glyph gets that same 6px,
+                // which is also where a finished list's `my-1.5` puts its first row.
+                // A to-do's box is centered on the first line instead, as it is when the
+                // row is finished.
                 <span
                   data-md-glyph
-                  className={`flex w-4 shrink-0 pt-[9px] text-[13px] leading-relaxed text-faint ${
-                    marker.kind === "ordered" ? "justify-end" : "justify-start"
-                  }`}
+                  className={`flex w-4 shrink-0 select-none text-[13.5px] leading-relaxed ${
+                    marker.kind === "todo" ? "pt-[9px]" : "pt-[6px]"
+                  } ${marker.kind === "ordered" ? "justify-end text-muted" : "justify-start text-faint"}`}
                 >
                   {marker.kind === "todo" ? (
                     <button
@@ -1964,6 +2340,37 @@ export const MarkdownEditor = forwardRef<
             <MarkdownBlock
               block={parseBlock(block)}
               issues={issues}
+              pages={pages}
+              listStart={Math.max(0, (orderedRun[index] ?? 1) - 1)}
+              moveHandle={
+                parseBlock(block).kind === "code" ? (
+                  // Only the code card offers a grip; the rest of the document is
+                  // reordered by cutting and pasting.
+                  <span
+                    draggable
+                    role="button"
+                    tabIndex={-1}
+                    aria-label="Drag to move this block"
+                    title="Drag to move"
+                    onMouseDown={(e) => e.stopPropagation()}
+                    onClick={(e) => e.stopPropagation()}
+                    onDragStart={(e) => {
+                      e.dataTransfer.effectAllowed = "move";
+                      e.dataTransfer.setData("text/plain", String(index));
+                      const card = (e.currentTarget as HTMLElement).closest(".group\\/code");
+                      if (card) e.dataTransfer.setDragImage(card, 16, 16);
+                      setDragBlock(index);
+                    }}
+                    onDragEnd={() => {
+                      setDragBlock(null);
+                      setDrop(null);
+                    }}
+                    className="flex h-5 w-5 cursor-grab items-center justify-center rounded text-faint transition-colors hover:bg-elevated hover:text-text active:cursor-grabbing"
+                  >
+                    <GripVertical size={13} />
+                  </span>
+                ) : null
+              }
               onToggleTodo={(item, checked) => {
                 // Ticking a box from the finished document is one character of Markdown.
                 const next = doc.slice();

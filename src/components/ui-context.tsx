@@ -59,6 +59,11 @@ type UIState = {
   openIssueId: string | null;
   openIssue: (id: string) => void;
   closeIssue: () => void;
+  // A document opened beside the page you were reading, the way a task opens in the
+  // same right-hand pane. Only one of the two panes is up at a time.
+  openPageId: string | null;
+  openPage: (id: string) => void;
+  closePage: () => void;
   // The detail panel normally shares the main card with the list; expanded hides the
   // list so the issue takes the whole workspace.
   panelExpanded: boolean;
@@ -114,13 +119,25 @@ export function UIProvider({
   aiReady?: boolean;
 }) {
   const [openIssueId, setOpenIssueId] = useState<string | null>(null);
+  const [openPageId, setOpenPageId] = useState<string | null>(null);
   const [panelExpanded, setPanelExpandedState] = useState(false);
   const openIssue = useCallback((id: string) => {
     setOpenIssueId(id);
+    setOpenPageId(null);
     setPanelExpandedState(false);
   }, []);
   const closeIssue = useCallback(() => {
     setOpenIssueId(null);
+    setPanelExpandedState(false);
+  }, []);
+  const openPage = useCallback((id: string) => {
+    setOpenPageId(id);
+    setOpenIssueId(null);
+    setPanelExpandedState(false);
+  }, []);
+  const closePage = useCallback(() => {
+    setOpenPageId(null);
+    // An expanded pane is the only thing on screen; closing it must bring the page back.
     setPanelExpandedState(false);
   }, []);
   const setPanelExpanded = useCallback((expanded: boolean) => {
@@ -203,6 +220,9 @@ export function UIProvider({
         openIssueId,
         openIssue,
         closeIssue,
+        openPageId,
+        openPage,
+        closePage,
         panelExpanded,
         setPanelExpanded,
         composerOpen: composer.open,

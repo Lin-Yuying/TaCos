@@ -79,7 +79,14 @@ export function splitBlocks(src: string): string[] {
   while (i < lines.length) {
     const line = lines[i];
     if (line.trim() === "") {
-      i += 1;
+      const start = i;
+      while (i < lines.length && lines[i].trim() === "") i += 1;
+      // One blank line is the ordinary separator between two blocks; each one beyond
+      // that is a line the author left empty on purpose, and it has to come back as an
+      // empty block so it survives a round trip through the stored Markdown. Leading
+      // blank lines stay ignored — there is nothing above them for a separator to mean.
+      const placed = start > 0 ? i - start - 1 : 0;
+      for (let n = 0; n < placed; n += 1) blocks.push("");
       continue;
     }
     if (FENCE.test(line)) {

@@ -7,6 +7,7 @@ export function Menu({
   children,
   align = "left",
   width = 200,
+  offset = 0,
   triggerClassName,
 }: {
   // A function form lets a trigger react to the open state — the sidebar workspace
@@ -15,6 +16,9 @@ export function Menu({
   children: (close: () => void) => ReactNode;
   align?: "left" | "right";
   width?: number;
+  // Lets a panel ignore the padding its trigger sits inside, so it can line up with the
+  // column instead of the trigger (the sidebar's Customize menu spans the whole sidebar).
+  offset?: number;
   triggerClassName?: string | ((open: boolean) => string);
 }) {
   const [open, setOpen] = useState(false);
@@ -27,11 +31,16 @@ export function Menu({
   // A tall menu (the model catalogue) never fits below a composer, so the panel is also
   // capped to the space on the side it opens into.
   const [maxHeight, setMaxHeight] = useState<number | null>(null);
+  // A right-aligned panel hangs its trigger on the right edge; when that trigger sits
+  // near the left of the card that clips the panel (Resources with nothing in it yet),
+  // the panel starts outside and comes back sliced. This slides it back inside.
+  const [shiftX, setShiftX] = useState(0);
 
   const close = () => {
     setOpen(false);
     setDropUp(false);
     setMaxHeight(null);
+    setShiftX(0);
   };
 
   useLayoutEffect(() => {
@@ -61,6 +70,26 @@ export function Menu({
     setDropUp(up);
     setMaxHeight(Math.max(160, Math.min(content, up ? spaceAbove : spaceBelow)));
     panel.scrollTop = 0;
+
+    // Same ancestor, horizontally: the card around a project is the usual clipping box.
+    let boundLeft = 0;
+    let boundRight = window.innerWidth;
+    for (let el = trigger.parentElement; el; el = el.parentElement) {
+      if (getComputedStyle(el).overflowX === "visible") continue;
+      const rect = el.getBoundingClientRect();
+      boundLeft = Math.max(boundLeft, rect.left);
+      boundRight = Math.min(boundRight, rect.right);
+      break;
+    }
+    const box = panel.getBoundingClientRect();
+    const edge = 8;
+    const shift =
+      box.left < boundLeft + edge
+        ? boundLeft + edge - box.left
+        : box.right > boundRight - edge
+          ? boundRight - edge - box.right
+          : 0;
+    setShiftX(Math.round(shift));
   }, [open]);
 
   useEffect(() => {
@@ -105,7 +134,8 @@ export function Menu({
             width,
             maxHeight: maxHeight ?? "calc(100dvh - 4rem)",
             overflowAnchor: "none",
-            [align]: 0,
+            transform: shiftX ? `translateX(${shiftX}px)` : undefined,
+            [align]: offset,
           }}
         >
           {children(close)}

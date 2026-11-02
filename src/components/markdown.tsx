@@ -61,6 +61,10 @@ export type PageContext = {
   // can cross the server/client boundary
   base: string;
   embeds?: Record<string, string>;
+  // Set where a page is better read beside the current one (a project Overview, a
+  // document open in the split pane) than on its own tab: the reference becomes a
+  // button that opens the page there instead of navigating away.
+  onOpen?: (id: string) => void;
 };
 
 function findPage(ctx: PageContext | undefined, title: string, id?: string) {
@@ -77,17 +81,35 @@ function PageChip({
   ctx: PageContext;
   className?: string;
 }) {
-  return (
-    <Link
-      href={`${ctx.base}${target.id}`}
-      className={`inline-flex max-w-full items-baseline gap-1 align-baseline text-text ${className ?? ""}`}
-    >
+  const body = (
+    <>
       {/* The icon is chrome: the stored Markdown only has the page title, so leaving
           it in the text flow would shift every passage after the chip. */}
       <span data-md-glyph className="shrink-0">{target.icon ?? "📄"}</span>
       <span className="truncate underline decoration-border-strong underline-offset-2 hover:decoration-text">
         {target.title}
       </span>
+    </>
+  );
+  const frame = `inline-flex max-w-full items-baseline gap-1 align-baseline text-text ${className ?? ""}`;
+  if (ctx.onOpen) {
+    return (
+      <button
+        type="button"
+        onClick={(event) => {
+          // The block underneath opens for editing on click; the chip opens the page.
+          event.stopPropagation();
+          ctx.onOpen?.(target.id);
+        }}
+        className={`${frame} cursor-pointer text-left`}
+      >
+        {body}
+      </button>
+    );
+  }
+  return (
+    <Link href={`${ctx.base}${target.id}`} className={frame}>
+      {body}
     </Link>
   );
 }
@@ -103,15 +125,32 @@ export function PageRow({
   ctx: PageContext;
   className?: string;
 }) {
-  return (
-    <Link
-      href={`${ctx.base}${target.id}`}
-      className={`flex items-center gap-2 rounded px-1 text-[14px] leading-relaxed text-text hover:bg-elevated/60 ${className ?? ""}`}
-    >
+  const body = (
+    <>
       <span data-md-glyph className="shrink-0">{target.icon ?? "📄"}</span>
       <span className="truncate underline decoration-border-strong underline-offset-2 hover:decoration-text">
         {target.title}
       </span>
+    </>
+  );
+  const frame = `flex items-center gap-2 rounded px-1 text-[14px] leading-relaxed text-text hover:bg-elevated/60 ${className ?? ""}`;
+  if (ctx.onOpen) {
+    return (
+      <button
+        type="button"
+        onClick={(event) => {
+          event.stopPropagation();
+          ctx.onOpen?.(target.id);
+        }}
+        className={`${frame} cursor-pointer text-left`}
+      >
+        {body}
+      </button>
+    );
+  }
+  return (
+    <Link href={`${ctx.base}${target.id}`} className={frame}>
+      {body}
     </Link>
   );
 }
@@ -272,9 +311,12 @@ function renderInline(
 function CodeBlock({
   block,
   onLangChange,
+  moveHandle,
 }: {
   block: Extract<Block, { kind: "code" }>;
   onLangChange?: (lang: string) => void;
+  /** Drag affordance the editor drops into the header; absent in read-only renders. */
+  moveHandle?: ReactNode;
 }) {
   const [collapsed, setCollapsed] = useState(false);
   const showNumbers = useLineNumbers();
@@ -287,6 +329,7 @@ function CodeBlock({
           collapsed ? "" : "border-b border-border/70"
         }`}
       >
+        {moveHandle}
         <CodeCollapseButton collapsed={collapsed} onToggle={() => setCollapsed((value) => !value)} />
         <div className="ml-auto flex items-center gap-1">
           <CodeLanguageMenu lang={block.lang} onChange={onLangChange} />
@@ -337,17 +380,22 @@ export function MarkdownBlock({
   block,
   onToggleTodo,
   onCodeLangChange,
+  moveHandle,
   pages,
   issues,
   storageKey,
+  listStart,
 }: {
   block: Block;
   onToggleTodo?: (itemIndex: number, checked: boolean) => void;
   /** Makes the code header's language a picker; receives the language it wrote. */
   onCodeLangChange?: (lang: string) => void;
+  moveHandle?: ReactNode;
   pages?: PageContext;
   issues?: IssueContext;
   storageKey?: string;
+  /** Number of items before this list's first item, for a list drawn one item at a time. */
+  listStart?: number;
 }) {
   const inline = (nodes: Inline[], keyPrefix: string) =>
     renderInline(nodes, keyPrefix, pages, issues);
@@ -393,11 +441,11 @@ export function MarkdownBlock({
           <span
             aria-hidden
             data-md-glyph
-            className={`flex w-4 shrink-0 select-none pt-[3px] text-[13px] text-faint ${
-              block.ordered ? "justify-end" : "justify-start"
+            className={`flex min-h-[24px] w-4 shrink-0 select-none text-[13.5px] leading-relaxed ${
+              block.ordered ? "justify-end text-muted" : "justify-start text-faint"
             }`}
           >
-            {block.ordered ? `${i + 1}.` : "•"}
+            {block.ordered ? `${(listStart ?? 0) + i + 1}.` : "•"}
           </span>
           <span className="min-w-0 flex-1 whitespace-pre-wrap">{inline(item.text, `l${i}`)}</span>
         </li>
@@ -445,7 +493,7 @@ export function MarkdownBlock({
         </div>
       );
     case "code":
-      return <CodeBlock block={block} onLangChange={onCodeLangChange} />;
+      return <CodeBlock block={block} onLangChange={onCodeLangChange} moveHandle={moveHandle} />;
     case "divider":
       return <hr className="my-4 border-border" />;
     case "image":
@@ -495,6 +543,11 @@ export function MarkdownBlock({
       );
     }
     default: {
+      if (block.lines.every((line) => line.length === 0)) {
+        // A blank line the author left on purpose keeps the height the editor gives it,
+        // so the rendered document and the one being edited occupy the same space.
+        return <div className="my-1.5 min-h-[22px]" aria-hidden />;
+      }
       const lone = block.lines.length === 1 ? lonePageRef(block.lines[0]) : null;
       const target = lone ? findPage(pages, lone.text, lone.pageId) : null;
       if (target && pages) {

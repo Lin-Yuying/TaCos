@@ -159,7 +159,7 @@ export function NewIssueDialog({ workspaceId }: { workspaceId: string }) {
               New task
               {project ? (
                 <span className="ml-1 inline-flex items-center gap-1 text-muted">
-                  <ProjectIcon color={project.color} size={12} />
+                  <ProjectIcon color={project.color} icon={project.icon} size={12} />
                   {project.name}
                 </span>
               ) : null}
@@ -250,7 +250,7 @@ export function NewIssueDialog({ workspaceId }: { workspaceId: string }) {
                     <span className="text-muted">Project</span>
                     {project ? (
                       <span className="flex items-center gap-1 text-[12px] text-muted">
-                        <ProjectIcon color={project.color} size={12} />
+                        <ProjectIcon color={project.color} icon={project.icon} size={12} />
                         {project.name}
                       </span>
                     ) : null}
@@ -268,7 +268,7 @@ export function NewIssueDialog({ workspaceId }: { workspaceId: string }) {
                           close();
                         }}
                       >
-                        <ProjectIcon color={option.color} size={13} />
+                        <ProjectIcon color={option.color} icon={option.icon} size={13} />
                         {option.name}
                       </MenuItem>
                     ))}

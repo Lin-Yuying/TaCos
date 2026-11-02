@@ -110,7 +110,7 @@ async function HelpContent({ params }: { params: Promise<{ workspaceId: string }
 
   return (
     <div className="flex-1 overflow-y-auto">
-      <div className="mx-auto w-full max-w-3xl px-5 py-8">
+      <div className="w-full px-10 pb-8 pt-6 lg:px-20 xl:px-32">
         <Markdown source={GUIDE} />
       </div>
     </div>

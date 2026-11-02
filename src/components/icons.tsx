@@ -59,7 +59,27 @@ export function StatusIcon({ status, size = 14 }: { status: Status; size?: numbe
 
 // Isometric cube: a rounded hexagon with the three edges that meet at the near
 // corner, drawn as one weight so the icon reads the same at 14px and at 40px.
-export function ProjectIcon({ color, size = 14 }: { color: string; size?: number }) {
+// A project that has been given an emoji draws that instead, in the same box.
+export function ProjectIcon({
+  color,
+  icon,
+  size = 14,
+}: {
+  color: string;
+  icon?: string | null;
+  size?: number;
+}) {
+  if (icon) {
+    return (
+      <span
+        aria-hidden
+        className="inline-flex shrink-0 items-center justify-center leading-none"
+        style={{ width: size, height: size, fontSize: Math.round(size * 0.95) }}
+      >
+        {icon}
+      </span>
+    );
+  }
   return (
     <svg width={size} height={size} viewBox="0 0 16 16" aria-hidden>
       <g

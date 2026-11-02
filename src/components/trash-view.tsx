@@ -59,8 +59,8 @@ export function TrashView({
   const empty = projects.length === 0 && issues.length === 0;
 
   return (
-    <div className="flex-1 overflow-y-auto p-6">
-      <div className="mx-auto max-w-2xl space-y-4">
+    <div className="flex-1 overflow-y-auto px-10 pb-10 pt-6 lg:px-20 xl:px-32">
+      <div className="space-y-4">
         <p className="text-[13px] leading-relaxed text-muted">
           Deleted issues and projects wait here. Restore puts one back exactly as it was; deleting it
           for good cannot be undone.
@@ -119,7 +119,7 @@ export function TrashView({
             {projects.map((project) => (
               <div key={project.id} className="flex items-start gap-3 px-4 py-2.5">
                 <span className="mt-[2px] flex shrink-0 items-center">
-                  <ProjectIcon color={project.color} size={15} />
+                  <ProjectIcon color={project.color} icon={project.icon} size={15} />
                 </span>
                 <div className="min-w-0 flex-1">
                   <div className="truncate text-[13px]">{project.name}</div>

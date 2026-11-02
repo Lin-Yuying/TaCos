@@ -126,7 +126,7 @@ export function DocsIndex({
 
   return (
     <div className="flex-1 overflow-y-auto">
-      <div className="mx-auto w-full max-w-3xl px-5 py-6">
+      <div className="w-full px-10 py-6 lg:px-20 xl:px-32">
         <div className="flex items-center justify-between gap-3">
           <div>
             <h1 className="text-[20px] font-semibold tracking-tight">Docs</h1>

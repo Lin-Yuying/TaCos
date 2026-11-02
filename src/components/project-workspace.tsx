@@ -4,12 +4,14 @@ import { useMemo, useState } from "react";
 import { Search, X } from "lucide-react";
 import { StatusIcon } from "@/components/icons";
 import { IssueLayout, LayoutToggle } from "@/components/issue-layout";
-import { toggleProjectFavoriteAction } from "@/app/actions";
+import { toggleProjectFavoriteAction, updateProjectAction } from "@/app/actions";
 import { ProjectHeader, type ProjectTab } from "@/components/project-header";
+import { ProjectMeta, MetaRowsMenu, useMetaRows } from "@/components/project-meta";
 import { ProjectOverview } from "@/components/project-overview";
 import { ProjectDocuments } from "@/components/project-documents";
 import { STATUS_META, type Status } from "@/lib/constants";
 import { issueRef } from "@/lib/format";
+import type { PageContext } from "@/components/markdown";
 import type { PageSummary } from "@/lib/pages";
 import type { ProjectResource } from "@/lib/resources";
 import type {
@@ -34,6 +36,7 @@ export function ProjectWorkspace({
   workspaceMembers,
   issues,
   documents,
+  pages,
   currentUserId,
   initialTab,
   initialFavorite,
@@ -52,6 +55,7 @@ export function ProjectWorkspace({
   workspaceMembers: Member[];
   issues: IssueWithLabels[];
   documents: PageSummary[];
+  pages: PageContext;
   currentUserId: string;
   initialTab: ProjectTab;
   initialFavorite: boolean;
@@ -67,6 +71,8 @@ export function ProjectWorkspace({
   const [status, setStatus] = useState<Status | null>(null);
   const [q, setQ] = useState("");
   const [favorite, setFavorite] = useState(initialFavorite);
+  const [icon, setIcon] = useState<string | null>(project.icon);
+  const metaRows = useMetaRows();
 
   // Optimistic: the star is a one-click toggle, and revalidating the layout is what
   // lands it in (or lifts it out of) the sidebar's Favorites group.
@@ -75,6 +81,16 @@ export function ProjectWorkspace({
     setFavorite(next);
     void toggleProjectFavoriteAction(workspaceId, project.id).then((res) => {
       if (!res.ok) setFavorite(!next);
+    });
+  }
+
+  // Same reasoning for the icon: the header, the sidebar row and the tab all draw it,
+  // so it changes locally first and the server's revalidation makes that permanent.
+  function pickIcon(next: string | null) {
+    const before = icon;
+    setIcon(next);
+    void updateProjectAction(workspaceId, project.id, { icon: next }).then((res) => {
+      if (!res.ok) setIcon(before);
     });
   }
 
@@ -93,30 +109,51 @@ export function ProjectWorkspace({
   return (
     <div className="flex min-h-0 min-w-0 flex-1 flex-col">
       <ProjectHeader
-        project={project}
+        project={{ ...project, icon }}
         tab={tab}
         issueCount={counts.total}
         documentCount={documents.length}
         favorite={favorite}
         canViewOverview={access.canView}
+        canPickIcon={access.canEdit}
+        onPickIcon={pickIcon}
         onTab={(next) => {
           setTab(next);
           if (next === "issues") setStatus(null);
         }}
         onToggleFavorite={toggleFavorite}
+        meta={
+          // Overview grants and resources are overview-only facts: without a grant the
+          // reader never saw these rows, so the header keeps it that way.
+          access.canView ? (
+            <ProjectMeta
+              workspaceId={workspaceId}
+              projectId={project.id}
+              createdBy={project.createdBy}
+              members={members}
+              workspaceMembers={workspaceMembers}
+              documents={documents}
+              resources={resources}
+              access={access}
+              grants={grants}
+              rows={metaRows}
+            />
+          ) : undefined
+        }
+        metaMenu={
+          access.canView ? (
+            <MetaRowsMenu hidden={metaRows.hidden} onToggle={metaRows.toggle} />
+          ) : undefined
+        }
       />
       {tab === "overview" ? (
         <ProjectOverview
           workspaceId={workspaceId}
           project={project}
-          members={members}
-          workspaceMembers={workspaceMembers}
           issues={issues}
-          documents={documents}
-          resources={resources}
+          pages={pages}
           trashedTitles={trashedTitles}
           access={access}
-          grants={grants}
           comments={comments}
           edits={edits}
           unseenDocEdits={unseenDocEdits}
@@ -130,7 +167,9 @@ export function ProjectWorkspace({
         />
       ) : (
         <>
-          <header className="flex h-12 shrink-0 items-center gap-2 border-b border-border px-6">
+          {/* The list's own row is a header, so it hangs from the same 52px column as
+              the project title and Properties; the board below keeps the reading gutters. */}
+          <header className="flex h-12 shrink-0 items-center gap-2 border-b border-border pl-[52px] pr-10 lg:pr-20 xl:pr-32">
             {status ? (
               <button
                 type="button"

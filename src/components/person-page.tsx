@@ -91,7 +91,7 @@ export function PersonPage({
 
       {tab === "projects" ? (
         <div className="flex-1 overflow-y-auto">
-          <div className="mx-auto w-full max-w-3xl px-5 py-5">
+          <div className="w-full px-10 py-5 lg:px-20 xl:px-32">
             {projects.length === 0 ? (
               <p className="text-[13px] text-faint">
                 {firstName(person.displayName)} does not own or belong to any project yet.
@@ -107,7 +107,7 @@ export function PersonPage({
                     }`}
                   >
                     <span className="flex w-4 shrink-0 items-center justify-center">
-                      <ProjectIcon color={project.color} size={15} />
+                      <ProjectIcon color={project.color} icon={project.icon} size={15} />
                     </span>
                     <span className="min-w-0 flex-1 truncate">{project.name}</span>
                     {/* Owner is the project's creator; everyone else in the list was
@@ -133,7 +133,7 @@ export function PersonPage({
         </div>
       ) : tab === "documents" ? (
         <div className="flex-1 overflow-y-auto">
-          <div className="mx-auto w-full max-w-3xl px-5 py-5">
+          <div className="w-full px-10 py-5 lg:px-20 xl:px-32">
             {documents.length === 0 ? (
               <p className="text-[13px] text-faint">
                 {firstName(person.displayName)} has not written any documents you can see.
@@ -166,7 +166,7 @@ export function PersonPage({
         </div>
       ) : (
         <>
-          <header className="flex h-12 shrink-0 items-center gap-2 border-b border-border px-4">
+          <header className="flex h-12 shrink-0 items-center gap-2 border-b border-border px-10 lg:px-20 xl:px-32">
             <span className="text-[13px] font-medium text-muted">Assigned tasks</span>
             <span className="rounded-full bg-elevated px-2 py-0.5 text-[11px] text-muted">
               {shown.length}

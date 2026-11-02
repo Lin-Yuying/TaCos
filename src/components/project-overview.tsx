@@ -3,26 +3,20 @@
 import {
   useCallback,
   useEffect,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
   type ComponentType,
-  type FormEvent,
   type MouseEvent,
 } from "react";
 import { useRouter } from "next/navigation";
-import Link from "next/link";
 import {
-  ArrowUpRight,
   Bold,
   Code,
-  FileText,
   History,
   Italic,
-  Link2,
-  Lock,
   MessageSquare,
-  Plus,
   RotateCcw,
   Sparkles,
   SquareArrowOutUpRight,
@@ -32,28 +26,22 @@ import {
 } from "lucide-react";
 import {
   addOverviewCommentAction,
-  addProjectDocAction,
-  addProjectLinkAction,
-  addProjectMemberAction,
   markDocEditsSeenAction,
   removeOverviewCommentAction,
-  removeOverviewGrantAction,
-  removeProjectMemberAction,
-  removeProjectResourceAction,
   restoreDocEditAction,
-  setOverviewGrantAction,
   updateProjectAction,
 } from "@/app/actions";
-import { createPageAction } from "@/app/pages-actions";
 import { AssigneeAvatar } from "@/components/issue-table";
 import { AiEditPanel, AiTaskDialog } from "@/components/ai-assist";
-import { Markdown, type IssueContext, type IssueRefEntry } from "@/components/markdown";
-import { Menu, MenuItem } from "@/components/menu";
+import {
+  Markdown,
+  type IssueContext,
+  type IssueRefEntry,
+  type PageContext,
+} from "@/components/markdown";
 import { MarkdownEditor, type MarkdownEditorHandle } from "@/components/markdown-editor";
 import { ISSUE_DELETED, useUI, type DeletedIssue } from "@/components/ui-context";
 import { timeAgo } from "@/lib/format";
-import type { PageSummary } from "@/lib/pages";
-import type { ProjectResource } from "@/lib/resources";
 import {
   formatPassage,
   issueReference,
@@ -66,17 +54,13 @@ import {
 import type { AiEditAction } from "@/lib/ai-constants";
 import type {
   IssueWithLabels,
-  Member,
   OverviewAccess,
   OverviewComment,
   OverviewDocEdit,
-  OverviewGrant,
   Project,
-  ProjectMember,
 } from "@/lib/issues";
 
 type ProjectDetail = Project & { doc: string; createdBy: string | null };
-type OverviewRole = "comment" | "edit";
 type CommentAnchor = { quote: string; occurrence: number };
 type TextChar = { node: Text; offset: number };
 type CommentThread = { anchor: CommentAnchor; comments: OverviewComment[] };
@@ -215,6 +199,10 @@ function setsEqual(a: Set<string>, b: Set<string>): boolean {
   return a.size === b.size && [...a].every((key) => b.has(key));
 }
 
+// Opening a page linked from the document unmounts the Overview, so the offset has to
+// live outside the component. Per window, not per server: a fresh load starts at the top.
+const scrollOffsets = new Map<string, number>();
+
 // Repainting moves the markers by a fraction of a pixel on some layouts; ignore those
 // so the paint loop does not re-render on every frame.
 function samePins(a: CommentPin[], b: CommentPin[]): boolean {
@@ -271,13 +259,9 @@ function CommentComposer({
 export function ProjectOverview({
   workspaceId,
   project,
-  members,
-  workspaceMembers,
   issues,
-  documents,
-  resources: initialResources,
+  pages,
   access,
-  grants,
   comments,
   edits,
   unseenDocEdits,
@@ -286,13 +270,9 @@ export function ProjectOverview({
 }: {
   workspaceId: string;
   project: ProjectDetail;
-  members: ProjectMember[];
-  workspaceMembers: Member[];
   issues: IssueWithLabels[];
-  documents: PageSummary[];
-  resources: ProjectResource[];
+  pages: PageContext;
   access: OverviewAccess;
-  grants: OverviewGrant[];
   comments: OverviewComment[];
   edits: OverviewDocEdit[];
   unseenDocEdits: number;
@@ -300,7 +280,7 @@ export function ProjectOverview({
   trashedTitles: Record<string, string>;
 }) {
   const router = useRouter();
-  const { setComposerOpen, openIssue, aiReady } = useUI();
+  const { setComposerOpen, openIssue, openPage, aiReady } = useUI();
   const [doc, setDoc] = useState(project.doc);
   // Document history for ⌘Z / ⌘⇧Z. Snapshots are whole strings: the document is small,
   // and a string cannot drift the way per-keystroke operation records can.
@@ -315,16 +295,7 @@ export function ProjectOverview({
   // after the server re-render, so the reference would keep drawing a live chip until
   // then; these titles let it read as the words it replaced immediately.
   const [deletedNow, setDeletedNow] = useState<Record<string, string>>({});
-  // Resources are read with the page, then kept locally so adding one lands in the row
-  // without waiting for a full refresh.
-  const [resources, setResources] = useState(initialResources);
-  const [linkOpen, setLinkOpen] = useState(false);
-  const [linkUrl, setLinkUrl] = useState("");
-  const [linkTitle, setLinkTitle] = useState("");
-  const [resourceBusy, setResourceBusy] = useState(false);
-  const [resourceError, setResourceError] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [saved, setSaved] = useState(false);
   const [thread, setThread] = useState(comments);
   const [draft, setDraft] = useState("");
   const [posting, setPosting] = useState(false);
@@ -375,6 +346,8 @@ export function ProjectOverview({
   const [unseen, setUnseen] = useState(unseenDocEdits);
   const [confirmRestore, setConfirmRestore] = useState<string | null>(null);
   const [restoring, setRestoring] = useState<string | null>(null);
+  const scrollRef = useRef<HTMLDivElement | null>(null);
+  const scrollKey = `${workspaceId}:${project.id}`;
   const wrapRef = useRef<HTMLDivElement | null>(null);
   const descRef = useRef<HTMLDivElement | null>(null);
   const editorRef = useRef<MarkdownEditorHandle | null>(null);
@@ -397,6 +370,34 @@ export function ProjectOverview({
     source?: string;
   } | null>(null);
   const [aiTasks, setAiTasks] = useState<{ prompt: string; context?: string } | null>(null);
+
+  // Following a page link leaves this component behind; coming back should land where the
+  // reader left off. Restore before paint, or the document is seen jumping to the top.
+  useLayoutEffect(() => {
+    const el = scrollRef.current;
+    const offset = scrollOffsets.get(scrollKey);
+    if (!el || !offset) return;
+    el.scrollTop = offset;
+    // Tall blocks settle a frame later; a clamped offset would otherwise stay near the top.
+    const frame = requestAnimationFrame(() => {
+      if (el.scrollTop !== offset) el.scrollTop = offset;
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [scrollKey]);
+
+  useEffect(() => {
+    const el = scrollRef.current;
+    if (!el) return;
+    // The offset is read while scrolling, never on unmount: by then the node is detached
+    // and reports 0, which would wipe the position it is meant to keep.
+    const onScroll = () => {
+      scrollOffsets.set(scrollKey, el.scrollTop);
+    };
+    el.addEventListener("scroll", onScroll, { passive: true });
+    return () => {
+      el.removeEventListener("scroll", onScroll);
+    };
+  }, [scrollKey]);
 
   // A task made from a passage is kept in `createdIssues` so its chip survives even
   // when the task lives in another project. Deleting it must drop that copy too —
@@ -441,73 +442,18 @@ export function ProjectOverview({
     return { lookup: resolved, deleted: gone, onOpen: openIssue };
   }, [issues, createdIssues, openIssue, trashedTitles, doc, deletedNow]);
 
+  // A page referenced from the Overview opens beside it, the same way a task does,
+  // instead of replacing the tab you were reading.
+  const pageContext: PageContext = useMemo(
+    () => ({ ...pages, onOpen: openPage }),
+    [pages, openPage]
+  );
+
   async function save(patch: { description?: string; doc?: string }) {
     setError(null);
     const result = await updateProjectAction(workspaceId, project.id, patch);
     if (!result.ok) setError(result.error);
     return result.ok;
-  }
-
-  // Only pages that are not attached yet appear in the menu; the rest are already
-  // pills in the row.
-  const attachableDocs = useMemo(
-    () => documents.filter((page) => !resources.some((resource) => resource.pageId === page.id)),
-    [documents, resources]
-  );
-
-  async function attachDocument(pageId: string) {
-    setResourceError(null);
-    const result = await addProjectDocAction(workspaceId, project.id, pageId);
-    if (!result.ok) {
-      setResourceError(result.error);
-      return;
-    }
-    setResources((prev) => [...prev, result.data]);
-  }
-
-  async function createDocument() {
-    setResourceError(null);
-    const page = await createPageAction(workspaceId, { projectId: project.id });
-    if (!page.ok) {
-      setResourceError(page.error);
-      return;
-    }
-    const attached = await addProjectDocAction(workspaceId, project.id, page.data.id);
-    if (!attached.ok) {
-      setResourceError(attached.error);
-      return;
-    }
-    router.push(`/${workspaceId}/docs/${page.data.id}`);
-  }
-
-  async function addLink(event: FormEvent) {
-    event.preventDefault();
-    if (!linkUrl.trim() || resourceBusy) return;
-    setResourceBusy(true);
-    setResourceError(null);
-    const result = await addProjectLinkAction(workspaceId, project.id, {
-      url: linkUrl,
-      title: linkTitle,
-    });
-    setResourceBusy(false);
-    if (!result.ok) {
-      setResourceError(result.error);
-      return;
-    }
-    setResources((prev) => [...prev, result.data]);
-    setLinkUrl("");
-    setLinkTitle("");
-    setLinkOpen(false);
-  }
-
-  async function removeResource(id: string) {
-    setResourceError(null);
-    const result = await removeProjectResourceAction(workspaceId, project.id, id);
-    if (!result.ok) {
-      setResourceError(result.error);
-      return;
-    }
-    setResources((prev) => prev.filter((resource) => resource.id !== id));
   }
 
   function flushDoc() {
@@ -516,13 +462,11 @@ export function ProjectOverview({
     const next = pending.current;
     if (next === null) return;
     pending.current = null;
-    setSaved(false);
-    void save({ doc: next }).then((ok) => ok && setSaved(true));
+    void save({ doc: next });
   }
 
   function scheduleDoc(next: string) {
     pending.current = next;
-    setSaved(false);
     if (timer.current) clearTimeout(timer.current);
     timer.current = setTimeout(flushDoc, 700);
   }
@@ -601,67 +545,6 @@ export function ProjectOverview({
     },
     [workspaceId, project.id]
   );
-
-  const lead = members.find((member) => member.role === "lead") ?? null;
-  const grantRoleByUser = new Map(grants.map((grant) => [grant.userId, grant.role]));
-  // One chip per person: project members, plus people who only hold overview access.
-  const roster = [
-    ...members.filter((member) => member.role !== "lead"),
-    ...grants
-      .filter((grant) => !members.some((m) => m.id === grant.userId))
-      .map((grant) => ({
-        id: grant.userId,
-        displayName: grant.displayName,
-        avatar: grant.avatar,
-      })),
-  ];
-  const candidates = workspaceMembers.filter(
-    (member) =>
-      member.id !== project.createdBy && !roster.some((entry) => entry.id === member.id)
-  );
-
-  // Joining the team and getting overview access is one gesture: the add menu offers
-  // the access level right there, and both facts are written together.
-  async function addPerson(userId: string, role: OverviewRole) {
-    setError(null);
-    const member = await addProjectMemberAction(workspaceId, project.id, userId);
-    if (!member.ok) {
-      setError(member.error);
-      return;
-    }
-    const grant = await setOverviewGrantAction(workspaceId, project.id, userId, role);
-    if (!grant.ok) {
-      setError(grant.error);
-      return;
-    }
-    router.refresh();
-  }
-
-  async function removePerson(userId: string) {
-    setError(null);
-    const isMember = members.some((member) => member.id === userId);
-    const hasGrant = grants.some((grant) => grant.userId === userId);
-    const results = await Promise.all([
-      ...(isMember ? [removeProjectMemberAction(workspaceId, project.id, userId)] : []),
-      ...(hasGrant ? [removeOverviewGrantAction(workspaceId, project.id, userId)] : []),
-    ]);
-    for (const result of results) {
-      if (!result.ok) {
-        setError(result.error);
-        return;
-      }
-    }
-    router.refresh();
-  }
-
-  async function changeGrant(userId: string, role: OverviewRole | null) {
-    setError(null);
-    const result = role
-      ? await setOverviewGrantAction(workspaceId, project.id, userId, role)
-      : await removeOverviewGrantAction(workspaceId, project.id, userId);
-    if (!result.ok) setError(result.error);
-    else router.refresh();
-  }
 
   function closePopovers() {
     setOpenKey(null);
@@ -791,12 +674,16 @@ export function ProjectOverview({
   function openAiForDocument(origin: HTMLElement) {
     if (!aiReady || !access.canEdit) return;
     const rect = origin.getBoundingClientRect();
+    // The button sits in the bottom-right corner, so the panel opens above it rather than
+    // growing past the window edge.
+    const below = rect.bottom + 6;
+    const y = below > window.innerHeight - 400 ? Math.max(12, rect.top - 396) : below;
     setSelection(null);
     setDraftSelection(null);
     setAiPanel({
       kind: "document",
-      x: rect.left - 220,
-      y: rect.bottom + 6,
+      x: rect.right - 400,
+      y,
       text: docRef.current,
     });
   }
@@ -1219,7 +1106,6 @@ export function ProjectOverview({
       return;
     }
     editDoc(result.data.doc);
-    setSaved(false);
     router.refresh();
   }
 
@@ -1329,318 +1215,17 @@ export function ProjectOverview({
   }
 
   return (
-    <div className="flex-1 overflow-y-auto">
-      <div className="w-full px-6 pb-8 pt-2">
-        {error && <div className="mb-2 text-[12px] text-danger">{error}</div>}
-
-        <div className="space-y-2.5 text-[13px]">
-          <div className="flex flex-wrap items-center gap-3">
-            <span className="w-20 shrink-0 text-[12.5px] text-faint">Properties</span>
-            {lead && (
-              <span
-                className="flex h-6 shrink-0 items-center gap-1.5 rounded-full border border-border bg-elevated/40 py-0.5 pl-0.5 pr-2 text-[12px] text-text"
-                title="Project lead"
-              >
-                <AssigneeAvatar
-                  displayName={lead.displayName}
-                  avatar={lead.avatar}
-                  size={18}
-                />
-                {lead.displayName}
-              </span>
-            )}
-            {roster.map((entry) => {
-              const role = grantRoleByUser.get(entry.id) ?? null;
-              return (
-                <span
-                  key={entry.id}
-                  className="group flex shrink-0 items-center gap-1.5 rounded-full border border-border py-0.5 pl-0.5 pr-1.5 text-[12px] text-muted"
-                >
-                  <AssigneeAvatar
-                    displayName={entry.displayName}
-                    avatar={entry.avatar}
-                    size={18}
-                  />
-                  {entry.displayName}
-                  {access.manage ? (
-                    <>
-                      <Menu
-                        width={160}
-                        triggerClassName="rounded px-1 text-[11px] text-faint hover:bg-elevated hover:text-text"
-                        trigger={role ?? "No access"}
-                      >
-                        {(close) => (
-                          <>
-                            <MenuItem
-                              active={role === "comment"}
-                              onSelect={() => {
-                                close();
-                                void changeGrant(entry.id, "comment");
-                              }}
-                            >
-                              Can comment
-                            </MenuItem>
-                            <MenuItem
-                              active={role === "edit"}
-                              onSelect={() => {
-                                close();
-                                void changeGrant(entry.id, "edit");
-                              }}
-                            >
-                              Can edit
-                            </MenuItem>
-                          </>
-                        )}
-                      </Menu>
-                      <button
-                        type="button"
-                        aria-label={`Remove ${entry.displayName}`}
-                        onClick={() => void removePerson(entry.id)}
-                        className="text-faint transition-colors hover:text-danger group-hover:opacity-100"
-                      >
-                        <X size={11} />
-                      </button>
-                    </>
-                  ) : (
-                    role && <span className="text-[11px] text-faint">{role}</span>
-                  )}
-                </span>
-              );
-            })}
-            <span
-              className="flex shrink-0 items-center text-faint"
-              title="Overview access"
-            >
-              <Lock size={11} />
-            </span>
-            {grants.length === 0 && <span className="text-[12px] text-faint">Owner only</span>}
-            {access.manage && (
-              <Menu
-                width={280}
-                triggerClassName="flex h-[22px] shrink-0 items-center gap-1 rounded-full border border-dashed border-border px-2 text-[12px] text-muted transition-colors hover:border-border-strong hover:text-text"
-                trigger={
-                  <>
-                    <span className="sr-only">Add person</span>
-                    <Plus size={12} />
-                  </>
-                }
-              >
-                {(close) => (
-                  <>
-                    {candidates.map((member) => (
-                      <div
-                        key={member.id}
-                        className="flex items-center gap-2 rounded-md px-2 py-1.5 text-[13px] hover:bg-elevated"
-                      >
-                        <AssigneeAvatar
-                          displayName={member.displayName}
-                          avatar={member.avatar}
-                          size={18}
-                        />
-                        <span className="min-w-0 flex-1 truncate">{member.displayName}</span>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            close();
-                            void addPerson(member.id, "comment");
-                          }}
-                          className="rounded border border-border px-1.5 py-0.5 text-[11px] text-muted hover:border-border-strong hover:text-text"
-                        >
-                          Comment
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            close();
-                            void addPerson(member.id, "edit");
-                          }}
-                          className="rounded border border-border px-1.5 py-0.5 text-[11px] text-muted hover:border-border-strong hover:text-text"
-                        >
-                          Edit
-                        </button>
-                      </div>
-                    ))}
-                    {candidates.length === 0 && (
-                      <div className="px-2 py-1.5 text-[12px] text-faint">
-                        Everyone in the workspace is already here.
-                      </div>
-                    )}
-                  </>
-                )}
-              </Menu>
-            )}
-          </div>
-          <div className="flex flex-wrap items-start gap-x-3 gap-y-2">
-            <span className="h-[22px] w-20 shrink-0 text-[12.5px] leading-[22px] text-faint">
-              Resources
-            </span>
-            <div className="flex min-w-0 flex-1 flex-wrap items-center gap-1.5">
-              {resources.map((resource) => {
-                const icon =
-                  resource.kind === "doc" && resource.icon ? (
-                    <span className="text-[12px] leading-none">{resource.icon}</span>
-                  ) : resource.kind === "doc" ? (
-                    <FileText size={12} className="text-muted" />
-                  ) : (
-                    <Link2 size={12} className="text-muted" />
-                  );
-                return (
-                  <span
-                    key={resource.id}
-                    className="group flex h-[22px] min-w-0 items-center rounded-full border border-border text-[12px] text-muted transition-colors hover:border-border-strong hover:text-text"
-                  >
-                    {resource.kind === "doc" && resource.pageId ? (
-                      <Link
-                        href={`/${workspaceId}/docs/${resource.pageId}`}
-                        className="flex min-w-0 items-center gap-1.5 py-0.5 pl-2 pr-1.5"
-                      >
-                        {icon}
-                        <span className="max-w-[220px] truncate">{resource.title}</span>
-                      </Link>
-                    ) : (
-                      <a
-                        href={resource.url ?? "#"}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="flex min-w-0 items-center gap-1.5 py-0.5 pl-2 pr-1.5"
-                      >
-                        {icon}
-                        <span className="max-w-[220px] truncate">{resource.title}</span>
-                        <ArrowUpRight size={11} className="shrink-0 text-faint" />
-                      </a>
-                    )}
-                    {access.canEdit && (
-                      <button
-                        type="button"
-                        aria-label={`Remove ${resource.title}`}
-                        title="Remove"
-                        onClick={() => void removeResource(resource.id)}
-                        className="mr-1 rounded-full p-0.5 text-faint transition-colors hover:bg-elevated hover:text-danger"
-                      >
-                        <X size={10} />
-                      </button>
-                    )}
-                  </span>
-                );
-              })}
-              {access.canEdit && (
-                <Menu
-                  width={260}
-                  triggerClassName="flex h-[22px] shrink-0 items-center gap-1 rounded-full border border-dashed border-border px-2 text-[12px] text-muted transition-colors hover:border-border-strong hover:text-text"
-                  trigger={
-                    <>
-                      <span className="sr-only">Add resource</span>
-                      <Plus size={12} />
-                    </>
-                  }
-                >
-                  {(close) => (
-                    <>
-                      <MenuItem
-                        onSelect={() => {
-                          close();
-                          setResourceError(null);
-                          setLinkOpen(true);
-                        }}
-                      >
-                        <Link2 size={13} className="text-muted" />
-                        Link
-                      </MenuItem>
-                      <MenuItem
-                        onSelect={() => {
-                          close();
-                          void createDocument();
-                        }}
-                      >
-                        <FileText size={13} className="text-muted" />
-                        New document
-                      </MenuItem>
-                      {attachableDocs.length > 0 && (
-                        <>
-                          <div className="my-1 border-t border-border" />
-                          <div className="px-2 py-1 text-[11px] font-medium text-faint">
-                            Project documents
-                          </div>
-                          {attachableDocs.map((page) => (
-                            <MenuItem
-                              key={page.id}
-                              onSelect={() => {
-                                close();
-                                void attachDocument(page.id);
-                              }}
-                            >
-                              {page.icon ? (
-                                <span className="text-[13px] leading-none">{page.icon}</span>
-                              ) : (
-                                <FileText size={13} className="text-muted" />
-                              )}
-                              <span className="min-w-0 flex-1 truncate">
-                                {page.title || "Untitled"}
-                              </span>
-                            </MenuItem>
-                          ))}
-                        </>
-                      )}
-                    </>
-                  )}
-                </Menu>
-              )}
-              {resources.length === 0 && !access.canEdit && (
-                <span className="text-[12px] text-faint">None yet</span>
-              )}
-            </div>
-            {resourceError && (
-              <span className="w-full pl-[5.75rem] text-[11.5px] text-danger">{resourceError}</span>
-            )}
-            {linkOpen && access.canEdit && (
-              <form
-                onSubmit={addLink}
-                className="ml-[5.75rem] flex w-full max-w-md flex-col gap-2 rounded-lg border border-border bg-overlay p-2.5 shadow-sm"
-              >
-                <input
-                  autoFocus
-                  value={linkUrl}
-                  onChange={(event) => setLinkUrl(event.target.value)}
-                  placeholder="Paste a link"
-                  className="w-full rounded-md border border-border bg-bg px-2.5 py-1.5 text-[13px] text-text placeholder:text-faint focus:border-border-strong focus:outline-none"
-                />
-                <input
-                  value={linkTitle}
-                  onChange={(event) => setLinkTitle(event.target.value)}
-                  placeholder="Title (optional)"
-                  className="w-full rounded-md border border-border bg-bg px-2.5 py-1.5 text-[13px] text-text placeholder:text-faint focus:border-border-strong focus:outline-none"
-                />
-                <div className="flex items-center justify-end gap-2">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setLinkOpen(false);
-                      setLinkUrl("");
-                      setLinkTitle("");
-                      setResourceError(null);
-                    }}
-                    className="rounded-md px-2 py-1 text-[12px] text-muted transition-colors hover:bg-elevated hover:text-text"
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    type="submit"
-                    disabled={!linkUrl.trim() || resourceBusy}
-                    className="rounded-md bg-accent px-2.5 py-1 text-[12px] font-medium text-white transition-opacity hover:opacity-90 disabled:opacity-40"
-                  >
-                    {resourceBusy ? "Adding…" : "Add link"}
-                  </button>
-                </div>
-              </form>
-            )}
-          </div>
-        </div>
-
-        <div className="mt-6">
-          <div className="mb-2 flex items-center justify-between gap-3">
-            <div className="flex min-w-0 items-center gap-2">
-              <h2 className="text-[13px] font-semibold text-muted">Description</h2>
-              {orphanComments > 0 && (
+    // The scroll box and the floating History/AI dock are siblings, so the dock stays in
+    // the corner instead of scrolling away with the document (Linear's arrangement).
+    <div className="relative min-h-0 flex-1">
+      <div ref={scrollRef} className="h-full overflow-y-auto">
+        {/* Properties and Resources live in the header now, so the document starts right
+            under it. */}
+        <div className="w-full px-10 pb-8 pt-3 lg:px-20 xl:px-32">
+          {error && <div className="mb-2 text-[12px] text-danger">{error}</div>}
+          <div>
+            {orphanComments > 0 && (
+              <div className="mb-2 flex min-w-0 items-center gap-2">
                 <button
                   type="button"
                   onClick={openOrphans}
@@ -1650,441 +1235,431 @@ export function ProjectOverview({
                   <MessageSquare size={11} />
                   {orphanComments}
                 </button>
-              )}
-            </div>
-            <div className="flex items-center gap-2.5">
-              <span
-                className={`text-[11.5px] text-faint transition-opacity duration-300 ${
-                  saved ? "opacity-100" : "opacity-0"
-                }`}
-              >
-                Saved
-              </span>
-              {aiReady && access.canEdit && (
-                <button
-                  type="button"
-                  onClick={(event) => openAiForDocument(event.currentTarget)}
-                  title="Edit this document with AI"
-                  className="flex shrink-0 items-center gap-1 rounded-md border border-border px-2 py-1 text-[12px] font-medium text-muted transition-colors hover:border-border-strong hover:text-text"
-                >
-                  <Sparkles size={13} /> AI
-                </button>
-              )}
-              <div className="relative">
-                <button
-                  type="button"
-                  onClick={toggleHistory}
-                  aria-expanded={historyOpen}
-                  className={`flex shrink-0 items-center gap-1 rounded-md border px-2 py-1 text-[12px] font-medium transition-colors ${
-                    historyOpen
-                      ? "border-border-strong bg-elevated text-text"
-                      : "border-border text-muted hover:border-border-strong hover:text-text"
-                  }`}
-                >
-                  <History size={13} /> History
-                </button>
-                {unseen > 0 && (
-                  <span className="pointer-events-none absolute -right-1.5 -top-1.5 flex h-[15px] min-w-[15px] items-center justify-center rounded-full bg-danger px-1 text-[9.5px] font-semibold leading-none text-white">
-                    {unseen > 9 ? "9+" : unseen}
-                  </span>
-                )}
               </div>
-              <button
-                type="button"
-                onClick={() => setComposerOpen(true)}
-                className="flex shrink-0 items-center gap-1 rounded-md border border-border px-2 py-1 text-[12px] font-medium text-muted transition-colors hover:border-border-strong hover:text-text"
-              >
-                <Plus size={13} /> New task
-              </button>
-            </div>
-          </div>
-          <div className="flex items-start gap-6">
-            <div ref={wrapRef} className="relative min-w-0 flex-1">
-              <div
-                ref={descRef}
-                className="min-w-0"
-                onMouseDown={() => {
-                  restoreToken.current += 1;
-                  setSelection(null);
-                  setDraftSelection(null);
-                }}
-              >
-                {access.canEdit ? (
-                  <MarkdownEditor
-                    ref={editorRef}
-                    value={doc}
-                    onChange={editDoc}
-                    onTextSelection={setDraftSelection}
-                    onBlockSelection={setRangeSelection}
-                    onUndo={undoDoc}
-                    onRedo={redoDoc}
-                    placeholder="Write down whatever's on your mind…"
-                    issues={issueContext}
-                  />
-                ) : doc.trim() ? (
-                  <Markdown source={doc} issues={issueContext} storageId={`project:${project.id}`} />
-                ) : (
-                  <p className="text-[13px] text-faint">Nothing has been written here yet.</p>
-                )}
-              </div>
-
-              {pins.map((pin) => {
-                const count = threads.find((group) => anchorKey(group.anchor) === pin.key)
-                  ?.comments.length ?? 0;
-                return (
-                  <button
-                    key={pin.key}
-                    type="button"
-                    data-overview-pin
-                    aria-label="Open comments"
-                    title={`${count} ${count === 1 ? "comment" : "comments"}`}
-                    onClick={() => {
-                      setOpenKey((prev) => (prev === pin.key ? null : pin.key));
-                      setReplyKey(null);
-                      setDraft("");
-                      setComposer(null);
-                      setOrphansOpen(false);
-                    }}
-                    style={{ top: pin.top, left: pin.left }}
-                    className="absolute z-20 flex h-[22px] min-w-[22px] items-center justify-center gap-0.5 rounded-full border border-[#ecd28a] bg-[#fdf3c7] px-1 text-[10px] font-medium text-[#8a6d1a] shadow-[0_1px_2px_rgba(0,0,0,0.08)] transition-colors hover:border-[#d9b64e] hover:bg-[#fbeaa9]"
-                  >
-                    <MessageSquare size={11} />
-                    {count > 1 && <span>{count}</span>}
-                  </button>
-                );
-              })}
-
-              {openThread && openPin && (
+            )}
+            <div className="flex items-start gap-6">
+              <div ref={wrapRef} className="relative min-w-0 flex-1">
                 <div
-                  data-overview-pop
-                  style={{
-                    top: openPin.top + 26,
-                    left: Math.max(0, Math.min(openPin.left - 150, wrapWidth - 328)),
+                  ref={descRef}
+                  className="min-w-0"
+                  onMouseDown={() => {
+                    restoreToken.current += 1;
+                    setSelection(null);
+                    setDraftSelection(null);
                   }}
-                  className="absolute z-30 w-[320px] rounded-xl border border-border bg-bg p-3 shadow-[0_10px_36px_rgba(0,0,0,0.16)]"
                 >
-                  <div className="mb-2 flex items-center justify-between gap-2">
-                    <span className="text-[11px] font-semibold uppercase tracking-wider text-faint">
-                      {openThread.comments.length}{" "}
-                      {openThread.comments.length === 1 ? "comment" : "comments"}
-                    </span>
-                    <button
-                      type="button"
-                      aria-label="Close comments"
-                      onClick={() => setOpenKey(null)}
-                      className="rounded p-0.5 text-faint transition-colors hover:bg-elevated hover:text-text"
-                    >
-                      <X size={13} />
-                    </button>
-                  </div>
-                  {threadBody(openThread)}
-                </div>
-              )}
-            </div>
-
-            {historyOpen && (
-              <aside className="sticky top-0 flex max-h-[calc(100vh-7rem)] w-[min(50%,460px)] shrink-0 flex-col self-start overflow-hidden rounded-xl border border-border bg-bg shadow-[0_1px_2px_rgba(0,0,0,0.05)]">
-                <header className="flex h-11 shrink-0 items-center gap-2 border-b border-border px-3">
-                  <History size={14} className="text-muted" />
-                  <span className="text-[12.5px] font-semibold text-text">History</span>
-                  <span className="text-[11px] text-faint">
-                    {edits.length} {edits.length === 1 ? "change" : "changes"}
-                  </span>
-                  <button
-                    type="button"
-                    aria-label="Close history"
-                    onClick={() => setHistoryOpen(false)}
-                    className="ml-auto rounded p-1 text-faint transition-colors hover:bg-elevated hover:text-text"
-                  >
-                    <X size={14} />
-                  </button>
-                </header>
-                <div className="min-h-0 flex-1 overflow-y-auto p-3">
-                  {edits.length === 0 ? (
-                    <p className="text-[12px] text-faint">
-                      No changes yet. Edits to this document will show up here.
-                    </p>
+                  {access.canEdit ? (
+                    <MarkdownEditor
+                      ref={editorRef}
+                      value={doc}
+                      onChange={editDoc}
+                      onTextSelection={setDraftSelection}
+                      onBlockSelection={setRangeSelection}
+                      onUndo={undoDoc}
+                      onRedo={redoDoc}
+                      placeholder="Write down whatever's on your mind…"
+                      issues={issueContext}
+                      pages={pageContext}
+                    />
+                  ) : doc.trim() ? (
+                    <Markdown
+                      source={doc}
+                      issues={issueContext}
+                      pages={pageContext}
+                      storageId={`project:${project.id}`}
+                    />
                   ) : (
-                    <ul className="space-y-3">
-                      {edits.map((edit) => (
-                        <li key={edit.id} className="rounded-lg border border-border px-2.5 py-2">
-                          <div className="flex items-start gap-2">
-                            <AssigneeAvatar
-                              displayName={edit.author?.displayName ?? "Unknown"}
-                              avatar={edit.author?.avatar ?? null}
-                              size={20}
-                            />
-                            <div className="min-w-0 flex-1">
-                              <div className="flex items-center gap-1.5">
-                                <span className="truncate text-[11.5px] font-medium text-text">
-                                  {edit.author?.displayName ?? "Unknown"}
-                                </span>
-                                <span className="shrink-0 text-[10.5px] text-faint">
-                                  {timeAgo(edit.createdAt)}
-                                </span>
-                                <span className="ml-auto shrink-0 text-[10.5px]">
-                                  {edit.added > 0 && (
-                                    <span className="text-[#2da44e]">+{edit.added} </span>
-                                  )}
-                                  {edit.removed > 0 && (
-                                    <span className="text-danger">−{edit.removed}</span>
-                                  )}
-                                  {edit.added === 0 && edit.removed === 0 && (
-                                    <span className="text-faint">no text change</span>
-                                  )}
-                                </span>
-                              </div>
-
-                              {(edit.removedLines.length > 0 || edit.addedLines.length > 0) && (
-                                <div className="mt-1.5 space-y-0.5 rounded-md border border-border/70 bg-surface/60 px-1.5 py-1 font-mono text-[11px] leading-relaxed">
-                                  {edit.removedLines.map((line, i) => (
-                                    <div key={`r${i}`} className="flex gap-1.5 text-danger">
-                                      <span className="select-none opacity-70">−</span>
-                                      <span
-                                        className="min-w-0 flex-1 truncate"
-                                        title={line}
-                                      >
-                                        {line.trim() === "" ? "⏎" : line}
-                                      </span>
-                                    </div>
-                                  ))}
-                                  {edit.addedLines.map((line, i) => (
-                                    <div
-                                      key={`a${i}`}
-                                      className="flex gap-1.5 text-[#2da44e]"
-                                    >
-                                      <span className="select-none opacity-70">+</span>
-                                      <span
-                                        className="min-w-0 flex-1 truncate"
-                                        title={line}
-                                      >
-                                        {line.trim() === "" ? "⏎" : line}
-                                      </span>
-                                    </div>
-                                  ))}
-                                  {(edit.added > edit.addedLines.length ||
-                                    edit.removed > edit.removedLines.length) && (
-                                    <div className="pt-0.5 text-[10.5px] text-faint">
-                                      …and more
-                                    </div>
-                                  )}
-                                </div>
-                              )}
-
-                              {access.canEdit && (
-                                <div className="mt-1.5 flex flex-wrap items-center gap-2">
-                                  {confirmRestore === edit.id ? (
-                                    <>
-                                      <button
-                                        type="button"
-                                        disabled={restoring === edit.id}
-                                        onClick={() => void restoreEdit(edit)}
-                                        className="rounded-md bg-accent px-2 py-0.5 text-[11px] font-medium text-white transition-opacity hover:opacity-90 disabled:opacity-50"
-                                      >
-                                        {restoring === edit.id ? "Restoring…" : "Confirm restore"}
-                                      </button>
-                                      <button
-                                        type="button"
-                                        onClick={() => setConfirmRestore(null)}
-                                        className="rounded px-1.5 py-0.5 text-[11px] text-muted transition-colors hover:bg-elevated hover:text-text"
-                                      >
-                                        Cancel
-                                      </button>
-                                      <span className="text-[10.5px] text-faint">
-                                        Replaces the current document
-                                      </span>
-                                    </>
-                                  ) : (
-                                    <button
-                                      type="button"
-                                      onClick={() => setConfirmRestore(edit.id)}
-                                      title="Restore the document to how it was before this change"
-                                      className="flex items-center gap-1 rounded-md border border-border px-1.5 py-0.5 text-[11px] text-muted transition-colors hover:border-border-strong hover:text-text"
-                                    >
-                                      <RotateCcw size={11} /> Restore
-                                    </button>
-                                  )}
-                                </div>
-                              )}
-                            </div>
-                          </div>
-                        </li>
-                      ))}
-                    </ul>
+                    <p className="text-[13px] text-faint">Nothing has been written here yet.</p>
                   )}
                 </div>
-              </aside>
-            )}
-          </div>
-        </div>
 
-        {(selection || draftSelection || rangeSelection) && (
-          <div
-            data-overview-toolbar
-            style={{
-              left: selection?.x ?? draftSelection?.x ?? rangeSelection?.x ?? 0,
-              top: selection?.y ?? draftSelection?.y ?? rangeSelection?.y ?? 0,
-            }}
-            className="fixed z-40 flex items-center gap-0.5 rounded-md bg-text p-0.5 text-bg shadow-[0_4px_14px_rgba(0,0,0,0.2)]"
-          >
-            {access.canEdit && (
-              <>
-                {FORMAT_BUTTONS.map(({ style, label, Icon }) => {
-                  const active = selection?.active?.includes(style) ?? false;
+                {pins.map((pin) => {
+                  const count = threads.find((group) => anchorKey(group.anchor) === pin.key)
+                    ?.comments.length ?? 0;
                   return (
                     <button
-                      key={style}
+                      key={pin.key}
                       type="button"
-                      title={label}
-                      aria-label={label}
-                      aria-pressed={active}
-                      onMouseDown={(event) => {
-                        // Keep the browser's selection while the click lands.
-                        event.preventDefault();
-                        applyFormat(style);
+                      data-overview-pin
+                      aria-label="Open comments"
+                      title={`${count} ${count === 1 ? "comment" : "comments"}`}
+                      onClick={() => {
+                        setOpenKey((prev) => (prev === pin.key ? null : pin.key));
+                        setReplyKey(null);
+                        setDraft("");
+                        setComposer(null);
+                        setOrphansOpen(false);
                       }}
-                      className={`flex h-6 w-6 items-center justify-center rounded transition-colors hover:bg-white/15 ${
-                        active ? "bg-white/25 text-white" : ""
-                      }`}
+                      style={{ top: pin.top, left: pin.left }}
+                      className="absolute z-20 flex h-[22px] min-w-[22px] items-center justify-center gap-0.5 rounded-full border border-[#ecd28a] bg-[#fdf3c7] px-1 text-[10px] font-medium text-[#8a6d1a] shadow-[0_1px_2px_rgba(0,0,0,0.08)] transition-colors hover:border-[#d9b64e] hover:bg-[#fbeaa9]"
                     >
-                      <Icon size={12} />
+                      <MessageSquare size={11} />
+                      {count > 1 && <span>{count}</span>}
                     </button>
                   );
                 })}
-                {aiReady && (
-                  <button
-                    type="button"
-                    title="Edit with AI"
-                    aria-label="Edit with AI"
-                    onMouseDown={(event) => {
-                      event.preventDefault();
-                      openAiForSelection();
+
+                {openThread && openPin && (
+                  <div
+                    data-overview-pop
+                    style={{
+                      top: openPin.top + 26,
+                      left: Math.max(0, Math.min(openPin.left - 150, wrapWidth - 328)),
                     }}
-                    className="flex h-6 w-6 items-center justify-center rounded transition-colors hover:bg-white/15"
+                    className="absolute z-30 w-[320px] rounded-xl border border-border bg-bg p-3 shadow-[0_10px_36px_rgba(0,0,0,0.16)]"
                   >
-                    <Sparkles size={12} />
-                  </button>
+                    <div className="mb-2 flex items-center justify-between gap-2">
+                      <span className="text-[11px] font-semibold uppercase tracking-wider text-faint">
+                        {openThread.comments.length}{" "}
+                        {openThread.comments.length === 1 ? "comment" : "comments"}
+                      </span>
+                      <button
+                        type="button"
+                        aria-label="Close comments"
+                        onClick={() => setOpenKey(null)}
+                        className="rounded p-0.5 text-faint transition-colors hover:bg-elevated hover:text-text"
+                      >
+                        <X size={13} />
+                      </button>
+                    </div>
+                    {threadBody(openThread)}
+                  </div>
                 )}
-                {!(selection?.multiLine || rangeSelection) && (
-                  <span className="mx-0.5 h-3.5 w-px bg-white/25" aria-hidden />
-                )}
-              </>
-            )}
-            {!(selection?.multiLine || rangeSelection) && (
-              <button
-                type="button"
-                title="Create task from selection"
-                aria-label="Create task from selection"
-                onMouseDown={(event) => {
-                  event.preventDefault();
-                  if (selection) taskFromSelection(selection.anchor, doc, selection.refId);
-                  else taskFromDraft();
-                }}
-                className="flex h-6 w-6 items-center justify-center rounded transition-colors hover:bg-white/15"
-              >
-                <SquareArrowOutUpRight size={13} />
-              </button>
-            )}
-            {access.canComment && !(selection?.multiLine || rangeSelection) && (
-              <button
-                type="button"
-                title="Comment on selection"
-                aria-label="Comment on selection"
-                onMouseDown={(event) => {
-                  // Keep the selection alive long enough to record it, then open the
-                  // comment box right where the passage is.
-                  event.preventDefault();
-                  if (selection) openComposer(selection.anchor, selection.x, selection.y);
-                  else commentOnDraft();
-                }}
-                className="flex h-6 w-6 items-center justify-center rounded transition-colors hover:bg-white/15"
-              >
-                <MessageSquare size={12} />
-              </button>
-            )}
-          </div>
-        )}
+              </div>
 
-        {aiPanel && (
-          <AiEditPanel
-            workspaceId={workspaceId}
-            x={aiPanel.x}
-            y={aiPanel.y}
-            target={{
-              mode: aiPanel.kind,
-              text: aiPanel.text,
-              context: aiPanel.context,
-              allowTasks: aiPanel.kind === "selection",
-              allowContinue: aiPanel.kind === "document",
-              acceptLabel: aiPanel.kind === "selection" ? "Replace" : "Replace document",
-            }}
-            onClose={() => setAiPanel(null)}
-            onAccept={acceptAi}
-            onTasks={aiPanel.kind === "selection" ? openAiTasks : undefined}
-          />
-        )}
+              {historyOpen && (
+                <aside className="sticky top-0 flex max-h-[calc(100vh-7rem)] w-[min(50%,460px)] shrink-0 flex-col self-start overflow-hidden rounded-xl border border-border bg-bg shadow-[0_1px_2px_rgba(0,0,0,0.05)]">
+                  <header className="flex h-11 shrink-0 items-center gap-2 border-b border-border px-3">
+                    <History size={14} className="text-muted" />
+                    <span className="text-[12.5px] font-semibold text-text">History</span>
+                    <span className="text-[11px] text-faint">
+                      {edits.length} {edits.length === 1 ? "change" : "changes"}
+                    </span>
+                    <button
+                      type="button"
+                      aria-label="Close history"
+                      onClick={() => setHistoryOpen(false)}
+                      className="ml-auto rounded p-1 text-faint transition-colors hover:bg-elevated hover:text-text"
+                    >
+                      <X size={14} />
+                    </button>
+                  </header>
+                  <div className="min-h-0 flex-1 overflow-y-auto p-3">
+                    {edits.length === 0 ? (
+                      <p className="text-[12px] text-faint">
+                        No changes yet. Edits to this document will show up here.
+                      </p>
+                    ) : (
+                      <ul className="space-y-3">
+                        {edits.map((edit) => (
+                          <li key={edit.id} className="rounded-lg border border-border px-2.5 py-2">
+                            <div className="flex items-start gap-2">
+                              <AssigneeAvatar
+                                displayName={edit.author?.displayName ?? "Unknown"}
+                                avatar={edit.author?.avatar ?? null}
+                                size={20}
+                              />
+                              <div className="min-w-0 flex-1">
+                                <div className="flex items-center gap-1.5">
+                                  <span className="truncate text-[11.5px] font-medium text-text">
+                                    {edit.author?.displayName ?? "Unknown"}
+                                  </span>
+                                  <span className="shrink-0 text-[10.5px] text-faint">
+                                    {timeAgo(edit.createdAt)}
+                                  </span>
+                                  <span className="ml-auto shrink-0 text-[10.5px]">
+                                    {edit.added > 0 && (
+                                      <span className="text-[#2da44e]">+{edit.added} </span>
+                                    )}
+                                    {edit.removed > 0 && (
+                                      <span className="text-danger">−{edit.removed}</span>
+                                    )}
+                                    {edit.added === 0 && edit.removed === 0 && (
+                                      <span className="text-faint">no text change</span>
+                                    )}
+                                  </span>
+                                </div>
 
-        {aiTasks && (
-          <AiTaskDialog
-            workspaceId={workspaceId}
-            projectId={project.id}
-            initialPrompt={aiTasks.prompt}
-            context={aiTasks.context}
-            onClose={() => setAiTasks(null)}
-          />
-        )}
+                                {(edit.removedLines.length > 0 || edit.addedLines.length > 0) && (
+                                  <div className="mt-1.5 space-y-0.5 rounded-md border border-border/70 bg-surface/60 px-1.5 py-1 font-mono text-[11px] leading-relaxed">
+                                    {edit.removedLines.map((line, i) => (
+                                      <div key={`r${i}`} className="flex gap-1.5 text-danger">
+                                        <span className="select-none opacity-70">−</span>
+                                        <span
+                                          className="min-w-0 flex-1 truncate"
+                                          title={line}
+                                        >
+                                          {line.trim() === "" ? "⏎" : line}
+                                        </span>
+                                      </div>
+                                    ))}
+                                    {edit.addedLines.map((line, i) => (
+                                      <div
+                                        key={`a${i}`}
+                                        className="flex gap-1.5 text-[#2da44e]"
+                                      >
+                                        <span className="select-none opacity-70">+</span>
+                                        <span
+                                          className="min-w-0 flex-1 truncate"
+                                          title={line}
+                                        >
+                                          {line.trim() === "" ? "⏎" : line}
+                                        </span>
+                                      </div>
+                                    ))}
+                                    {(edit.added > edit.addedLines.length ||
+                                      edit.removed > edit.removedLines.length) && (
+                                      <div className="pt-0.5 text-[10.5px] text-faint">
+                                        …and more
+                                      </div>
+                                    )}
+                                  </div>
+                                )}
 
-        {composer && access.canComment && (
-          <div
-            data-overview-pop
-            style={{ left: composer.x, top: composer.y }}
-            className="fixed z-40 w-[320px] rounded-xl border border-border bg-bg p-2.5 shadow-[0_10px_36px_rgba(0,0,0,0.16)]"
-          >
-            <p className="mb-1.5 line-clamp-2 px-0.5 text-[11.5px] font-medium text-text">
-              “{composer.anchor.quote}”
-            </p>
-            <CommentComposer
-              draft={draft}
-              posting={posting}
-              placeholder="Leave a comment…"
-              onDraft={setDraft}
-              onPost={() => void postComment(composer.anchor, "new")}
-            />
-          </div>
-        )}
-
-        {orphansOpen && orphanThreads.length > 0 && (
-          <div
-            data-overview-pop
-            style={{ left: orphanPos.x, top: orphanPos.y }}
-            className="fixed z-40 w-[340px] rounded-xl border border-border bg-bg p-3 shadow-[0_10px_36px_rgba(0,0,0,0.16)]"
-          >
-            <div className="mb-2 flex items-center justify-between gap-2">
-              <span className="text-[11px] font-semibold uppercase tracking-wider text-faint">
-                Comments on changed text
-              </span>
-              <button
-                type="button"
-                aria-label="Close comments"
-                onClick={() => setOrphansOpen(false)}
-                className="rounded p-0.5 text-faint transition-colors hover:bg-elevated hover:text-text"
-              >
-                <X size={13} />
-              </button>
+                                {access.canEdit && (
+                                  <div className="mt-1.5 flex flex-wrap items-center gap-2">
+                                    {confirmRestore === edit.id ? (
+                                      <>
+                                        <button
+                                          type="button"
+                                          disabled={restoring === edit.id}
+                                          onClick={() => void restoreEdit(edit)}
+                                          className="rounded-md bg-accent px-2 py-0.5 text-[11px] font-medium text-white transition-opacity hover:opacity-90 disabled:opacity-50"
+                                        >
+                                          {restoring === edit.id ? "Restoring…" : "Confirm restore"}
+                                        </button>
+                                        <button
+                                          type="button"
+                                          onClick={() => setConfirmRestore(null)}
+                                          className="rounded px-1.5 py-0.5 text-[11px] text-muted transition-colors hover:bg-elevated hover:text-text"
+                                        >
+                                          Cancel
+                                        </button>
+                                        <span className="text-[10.5px] text-faint">
+                                          Replaces the current document
+                                        </span>
+                                      </>
+                                    ) : (
+                                      <button
+                                        type="button"
+                                        onClick={() => setConfirmRestore(edit.id)}
+                                        title="Restore the document to how it was before this change"
+                                        className="flex items-center gap-1 rounded-md border border-border px-1.5 py-0.5 text-[11px] text-muted transition-colors hover:border-border-strong hover:text-text"
+                                      >
+                                        <RotateCcw size={11} /> Restore
+                                      </button>
+                                    )}
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                  </div>
+                </aside>
+              )}
             </div>
-            <div className="max-h-[420px] space-y-3 overflow-y-auto pr-0.5">
-              {orphanThreads.map((group) => (
-                <div
-                  key={anchorKey(group.anchor)}
-                  className="border-t border-border pt-3 first:border-t-0 first:pt-0"
+          </div>
+
+          {(selection || draftSelection || rangeSelection) && (
+            <div
+              data-overview-toolbar
+              style={{
+                left: selection?.x ?? draftSelection?.x ?? rangeSelection?.x ?? 0,
+                top: selection?.y ?? draftSelection?.y ?? rangeSelection?.y ?? 0,
+              }}
+              className="fixed z-40 flex items-center gap-0.5 rounded-md bg-text p-0.5 text-bg shadow-[0_4px_14px_rgba(0,0,0,0.2)]"
+            >
+              {access.canEdit && (
+                <>
+                  {FORMAT_BUTTONS.map(({ style, label, Icon }) => {
+                    const active = selection?.active?.includes(style) ?? false;
+                    return (
+                      <button
+                        key={style}
+                        type="button"
+                        title={label}
+                        aria-label={label}
+                        aria-pressed={active}
+                        onMouseDown={(event) => {
+                          // Keep the browser's selection while the click lands.
+                          event.preventDefault();
+                          applyFormat(style);
+                        }}
+                        className={`flex h-6 w-6 items-center justify-center rounded transition-colors hover:bg-white/15 ${
+                          active ? "bg-white/25 text-white" : ""
+                        }`}
+                      >
+                        <Icon size={12} />
+                      </button>
+                    );
+                  })}
+                  {aiReady && (
+                    <button
+                      type="button"
+                      title="Edit with AI"
+                      aria-label="Edit with AI"
+                      onMouseDown={(event) => {
+                        event.preventDefault();
+                        openAiForSelection();
+                      }}
+                      className="flex h-6 w-6 items-center justify-center rounded transition-colors hover:bg-white/15"
+                    >
+                      <Sparkles size={12} />
+                    </button>
+                  )}
+                  {!(selection?.multiLine || rangeSelection) && (
+                    <span className="mx-0.5 h-3.5 w-px bg-white/25" aria-hidden />
+                  )}
+                </>
+              )}
+              {!(selection?.multiLine || rangeSelection) && (
+                <button
+                  type="button"
+                  title="Create task from selection"
+                  aria-label="Create task from selection"
+                  onMouseDown={(event) => {
+                    event.preventDefault();
+                    if (selection) taskFromSelection(selection.anchor, doc, selection.refId);
+                    else taskFromDraft();
+                  }}
+                  className="flex h-6 w-6 items-center justify-center rounded transition-colors hover:bg-white/15"
                 >
-                  {threadBody(group)}
-                </div>
-              ))}
+                  <SquareArrowOutUpRight size={13} />
+                </button>
+              )}
+              {access.canComment && !(selection?.multiLine || rangeSelection) && (
+                <button
+                  type="button"
+                  title="Comment on selection"
+                  aria-label="Comment on selection"
+                  onMouseDown={(event) => {
+                    // Keep the selection alive long enough to record it, then open the
+                    // comment box right where the passage is.
+                    event.preventDefault();
+                    if (selection) openComposer(selection.anchor, selection.x, selection.y);
+                    else commentOnDraft();
+                  }}
+                  className="flex h-6 w-6 items-center justify-center rounded transition-colors hover:bg-white/15"
+                >
+                  <MessageSquare size={12} />
+                </button>
+              )}
             </div>
-          </div>
-        )}
+          )}
+
+          {aiPanel && (
+            <AiEditPanel
+              workspaceId={workspaceId}
+              x={aiPanel.x}
+              y={aiPanel.y}
+              target={{
+                mode: aiPanel.kind,
+                text: aiPanel.text,
+                context: aiPanel.context,
+                allowTasks: aiPanel.kind === "selection",
+                allowContinue: aiPanel.kind === "document",
+                acceptLabel: aiPanel.kind === "selection" ? "Replace" : "Replace document",
+              }}
+              onClose={() => setAiPanel(null)}
+              onAccept={acceptAi}
+              onTasks={aiPanel.kind === "selection" ? openAiTasks : undefined}
+            />
+          )}
+
+          {aiTasks && (
+            <AiTaskDialog
+              workspaceId={workspaceId}
+              projectId={project.id}
+              initialPrompt={aiTasks.prompt}
+              context={aiTasks.context}
+              onClose={() => setAiTasks(null)}
+            />
+          )}
+
+          {composer && access.canComment && (
+            <div
+              data-overview-pop
+              style={{ left: composer.x, top: composer.y }}
+              className="fixed z-40 w-[320px] rounded-xl border border-border bg-bg p-2.5 shadow-[0_10px_36px_rgba(0,0,0,0.16)]"
+            >
+              <p className="mb-1.5 line-clamp-2 px-0.5 text-[11.5px] font-medium text-text">
+                “{composer.anchor.quote}”
+              </p>
+              <CommentComposer
+                draft={draft}
+                posting={posting}
+                placeholder="Leave a comment…"
+                onDraft={setDraft}
+                onPost={() => void postComment(composer.anchor, "new")}
+              />
+            </div>
+          )}
+
+          {orphansOpen && orphanThreads.length > 0 && (
+            <div
+              data-overview-pop
+              style={{ left: orphanPos.x, top: orphanPos.y }}
+              className="fixed z-40 w-[340px] rounded-xl border border-border bg-bg p-3 shadow-[0_10px_36px_rgba(0,0,0,0.16)]"
+            >
+              <div className="mb-2 flex items-center justify-between gap-2">
+                <span className="text-[11px] font-semibold uppercase tracking-wider text-faint">
+                  Comments on changed text
+                </span>
+                <button
+                  type="button"
+                  aria-label="Close comments"
+                  onClick={() => setOrphansOpen(false)}
+                  className="rounded p-0.5 text-faint transition-colors hover:bg-elevated hover:text-text"
+                >
+                  <X size={13} />
+                </button>
+              </div>
+              <div className="max-h-[420px] space-y-3 overflow-y-auto pr-0.5">
+                {orphanThreads.map((group) => (
+                  <div
+                    key={anchorKey(group.anchor)}
+                    className="border-t border-border pt-3 first:border-t-0 first:pt-0"
+                  >
+                    {threadBody(group)}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
       </div>
+      {!historyOpen && (
+        <div className="pointer-events-none absolute bottom-5 right-5 z-30 flex items-center gap-2">
+          <div className="pointer-events-auto relative">
+            <button
+              type="button"
+              onClick={toggleHistory}
+              title="Document history"
+              className="flex items-center gap-1.5 rounded-full border border-border bg-overlay px-3 py-1.5 text-[12px] font-medium text-muted shadow-[0_2px_10px_rgba(0,0,0,0.08)] transition-colors hover:border-border-strong hover:text-text"
+            >
+              <History size={13} /> History
+            </button>
+            {unseen > 0 && (
+              <span className="pointer-events-none absolute -right-1 -top-1 flex h-[15px] min-w-[15px] items-center justify-center rounded-full bg-danger px-1 text-[9.5px] font-semibold leading-none text-white">
+                {unseen > 9 ? "9+" : unseen}
+              </span>
+            )}
+          </div>
+          {aiReady && access.canEdit && (
+            <button
+              type="button"
+              onClick={(event) => openAiForDocument(event.currentTarget)}
+              title="Edit this document with AI"
+              className="pointer-events-auto flex items-center gap-1.5 rounded-full border border-border bg-overlay px-3 py-1.5 text-[12px] font-medium text-muted shadow-[0_2px_10px_rgba(0,0,0,0.08)] transition-colors hover:border-border-strong hover:text-text"
+            >
+              <Sparkles size={13} /> AI
+            </button>
+          )}
+        </div>
+      )}
     </div>
   );
 }

@@ -159,15 +159,20 @@ export async function createProjectAction(
 export async function updateProjectAction(
   workspaceId: string,
   projectId: string,
-  patch: { name?: string; description?: string; doc?: string; color?: string }
+  patch: { name?: string; description?: string; doc?: string; color?: string; icon?: string | null }
 ) {
   return run<Project>(async () => {
     const { user } = await requireWorkspace(workspaceId);
     const project = await updateProject(workspaceId, projectId, patch, user.id);
     // The Overview autosaves its body every time typing pauses; revalidating the layout
-    // on that beat re-rendered the whole shell mid-sentence. Only the name, description
-    // and colour are drawn outside the editor.
-    if (patch.name !== undefined || patch.description !== undefined || patch.color !== undefined) {
+    // on that beat re-rendered the whole shell mid-sentence. Only the name, description,
+    // colour and icon are drawn outside the editor.
+    if (
+      patch.name !== undefined ||
+      patch.description !== undefined ||
+      patch.color !== undefined ||
+      patch.icon !== undefined
+    ) {
       refresh(workspaceId);
     }
     return project;
