@@ -3,7 +3,7 @@ import { connection } from "next/server";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { getSessionUser, requireWorkspace } from "@/lib/auth";
-import { aiEngineOptions, getAiSettingsView } from "@/lib/ai";
+import { agentCliEngineOptions, getAiSettingsView } from "@/lib/ai";
 import { listProjects } from "@/lib/issues";
 import { ENGINE_COOKIE, type AgentEngineOption } from "@/lib/ai-constants";
 import { codexDefaults, listCodexModels, listCodexSkills } from "@/lib/cli-agents";
@@ -42,17 +42,16 @@ async function AgentContent({
   const { role } = await requireWorkspace(workspaceId);
   const ai = await getAiSettingsView(workspaceId);
 
-  const engines: AgentEngineOption[] = await aiEngineOptions(workspaceId);
+  const engines: AgentEngineOption[] = await agentCliEngineOptions(workspaceId);
   const ready = engines.some((engine) => engine.available);
   const usable = (id: string | undefined) =>
     engines.find((engine) => engine.id === id && engine.available)?.id;
   const saved = (await cookies()).get(ENGINE_COOKIE)?.value;
-  // Chat should reopen on the engine the user picked last, and by default on Codex: it runs
-  // on the machine's ChatGPT login, so a turn doesn't spend the metered API key. An explicit
-  // CLI choice in Settings outranks that fallback, but a stored "api" preference does not.
+  // Agent reopens on the CLI the user picked last. Default to Codex when it is ready.
+  // The API key engine is not offered on the Agent page (H-P1-07).
   const cliPreferred = ai.engine === "api" ? undefined : usable(ai.engine);
   const defaultEngine =
-    usable(saved) ?? cliPreferred ?? usable("codex") ?? engines.find((engine) => engine.available)?.id ?? "api";
+    usable(saved) ?? cliPreferred ?? usable("codex") ?? engines.find((engine) => engine.available)?.id ?? "codex";
 
   const sp = await searchParams;
   const threadId = typeof sp.thread === "string" ? sp.thread : "";

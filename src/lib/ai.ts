@@ -183,6 +183,12 @@ export async function aiEngineOptions(workspaceId: string): Promise<AgentEngineO
   ];
 }
 
+/** Agent page engines: local CLI harnesses only. The API key is not an Agent engine. */
+export async function agentCliEngineOptions(workspaceId: string): Promise<AgentEngineOption[]> {
+  const all = await aiEngineOptions(workspaceId);
+  return all.filter((option) => option.id === "codex" || option.id === "pi");
+}
+
 // Cheap check used by pages that only need to know whether the sparkle buttons
 // should be offered at all.
 export async function aiReady(workspaceId: string): Promise<boolean> {

@@ -347,7 +347,6 @@ function ModelChip({
   effort,
   onModel,
   disabled,
-  codexOnly,
 }: {
   options: AgentEngineOption[];
   value: AiEngine;
@@ -357,8 +356,6 @@ function ModelChip({
   effort: string;
   onModel: (model: string, effort: string) => void;
   disabled?: boolean;
-  /** When true, non-Codex engines stay greyed out with an explanation. */
-  codexOnly?: boolean;
 }) {
   const current = options.find((option) => option.id === value) ?? options[0];
   const picked = models.find((entry) => entry.slug === model) ?? models[0];
@@ -392,25 +389,19 @@ function ModelChip({
       {(close) => (
         <>
           <SectionLabel>Engine</SectionLabel>
-          {options.map((option) => {
-            const blocked = Boolean(codexOnly) && option.id !== "codex";
-            return (
+          {options.map((option) => (
               <MenuItem
                 key={option.id}
                 active={option.id === value}
-                disabled={blocked}
                 onSelect={() => {
                   close();
                   onChange(option.id);
                 }}
               >
                 <span className="min-w-0 flex-1 truncate text-left">{option.label}</span>
-                <span className="shrink-0 text-[11px] text-faint">
-                  {blocked ? "Chat only — Work needs Codex" : option.detail}
-                </span>
+                <span className="shrink-0 text-[11px] text-faint">{option.detail}</span>
               </MenuItem>
-            );
-          })}
+            ))}
           {value === "codex" && picked && (
             <>
               <div className="my-1 border-t border-border" />
@@ -1617,7 +1608,6 @@ function StartComposer({
                     effort={effort}
                     onModel={onModel}
                     disabled={busy}
-                    codexOnly={false}
                   />
                 </>
               }
@@ -2343,7 +2333,6 @@ function Conversation({
                   effort={effort}
                   onModel={(nextModel, nextEffort) => void changeModel(nextModel, nextEffort)}
                   disabled={busy || !active.mine}
-                  codexOnly={false}
                 />
               </>
             }
