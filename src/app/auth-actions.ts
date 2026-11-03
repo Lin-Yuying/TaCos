@@ -27,6 +27,7 @@ import {
   createWorkspace,
   deleteWorkspace,
   joinWorkspace,
+  inviteMember,
   leaveWorkspace,
   restoreWorkspace,
   TacosError,
@@ -179,6 +180,19 @@ export async function joinWorkspaceAction(input: {
     const result = await joinWorkspace({ code: input.code, userId: user.id });
     revalidatePath("/", "layout");
     return result;
+  });
+}
+
+// H-COLLAB-12: add an existing account to the workspace. Admins only.
+export async function inviteMemberAction(
+  workspaceId: string,
+  who: string
+): Promise<ActionResult<{ id: string; username: string; displayName: string }>> {
+  return run(async () => {
+    await requireAdmin(workspaceId);
+    const member = await inviteMember(workspaceId, who);
+    revalidatePath(`/${workspaceId}`, "layout");
+    return member;
   });
 }
 

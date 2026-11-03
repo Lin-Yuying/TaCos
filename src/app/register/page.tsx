@@ -6,17 +6,28 @@ import { AuthForm } from "@/components/auth-form";
 import { I18nProvider } from "@/components/i18n-context";
 import { resolveLocale } from "@/lib/locale";
 
-export default function RegisterPage() {
+export default function RegisterPage({
+  searchParams,
+}: {
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
+}) {
   return (
     <Suspense fallback={<div className="flex h-full items-center justify-center text-[13px] text-muted">Loading…</div>}>
-      <RegisterView />
+      <RegisterView searchParams={searchParams} />
     </Suspense>
   );
 }
 
-async function RegisterView() {
+async function RegisterView({
+  searchParams,
+}: {
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
+}) {
   await connection();
+  const raw = (await searchParams).invite;
+  const invite = typeof raw === "string" && /^[A-Za-z0-9-]{4,40}$/.test(raw) ? raw : undefined;
   const user = await getSessionUser();
+  if (user && invite) redirect(`/join/${invite}`);
   if (user) {
     const workspaces = await listUserWorkspaces(user.id);
     const landing = landingWorkspaceId(user.id, workspaces, user.lastWorkspaceId);
@@ -24,7 +35,7 @@ async function RegisterView() {
   }
   return (
     <I18nProvider locale={await resolveLocale()}>
-      <AuthForm mode="register" />
+      <AuthForm mode="register" invite={invite} />
     </I18nProvider>
   );
 }

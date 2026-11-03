@@ -283,6 +283,44 @@ export async function joinWorkspace(input: {
   return { id: ws.id, name: ws.name, key: ws.key };
 }
 
+// H-COLLAB-12: the invite link is /join/<active join code>. Null when the code is
+// unknown, revoked, or its workspace is deleted.
+export async function describeInvite(code: string): Promise<{ id: string; name: string } | null> {
+  const [row] = await getDb()
+    .select({ id: workspaces.id, name: workspaces.name, revokedAt: joinCodes.revokedAt, deletedAt: workspaces.deletedAt })
+    .from(joinCodes)
+    .innerJoin(workspaces, eq(workspaces.id, joinCodes.workspaceId))
+    .where(eq(joinCodes.code, code.trim().toUpperCase()))
+    .limit(1);
+  if (!row || row.revokedAt || row.deletedAt) return null;
+  return { id: row.id, name: row.name };
+}
+
+// H-COLLAB-12: an admin adds an existing account by user name ("@name" also works).
+// The caller checks the admin role.
+export async function inviteMember(
+  workspaceId: string,
+  who: string
+): Promise<{ id: string; username: string; displayName: string }> {
+  const username = who.trim().replace(/^@/, "").toLowerCase();
+  if (!username) throw new TacosError("Enter a user name");
+  const db = getDb();
+  const [user] = await db
+    .select({ id: users.id, username: users.username, displayName: users.displayName })
+    .from(users)
+    .where(sql`lower(${users.username}) = ${username}`)
+    .limit(1);
+  if (!user) throw new TacosError("No account with that user name", 404);
+  const existing = await db
+    .select({ userId: workspaceMembers.userId })
+    .from(workspaceMembers)
+    .where(and(eq(workspaceMembers.workspaceId, workspaceId), eq(workspaceMembers.userId, user.id)))
+    .limit(1);
+  if (existing.length > 0) throw new TacosError("That person is already a member", 409);
+  await db.insert(workspaceMembers).values({ workspaceId, userId: user.id, role: "member", createdAt: nowIso() });
+  return user;
+}
+
 // null resets the workspace to the built-in otter mark.
 export async function setWorkspaceIcon(workspaceId: string, icon: string | null) {
   await getDb().update(workspaces).set({ icon }).where(eq(workspaces.id, workspaceId));

@@ -1774,7 +1774,9 @@ export function WorkspaceShell({
 
       {inviteOpen && (
         <InviteDialog
+          workspaceId={workspace.id}
           workspaceName={workspace.name}
+          isAdmin={workspace.role === "admin"}
           joinCode={joinCode}
           onClose={() => setInviteOpen(false)}
         />

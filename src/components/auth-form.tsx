@@ -6,7 +6,9 @@ import { loginAction, registerAction } from "@/app/auth-actions";
 import { OtterMark } from "@/components/icons";
 import { useT } from "@/components/i18n-context";
 
-export function AuthForm({ mode }: { mode: "login" | "register" }) {
+// invite: H-COLLAB-12 join code from an invite link; after sign-in the user goes back
+// to /join/<code>.
+export function AuthForm({ mode, invite }: { mode: "login" | "register"; invite?: string }) {
   const t = useT();
   const [username, setUsername] = useState("");
   const [displayName, setDisplayName] = useState("");
@@ -28,7 +30,7 @@ export function AuthForm({ mode }: { mode: "login" | "register" }) {
       return;
     }
     // Server-picked: the account's own last workspace, never the previous account's.
-    window.location.href = result.data.next;
+    window.location.href = invite ? `/join/${encodeURIComponent(invite)}` : result.data.next;
   }
 
   return (
@@ -104,14 +106,14 @@ export function AuthForm({ mode }: { mode: "login" | "register" }) {
           {mode === "login" ? (
             <>
               {t("No account yet?")}{" "}
-              <Link href="/register" className="text-accent hover:underline">
+              <Link href={invite ? `/register?invite=${encodeURIComponent(invite)}` : "/register"} className="text-accent hover:underline">
                 {t("Register")}
               </Link>
             </>
           ) : (
             <>
               {t("Already registered?")}{" "}
-              <Link href="/login" className="text-accent hover:underline">
+              <Link href={invite ? `/login?invite=${encodeURIComponent(invite)}` : "/login"} className="text-accent hover:underline">
                 {t("Sign in")}
               </Link>
             </>

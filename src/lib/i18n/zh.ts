@@ -851,6 +851,19 @@ const zh: Record<string, string> = {
   "Leave a comment… Type @ to mention someone": "写评论… 输入 @ 提及成员",
   "{name} mentioned you": "{name} 提到了你",
   "Due {date}: reminder": "截止提醒：{date} 到期",
+  "Enter a user name": "请输入用户名",
+  "No account with that user name": "没有这个用户名的账号",
+  "That person is already a member": "此人已经是成员",
+  "Join {name}": "加入 {name}",
+  "You are signed in as {name}. You were invited to this workspace.": "你当前登录为 {name}，你受邀加入此工作区。",
+  "Joining…": "加入中…",
+  "This invite link no longer works": "此邀请链接已失效",
+  "Ask a workspace admin for a new link.": "请向工作区管理员索取新链接。",
+  "Go home": "返回首页",
+  "{name} joined the workspace": "{name} 已加入工作区",
+  "Invite link": "邀请链接",
+  "Add an existing account": "添加已有账号",
+  "User name": "用户名",
 };
 
 export default zh;
