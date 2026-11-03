@@ -50,7 +50,7 @@ const STREAM_HEADERS = {
   "X-Accel-Buffering": "no",
 };
 
-// The stdio MCP shim that gives Work mode its TaCos tools. It ships beside the server so
+// The stdio MCP shim that gives Agent turns their TaCos tools. It ships beside the server so
 // a standalone build can spawn it without a checkout on disk.
 function shimPath(): string {
   const candidates = [
@@ -219,6 +219,7 @@ export async function POST(request: Request) {
       }
       // History comes from the thread, not from the browser: whatever scrolled past in
       // this conversation is what the model gets, including turns from other sessions.
+      // Harness on the request is a turn pref. A mismatch updates last-used and keeps the session.
       const thread = await loadThreadForTurn(workspaceId, access.user.id, threadId);
       if (thread.engine !== engine) await setThreadEngine(threadId, engine);
 

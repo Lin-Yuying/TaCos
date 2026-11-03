@@ -9,6 +9,7 @@ import {
   deleteAgentThread,
   renameAgentThread,
   setAgentThreadApproval,
+  setAgentThreadEngine,
   setAgentThreadModel,
   setAgentThreadPinned,
   setAgentThreadProject,
@@ -87,6 +88,20 @@ export async function setAgentThreadProjectAction(
   return run(async () => {
     const { user } = await requireWorkspace(workspaceId);
     const thread = await setAgentThreadProject(workspaceId, user.id, threadId, projectId);
+    refresh(workspaceId);
+    return thread;
+  });
+}
+
+
+export async function setAgentThreadEngineAction(
+  workspaceId: string,
+  threadId: string,
+  engine: string
+): Promise<ActionResult<AgentThread>> {
+  return run(async () => {
+    const { user } = await requireWorkspace(workspaceId);
+    const thread = await setAgentThreadEngine(workspaceId, user.id, threadId, engine);
     refresh(workspaceId);
     return thread;
   });

@@ -83,6 +83,9 @@ function visibleTo(userId: string) {
   return or(eq(agentThreads.visibility, "shared"), eq(agentThreads.createdBy, userId));
 }
 
+// A session is the agent_threads row and its messages. The id is the session identity.
+// engine / model / effort / approval are last-used turn prefs for the composer restore.
+// A change to those prefs keeps the same session. New chat calls this and gets a new id.
 export async function startAgentThread(input: {
   workspaceId: string;
   projectId: string;
@@ -329,6 +332,7 @@ export async function setAgentThreadVisibility(
 
 const MAX_MODEL = 80;
 
+// Last-used model/effort for reopen UI. Does not create a session and does not lock the thread.
 export async function setAgentThreadModel(
   workspaceId: string,
   userId: string,
@@ -570,9 +574,29 @@ export async function finishAgentStep(
     .where(eq(agentSteps.id, stepId));
 }
 
+// Server turn path: store the harness the composer sent for this turn as last-used.
+// Never refuse a turn when the stored engine differs. Callers already authorize the thread.
 export async function setThreadEngine(threadId: string, engine: string): Promise<void> {
   await getDb()
     .update(agentThreads)
     .set({ engine, updatedAt: new Date().toISOString() })
     .where(eq(agentThreads.id, threadId));
+}
+
+// Composer path: author updates last-used harness without a new session.
+export async function setAgentThreadEngine(
+  workspaceId: string,
+  userId: string,
+  threadId: string,
+  engine: string
+): Promise<AgentThread> {
+  const { thread } = await requireThreadRow(workspaceId, userId, threadId);
+  if (!thread.mine) throw new TacosError("Only the author can change this conversation", 403);
+  const next = engine.trim();
+  if (!next) throw new TacosError("Pick a harness in the composer", 400);
+  await getDb()
+    .update(agentThreads)
+    .set({ engine: next, updatedAt: new Date().toISOString() })
+    .where(eq(agentThreads.id, threadId));
+  return threadOnly(await getAgentThread(workspaceId, userId, threadId));
 }

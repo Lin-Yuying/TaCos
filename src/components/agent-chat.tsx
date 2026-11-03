@@ -43,6 +43,7 @@ import {
   deleteAgentThreadAction,
   renameAgentThreadAction,
   setAgentThreadApprovalAction,
+  setAgentThreadEngineAction,
   setAgentThreadModelAction,
   setAgentThreadPinnedAction,
   setAgentThreadProjectAction,
@@ -1876,6 +1877,7 @@ export function AgentWorkspace({
         {active ? (
           // Keyed by thread so switching conversations starts from that thread's own state
           // instead of carrying the previous one's messages across.
+          // New chat leaves the open thread. Start on the empty composer creates a new session id.
           <Conversation
             key={active.id}
             workspaceId={workspaceId}
@@ -1993,9 +1995,16 @@ function Conversation({
   const [effort, setEffort] = useState(active.effort || codexDefault.effort);
   const [approvalMode, setApprovalMode] = useState<AgentApproval>(active.approval);
 
-  function chooseEngine(next: AiEngine) {
+  // Harness is a turn pref on this session. Persist last-used. Do not open a new thread.
+  async function chooseEngine(next: AiEngine) {
+    const before = engine;
     setEngine(next);
     rememberEngine(next);
+    const result = await setAgentThreadEngineAction(workspaceId, active.id, next);
+    if (!result.ok) {
+      setEngine(before);
+      setError(result.error);
+    }
   }
 
   async function changeModel(nextModel: string, nextEffort: string) {
@@ -2327,7 +2336,7 @@ function Conversation({
                 <ModelChip
                   options={options}
                   value={engine}
-                  onChange={chooseEngine}
+                  onChange={(next) => void chooseEngine(next)}
                   models={models}
                   model={model}
                   effort={effort}
