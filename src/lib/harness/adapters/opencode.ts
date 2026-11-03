@@ -18,6 +18,7 @@ function isReady(_binary: string): { ok: boolean; error: string | null; hint: st
 export const opencodeAdapter: HarnessAdapter = {
   id: "opencode",
   label: LABEL,
+  osSandbox: false,
   detect(): DetectResult {
     const binary = findHarnessBinary("opencode");
     if (!binary) {
@@ -30,6 +31,8 @@ export const opencodeAdapter: HarnessAdapter = {
         ready: false,
         error: "missing_binary",
         hint: INSTALL_HINT,
+        osSandbox: false,
+        riskLabel: "No OS sandbox",
       };
     }
     const version = readHarnessVersion("opencode", binary);
@@ -43,6 +46,8 @@ export const opencodeAdapter: HarnessAdapter = {
         ready: false,
         error: "version_unreadable",
         hint: INSTALL_HINT,
+        osSandbox: false,
+        riskLabel: "No OS sandbox",
       };
     }
     const ready = isReady(binary);
@@ -55,6 +60,8 @@ export const opencodeAdapter: HarnessAdapter = {
       ready: ready.ok,
       error: ready.ok ? null : ready.error,
       hint: ready.ok ? null : ready.hint,
+      osSandbox: false,
+      riskLabel: "No OS sandbox",
     };
   },
   listModels(): ModelOption[] {

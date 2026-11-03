@@ -380,7 +380,11 @@ function ModelChip({
           ) : (
             <>
               <span className="max-w-[190px] truncate">{current?.label}</span>
-              {current?.detail && <span className="max-w-[110px] truncate text-faint">{current.detail}</span>}
+              {current?.riskLabel ? (
+                <span className="max-w-[120px] truncate text-danger">{current.riskLabel}</span>
+              ) : current?.detail ? (
+                <span className="max-w-[110px] truncate text-faint">{current.detail}</span>
+              ) : null}
             </>
           )}
           <ChevronDown size={11} className="shrink-0 text-muted" />
@@ -399,7 +403,17 @@ function ModelChip({
                   onChange(option.id);
                 }}
               >
-                <span className="min-w-0 flex-1 truncate text-left">{option.label}</span>
+                <span className="min-w-0 flex-1 truncate text-left">
+                  <span className="block truncate">{option.label}</span>
+                  {option.riskLabel ? (
+                    <span
+                      className="block truncate text-[11px] text-danger"
+                      data-testid={`composer-risk-${option.id}`}
+                    >
+                      {option.riskLabel}
+                    </span>
+                  ) : null}
+                </span>
                 <span className="shrink-0 text-[11px] text-faint">{option.detail}</span>
               </MenuItem>
             ))}

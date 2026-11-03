@@ -200,6 +200,7 @@ export async function listAgentHarnessOptions(workspaceId: string): Promise<Agen
     detail: row.version,
     available: true,
     hint: null,
+    riskLabel: row.riskLabel,
   }));
 }
 

@@ -17,6 +17,7 @@ function isReady(_binary: string): { ok: boolean; error: string | null; hint: st
 export const codebuddyAdapter: HarnessAdapter = {
   id: "codebuddy",
   label: LABEL,
+  osSandbox: false,
   detect(): DetectResult {
     const binary = findHarnessBinary("codebuddy");
     if (!binary) {
@@ -29,6 +30,8 @@ export const codebuddyAdapter: HarnessAdapter = {
         ready: false,
         error: "missing_binary",
         hint: INSTALL_HINT,
+        osSandbox: false,
+        riskLabel: "No OS sandbox",
       };
     }
     const version = readHarnessVersion("codebuddy", binary);
@@ -42,6 +45,8 @@ export const codebuddyAdapter: HarnessAdapter = {
         ready: false,
         error: "version_unreadable",
         hint: INSTALL_HINT,
+        osSandbox: false,
+        riskLabel: "No OS sandbox",
       };
     }
     const ready = isReady(binary);
@@ -54,6 +59,8 @@ export const codebuddyAdapter: HarnessAdapter = {
       ready: ready.ok,
       error: ready.ok ? null : ready.error,
       hint: ready.ok ? null : ready.hint,
+      osSandbox: false,
+      riskLabel: "No OS sandbox",
     };
   },
   listModels(): ModelOption[] {

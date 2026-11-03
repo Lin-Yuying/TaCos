@@ -21,6 +21,7 @@ function isReady(_binary: string): { ok: boolean; error: string | null; hint: st
 export const dshAdapter: HarnessAdapter = {
   id: "dsh",
   label: LABEL,
+  osSandbox: false,
   detect(): DetectResult {
     const binary = findHarnessBinary("dsh");
     if (!binary) {
@@ -33,6 +34,8 @@ export const dshAdapter: HarnessAdapter = {
         ready: false,
         error: "missing_binary",
         hint: INSTALL_HINT,
+        osSandbox: false,
+        riskLabel: "No OS sandbox",
       };
     }
     const version = readHarnessVersion("dsh", binary);
@@ -46,6 +49,8 @@ export const dshAdapter: HarnessAdapter = {
         ready: false,
         error: "version_unreadable",
         hint: INSTALL_HINT,
+        osSandbox: false,
+        riskLabel: "No OS sandbox",
       };
     }
     const ready = isReady(binary);
@@ -58,6 +63,8 @@ export const dshAdapter: HarnessAdapter = {
       ready: ready.ok,
       error: ready.ok ? null : ready.error,
       hint: ready.ok ? null : ready.hint,
+      osSandbox: false,
+      riskLabel: "No OS sandbox",
     };
   },
   listModels(): ModelOption[] {

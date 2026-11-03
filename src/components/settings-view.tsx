@@ -862,6 +862,22 @@ export function SettingsView({
                     >
                       {row.ready ? "Ready" : row.installed ? "Not ready" : "Not installed"}
                     </span>
+                    {row.riskLabel ? (
+                      <span
+                        className="rounded-full bg-danger/10 px-2 py-0.5 text-[11px] font-medium text-danger"
+                        data-testid={`harness-risk-${row.id}`}
+                        title="This harness does not apply an OS-level sandbox around agent commands."
+                      >
+                        {row.riskLabel}
+                      </span>
+                    ) : (
+                      <span
+                        className="rounded-full bg-elevated px-2 py-0.5 text-[11px] font-medium text-faint"
+                        data-testid={`harness-sandbox-${row.id}`}
+                      >
+                        OS sandbox
+                      </span>
+                    )}
                   </div>
                   <div className="text-[12px] text-muted">
                     Version: {row.version ?? "—"}
