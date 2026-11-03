@@ -12,10 +12,10 @@ export type AiPreset = {
 export const AI_PRESETS: AiPreset[] = [
   {
     id: "deepseek",
-    label: "DeepSeek",
+    label: "DeepSeek API",
     baseUrl: "https://api.deepseek.com/v1",
     model: "deepseek-chat",
-    hint: "Cheap and strong in Chinese; supports streaming.",
+    hint: "DeepSeek API key for the AI assistant. This is not the dsh harness; set up dsh in Settings → Harness.",
   },
   {
     id: "openai",
