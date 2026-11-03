@@ -374,8 +374,7 @@ export const apiKeys = sqliteTable(
 );
 
 // An Agent conversation is bound to one project, the way a Codex thread is bound to a
-// folder. Chat threads can only read; Work threads may change TaCos data, one
-// user-approved action at a time.
+// folder. Writes go through MCP tools with per-turn approval.
 export const agentThreads = sqliteTable(
   "agent_threads",
   {
@@ -383,8 +382,8 @@ export const agentThreads = sqliteTable(
     workspaceId: text("workspace_id").notNull(),
     projectId: text("project_id").notNull(),
     title: text("title").notNull().default(""),
-    // chat | work
-    mode: text("mode").notNull().default("chat"),
+    // Legacy Chat/Work column; product ignores it (drop in H-P1-08).
+    mode: text("mode").notNull().default("work"),
     // codex | pi | api — recorded so a reopened thread shows what answered it
     engine: text("engine").notNull().default("codex"),
     // Codex model slug and reasoning effort; empty means "whatever the CLI is set to"
