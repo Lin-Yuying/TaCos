@@ -1,5 +1,7 @@
 export type {
+  ApprovalDecision,
   ApprovalMode,
+  ApprovalRequest,
   DetectResult,
   HarnessAdapter,
   HarnessGate,
@@ -31,3 +33,5 @@ export {
 } from "./registry";
 
 export { harnessGate } from "./gate";
+
+export { turnEventsToSse } from "./sse";

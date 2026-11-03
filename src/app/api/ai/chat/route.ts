@@ -34,6 +34,8 @@ import {
   skillsInText,
   type AgentStepEvent,
 } from "@/lib/cli-agents";
+import { getHarnessAdapter, turnEventsToSse } from "@/lib/harness";
+import type { ApprovalDecision as HarnessApprovalDecision } from "@/lib/harness";
 import { TacosError } from "@/lib/issues";
 
 const EDIT_ACTIONS = new Set<string>([
@@ -257,14 +259,62 @@ export async function POST(request: Request) {
       const skills =
         engine === "codex" && message.includes("@") ? skillsInText(message, await listCodexSkills()) : [];
       const origin = new URL(request.url).origin;
-      const stream = openCliStream(engine, flattenMessages(messages), {
+      const cwd = path.join(DATA_DIR, "agent", workspaceId, thread.projectId || "general");
+      const prompt = flattenMessages(messages);
+      const isTurnApproved = () =>
+        Boolean(grant && (grant.autoApproveTurn || thread.approval !== "ask"));
+
+      // Codex Agent turns go through the harness adapter (chat + MCP + elicitation keys).
+      if (engine === "codex") {
+        const defaults = codexDefaults();
+        const adapter = getHarnessAdapter("codex");
+        if (!adapter) {
+          throw new TacosError("Codex harness is not registered", 500);
+        }
+        const mapDecision = (value: "accept" | "decline"): HarnessApprovalDecision =>
+          value === "accept" ? "allow" : "deny";
+        const events = adapter.openTurn({
+          sessionId: threadId,
+          cwd,
+          prompt,
+          model: thread.model || defaults.model || null,
+          effort: thread.effort || defaults.effort || null,
+          approval: thread.approval,
+          skills: skills.length > 0 ? skills : undefined,
+          autoApproveTools: AGENT_TOOLS.filter((tool) => !tool.write).map((tool) => tool.name),
+          isTurnApproved,
+          waitForApproval: async (approvalRequest) =>
+            mapDecision(
+              await waitForAgentApproval(approvalRequest.requestId, { signal: request.signal })
+            ),
+          signal: request.signal,
+          proxy: runtime.proxy,
+          ...(grant
+            ? {
+                mcp: {
+                  command: process.execPath,
+                  args: [shimPath()],
+                  env: {
+                    TACOS_AGENT_URL: origin,
+                    TACOS_AGENT_TOKEN: grant.token,
+                    ...(process.versions.electron ? { ELECTRON_RUN_AS_NODE: "1" } : {}),
+                  },
+                },
+              }
+            : { mcp: null }),
+        });
+        const stream = turnEventsToSse(events);
+        return new Response(
+          recordTurn(stream, { ...turn, onEnd: grant ? () => revokeAgentToolGrant(grant.token) : undefined }),
+          { headers: STREAM_HEADERS }
+        );
+      }
+
+      const stream = openCliStream(engine, prompt, {
         proxy: runtime.proxy,
         signal: request.signal,
         agent: {
-          ...(skills.length > 0 ? { skills } : {}),
-          cwd: path.join(DATA_DIR, "agent", workspaceId, thread.projectId || "general"),
-          // A thread that never picked a model follows the machine's Codex config.
-          ...(engine === "codex" ? { ...codexDefaults(), ...(thread.model ? { model: thread.model } : {}), ...(thread.effort ? { effort: thread.effort } : {}) } : {}),
+          cwd,
           approval: thread.approval,
           ...(grant
             ? {
@@ -274,20 +324,13 @@ export async function POST(request: Request) {
                   env: {
                     TACOS_AGENT_URL: origin,
                     TACOS_AGENT_TOKEN: grant.token,
-                    // In the desktop app the server runs inside Electron; a plain node
-                    // child would otherwise try to open a window.
                     ...(process.versions.electron ? { ELECTRON_RUN_AS_NODE: "1" } : {}),
                   },
                 },
                 autoApprove: AGENT_TOOLS.filter((tool) => !tool.write).map((tool) => tool.name),
-                // The card's "Allow for this turn" flips this flag, so later writes in
-                // the same turn run without asking again. "Approve for me" and "Full
-                // access" start every turn in that state.
-                isTurnApproved: () => grant.autoApproveTurn || thread.approval !== "ask",
+                isTurnApproved,
               }
             : {}),
-          // The permission card was already streamed; this waits for the answer that
-          // arrives on /api/ai/chat/approval.
           onApproval: (approval) => waitForAgentApproval(approval.requestId, { signal: request.signal }),
         },
       });

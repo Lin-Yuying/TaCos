@@ -29,6 +29,16 @@ export type McpStdioConfig = {
   env?: Record<string, string>;
 };
 
+export type ApprovalDecision = "allow" | "deny" | "allow_turn";
+
+export type ApprovalRequest = {
+  requestId: string;
+  tool: string;
+  message: string;
+  description?: string;
+  params?: unknown;
+};
+
 export type TurnInput = {
   sessionId: string;
   cwd: string;
@@ -38,14 +48,17 @@ export type TurnInput = {
   approval: ApprovalMode;
   mcp?: McpStdioConfig | null;
   autoApproveTools?: string[];
+  skills?: { name: string; path: string }[];
   isTurnApproved: () => boolean;
+  /** Wait for the browser card after the adapter yields an approval event. */
+  waitForApproval: (request: ApprovalRequest) => Promise<ApprovalDecision>;
   signal?: AbortSignal;
   proxy?: string;
 };
 
 export type TurnEvent =
   | { type: "delta"; text: string }
-  | { type: "step"; id: string; title: string; status: "running" | "done" | "error"; detail?: string }
+  | { type: "step"; id: string; kind?: "command" | "file" | "tool" | "info"; title: string; status: "running" | "done" | "error" | "denied"; detail?: string }
   | {
       type: "approval";
       requestId: string;
@@ -54,7 +67,7 @@ export type TurnEvent =
       description?: string;
       params?: unknown;
     }
-  | { type: "approval_done"; requestId: string; decision: "allow" | "deny" | "allow_turn" }
+  | { type: "approval_done"; requestId: string; decision: ApprovalDecision }
   | { type: "error"; message: string }
   | { type: "done" };
 

@@ -1,8 +1,9 @@
 import os from "node:os";
 import path from "node:path";
+import { listCodexModels } from "@/lib/cli-agents";
 import { findHarnessBinary, readHarnessVersion, readJsonFile } from "../detect-bin";
-import { notImplementedTurn } from "../stub-turn";
 import type { DetectResult, HarnessAdapter, ModelOption, TurnInput } from "../types";
+import { openCodexTurn } from "./codex-turn";
 
 const LABEL = "Codex";
 const INSTALL_HINT = "Install the Codex CLI (npm i -g @openai/codex), then run codex login in Terminal.";
@@ -20,7 +21,6 @@ function isReady(_binary: string): { ok: boolean; error: string | null; hint: st
   }
   return { ok: true, error: null, hint: null };
 }
-
 
 export const codexAdapter: HarnessAdapter = {
   id: "codex",
@@ -65,9 +65,15 @@ export const codexAdapter: HarnessAdapter = {
     };
   },
   listModels(): ModelOption[] {
-    return [];
+    return listCodexModels().map((model) => ({
+      id: model.slug,
+      label: model.label,
+      description: model.description,
+      defaultEffort: model.defaultEffort,
+      efforts: model.efforts,
+    }));
   },
   openTurn(input: TurnInput) {
-    return notImplementedTurn("codex", input);
+    return openCodexTurn(input);
   },
 };
