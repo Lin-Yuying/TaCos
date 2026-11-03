@@ -80,6 +80,7 @@ export async function POST(request: Request) {
         projectId: grant.projectId,
         projectKey: grant.projectKey,
         userId: grant.userId,
+        threadId: grant.threadId,
       },
       name,
       body.arguments

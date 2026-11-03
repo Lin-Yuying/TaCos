@@ -96,12 +96,21 @@ export type Issue = {
   // YYYY-MM-DD, chosen from the calendar in the task panel
   dueDate: string | null;
   reminder: ReminderPreset | null;
-  // null for agent-created issues; the creator and assignees own status changes
+  // the person who opened it, or who ran the agent that published it
   createdBy: string | null;
   createdVia: Via;
+  // H-COLLAB: claim, publisher, source chat and review gate
+  claimedBy: string | null;
+  claimedAt: string | null;
+  publishedBy: string | null;
+  sourceThreadId: string | null;
+  reviewStatus: ReviewStatus;
+  reviewedBy: string | null;
+  reviewedAt: string | null;
   createdAt: string;
   updatedAt: string;
 };
+export type ReviewStatus = "approved" | "pending" | "rejected";
 export type IssueWithLabels = Issue & { labels: Label[] };
 export type Comment = {
   id: string;
@@ -1742,6 +1751,13 @@ async function toIssueRows(workspaceId: string, rows: IssueRow[]): Promise<Issue
       reminder: (row.reminder as ReminderPreset | null) ?? null,
       createdBy: row.createdBy,
       createdVia: row.createdVia as Via,
+      claimedBy: row.claimedBy ?? null,
+      claimedAt: row.claimedAt ?? null,
+      publishedBy: row.publishedBy ?? null,
+      sourceThreadId: row.sourceThreadId ?? null,
+      reviewStatus: row.reviewStatus as ReviewStatus,
+      reviewedBy: row.reviewedBy ?? null,
+      reviewedAt: row.reviewedAt ?? null,
       createdAt: row.createdAt,
       updatedAt: row.updatedAt,
       labels: (byIssue.get(row.id) ?? []).sort((a, b) => a.name.localeCompare(b.name)),
@@ -1974,7 +1990,8 @@ async function notify(input: {
 
 type MutationActor =
   | { kind: "user"; userId: string; displayName: string }
-  | { kind: "agent"; label: string; via: Via };
+  // publishedBy is the person who ran the agent. An agent task waits for human review.
+  | { kind: "agent"; label: string; via: Via; publishedBy?: string; sourceThreadId?: string };
 
 function actorFields(actor: MutationActor) {
   return actor.kind === "user"
@@ -2079,6 +2096,9 @@ export async function createIssue(
   const id = crypto.randomUUID();
   const now = nowIso();
   const actorUserId = actor.kind === "user" ? actor.userId : null;
+  const publisherId = actor.kind === "user" ? actor.userId : actor.publishedBy ?? null;
+  const reviewStatus: ReviewStatus = actor.kind === "agent" ? "pending" : "approved";
+  const sourceThreadId = actor.kind === "agent" ? actor.sourceThreadId ?? null : null;
 
   const assigneeIds = [...new Set(input.assigneeIds ?? [])];
   if (assigneeIds.length > 0) {
@@ -2092,11 +2112,12 @@ export async function createIssue(
 
   const db = getDb();
   await db.run(sql`INSERT INTO issues
-    (id, workspace_id, project_id, number, identifier, title, description, status, priority, due_date, reminder, created_by, created_via, created_at, updated_at, position)
+    (id, workspace_id, project_id, number, identifier, title, description, status, priority, due_date, reminder, created_by, published_by, review_status, source_thread_id, created_via, created_at, updated_at, position)
     VALUES (${id}, ${workspaceId}, ${project.id},
       (SELECT COALESCE(MAX(number), 0) + 1 FROM issues WHERE project_id = ${project.id}),
       'pending', ${title}, ${description}, ${status}, ${priority}, ${dueDate}, ${reminder},
-      ${actorUserId}, ${actor.kind === "agent" ? actor.via : "web"}, ${now}, ${now},
+      ${publisherId}, ${publisherId}, ${reviewStatus}, ${sourceThreadId},
+      ${actor.kind === "agent" ? actor.via : "web"}, ${now}, ${now},
       (SELECT COALESCE(MAX(position), 0) + 1 FROM issues WHERE workspace_id = ${workspaceId}))`);
   await db.run(
     sql`UPDATE issues SET identifier = ${project.key} || '-' || number WHERE id = ${id}`
@@ -2437,6 +2458,13 @@ export async function deleteIssue(workspaceId: string, idOrIdentifier: string): 
     reminder: (row.reminder as ReminderPreset | null) ?? null,
     createdBy: row.createdBy,
     createdVia: row.createdVia as Via,
+    claimedBy: row.claimedBy ?? null,
+    claimedAt: row.claimedAt ?? null,
+    publishedBy: row.publishedBy ?? null,
+    sourceThreadId: row.sourceThreadId ?? null,
+    reviewStatus: row.reviewStatus as ReviewStatus,
+    reviewedBy: row.reviewedBy ?? null,
+    reviewedAt: row.reviewedAt ?? null,
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
   };

@@ -26,6 +26,8 @@ export type AgentToolContext = {
   projectId: string;
   projectKey: string;
   userId: string;
+  // conversation that runs the tool; stored as the source chat of new tasks
+  threadId?: string;
 };
 
 export type AgentToolSpec = {
@@ -326,6 +328,11 @@ function taskSummary(issue: {
 
 const AGENT_ACTOR = { kind: "agent" as const, label: "codex", via: "mcp" as const };
 
+// Tasks that an agent publishes name the person who ran it and wait for review (H-COLLAB-02).
+function publishingActor(ctx: AgentToolContext) {
+  return { ...AGENT_ACTOR, publishedBy: ctx.userId, sourceThreadId: ctx.threadId };
+}
+
 // One approval covers a whole batch, so a batch is capped rather than trusted.
 const BATCH_LIMIT = 20;
 
@@ -375,7 +382,7 @@ async function createOne(ctx: AgentToolContext, args: ToolArgs): Promise<string>
         : [],
       project: ctx.projectKey,
     },
-    AGENT_ACTOR
+    publishingActor(ctx)
   );
   return `Created ${detail.issue.identifier} — ${detail.issue.title}`;
 }
