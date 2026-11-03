@@ -76,6 +76,8 @@ function NavItem({
   icon,
   badge,
   tag,
+  disabled,
+  title,
   children,
 }: {
   href: string;
@@ -83,15 +85,21 @@ function NavItem({
   icon: ReactNode;
   badge?: number | null;
   tag?: ReactNode;
+  disabled?: boolean;
+  title?: string;
   children: ReactNode;
 }) {
   return (
     <Link
       href={href}
+      title={title}
+      aria-disabled={disabled || undefined}
       className={`flex items-center gap-2 rounded-md px-2 py-1 transition-colors ${
-        active
-          ? "bg-elevated font-medium text-text"
-          : "text-muted hover:bg-elevated/60 hover:text-text"
+        disabled
+          ? "cursor-not-allowed text-faint opacity-60"
+          : active
+            ? "bg-elevated font-medium text-text"
+            : "text-muted hover:bg-elevated/60 hover:text-text"
       }`}
     >
       <span className="flex w-4 shrink-0 items-center justify-center text-faint">{icon}</span>
@@ -600,6 +608,7 @@ function RailLink({
   icon,
   dot,
   labeled,
+  disabled,
 }: {
   href: string;
   active: boolean;
@@ -607,18 +616,25 @@ function RailLink({
   icon: ReactNode;
   dot?: boolean;
   labeled?: boolean;
+  disabled?: boolean;
 }) {
-  const activeLook = active
-    ? "bg-elevated text-text"
-    : "text-muted hover:bg-elevated/60 hover:text-text";
+  const activeLook = disabled
+    ? "cursor-not-allowed text-faint opacity-60"
+    : active
+      ? "bg-elevated text-text"
+      : "text-muted hover:bg-elevated/60 hover:text-text";
+  const title = disabled
+    ? "Agent is disabled. Enable a ready harness in Settings."
+    : label;
   // Past the label threshold the rail stops being a rail and reads as a compact
   // sidebar, so the name sits next to the icon instead of hiding in a tooltip.
   if (labeled) {
     return (
       <Link
         href={href}
-        title={label}
+        title={title}
         aria-label={label}
+        aria-disabled={disabled || undefined}
         className={`relative flex h-8 items-center gap-2 rounded-md px-2 text-[13px] font-medium transition-colors ${activeLook}`}
       >
         <span className="flex w-4 shrink-0 items-center justify-center">{icon}</span>
@@ -630,8 +646,9 @@ function RailLink({
   return (
     <Link
       href={href}
-      title={label}
+      title={title}
       aria-label={label}
+      aria-disabled={disabled || undefined}
       className={`relative flex h-8 w-8 items-center justify-center rounded-md transition-colors ${activeLook}`}
     >
       {icon}
@@ -815,6 +832,7 @@ function SidebarRail({
   members,
   viewerId,
   width,
+  agentAllowed,
 }: {
   workspace: WorkspaceInfo;
   workspaces: WorkspaceInfo[];
@@ -825,6 +843,7 @@ function SidebarRail({
   members: Member[];
   viewerId: string;
   width: number;
+  agentAllowed: boolean;
 }) {
   const pathname = usePathname();
   const searchParams = useSearchParams();
@@ -961,6 +980,7 @@ function SidebarRail({
           label="Agent"
           icon={<Bot size={16} />}
           labeled={labeled}
+          disabled={!agentAllowed}
         />
         {!hidden.includes("help") && (
           <RailLink
@@ -1514,6 +1534,7 @@ export function WorkspaceShell({
   members,
   pages,
   joinCode,
+  agentAllowed,
   children,
 }: {
   workspace: WorkspaceInfo;
@@ -1524,6 +1545,7 @@ export function WorkspaceShell({
   members: Member[];
   pages: PageSummary[];
   joinCode: string | null;
+  agentAllowed: boolean;
   children: ReactNode;
 }) {
   const pathname = usePathname();
@@ -1614,6 +1636,7 @@ export function WorkspaceShell({
               members={members}
               viewerId={user.id}
               width={sidebarWidth}
+              agentAllowed={agentAllowed}
             />
           ) : (
             <>
@@ -1641,6 +1664,12 @@ export function WorkspaceShell({
                   href={`/${workspace.id}/agent`}
                   active={pathname.endsWith("/agent")}
                   icon={<Bot size={14} />}
+                  disabled={!agentAllowed}
+                  title={
+                    agentAllowed
+                      ? undefined
+                      : "Agent is disabled. Enable a ready harness in Settings."
+                  }
                 >
                   Agent
                 </NavItem>
