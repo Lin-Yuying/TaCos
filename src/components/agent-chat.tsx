@@ -1347,10 +1347,12 @@ function ThreadSidebar({
       )}
 
       <div className="px-2 pb-1">
+        {/* H-P3-18: New chat leaves the thread URL. The empty composer creates a new session id. */}
         <Link
           href={`/${workspaceId}/agent`}
           onClick={onNavigate}
           className="flex h-[30px] items-center gap-2 rounded-md px-2 text-[13px] text-text/85 transition-colors hover:bg-elevated"
+          data-testid="agent-new-chat"
         >
           <Pencil size={13} className="shrink-0 text-faint" /> New chat
         </Link>
@@ -2011,6 +2013,7 @@ function Conversation({
     }
   }
 
+  // H-P3-18: model change keeps this session. It does not create a thread.
   async function changeModel(nextModel: string, nextEffort: string) {
     const before = { model, effort };
     setModel(nextModel);
