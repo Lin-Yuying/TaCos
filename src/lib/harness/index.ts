@@ -6,6 +6,7 @@ export type {
   HarnessAdapter,
   HarnessGate,
   HarnessId,
+  HarnessSettingsView,
   HarnessStatus,
   InstallResult,
   McpStdioConfig,
@@ -35,3 +36,9 @@ export {
 export { harnessGate } from "./gate";
 
 export { turnEventsToSse } from "./sse";
+
+export {
+  getHarnessSettingsView,
+  loadHarnessEnabledMap,
+  setHarnessEnabled,
+} from "./settings";

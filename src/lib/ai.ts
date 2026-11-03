@@ -243,6 +243,7 @@ export async function saveAiSettings(
         updatedAt: now,
         engine,
         proxy,
+        harnessEnabled: existing?.harnessEnabled ?? "{}",
       })
       .onConflictDoUpdate({
         target: aiSettings.workspaceId,
@@ -272,6 +273,7 @@ export async function saveAiSettings(
       updatedAt: now,
       engine,
       proxy,
+      harnessEnabled: existing?.harnessEnabled ?? "{}",
     })
     .onConflictDoUpdate({
       target: aiSettings.workspaceId,

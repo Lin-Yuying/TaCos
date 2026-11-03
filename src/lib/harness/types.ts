@@ -96,3 +96,9 @@ export type HarnessGate = {
   anyReady: boolean;
   agentAllowed: boolean;
 };
+
+export type HarnessSettingsView = {
+  rows: HarnessStatus[];
+  gate: HarnessGate;
+};
+

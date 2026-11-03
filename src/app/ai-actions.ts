@@ -1,5 +1,7 @@
 "use server";
 
+import { revalidatePath } from "next/cache";
+
 import { requireAdmin, requireWorkspace } from "@/lib/auth";
 import { draftTask, generateTasks, saveAiSettings, testAiConnection } from "@/lib/ai";
 import { getProject, TacosError } from "@/lib/issues";
@@ -79,5 +81,23 @@ export async function draftIssueAction(
       prompt: input.prompt,
       project: await projectLabel(workspaceId, input.projectId),
     });
+  });
+}
+
+export async function setHarnessEnabledAction(
+  workspaceId: string,
+  id: string,
+  enabled: boolean
+): Promise<ActionResult<{ id: string; enabled: boolean }>> {
+  return run(async () => {
+    await requireAdmin(workspaceId);
+    const { setHarnessEnabled, FIRST_CLASS_HARNESS_IDS } = await import("@/lib/harness");
+    if (!(FIRST_CLASS_HARNESS_IDS as readonly string[]).includes(id)) {
+      throw new Error("Unknown harness");
+    }
+    await setHarnessEnabled(workspaceId, id as import("@/lib/harness").HarnessId, enabled);
+    revalidatePath(`/${workspaceId}/settings`, "page");
+    revalidatePath(`/${workspaceId}/agent`, "page");
+    return { id, enabled };
   });
 }

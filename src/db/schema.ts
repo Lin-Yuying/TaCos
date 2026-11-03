@@ -457,4 +457,6 @@ export const aiSettings = sqliteTable("ai_settings", {
   updatedAt: text("updated_at").notNull(),
   engine: text("engine").notNull().default("api"),
   proxy: text("proxy").notNull().default(""),
+  // JSON map of HarnessId -> enabled. Empty object means every harness is enabled.
+  harnessEnabled: text("harness_enabled").notNull().default("{}"),
 });

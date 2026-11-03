@@ -313,7 +313,8 @@ CREATE TABLE IF NOT EXISTS ai_settings (
   enabled INTEGER NOT NULL DEFAULT 1,
   updated_at TEXT NOT NULL,
   engine TEXT NOT NULL DEFAULT 'api',
-  proxy TEXT NOT NULL DEFAULT ''
+  proxy TEXT NOT NULL DEFAULT '',
+  harness_enabled TEXT NOT NULL DEFAULT '{}'
 );
 `;
 
@@ -673,6 +674,7 @@ function bootstrap(sqlite: Database.Database) {
   // would drift as soon as the overview is edited.
   addColumnIfMissing(sqlite, "ai_settings", "engine", "TEXT NOT NULL DEFAULT 'api'");
   addColumnIfMissing(sqlite, "ai_settings", "proxy", "TEXT NOT NULL DEFAULT ''");
+  addColumnIfMissing(sqlite, "ai_settings", "harness_enabled", "TEXT NOT NULL DEFAULT '{}'");
   addColumnIfMissing(sqlite, "overview_comments", "quote", "TEXT");
   addColumnIfMissing(sqlite, "overview_comments", "occurrence", "INTEGER NOT NULL DEFAULT 1");
   // A conversation remembers which Codex model, reasoning effort and approval mode it runs on.

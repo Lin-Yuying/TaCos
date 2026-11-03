@@ -11,6 +11,7 @@ import {
   listProjects,
 } from "@/lib/issues";
 import { getAiSettingsView } from "@/lib/ai";
+import { getHarnessSettingsView } from "@/lib/harness";
 import { SettingsView } from "@/components/settings-view";
 
 export default async function SettingsPage({
@@ -31,7 +32,7 @@ async function View({ params }: { params: Promise<{ workspaceId: string }> }) {
   const user = await getSessionUser();
   if (!user) redirect("/login");
   const ws = await requireWorkspace(workspaceId);
-  const [members, projects, keys, joinCode, allWorkspaces, deletedWorkspaces, seeAll, ai] =
+  const [members, projects, keys, joinCode, allWorkspaces, deletedWorkspaces, seeAll, ai, harness] =
     await Promise.all([
       listMembers(workspaceId),
       listProjects(workspaceId),
@@ -41,6 +42,7 @@ async function View({ params }: { params: Promise<{ workspaceId: string }> }) {
       listDeletedWorkspaces(ws.user.id),
       getMembersSeeAllTasks(workspaceId),
       getAiSettingsView(workspaceId),
+      getHarnessSettingsView(workspaceId),
     ]);
   // Where deleting this workspace lands you: the next team you belong to, or the
   // create/join screen when it was your last one.
@@ -56,6 +58,7 @@ async function View({ params }: { params: Promise<{ workspaceId: string }> }) {
       joinCode={joinCode}
       membersSeeAllTasks={seeAll}
       ai={ai}
+      harness={harness}
       isOwner={ws.workspace.createdBy === ws.user.id}
       nextWorkspaceHref={next ? `/${next.id}` : "/onboarding"}
       deletedWorkspaces={deletedWorkspaces}

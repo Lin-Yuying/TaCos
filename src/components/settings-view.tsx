@@ -19,7 +19,11 @@ import {
   setMemberRoleAction,
   deleteWorkspaceAction,
 } from "@/app/auth-actions";
-import { saveAiSettingsAction, testAiConnectionAction } from "@/app/ai-actions";
+import {
+  saveAiSettingsAction,
+  setHarnessEnabledAction,
+  testAiConnectionAction,
+} from "@/app/ai-actions";
 import {
   AI_PRESETS,
   type AiEngine,
@@ -30,6 +34,7 @@ import { AssigneeAvatar } from "@/components/issue-table";
 import { ProjectIcon, WorkspaceMark } from "@/components/icons";
 import { WorkspaceTrashList } from "@/components/workspace-trash-list";
 import type { ApiKeyRecord, DeletedWorkspace, Member, Project } from "@/lib/issues";
+import type { HarnessSettingsView } from "@/lib/harness/types";
 import { BUILTIN_AVATARS, BUILTIN_AVATAR_LABELS, builtinAvatarId } from "@/lib/avatars";
 import { formatDate, timeAgo } from "@/lib/format";
 
@@ -117,6 +122,7 @@ export function SettingsView({
   joinCode,
   membersSeeAllTasks,
   ai,
+  harness,
   isOwner,
   nextWorkspaceHref,
   deletedWorkspaces,
@@ -130,6 +136,7 @@ export function SettingsView({
   joinCode: string | null;
   membersSeeAllTasks: boolean;
   ai: AiSettingsView;
+  harness: HarnessSettingsView;
   isOwner: boolean;
   nextWorkspaceHref: string;
   deletedWorkspaces: DeletedWorkspace[];
@@ -162,8 +169,27 @@ export function SettingsView({
   const [aiBusy, setAiBusy] = useState<"save" | "test" | null>(null);
   const [aiError, setAiError] = useState<string | null>(null);
   const [aiNotice, setAiNotice] = useState<string | null>(null);
+  const [harnessRows, setHarnessRows] = useState(harness.rows);
+  const [harnessBusy, setHarnessBusy] = useState<string | null>(null);
+  const [harnessError, setHarnessError] = useState<string | null>(null);
 
   const origin = typeof window !== "undefined" ? window.location.origin : "http://localhost:3000";
+
+  async function toggleHarness(id: string, enabled: boolean) {
+    if (!isAdmin) return;
+    setHarnessBusy(id);
+    setHarnessError(null);
+    const before = harnessRows;
+    setHarnessRows((rows) => rows.map((row) => (row.id === id ? { ...row, enabled } : row)));
+    const result = await setHarnessEnabledAction(workspace.id, id, enabled);
+    setHarnessBusy(null);
+    if (!result.ok) {
+      setHarnessRows(before);
+      setHarnessError(result.error);
+      return;
+    }
+    router.refresh();
+  }
 
   async function rotateCode() {
     const result = await rotateJoinCodeAction(workspace.id);
@@ -732,6 +758,71 @@ export function SettingsView({
             </button>
           </div>
           {projError && <div className="text-[12px] text-danger">{projError}</div>}
+        </section>
+
+        <section className="space-y-3" data-testid="harness-settings">
+          <div className="flex items-center gap-2">
+            <h2 className="text-[13px] font-semibold">Harness</h2>
+            <span className="rounded-full bg-elevated px-2 py-0.5 text-[11px] text-faint">
+              {harnessRows.filter((row) => row.enabled && row.ready).length} ready
+            </span>
+          </div>
+          <p className="text-[13px] leading-relaxed text-muted">
+            Local CLI harnesses for the Agent tab. Turn each one on or off for this workspace.
+            The list shows version, ready state, and the last detect error.
+          </p>
+          <div className="overflow-hidden rounded-lg border border-border">
+            {harnessRows.map((row, index) => (
+              <div
+                key={row.id}
+                className={`flex flex-wrap items-start gap-3 px-4 py-3 ${
+                  index > 0 ? "border-t border-border" : ""
+                }`}
+              >
+                <div className="min-w-0 flex-1 space-y-1">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="text-[13px] font-medium text-text">{row.label}</span>
+                    <span className="rounded-full bg-elevated px-2 py-0.5 font-mono text-[11px] text-faint">
+                      {row.id}
+                    </span>
+                    <span
+                      className={`rounded-full px-2 py-0.5 text-[11px] font-medium ${
+                        row.ready ? "bg-accent/10 text-accent" : "bg-elevated text-faint"
+                      }`}
+                    >
+                      {row.ready ? "Ready" : row.installed ? "Not ready" : "Not installed"}
+                    </span>
+                  </div>
+                  <div className="text-[12px] text-muted">
+                    Version: {row.version ?? "—"}
+                    {row.binary ? (
+                      <span className="ml-2 font-mono text-[11px] text-faint">{row.binary}</span>
+                    ) : null}
+                  </div>
+                  {(row.error || row.hint) && (
+                    <div className="text-[12px] text-muted">
+                      {row.error ? <span className="text-danger">{row.error}. </span> : null}
+                      {row.hint}
+                    </div>
+                  )}
+                </div>
+                <label className="flex items-center gap-2 text-[12.5px] text-muted">
+                  <input
+                    type="checkbox"
+                    checked={row.enabled}
+                    disabled={!isAdmin || harnessBusy === row.id}
+                    onChange={(e) => void toggleHarness(row.id, e.target.checked)}
+                    className="h-3.5 w-3.5 accent-[#0d0d0d]"
+                  />
+                  {row.enabled ? "On" : "Off"}
+                </label>
+              </div>
+            ))}
+          </div>
+          {harnessError && <div className="text-[12px] text-danger">{harnessError}</div>}
+          {!isAdmin && (
+            <p className="text-[12px] text-faint">Only a workspace admin can change harness toggles.</p>
+          )}
         </section>
 
         <section className="space-y-3">
