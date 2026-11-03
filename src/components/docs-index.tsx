@@ -7,6 +7,7 @@ import { FileText, FolderOpen, Lock, Plus, Upload, Users } from "lucide-react";
 import { createPageAction, importMarkdownAction } from "@/app/pages-actions";
 import { Menu, MenuItem } from "@/components/menu";
 import type { DocPage } from "@/lib/pages";
+import { useT } from "@/components/i18n-context";
 
 const MARKDOWN_FILE = /\.(md|markdown|mdx|txt)$/i;
 
@@ -28,6 +29,7 @@ export function DocsIndex({
   userId: string;
   pages: DocPage[];
 }) {
+  const t = useT();
   const router = useRouter();
   const [error, setError] = useState<string | null>(null);
   const [note, setNote] = useState<string | null>(null);
@@ -53,7 +55,7 @@ export function DocsIndex({
       (file) => MARKDOWN_FILE.test(file.name) && !junkPath(relativePath(file))
     );
     if (files.length === 0) {
-      setNote("That selection had no Markdown files.");
+      setNote(t("That selection had no Markdown files."));
       return;
     }
     importing.current = true;
@@ -88,12 +90,16 @@ export function DocsIndex({
     setProgress(null);
     setNote(
       [
-        created > 0 ? `${created} imported` : "",
-        skipped > 0 ? `${skipped} already existed` : "",
-        failed > 0 ? `${failed} failed${reason ? ` — ${reason}` : ""}` : "",
+        created > 0 ? t("{count} imported", { count: created }) : "",
+        skipped > 0 ? t("{count} already existed", { count: skipped }) : "",
+        failed > 0
+          ? reason
+            ? t("{count} failed — {reason}", { count: failed, reason })
+            : t("{count} failed", { count: failed })
+          : "",
       ]
         .filter(Boolean)
-        .join(" · ") || "Nothing imported"
+        .join(" · ") || t("Nothing imported")
     );
     router.refresh();
   }
@@ -115,7 +121,7 @@ export function DocsIndex({
               <span className="truncate">{page.title}</span>
               <span className="ml-auto flex shrink-0 items-center gap-1 text-[11px] text-faint">
                 {page.shared ? <Users size={11} /> : <Lock size={11} />}
-                {page.shared ? "Shared" : "Private"}
+                {page.shared ? t("Shared") : t("Private")}
               </span>
             </Link>
           ))}
@@ -129,9 +135,9 @@ export function DocsIndex({
       <div className="w-full px-10 py-6 lg:px-20 xl:px-32">
         <div className="flex items-center justify-between gap-3">
           <div>
-            <h1 className="text-[20px] font-semibold tracking-tight">Docs</h1>
+            <h1 className="text-[20px] font-semibold tracking-tight">{t("Docs")}</h1>
             <p className="mt-0.5 text-[12.5px] text-muted">
-              Markdown documents stored with your TaCos data. Private until you share them.
+              {t("Markdown documents stored with your TaCos data. Private until you share them.")}
             </p>
           </div>
           <div className="flex shrink-0 items-center gap-2">
@@ -142,7 +148,7 @@ export function DocsIndex({
               trigger={
                 <>
                   <Upload size={13} />
-                  {progress ? `Importing ${progress.done + 1}/${progress.total}` : "Import"}
+                  {progress ? t("Importing {done}/{total}", { done: progress.done + 1, total: progress.total }) : t("Import")}
                 </>
               }
             >
@@ -154,7 +160,7 @@ export function DocsIndex({
                       filesRef.current?.click();
                     }}
                   >
-                    <FileText size={13} /> Markdown files…
+                    <FileText size={13} /> {t("Markdown files…")}
                   </MenuItem>
                   <MenuItem
                     onSelect={() => {
@@ -162,7 +168,7 @@ export function DocsIndex({
                       folderRef.current?.click();
                     }}
                   >
-                    <FolderOpen size={13} /> Folder…
+                    <FolderOpen size={13} /> {t("Folder…")}
                   </MenuItem>
                 </>
               )}
@@ -172,7 +178,7 @@ export function DocsIndex({
               onClick={() => void createPage()}
               className="flex shrink-0 items-center gap-1 rounded-md border border-border px-2.5 py-1.5 text-[12.5px] font-medium text-muted transition-colors hover:border-border-strong hover:text-text"
             >
-              <Plus size={13} /> New page
+              <Plus size={13} /> {t("New page")}
             </button>
           </div>
         </div>
@@ -202,10 +208,10 @@ export function DocsIndex({
             void importFiles(list, true);
           }}
         />
-        {error && <div className="mt-3 text-[12px] text-danger">{error}</div>}
+        {error && <div className="mt-3 text-[12px] text-danger">{t(error)}</div>}
         {!error && note && <div className="mt-3 text-[12px] text-muted">{note}</div>}
-        {section("My pages", mine, "No pages yet — create one.")}
-        {section("Shared with the workspace", shared, "Nothing has been shared with you yet.")}
+        {section(t("My pages"), mine, t("No pages yet — create one."))}
+        {section(t("Shared with the workspace"), shared, t("Nothing has been shared with you yet."))}
       </div>
     </div>
   );

@@ -10,6 +10,7 @@ import { STATUS_ORDER, PRIORITY_NAMES } from "@/lib/constants";
 import { builtinAvatarId, builtinAvatarSrc } from "@/lib/avatars";
 import type { Assignee, IssueWithLabels } from "@/lib/issues";
 import { issueRef, timeAgo } from "@/lib/format";
+import { useLocale, useT } from "@/components/i18n-context";
 
 function initials(displayName: string) {
   const words = displayName
@@ -135,6 +136,8 @@ export function AssigneeStack({
 }
 
 export function IssueTable({ issues }: { issues: IssueWithLabels[] }) {
+  const t = useT();
+  const locale = useLocale();
   const { openIssue, openIssueId, setFocused } = useUI();
   const assigneeHref = useAssigneeHref();
   const [focusIndex, setFocusIndex] = useState<number | null>(null);
@@ -208,7 +211,7 @@ export function IssueTable({ issues }: { issues: IssueWithLabels[] }) {
           <div className="sticky top-0 z-10 flex items-center gap-2 border-b border-border bg-bg/95 px-10 py-1.5 backdrop-blur lg:px-20 xl:px-32">
             <StatusIcon status={group.status} size={13} />
             <span className="text-[12px] font-medium text-muted">
-              {STATUS_META[group.status].label}
+              {t(STATUS_META[group.status].label)}
             </span>
             <span className="text-[12px] text-faint">{group.items.length}</span>
             <AddIssueButton status={group.status} />
@@ -246,7 +249,7 @@ export function IssueTable({ issues }: { issues: IssueWithLabels[] }) {
                 <span className="flex w-[96px] shrink-0 items-center gap-1.5 text-[12px]">
                   <PriorityIcon priority={issue.priority} size={14} />
                   <span className={issue.priority === 0 ? "truncate text-faint" : "truncate text-muted"}>
-                    {PRIORITY_NAMES[issue.priority]}
+                    {t(PRIORITY_NAMES[issue.priority])}
                   </span>
                 </span>
                 <span className="flex w-[146px] shrink-0 items-center gap-1.5">
@@ -302,7 +305,7 @@ export function IssueTable({ issues }: { issues: IssueWithLabels[] }) {
                 <span className="flex w-[44px] shrink-0 items-center justify-end gap-1">
                   <ViaBadge via={issue.createdVia} />
                   <span suppressHydrationWarning className="w-8 text-right text-[12px] text-faint">
-                    {timeAgo(issue.updatedAt)}
+                    {timeAgo(issue.updatedAt, locale)}
                   </span>
                 </span>
               </div>

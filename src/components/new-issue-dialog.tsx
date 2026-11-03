@@ -18,8 +18,10 @@ import { createIssueAction } from "@/app/actions";
 import { draftIssueAction } from "@/app/ai-actions";
 import { STATUS_ORDER, type Priority, type Status } from "@/lib/constants";
 import type { Label, Member, Project } from "@/lib/issues";
+import { useT } from "@/components/i18n-context";
 
 export function NewIssueDialog({ workspaceId }: { workspaceId: string }) {
+  const t = useT();
   const { composerOpen, composerStatus, composerSeed, setComposerOpen, openIssue, aiReady } = useUI();
   const searchParams = useSearchParams();
   const pathname = usePathname();
@@ -111,7 +113,7 @@ export function NewIssueDialog({ workspaceId }: { workspaceId: string }) {
       setComposerOpen(false);
       openIssue(result.data.id);
     } else {
-      setError(result.error);
+      setError(t(result.error));
     }
   }
 
@@ -127,7 +129,7 @@ export function NewIssueDialog({ workspaceId }: { workspaceId: string }) {
     });
     setAiBusy(false);
     if (!result.ok) {
-      setAiError(result.error);
+      setAiError(t(result.error));
       return;
     }
     const task = result.data;
@@ -156,7 +158,7 @@ export function NewIssueDialog({ workspaceId }: { workspaceId: string }) {
         >
           <div className="flex items-center justify-between border-b border-border px-4 py-2 text-[12px] text-faint">
             <span>
-              New task
+              {t("New task")}
               {project ? (
                 <span className="ml-1 inline-flex items-center gap-1 text-muted">
                   <ProjectIcon color={project.color} icon={project.icon} size={12} />
@@ -167,7 +169,7 @@ export function NewIssueDialog({ workspaceId }: { workspaceId: string }) {
             <button
               type="button"
               onClick={() => setComposerOpen(false)}
-              aria-label="Close"
+              aria-label={t("Close")}
               className="rounded p-1 transition-colors hover:bg-elevated hover:text-text"
             >
               <X size={14} />
@@ -184,13 +186,13 @@ export function NewIssueDialog({ workspaceId }: { workspaceId: string }) {
                   void submit();
                 }
               }}
-              placeholder="Issue title"
+              placeholder={t("Issue title")}
               className="w-full bg-transparent text-[18px] font-semibold text-text placeholder:text-faint"
             />
             <textarea
               value={description}
               onChange={(e) => setDescription(e.target.value)}
-              placeholder="Add description…"
+              placeholder={t("Add description…")}
               rows={4}
               className="mt-2 w-full resize-none bg-transparent text-[13px] leading-relaxed text-muted placeholder:text-faint"
             />
@@ -209,7 +211,7 @@ export function NewIssueDialog({ workspaceId }: { workspaceId: string }) {
                         }
                         if (event.key === "Escape") setAiOpen(false);
                       }}
-                      placeholder="Describe the task, e.g. 修复微信登录回调偶发失败"
+                      placeholder={t("Describe the task, e.g. 修复微信登录回调偶发失败")}
                       className="min-w-0 flex-1 rounded-md border border-border bg-elevated/40 px-2.5 py-1.5 text-[12.5px] text-text placeholder:text-faint focus:border-border-strong"
                     />
                     <button
@@ -219,12 +221,12 @@ export function NewIssueDialog({ workspaceId }: { workspaceId: string }) {
                       className="flex shrink-0 items-center gap-1 rounded-md bg-accent px-2.5 py-1.5 text-[12px] font-medium text-white disabled:opacity-40"
                     >
                       {aiBusy ? <LoaderCircle size={11} className="animate-spin" /> : <Sparkles size={11} />}
-                      {aiBusy ? "Drafting…" : "Draft"}
+                      {aiBusy ? t("Drafting…") : t("Draft")}
                     </button>
                     <button
                       type="button"
                       onClick={() => setAiOpen(false)}
-                      aria-label="Close AI draft"
+                      aria-label={t("Close AI draft")}
                       className="shrink-0 rounded p-1 text-faint hover:bg-elevated hover:text-text"
                     >
                       <X size={13} />
@@ -239,7 +241,7 @@ export function NewIssueDialog({ workspaceId }: { workspaceId: string }) {
                     <Sparkles size={12} /> AI draft
                   </button>
                 )}
-                {aiError && <div className="mt-1 text-[11.5px] text-danger">{aiError}</div>}
+                {aiError && <div className="mt-1 text-[11.5px] text-danger">{t(aiError)}</div>}
               </div>
             )}
             <div className="mt-3 flex flex-wrap items-center gap-2">
@@ -247,7 +249,7 @@ export function NewIssueDialog({ workspaceId }: { workspaceId: string }) {
                 width={200}
                 trigger={
                   <>
-                    <span className="text-muted">Project</span>
+                    <span className="text-muted">{t("Project")}</span>
                     {project ? (
                       <span className="flex items-center gap-1 text-[12px] text-muted">
                         <ProjectIcon color={project.color} icon={project.icon} size={12} />
@@ -274,7 +276,7 @@ export function NewIssueDialog({ workspaceId }: { workspaceId: string }) {
                     ))}
                     {projects.length === 0 && (
                       <div className="px-2 py-1.5 text-[12px] text-faint">
-                        No projects yet — create one in Settings.
+                        {t("No projects yet — create one in Settings.")}
                       </div>
                     )}
                   </>
@@ -286,7 +288,7 @@ export function NewIssueDialog({ workspaceId }: { workspaceId: string }) {
                 trigger={
                   <>
                     <StatusIcon status={status} size={13} />
-                    {STATUS_META[status].label}
+                    {t(STATUS_META[status].label)}
                   </>
                 }
               >
@@ -302,7 +304,7 @@ export function NewIssueDialog({ workspaceId }: { workspaceId: string }) {
                         }}
                       >
                         <StatusIcon status={option} size={13} />
-                        {STATUS_META[option].label}
+                        {t(STATUS_META[option].label)}
                       </MenuItem>
                     ))}
                   </>
@@ -314,7 +316,7 @@ export function NewIssueDialog({ workspaceId }: { workspaceId: string }) {
                 trigger={
                   <>
                     <PriorityIcon priority={priority} size={13} />
-                    {PRIORITY_META[priority].label}
+                    {t(PRIORITY_META[priority].label)}
                   </>
                 }
               >
@@ -330,7 +332,7 @@ export function NewIssueDialog({ workspaceId }: { workspaceId: string }) {
                         }}
                       >
                         <PriorityIcon priority={option} size={13} />
-                        {PRIORITY_META[option].label}
+                        {t(PRIORITY_META[option].label)}
                       </MenuItem>
                     ))}
                   </>
@@ -342,7 +344,7 @@ export function NewIssueDialog({ workspaceId }: { workspaceId: string }) {
                 trigger={
                   <>
                     {assigneeIds.length === 0 ? (
-                      "Assignee…"
+                      t("Assignee…")
                     ) : (
                       <>
                         <AssigneeStack
@@ -352,8 +354,8 @@ export function NewIssueDialog({ workspaceId }: { workspaceId: string }) {
                         <span className="max-w-[140px] truncate">
                           {assigneeIds.length === 1
                             ? members.find((member) => member.id === assigneeIds[0])?.displayName ??
-                              "Assignee"
-                            : `${assigneeIds.length} assignees`}
+                              t("Assignee")
+                            : t("{count} assignees", { count: assigneeIds.length })}
                         </span>
                       </>
                     )}
@@ -369,7 +371,7 @@ export function NewIssueDialog({ workspaceId }: { workspaceId: string }) {
                         close();
                       }}
                     >
-                      <span className="text-faint">—</span> Unassigned
+                      <span className="text-faint">—</span> {t("Unassigned")}
                     </MenuItem>
                     <MenuItem
                       active={
@@ -381,7 +383,7 @@ export function NewIssueDialog({ workspaceId }: { workspaceId: string }) {
                         close();
                       }}
                     >
-                      <Users size={14} className="text-muted" /> Everyone
+                      <Users size={14} className="text-muted" /> {t("Everyone")}
                     </MenuItem>
                     <div className="my-1 border-t border-border" />
                     {members.map((member) => {
@@ -413,7 +415,7 @@ export function NewIssueDialog({ workspaceId }: { workspaceId: string }) {
                 width={220}
                 trigger={
                   <>
-                    <span>Labels</span>
+                    <span>{t("Labels")}</span>
                     {labelNames.length > 0 && (
                       <span className="text-faint">· {labelNames.length}</span>
                     )}
@@ -442,7 +444,7 @@ export function NewIssueDialog({ workspaceId }: { workspaceId: string }) {
                     })}
                     {labels.length === 0 && (
                       <div className="px-2 py-1.5 text-[12px] text-faint">
-                        No labels yet — create some on the Labels page.
+                        {t("No labels yet — create some on the Labels page.")}
                       </div>
                     )}
                   </>
@@ -450,14 +452,14 @@ export function NewIssueDialog({ workspaceId }: { workspaceId: string }) {
               </Menu>
 
               <div className="ml-auto flex items-center gap-2">
-                {error && <span className="text-[12px] text-danger">{error}</span>}
+                {error && <span className="text-[12px] text-danger">{t(error)}</span>}
                 <button
                   type="button"
                   onClick={() => void submit()}
                   disabled={!title.trim() || !project || busy}
                   className="rounded-md bg-accent px-3 py-1.5 text-[13px] font-medium text-white transition-colors hover:bg-accent-hover disabled:opacity-40"
                 >
-                  Create task
+                  {t("Create task")}
                   <span className="ml-2 text-[11px] opacity-75">⌘↵</span>
                 </button>
               </div>

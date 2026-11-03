@@ -10,6 +10,7 @@ import { useUI } from "@/components/ui-context";
 import { STATUS_META, STATUS_ORDER, type Status } from "@/lib/constants";
 import { issueRef } from "@/lib/format";
 import type { IssueWithLabels } from "@/lib/issues";
+import { useT } from "@/components/i18n-context";
 
 function BoardCard({
   issue,
@@ -95,6 +96,7 @@ export function IssueBoard({
   workspaceId: string;
   currentUserId: string;
 }) {
+  const t = useT();
   const router = useRouter();
   const [, startTransition] = useTransition();
   const [drag, setDrag] = useState<IssueWithLabels | null>(null);
@@ -177,7 +179,7 @@ export function IssueBoard({
             <header className="flex shrink-0 items-center gap-2 px-1 pb-2">
               <StatusIcon status={status} size={13} />
               <span className="truncate text-[12px] font-medium text-muted">
-                {STATUS_META[status].label}
+                {t(STATUS_META[status].label)}
               </span>
               <span className="text-[12px] text-faint">{items.length}</span>
               <AddIssueButton status={status} />
@@ -210,7 +212,7 @@ export function IssueBoard({
               {over?.status === status && over.index === slot && !!drag && <DropLine />}
               {items.length === 0 && (
                 <div className="rounded-lg border border-dashed border-border px-3 py-4 text-center text-[12px] text-faint">
-                  No {STATUS_META[status].label.toLowerCase()} issues
+                  {t("No {status} issues", { status: t(STATUS_META[status].label) })}
                 </div>
               )}
             </div>

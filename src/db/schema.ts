@@ -11,6 +11,8 @@ export const users = sqliteTable("users", {
   role: text("role").notNull().default("member"),
   // last workspace this account opened; where a fresh session lands when it is still theirs
   lastWorkspaceId: text("last_workspace_id"),
+  // interface language; null follows the browser's Accept-Language
+  locale: text("locale"),
   createdAt: text("created_at").notNull(),
 });
 

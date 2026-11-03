@@ -9,6 +9,7 @@ import { AssigneeAvatar } from "@/components/issue-table";
 import { issueRef } from "@/lib/format";
 import type { PageSummary } from "@/lib/pages";
 import type { IssueWithLabels, Member, PersonProject } from "@/lib/issues";
+import { useT } from "@/components/i18n-context";
 
 type PersonTab = "projects" | "tasks" | "documents";
 
@@ -32,6 +33,7 @@ export function PersonPage({
   documents: PageSummary[];
   currentUserId: string;
 }) {
+  const t = useT();
   const [tab, setTab] = useState<PersonTab>("projects");
   const [q, setQ] = useState("");
 
@@ -47,9 +49,9 @@ export function PersonPage({
   }, [issues, q]);
 
   const tabs: { key: PersonTab; label: string; count: number }[] = [
-    { key: "projects", label: "Projects", count: projects.length },
-    { key: "tasks", label: "Tasks", count: issues.length },
-    { key: "documents", label: "Documents", count: documents.length },
+    { key: "projects", label: t("Projects"), count: projects.length },
+    { key: "tasks", label: t("Tasks"), count: issues.length },
+    { key: "documents", label: t("Documents"), count: documents.length },
   ];
 
   return (
@@ -61,7 +63,7 @@ export function PersonPage({
             {person.displayName}
           </h1>
           <span className="shrink-0 rounded-full bg-elevated px-2 py-0.5 text-[11px] text-muted">
-            {workspaceRole}
+            {t(workspaceRole)}
           </span>
         </div>
         <nav className="mt-2 flex items-center gap-1.5">
@@ -119,7 +121,7 @@ export function PersonPage({
                           : "border border-border text-muted"
                       }`}
                     >
-                      {project.role === "owner" ? "Owner" : "Member"}
+                      {project.role === "owner" ? t("Owner") : t("Member")}
                     </span>
                     <ArrowUpRight
                       size={13}
@@ -156,7 +158,7 @@ export function PersonPage({
                     <span className="truncate">{page.title}</span>
                     <span className="ml-auto flex shrink-0 items-center gap-1 text-[11px] text-faint">
                       {page.shared ? <Users size={11} /> : <Lock size={11} />}
-                      {page.shared ? "Shared" : "Private"}
+                      {page.shared ? t("Shared") : t("Private")}
                     </span>
                   </Link>
                 ))}
@@ -167,7 +169,7 @@ export function PersonPage({
       ) : (
         <>
           <header className="flex h-12 shrink-0 items-center gap-2 border-b border-border px-10 lg:px-20 xl:px-32">
-            <span className="text-[13px] font-medium text-muted">Assigned tasks</span>
+            <span className="text-[13px] font-medium text-muted">{t("Assigned tasks")}</span>
             <span className="rounded-full bg-elevated px-2 py-0.5 text-[11px] text-muted">
               {shown.length}
             </span>
@@ -177,14 +179,14 @@ export function PersonPage({
                 <input
                   value={q}
                   onChange={(e) => setQ(e.target.value)}
-                  placeholder="Search tasks…"
+                  placeholder={t("Search tasks…")}
                   className="w-full bg-transparent text-[13px] text-text placeholder:text-faint"
                 />
                 {q && (
                   <button
                     type="button"
                     onClick={() => setQ("")}
-                    aria-label="Clear search"
+                    aria-label={t("Clear search")}
                     className="text-faint hover:text-muted"
                   >
                     <X size={12} />

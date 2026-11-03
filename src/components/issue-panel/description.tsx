@@ -5,6 +5,7 @@ import { Markdown } from "@/components/markdown";
 import { MarkdownEditor, type MarkdownEditorHandle } from "@/components/markdown-editor";
 import { updateIssueDetailAction } from "@/app/actions";
 import type { IssueUpdate } from "./types";
+import { useT } from "@/components/i18n-context";
 
 /**
  * The description takes every spare pixel above the footer. It reads as the document
@@ -22,6 +23,7 @@ export function DescriptionSection({
   description: string;
   onUpdate: IssueUpdate;
 }) {
+  const t = useT();
   // The description is a Notion-style block editor while open (`doc`) and rendered
   // Markdown — checkboxes tickable — the rest of the time.
   const [doc, setDoc] = useState<string | null>(null);
@@ -80,7 +82,7 @@ export function DescriptionSection({
       <div
         role="button"
         tabIndex={0}
-        title="Click to edit the description"
+        title={t("Click to edit the description")}
         onClick={(event) => {
           // A link keeps its own click, and a checkbox ticks without opening the editor.
           if ((event.target as HTMLElement).closest("a, button")) return;
@@ -102,7 +104,7 @@ export function DescriptionSection({
             onSourceChange={(next) => void onUpdate({ description: next })}
           />
         ) : (
-          <p className="text-[13px] text-faint">Add a description…</p>
+          <p className="text-[13px] text-faint">{t("Add a description…")}</p>
         )}
       </div>
     );
@@ -117,7 +119,7 @@ export function DescriptionSection({
           pending.current = next;
           setDoc(next);
         }}
-        placeholder="Write a description, type / for commands…"
+        placeholder={t("Write a description, type / for commands…")}
       />
     </div>
   );

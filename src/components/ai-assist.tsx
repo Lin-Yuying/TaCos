@@ -17,6 +17,7 @@ import { PRIORITY_META } from "@/components/icons";
 import { readEngineCookie, rememberEngine, streamAiEdit } from "@/lib/ai-client";
 import { Menu, MenuItem } from "@/components/menu";
 import { useUI } from "@/components/ui-context";
+import { useT } from "@/components/i18n-context";
 
 export type AiEditTarget = {
   mode: "selection" | "document";
@@ -51,6 +52,7 @@ export function AiEditPanel({
   onAccept: (text: string, action: AiEditAction) => void;
   onTasks?: () => void;
 }) {
+  const t = useT();
   const [result, setResult] = useState("");
   const [busy, setBusy] = useState(false);
   const [action, setAction] = useState<AiEditAction | null>(null);
@@ -145,9 +147,9 @@ export function AiEditPanel({
     >
       <div className="mb-2 flex items-center gap-1.5">
         <Sparkles size={13} className="text-accent" />
-        <span className="text-[12px] font-semibold text-text">AI assistant</span>
+        <span className="text-[12px] font-semibold text-text">{t("AI assistant")}</span>
         <span className="truncate text-[11px] text-faint">
-          {target.mode === "selection" ? "· selected passage" : "· whole document"}
+          {t(target.mode === "selection" ? "· selected passage" : "· whole document")}
         </span>
         <div className="ml-auto flex shrink-0 items-center gap-1">
           {available.length > 1 && (
@@ -157,7 +159,7 @@ export function AiEditPanel({
               triggerClassName="flex items-center gap-1 rounded-full px-1.5 py-0.5 text-[11px] text-muted transition-colors hover:bg-elevated hover:text-text"
               trigger={
                 <>
-                  <span className="max-w-[92px] truncate">{current?.label ?? "Model"}</span>
+                  <span className="max-w-[92px] truncate">{current?.label ?? t("Model")}</span>
                   <ChevronDown size={11} className="shrink-0 text-faint" />
                 </>
               }
@@ -186,7 +188,7 @@ export function AiEditPanel({
           <button
             type="button"
             onClick={close}
-            aria-label="Close AI assistant"
+            aria-label={t("Close AI assistant")}
             className="rounded p-0.5 text-faint transition-colors hover:bg-elevated hover:text-text"
           >
             <X size={13} />
@@ -197,11 +199,15 @@ export function AiEditPanel({
       {tooLong ? (
         <div className="space-y-2 rounded-lg border border-border bg-elevated/30 px-2.5 py-2">
           <p className="text-[11.5px] leading-relaxed text-muted">
-            {`${target.text.length.toLocaleString()} characters is past the ${AI_EDIT_CHAR_LIMIT.toLocaleString()}-character limit for a one-shot rewrite.`}
+            {t("{count} characters is past the {limit}-character limit for a one-shot rewrite.", {
+              count: target.text.length.toLocaleString(),
+              limit: AI_EDIT_CHAR_LIMIT.toLocaleString(),
+            })}
           </p>
           <p className="text-[11.5px] leading-relaxed text-faint">
-            The Agent can take it in Work mode: it reads the document, rewrites it in steps and
-            saves it back. Select a shorter passage to use this panel.
+            {t(
+              "The Agent can take it in Work mode: it reads the document, rewrites it in steps and saves it back. Select a shorter passage to use this panel."
+            )}
           </p>
           <button
             type="button"
@@ -211,7 +217,7 @@ export function AiEditPanel({
             }}
             className="flex items-center gap-1 rounded-md bg-accent px-2.5 py-1 text-[11.5px] font-medium text-white transition-opacity hover:opacity-90"
           >
-            <Bot size={12} /> Open Agent in Work mode
+            <Bot size={12} /> {t("Open Agent in Work mode")}
           </button>
         </div>
       ) : (
@@ -225,7 +231,7 @@ export function AiEditPanel({
             onClick={() => void run(entry.id)}
             className="rounded-md border border-border px-2 py-1 text-left text-[11.5px] text-muted transition-colors hover:border-border-strong hover:text-text disabled:opacity-40"
           >
-            {entry.label}
+            {t(entry.label)}
           </button>
         ))}
         {target.allowContinue && (
@@ -235,7 +241,7 @@ export function AiEditPanel({
             onClick={() => void run("continue")}
             className="col-span-2 rounded-md border border-border px-2 py-1 text-left text-[11.5px] text-muted transition-colors hover:border-border-strong hover:text-text disabled:opacity-40"
           >
-            Continue writing from the end
+            {t("Continue writing from the end")}
           </button>
         )}
       </div>
@@ -251,7 +257,7 @@ export function AiEditPanel({
               if (instruction.trim() && !busy) void run("custom");
             }
           }}
-          placeholder="Or tell the AI what to change…"
+          placeholder={t("Or tell the AI what to change…")}
           className="min-w-0 flex-1 rounded-md border border-border bg-elevated/40 px-2 py-1.5 text-[12px] text-text placeholder:text-faint focus:border-border-strong"
         />
         <button
@@ -260,11 +266,11 @@ export function AiEditPanel({
           onClick={() => void run("custom")}
           className="shrink-0 rounded-md bg-accent px-2.5 py-1.5 text-[11.5px] font-medium text-white transition-opacity hover:opacity-90 disabled:opacity-40"
         >
-          Run
+          {t("Run")}
         </button>
       </div>
 
-      {error && <div className="mt-2 text-[11.5px] text-danger">{error}</div>}
+      {error && <div className="mt-2 text-[11.5px] text-danger">{t(error)}</div>}
 
       {(busy || result) && (
         <div className="mt-2">
@@ -272,13 +278,13 @@ export function AiEditPanel({
             value={result}
             onChange={(event) => setResult(event.target.value)}
             rows={7}
-            aria-label="AI result"
+            aria-label={t("AI result")}
             className="w-full resize-y rounded-md border border-border bg-bg px-2 py-1.5 font-mono text-[12px] leading-relaxed text-text focus:border-border-strong focus:outline-none"
           />
           {busy && (
             <div className="mt-1 flex items-center gap-1 text-[11px] text-faint">
               <LoaderCircle size={11} className="animate-spin" />
-              {actionLabel ? `${actionLabel}…` : "Writing…"}
+              {actionLabel ? `${t(actionLabel)}…` : t("Writing…")}
             </div>
           )}
         </div>
@@ -293,7 +299,7 @@ export function AiEditPanel({
             onClick={onTasks}
             className="flex items-center gap-1 text-[11.5px] text-muted transition-colors hover:text-text"
           >
-            <ListChecks size={12} /> Turn into tasks
+            <ListChecks size={12} /> {t("Turn into tasks")}
           </button>
         )}
         <div className="ml-auto flex items-center gap-1.5">
@@ -302,7 +308,7 @@ export function AiEditPanel({
             onClick={close}
             className="rounded-md border border-border px-2 py-1 text-[11.5px] text-muted transition-colors hover:text-text"
           >
-            Cancel
+            {t("Cancel")}
           </button>
           {!tooLong && (
             <button
@@ -343,6 +349,7 @@ export function AiTaskDialog({
   onClose: () => void;
   onCreated?: (count: number) => void;
 }) {
+  const t = useT();
   const router = useRouter();
   const { toast } = useUI();
   const [prompt, setPrompt] = useState(initialPrompt);
@@ -393,7 +400,7 @@ export function AiTaskDialog({
     }
     setCreating(false);
     if (made > 0) {
-      toast(`${made} ${made === 1 ? "task" : "tasks"} created`);
+      toast(t(made === 1 ? "{count} task created" : "{count} tasks created", { count: made }));
       onCreated?.(made);
       router.refresh();
       onClose();
@@ -413,16 +420,16 @@ export function AiTaskDialog({
     <div className="fixed inset-0 z-50 flex items-start justify-center bg-black/35 px-[12px] py-[8vh]">
       <div
         role="dialog"
-        aria-label="Generate tasks with AI"
+        aria-label={t("Generate tasks with AI")}
         className="w-[560px] max-w-full overflow-hidden rounded-xl border border-border bg-bg shadow-2xl shadow-black/20"
       >
         <header className="flex items-center gap-2 border-b border-border px-4 py-2.5">
           <Sparkles size={14} className="text-accent" />
-          <span className="text-[13px] font-semibold">Generate tasks with AI</span>
+          <span className="text-[13px] font-semibold">{t("Generate tasks with AI")}</span>
           <button
             type="button"
             onClick={onClose}
-            aria-label="Close"
+            aria-label={t("Close")}
             className="ml-auto rounded p-1 text-faint transition-colors hover:bg-elevated hover:text-text"
           >
             <X size={14} />
@@ -435,7 +442,7 @@ export function AiTaskDialog({
             value={prompt}
             onChange={(event) => setPrompt(event.target.value)}
             rows={3}
-            placeholder="Describe the work, for example: 把微信登录的联调拆成几个任务，包含接口、前端和回归测试"
+            placeholder={t("Describe the work, for example: 把微信登录的联调拆成几个任务，包含接口、前端和回归测试")}
             className="w-full resize-y rounded-lg border border-border bg-bg px-3 py-2 text-[13px] leading-relaxed text-text placeholder:text-faint focus:border-border-strong focus:outline-none"
           />
           <div className="flex items-center gap-2">
@@ -446,12 +453,12 @@ export function AiTaskDialog({
               className="flex items-center gap-1.5 rounded-md bg-accent px-3 py-1.5 text-[12.5px] font-medium text-white transition-opacity hover:opacity-90 disabled:opacity-40"
             >
               {busy ? <LoaderCircle size={12} className="animate-spin" /> : <Sparkles size={12} />}
-              {busy ? "Thinking…" : tasks ? "Regenerate" : "Generate"}
+              {busy ? t("Thinking…") : t(tasks ? "Regenerate" : "Generate")}
             </button>
-            <span className="text-[11.5px] text-faint">Nothing is created until you confirm.</span>
+            <span className="text-[11.5px] text-faint">{t("Nothing is created until you confirm.")}</span>
           </div>
 
-          {error && <div className="text-[12px] text-danger">{error}</div>}
+          {error && <div className="text-[12px] text-danger">{t(error)}</div>}
 
           {tasks && (
             <div className="divide-y divide-border rounded-lg border border-border">
@@ -479,7 +486,7 @@ export function AiTaskDialog({
                       )}
                       <span className="mt-1 flex flex-wrap items-center gap-1.5 text-[10.5px] text-faint">
                         <span className="rounded-full bg-elevated px-1.5 py-0.5">
-                          {PRIORITY_LABEL[task.priority]}
+                          {t(PRIORITY_LABEL[task.priority])}
                         </span>
                         {task.labels.map((label) => (
                           <span key={label} className="rounded-full bg-elevated px-1.5 py-0.5">
@@ -501,7 +508,7 @@ export function AiTaskDialog({
             onClick={onClose}
             className="rounded-md border border-border px-3 py-1.5 text-[12.5px] text-muted transition-colors hover:text-text"
           >
-            Cancel
+            {t("Cancel")}
           </button>
           <button
             type="button"
@@ -510,8 +517,12 @@ export function AiTaskDialog({
             className="rounded-md bg-accent px-3 py-1.5 text-[12.5px] font-medium text-white transition-opacity hover:opacity-90 disabled:opacity-40"
           >
             {creating
-              ? "Creating…"
-              : `Create ${picked.size || ""} ${picked.size === 1 ? "task" : "tasks"}`.trim()}
+              ? t("Creating…")
+              : picked.size === 0
+                ? t("Create tasks")
+                : t(picked.size === 1 ? "Create {count} task" : "Create {count} tasks", {
+                    count: picked.size,
+                  })}
           </button>
         </footer>
       </div>

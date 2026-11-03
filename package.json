@@ -25,7 +25,8 @@
     "desktop:standalone:win": "npm run build && npm run server:bundle -- --target=win32-x64 && electron-builder --win --x64 --publish never --config electron/builder.standalone.json",
     "mcp": "tsx mcp/server.ts",
     "mcp:test": "tsx scripts/test-mcp.ts",
-    "check:harness": "tsx scripts/check-all.ts"
+    "check:harness": "tsx scripts/check-all.ts",
+    "i18n:check": "node scripts/check-i18n.mjs"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.32.1",

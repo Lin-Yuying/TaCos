@@ -6,6 +6,7 @@ import { AssigneeAvatar } from "@/components/issue-table";
 import { Menu, MenuItem } from "@/components/menu";
 import { listSwitchableUsersAction, switchUserAction, type SwitchUser } from "@/app/admin-actions";
 import { logoutAction } from "@/app/auth-actions";
+import { useT } from "@/components/i18n-context";
 
 export type UserInfo = {
   id: string;
@@ -27,10 +28,11 @@ export function UserMenu({
 }: {
   user: UserInfo;
   workspaceUrl?: string;
-  // Where "Admin console" goes for this person: the site console for a site admin, the
+  // Where t("Admin console") goes for this person: the site console for a site admin, the
   // workspace-scoped one for a workspace admin, nothing for everyone else.
   adminUrl?: string | null;
 }) {
+  const t = useT();
   const isSiteAdmin = user.siteRole === "admin";
   const [people, setPeople] = useState<SwitchUser[] | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -92,9 +94,9 @@ export function UserMenu({
 
           {/* Above the list: a tall switch list can push a closing message out of view. */}
           {switching && (
-            <div className="px-2 pb-1 text-[11px] text-faint">Switching account…</div>
+            <div className="px-2 pb-1 text-[11px] text-faint">{t("Switching account…")}</div>
           )}
-          {error && <div className="px-2 pb-1 text-[11px] text-danger">{error}</div>}
+          {error && <div className="px-2 pb-1 text-[11px] text-danger">{t(error)}</div>}
 
           {workspaceUrl && (
             <MenuItem
@@ -103,7 +105,7 @@ export function UserMenu({
                 window.location.href = workspaceUrl;
               }}
             >
-              <ArrowLeft size={13} /> Back to workspace
+              <ArrowLeft size={13} /> {t("Back to workspace")}
             </MenuItem>
           )}
 
@@ -111,7 +113,7 @@ export function UserMenu({
             <>
               <div className="my-1 border-t border-border" />
               <div className="px-2 pb-1 pt-1 text-[11px] uppercase tracking-wider text-faint">
-                Switch user
+                {t("Switch user")}
               </div>
               <div className="max-h-52 overflow-y-auto">
                 {people.map((person) => (
@@ -127,7 +129,7 @@ export function UserMenu({
                         <span className="text-faint"> @{person.username}</span>
                       </span>
                       <span className="block truncate text-[11px] text-faint">
-                        {person.workspaceName ?? "No workspace"}
+                        {person.workspaceName ?? t("No workspace")}
                       </span>
                     </span>
                   </MenuItem>
@@ -135,7 +137,7 @@ export function UserMenu({
               </div>
               {!isSiteAdmin && (
                 <div className="px-2 pb-1 pt-0.5 text-[11px] text-faint">
-                  Accounts signed in on this device
+                  {t("Accounts signed in on this device")}
                 </div>
               )}
             </>
@@ -150,7 +152,7 @@ export function UserMenu({
                   window.location.href = adminUrl;
                 }}
               >
-                <ShieldCheck size={13} /> Admin console
+                <ShieldCheck size={13} /> {t("Admin console")}
               </MenuItem>
             </>
           )}
@@ -167,7 +169,7 @@ export function UserMenu({
               })();
             }}
           >
-            <LogOut size={13} /> Sign out
+            <LogOut size={13} /> {t("Sign out")}
           </MenuItem>
         </>
       )}

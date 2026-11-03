@@ -53,6 +53,7 @@ import {
   type PassageAnchor,
   type PassageStyle,
 } from "@/lib/markdown";
+import { useT } from "@/components/i18n-context";
 
 type Marker =
   | { kind: "none"; depth: number }
@@ -610,10 +611,11 @@ function PagePickerMenu({
   onPick: (entry: PageRefEntry) => void;
   onHover: (index: number) => void;
 }) {
+  const t = useT();
   return (
     <div className="absolute left-2 top-full z-20 mt-1 max-h-[min(60vh,360px)] w-72 max-w-[calc(100%-1rem)] overflow-y-auto rounded-lg border border-border bg-overlay shadow-lg shadow-black/10">
       <div className="border-b border-border px-2.5 py-1.5 text-[11px] uppercase tracking-wide text-faint">
-        Documents
+        {t("Documents")}
       </div>
       {docs.length === 0 ? (
         <div className="px-2.5 py-2 text-[12px] text-faint">{emptyHint}</div>
@@ -691,6 +693,7 @@ export const MarkdownEditor = forwardRef<
   { value, onChange, placeholder, issues, pages, onTextSelection, onBlockSelection, onUndo, onRedo },
   ref
 ) {
+  const t = useT();
   const [blocks, setBlocks] = useState<string[]>(() => editBlocks(value));
   const [editing, setEditing] = useState<number | null>(null);
   const [marker, setMarker] = useState<Marker>({ kind: "none", depth: 0 });
@@ -1283,7 +1286,12 @@ export const MarkdownEditor = forwardRef<
     // Every block type stays in the list — an earlier 8-entry cap hid Quote, Code and
     // Divider once the doc entry was added. The menu scrolls instead of cutting them.
     if (!query) return commands;
-    return commands.filter((c) => c.label.toLowerCase().includes(query) || c.keywords.includes(query));
+    return commands.filter(
+      (c) =>
+        c.label.toLowerCase().includes(query) ||
+        t(c.label).toLowerCase().includes(query) ||
+        c.keywords.includes(query),
+    );
   }
 
   // One entry per doc: `lookup` holds each page twice (by id and by bare title).
@@ -2103,8 +2111,8 @@ export const MarkdownEditor = forwardRef<
                   index !== 0
                     ? ""
                     : marker.kind === "none"
-                      ? (placeholder ?? PLACEHOLDER.none)
-                      : PLACEHOLDER[marker.kind]
+                      ? (placeholder ?? t(PLACEHOLDER.none))
+                      : t(PLACEHOLDER[marker.kind])
                 }
                 rows={1}
                 className={`md-ghost-input relative block w-full resize-none overflow-hidden bg-transparent text-transparent caret-text outline-none placeholder:text-faint ${textClass(marker)}`}
@@ -2116,7 +2124,7 @@ export const MarkdownEditor = forwardRef<
           const menuNode = menu?.stage === "pages" ? (
             <PagePickerMenu
               docs={docs}
-              emptyHint={menu.query.trim() ? "No matching documents" : "No documents yet"}
+              emptyHint={t(menu.query.trim() ? "No matching documents" : "No documents yet")}
               selected={menu.selected}
               onPick={insertPage}
               onHover={(i) =>
@@ -2129,7 +2137,7 @@ export const MarkdownEditor = forwardRef<
               className="absolute left-2 top-full z-20 mt-1 max-h-[min(70vh,540px)] w-72 max-w-[calc(100%-1rem)] overflow-y-auto rounded-lg border border-border bg-overlay shadow-lg shadow-black/10"
             >
               <div className="border-b border-border px-2.5 py-1.5 text-[11px] uppercase tracking-wide text-faint">
-                Basic blocks
+                {t("Basic blocks")}
               </div>
               {visible.map((command, i) => (
                 <button
@@ -2150,8 +2158,8 @@ export const MarkdownEditor = forwardRef<
                     <command.icon size={14} />
                   </span>
                   <span className="min-w-0">
-                    <span className="block truncate">{command.label}</span>
-                    <span className="block truncate text-[12px] text-faint">{command.hint}</span>
+                    <span className="block truncate">{t(command.label)}</span>
+                    <span className="block truncate text-[12px] text-faint">{t(command.hint)}</span>
                   </span>
                 </button>
               ))}
@@ -2260,7 +2268,7 @@ export const MarkdownEditor = forwardRef<
                       type="button"
                       role="checkbox"
                       aria-checked={marker.checked}
-                      aria-label={marker.checked ? "Mark as not done" : "Mark as done"}
+                      aria-label={t(marker.checked ? "Mark as not done" : "Mark as done")}
                       onMouseDown={(e) => e.preventDefault()}
                       onClick={() => {
                         const next = { ...marker, checked: !marker.checked };
@@ -2308,7 +2316,7 @@ export const MarkdownEditor = forwardRef<
                 selected(index) ? "md-block-selected" : "hover:bg-elevated/40"
               }`}
             >
-              {index === 0 ? (placeholder ?? PLACEHOLDER.none) : ""}
+              {index === 0 ? (placeholder ?? t(PLACEHOLDER.none)) : ""}
             </div>
           );
         }
@@ -2350,8 +2358,8 @@ export const MarkdownEditor = forwardRef<
                     draggable
                     role="button"
                     tabIndex={-1}
-                    aria-label="Drag to move this block"
-                    title="Drag to move"
+                    aria-label={t("Drag to move this block")}
+                    title={t("Drag to move")}
                     onMouseDown={(e) => e.stopPropagation()}
                     onClick={(e) => e.stopPropagation()}
                     onDragStart={(e) => {

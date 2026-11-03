@@ -18,6 +18,7 @@ import {
   saveAvatarAction,
   setMemberRoleAction,
   deleteWorkspaceAction,
+  saveLocaleAction,
 } from "@/app/auth-actions";
 import {
   saveAiSettingsAction,
@@ -39,8 +40,11 @@ import type { ApiKeyRecord, DeletedWorkspace, Member, Project } from "@/lib/issu
 import type { HarnessSettingsView } from "@/lib/harness/types";
 import { BUILTIN_AVATARS, BUILTIN_AVATAR_LABELS, builtinAvatarId } from "@/lib/avatars";
 import { formatDate, timeAgo } from "@/lib/format";
+import { LOCALES, LOCALE_LABELS, type Locale } from "@/lib/i18n";
+import { interpolate, useLocale, useT } from "@/components/i18n-context";
 
 function CopyButton({ text }: { text: string }) {
+  const t = useT();
   const [copied, setCopied] = useState(false);
   return (
     <button
@@ -54,7 +58,7 @@ function CopyButton({ text }: { text: string }) {
       className="inline-flex shrink-0 items-center gap-1 rounded-md border border-border px-1.5 py-0.5 text-[11px] text-muted transition-colors hover:text-text"
     >
       {copied ? <Check size={11} /> : <Copy size={11} />}
-      {copied ? "Copied" : "Copy"}
+      {t(copied ? "Copied" : "Copy")}
     </button>
   );
 }
@@ -144,6 +148,8 @@ export function SettingsView({
   deletedWorkspaces: DeletedWorkspace[];
 }) {
   const router = useRouter();
+  const t = useT();
+  const locale = useLocale();
   const isAdmin = role === "admin";
   const [code, setCode] = useState(joinCode);
   const [newKeyName, setNewKeyName] = useState("");
@@ -241,9 +247,22 @@ export function SettingsView({
     const available = result.data.rows.filter((row) => row.updateAvailable).length;
     setHarnessNotice(
       available > 0
-        ? `${available} harness update${available === 1 ? "" : "s"} available.`
-        : "All harnesses are up to date on npm."
+        ? t(available === 1 ? "{count} harness update available." : "{count} harness updates available.", { count: String(available) })
+        : t("All harnesses are up to date on npm.")
     );
+  }
+
+  const [localeError, setLocaleError] = useState<string | null>(null);
+
+  async function chooseLocale(next: Locale) {
+    if (next === locale) return;
+    setLocaleError(null);
+    const result = await saveLocaleAction(next);
+    if (!result.ok) {
+      setLocaleError(result.error);
+      return;
+    }
+    router.refresh();
   }
 
   async function rotateCode() {
@@ -267,7 +286,7 @@ export function SettingsView({
   }
 
   async function revokeKey(key: ApiKeyRecord) {
-    if (!window.confirm(`Revoke key "${key.name}"? Agents using it will lose access.`)) return;
+    if (!window.confirm(t("Revoke key \"{name}\"? Agents using it will lose access.", { name: key.name }))) return;
     await revokeApiKeyAction(workspace.id, key.id);
     router.refresh();
   }
@@ -329,7 +348,9 @@ export function SettingsView({
       return;
     }
     setAiNotice(
-      `Connected — ${result.data.model} replied${result.data.sample ? `: “${result.data.sample}”` : "."}`
+      result.data.sample
+        ? t("Connected — {model} replied: “{sample}”", { model: result.data.model, sample: result.data.sample })
+        : t("Connected — {model} replied.", { model: result.data.model })
     );
   }
 
@@ -350,7 +371,9 @@ export function SettingsView({
   async function removeProject(project: Project) {
     if (
       !window.confirm(
-        `Move project "${project.name}" and its issues to the Trash? You can restore it from there.`
+        t("Move project \"{name}\" and its issues to the Trash? You can restore it from there.", {
+          name: project.name,
+        })
       )
     )
       return;
@@ -402,7 +425,7 @@ export function SettingsView({
         setAvatarError(result.error);
       }
     } catch (err) {
-      setAvatarError(err instanceof Error ? err.message : "Upload failed");
+      setAvatarError(err instanceof Error ? t(err.message) : t("Upload failed"));
     } finally {
       setBusy(false);
     }
@@ -447,7 +470,7 @@ export function SettingsView({
         setIconError(result.error);
       }
     } catch (err) {
-      setIconError(err instanceof Error ? err.message : "Upload failed");
+      setIconError(err instanceof Error ? t(err.message) : t("Upload failed"));
     } finally {
       setBusy(false);
     }
@@ -488,14 +511,14 @@ export function SettingsView({
     <div className="flex-1 overflow-y-auto px-10 pb-10 pt-6 lg:px-20 xl:px-32">
       <div className="space-y-10">
         <header className="flex items-center gap-3">
-          <h1 className="text-[16px] font-semibold">Workspace settings</h1>
+          <h1 className="text-[16px] font-semibold">{t("Workspace settings")}</h1>
           <span className="rounded-full bg-elevated px-2 py-0.5 text-[11px] text-muted">
             {workspace.name}
           </span>
         </header>
 
         <section className="space-y-3">
-          <h2 className="text-[13px] font-semibold">Workspace icon</h2>
+          <h2 className="text-[13px] font-semibold">{t("Workspace icon")}</h2>
           <div className="flex items-center gap-4 rounded-lg border border-border p-4">
             <WorkspaceMark icon={icon} className="h-14 w-14" />
             <div className="min-w-0 flex-1">
@@ -507,7 +530,7 @@ export function SettingsView({
                       busy ? "pointer-events-none opacity-50" : ""
                     }`}
                   >
-                    <Upload size={12} /> {icon ? "Change image" : "Upload image"}
+                    <Upload size={12} /> {icon ? t("Change image") : t("Upload image")}
                     <input
                       type="file"
                       accept="image/png,image/jpeg,image/webp"
@@ -524,23 +547,23 @@ export function SettingsView({
                       onClick={() => void clearIcon()}
                       className="rounded-md px-2 py-1 text-[12px] text-faint transition-colors hover:text-danger"
                     >
-                      Remove
+                      {t("Remove")}
                     </button>
                   )}
                 </div>
               )}
-              {iconError && <div className="mt-1 text-[12px] text-danger">{iconError}</div>}
+              {iconError && <div className="mt-1 text-[12px] text-danger">{t(iconError)}</div>}
             </div>
           </div>
           <p className="text-[12px] leading-relaxed text-faint">
             {isAdmin
-              ? "Shown next to the workspace name in the sidebar and the switcher. Without an image, the otter is used. Cropped to a square and resized to 128×128 in the browser."
-              : "Only workspace admins can change this icon. Without an image, the otter is used."}
+              ? t("Shown next to the workspace name in the sidebar and the switcher. Without an image, the otter is used. Cropped to a square and resized to 128×128 in the browser.")
+              : t("Only workspace admins can change this icon. Without an image, the otter is used.")}
           </p>
         </section>
 
         <section className="space-y-3">
-          <h2 className="text-[13px] font-semibold">Your profile</h2>
+          <h2 className="text-[13px] font-semibold">{t("Your profile")}</h2>
           <div className="flex items-center gap-4 rounded-lg border border-border p-4">
             <AssigneeAvatar displayName={currentUser.displayName} avatar={avatar} size={56} />
             <div className="min-w-0 flex-1">
@@ -552,7 +575,7 @@ export function SettingsView({
                     busy ? "pointer-events-none opacity-50" : ""
                   }`}
                 >
-                  <Upload size={12} /> {avatar ? "Change image" : "Upload image"}
+                  <Upload size={12} /> {avatar ? t("Change image") : t("Upload image")}
                   <input
                     type="file"
                     accept="image/png,image/jpeg,image/webp"
@@ -569,17 +592,17 @@ export function SettingsView({
                     onClick={() => void clearAvatar()}
                     className="rounded-md px-2 py-1 text-[12px] text-faint transition-colors hover:text-danger"
                   >
-                    Remove image
+                    {t("Remove image")}
                   </button>
                 )}
               </div>
-              {avatarError && <div className="mt-1 text-[12px] text-danger">{avatarError}</div>}
+              {avatarError && <div className="mt-1 text-[12px] text-danger">{t(avatarError)}</div>}
             </div>
           </div>
           <div className="rounded-lg border border-border p-4">
-            <div className="text-[12px] font-medium text-muted">Avatar library</div>
+            <div className="text-[12px] font-medium text-muted">{t("Avatar library")}</div>
             <div className="mt-0.5 text-[11.5px] text-faint">
-              Every account starts with its own taco ingredient. Pick another one, or upload a picture above.
+              {t("Every account starts with its own taco ingredient. Pick another one, or upload a picture above.")}
             </div>
             <div className="mt-3 flex flex-wrap gap-1.5">
               {BUILTIN_AVATARS.map((id) => {
@@ -589,8 +612,8 @@ export function SettingsView({
                     key={id}
                     type="button"
                     disabled={busy}
-                    title={BUILTIN_AVATAR_LABELS[id]}
-                    aria-label={BUILTIN_AVATAR_LABELS[id]}
+                    title={t(BUILTIN_AVATAR_LABELS[id])}
+                    aria-label={t(BUILTIN_AVATAR_LABELS[id])}
                     aria-pressed={active}
                     onClick={() => void chooseAvatar(`builtin:${id}`)}
                     className={`rounded-full p-0.5 transition ${
@@ -598,7 +621,7 @@ export function SettingsView({
                     } ${busy ? "opacity-50" : ""}`}
                   >
                     <AssigneeAvatar
-                      displayName={BUILTIN_AVATAR_LABELS[id]}
+                      displayName={t(BUILTIN_AVATAR_LABELS[id])}
                       avatar={`builtin:${id}`}
                       size={30}
                     />
@@ -608,14 +631,48 @@ export function SettingsView({
             </div>
           </div>
           <p className="text-[12px] leading-relaxed text-faint">
-            Your picture shows as a circle next to your name in issue rows, timelines and the
-            member list. Uploaded images are cropped to a square and resized to 128×128 in the
-            browser before being saved.
+            {t("Your picture shows as a circle next to your name in issue rows, timelines and the member list. Uploaded images are cropped to a square and resized to 128×128 in the browser before being saved.")}
           </p>
         </section>
 
         <section className="space-y-3">
-          <h2 className="text-[13px] font-semibold">Members ({members.length})</h2>
+          <h2 className="text-[13px] font-semibold">{t("Language")}</h2>
+          <div className="flex items-center gap-4 rounded-lg border border-border p-4">
+            <div className="min-w-0 flex-1">
+              <div className="text-[13px] font-medium">{t("Interface language")}</div>
+              <p className="mt-0.5 text-[12px] leading-relaxed text-muted">
+                {t("Applies to this account on every device.")}
+              </p>
+            </div>
+            <div role="radiogroup" aria-label={t("Interface language")} className="flex shrink-0 gap-1">
+              {LOCALES.map((code) => (
+                <button
+                  key={code}
+                  type="button"
+                  role="radio"
+                  aria-checked={locale === code}
+                  onClick={() => void chooseLocale(code)}
+                  className={`rounded-md px-3 py-1 text-[12.5px] transition-colors ${
+                    locale === code
+                      ? "bg-accent/10 font-medium text-accent"
+                      : "text-muted hover:bg-elevated hover:text-text"
+                  }`}
+                >
+                  {LOCALE_LABELS[code]}
+                </button>
+              ))}
+            </div>
+          </div>
+          {localeError && <div className="text-[12px] text-danger">{t(localeError)}</div>}
+          <p className="text-[12px] leading-relaxed text-faint">
+            {t("Task content, documents and replies from the API or MCP server are not translated.")}
+          </p>
+        </section>
+
+        <section className="space-y-3">
+          <h2 className="text-[13px] font-semibold">
+            {t("Members ({count})", { count: members.length })}
+          </h2>
           <div className="divide-y divide-border rounded-lg border border-border">
             {members.map((member) => (
               <div key={member.id} className="flex items-center gap-3 px-4 py-2.5">
@@ -624,7 +681,7 @@ export function SettingsView({
                   <div className="text-[13px]">
                     {member.displayName}
                     {member.id === currentUser.id && (
-                      <span className="ml-1 text-[11px] text-faint">(you)</span>
+                      <span className="ml-1 text-[11px] text-faint">{t("(you)")}</span>
                     )}
                   </div>
                   <div className="text-[11px] text-faint">@{member.username}</div>
@@ -642,25 +699,25 @@ export function SettingsView({
                       }}
                       className="ml-auto rounded-md border border-border bg-elevated px-1.5 py-1 text-[12px] text-muted"
                     >
-                      <option value="admin">Admin</option>
-                      <option value="member">Member</option>
+                      <option value="admin">{t("Admin")}</option>
+                      <option value="member">{t("Member")}</option>
                     </select>
                     <button
                       type="button"
                       onClick={() => {
-                        if (window.confirm(`Remove ${member.displayName} from this workspace?`)) {
+                        if (window.confirm(t("Remove {name} from this workspace?", { name: member.displayName }))) {
                           void removeMemberAction(workspace.id, member.id).then(() => router.refresh());
                         }
                       }}
                       className="rounded-md p-1 text-faint transition-colors hover:bg-elevated hover:text-danger"
-                      aria-label={`Remove ${member.displayName}`}
+                      aria-label={t("Remove {name}", { name: member.displayName })}
                     >
                       <Trash2 size={14} />
                     </button>
                   </>
                 ) : (
                   <span className="ml-auto rounded-full bg-elevated px-2 py-0.5 text-[11px] text-muted">
-                    {member.role}
+                    {member.role === "admin" ? t("Admin") : t("Member")}
                   </span>
                 )}
               </div>
@@ -668,14 +725,15 @@ export function SettingsView({
           </div>
 
           <div className="space-y-2 rounded-lg border border-border bg-surface/60 p-4">
-            <div className="text-[13px] font-medium">Invite teammates</div>
+            <div className="text-[13px] font-medium">{t("Invite teammates")}</div>
             <p className="text-[12px] leading-relaxed text-muted">
-              Share this join code — anyone can register at{" "}
-              <code className="font-mono text-[11px]">{origin}/register</code> and join with it.
+              {interpolate(t("Share this join code — anyone can register at {url} and join with it."), {
+                url: <code className="font-mono text-[11px]">{origin}/register</code>,
+              })}
             </p>
             <div className="flex items-center gap-2">
               <code className="min-w-0 flex-1 overflow-x-auto rounded-md bg-bg px-2 py-1.5 font-mono text-[13px] text-text">
-                {code ?? "No active code"}
+                {code ?? t("No active code")}
               </code>
               {code && <CopyButton text={code} />}
               {isAdmin && (
@@ -684,7 +742,7 @@ export function SettingsView({
                   onClick={() => void rotateCode()}
                   className="inline-flex items-center gap-1 rounded-md border border-border px-2 py-1 text-[12px] text-muted transition-colors hover:text-text"
                 >
-                  <RefreshCw size={12} /> Rotate
+                  <RefreshCw size={12} /> {t("Rotate")}
                 </button>
               )}
             </div>
@@ -692,23 +750,23 @@ export function SettingsView({
         </section>
 
         <section className="space-y-3">
-          <h2 className="text-[13px] font-semibold">Task visibility</h2>
+          <h2 className="text-[13px] font-semibold">{t("Task visibility")}</h2>
           <div className="flex items-center gap-4 rounded-lg border border-border p-4">
             <div className="min-w-0 flex-1">
               <div className="text-[13px] font-medium">
-                {seeAll ? "Everyone sees all tasks" : "Members only see their projects"}
+                {seeAll ? t("Everyone sees all tasks") : t("Members only see their projects")}
               </div>
               <p className="mt-0.5 text-[12px] leading-relaxed text-muted">
                 {seeAll
-                  ? "Every workspace member can open every project and its tasks."
-                  : "A member only sees tasks in projects they created or joined. Owners and admins still see everything."}
+                  ? t("Every workspace member can open every project and its tasks.")
+                  : t("A member only sees tasks in projects they created or joined. Owners and admins still see everything.")}
               </p>
             </div>
             <button
               type="button"
               role="switch"
               aria-checked={seeAll}
-              aria-label="Let every member see all tasks"
+              aria-label={t("Let every member see all tasks")}
               disabled={!isAdmin}
               onClick={() => void toggleSeeAll(!seeAll)}
               className={`relative h-5 w-9 shrink-0 rounded-full transition-colors disabled:opacity-40 ${
@@ -724,13 +782,13 @@ export function SettingsView({
           </div>
           <p className="text-[12px] leading-relaxed text-faint">
             {isAdmin
-              ? "Turn this off to hand out tasks per project. Agents using API keys or MCP always see everything."
-              : "Only workspace admins can change who sees tasks."}
+              ? t("Turn this off to hand out tasks per project. Agents using API keys or MCP always see everything.")
+              : t("Only workspace admins can change who sees tasks.")}
           </p>
         </section>
 
         <section className="space-y-3">
-          <h2 className="text-[13px] font-semibold">Projects</h2>
+          <h2 className="text-[13px] font-semibold">{t("Projects")}</h2>
           <div className="divide-y divide-border rounded-lg border border-border">
             {projects.map((project) => {
               const editing = renaming && renaming.id === project.id ? renaming : null;
@@ -747,7 +805,7 @@ export function SettingsView({
                           if (e.key === "Enter") void saveRename(project, editing.name);
                           if (e.key === "Escape") setRenaming(null);
                         }}
-                        aria-label={`Rename ${project.name}`}
+                        aria-label={t("Rename {name}", { name: project.name })}
                         className="min-w-0 flex-1 rounded-md border border-border bg-elevated/50 px-2 py-1 text-[13px] focus:border-border-strong"
                       />
                       <button
@@ -755,7 +813,7 @@ export function SettingsView({
                         onClick={() => void saveRename(project, editing.name)}
                         className="shrink-0 rounded-md bg-accent px-2.5 py-1 text-[12px] font-medium text-white hover:bg-accent-hover"
                       >
-                        Save
+                        {t("Save")}
                       </button>
                     </>
                   ) : (
@@ -763,7 +821,7 @@ export function SettingsView({
                       <button
                         type="button"
                         onClick={() => setRenaming({ id: project.id, name: project.name })}
-                        title="Rename project"
+                        title={t("Rename project")}
                         className="group flex min-w-0 items-center gap-1.5 text-[13px] hover:text-accent"
                       >
                         <span className="truncate">{project.name}</span>
@@ -778,8 +836,8 @@ export function SettingsView({
                           type="button"
                           onClick={() => void removeProject(project)}
                           className="ml-auto rounded-md p-1 text-faint transition-colors hover:bg-elevated hover:text-danger"
-                          aria-label={`Move ${project.name} to trash`}
-                          title="Move to trash"
+                          aria-label={t("Move {name} to trash", { name: project.name })}
+                          title={t("Move to trash")}
                         >
                           <Trash2 size={14} />
                         </button>
@@ -790,7 +848,7 @@ export function SettingsView({
               );
             })}
             {projects.length === 0 && (
-              <div className="p-4 text-[13px] text-faint">No projects yet.</div>
+              <div className="p-4 text-[13px] text-faint">{t("No projects yet.")}</div>
             )}
           </div>
           <div className="flex items-center gap-2">
@@ -800,7 +858,7 @@ export function SettingsView({
               onKeyDown={(e) => {
                 if (e.key === "Enter") void addProject();
               }}
-              placeholder="Project name (e.g. Mobile App)"
+              placeholder={t("Project name (e.g. Mobile App)")}
               className="w-full rounded-md border border-border bg-elevated/50 px-2.5 py-1.5 text-[13px] placeholder:text-faint focus:border-border-strong"
             />
             <button
@@ -809,17 +867,17 @@ export function SettingsView({
               disabled={busy || !projName.trim()}
               className="shrink-0 rounded-md bg-accent px-3 py-1.5 text-[13px] font-medium text-white hover:bg-accent-hover disabled:opacity-40"
             >
-              Add
+              {t("Add")}
             </button>
           </div>
-          {projError && <div className="text-[12px] text-danger">{projError}</div>}
+          {projError && <div className="text-[12px] text-danger">{t(projError)}</div>}
         </section>
 
         <section className="space-y-3" data-testid="harness-settings">
           <div className="flex flex-wrap items-center gap-2">
-            <h2 className="text-[13px] font-semibold">Harness</h2>
+            <h2 className="text-[13px] font-semibold">{t("Harness")}</h2>
             <span className="rounded-full bg-elevated px-2 py-0.5 text-[11px] text-faint">
-              {harnessRows.filter((row) => row.enabled && row.ready).length} ready
+              {t("{count} ready", { count: String(harnessRows.filter((row) => row.enabled && row.ready).length) })}
             </span>
             {isAdmin && (
               <button
@@ -828,17 +886,16 @@ export function SettingsView({
                 onClick={() => void checkHarnessUpdates()}
                 className="ml-auto rounded-md border border-border px-2 py-1 text-[11.5px] text-muted hover:bg-elevated disabled:opacity-40"
               >
-                {harnessBusy === "check-updates" ? "Checking…" : "Check for updates"}
+                {harnessBusy === "check-updates" ? t("Checking…") : t("Check for updates")}
               </button>
             )}
           </div>
           <p className="text-[13px] leading-relaxed text-muted">
-            Local CLI harnesses for the Agent tab. Turn each one on or off for this workspace.
-            The list shows version, ready state, and the last detect error.
+            {t("Local CLI harnesses for the Agent tab. Turn each one on or off for this workspace. The list shows version, ready state, and the last detect error.")}
           </p>
           {!harnessGateView.agentAllowed && (
             <div className="rounded-md border border-border bg-elevated px-3 py-2 text-[12.5px] text-muted" data-testid="harness-agent-disabled">
-              The Agent tab is disabled. Enable at least one ready harness to use Agent.
+              {t("The Agent tab is disabled. Enable at least one ready harness to use Agent.")}
             </div>
           )}
           <div className="overflow-hidden rounded-lg border border-border">
@@ -860,33 +917,33 @@ export function SettingsView({
                         row.ready ? "bg-accent/10 text-accent" : "bg-elevated text-faint"
                       }`}
                     >
-                      {row.ready ? "Ready" : row.installed ? "Not ready" : "Not installed"}
+                      {row.ready ? t("Ready") : row.installed ? t("Not ready") : t("Not installed")}
                     </span>
                     {row.riskLabel ? (
                       <span
                         className="rounded-full bg-danger/10 px-2 py-0.5 text-[11px] font-medium text-danger"
                         data-testid={`harness-risk-${row.id}`}
-                        title="This harness does not apply an OS-level sandbox around agent commands."
+                        title={t("This harness does not apply an OS-level sandbox around agent commands.")}
                       >
-                        {row.riskLabel}
+                        {t(row.riskLabel)}
                       </span>
                     ) : (
                       <span
                         className="rounded-full bg-elevated px-2 py-0.5 text-[11px] font-medium text-faint"
                         data-testid={`harness-sandbox-${row.id}`}
                       >
-                        OS sandbox
+                        {t("OS sandbox")}
                       </span>
                     )}
                   </div>
                   <div className="text-[12px] text-muted">
-                    Version: {row.version ?? "—"}
+                    {t("Version:")} {row.version ?? "—"}
                     {row.latestVersion ? (
-                      <span className="ml-2 text-faint">Latest: {row.latestVersion}</span>
+                      <span className="ml-2 text-faint">{t("Latest:")} {row.latestVersion}</span>
                     ) : null}
                     {row.updateAvailable ? (
                       <span className="ml-2 rounded-full bg-accent/10 px-2 py-0.5 text-[11px] font-medium text-accent">
-                        Update available
+                        {t("Update available")}
                       </span>
                     ) : null}
                     {row.binary ? (
@@ -895,8 +952,8 @@ export function SettingsView({
                   </div>
                   {(row.error || row.hint) && (
                     <div className="text-[12px] text-muted">
-                      {row.error ? <span className="text-danger">{row.error}. </span> : null}
-                      {row.hint}
+                      {row.error ? <span className="text-danger">{t(row.error)}. </span> : null}
+                      {row.hint ? t(row.hint) : null}
                     </div>
                   )}
                 </div>
@@ -909,7 +966,7 @@ export function SettingsView({
                         onClick={() => void runHarnessRecipe(row.id, "install")}
                         className="rounded-md border border-border px-2 py-1 text-[11.5px] text-muted hover:bg-elevated disabled:opacity-40"
                       >
-                        {harnessBusy === `${row.id}:install` ? "Installing…" : "Install"}
+                        {harnessBusy === `${row.id}:install` ? t("Installing…") : t("Install")}
                       </button>
                       <button
                         type="button"
@@ -917,7 +974,7 @@ export function SettingsView({
                         onClick={() => void runHarnessRecipe(row.id, "upgrade")}
                         className="rounded-md border border-border px-2 py-1 text-[11.5px] text-muted hover:bg-elevated disabled:opacity-40"
                       >
-                        {harnessBusy === `${row.id}:upgrade` ? "Upgrading…" : "Upgrade"}
+                        {harnessBusy === `${row.id}:upgrade` ? t("Upgrading…") : t("Upgrade")}
                       </button>
                     </>
                   )}
@@ -929,63 +986,61 @@ export function SettingsView({
                       onChange={(e) => void toggleHarness(row.id, e.target.checked)}
                       className="h-3.5 w-3.5 accent-[#0d0d0d]"
                     />
-                    {row.enabled ? "On" : "Off"}
+                    {row.enabled ? t("On") : t("Off")}
                   </label>
                 </div>
               </div>
             ))}
           </div>
-          {harnessError && <div className="text-[12px] text-danger">{harnessError}</div>}
-          {harnessNotice && <div className="text-[12px] text-muted">{harnessNotice}</div>}
+          {harnessError && <div className="text-[12px] text-danger">{t(harnessError)}</div>}
+          {harnessNotice && <div className="text-[12px] text-muted">{t(harnessNotice)}</div>}
           {!isAdmin && (
-            <p className="text-[12px] text-faint">Only a workspace admin can change harness toggles.</p>
+            <p className="text-[12px] text-faint">{t("Only a workspace admin can change harness toggles.")}</p>
           )}
         </section>
 
         <section className="space-y-3">
           <div className="flex items-center gap-2">
-            <h2 className="text-[13px] font-semibold">AI assistant</h2>
+            <h2 className="text-[13px] font-semibold">{t("AI assistant")}</h2>
             {ai.configured || ai.cli.some((status) => status.installed && status.signedIn) ? (
               <span
                 className={`rounded-full px-2 py-0.5 text-[11px] font-medium ${
                   ai.enabled ? "bg-accent/10 text-accent" : "bg-elevated text-faint"
                 }`}
               >
-                {ai.enabled ? "On" : "Off"}
+                {ai.enabled ? t("On") : t("Off")}
               </span>
             ) : (
               <span className="rounded-full bg-elevated px-2 py-0.5 text-[11px] text-faint">
-                Not configured
+                {t("Not configured")}
               </span>
             )}
           </div>
           <p className="text-[13px] leading-relaxed text-muted">
-            Powers the Agent tab, drafts tasks from a sentence, and rewrites Markdown in projects
-            and docs. The Agent can also drive a Codex or Pi CLI that is already signed in on this
-            server, so no API key is needed. Keys are stored encrypted and never reach the browser.
+            {t("Powers the Agent tab, drafts tasks from a sentence, and rewrites Markdown in projects and docs. The Agent can also drive a Codex or Pi CLI that is already signed in on this server, so no API key is needed. Keys are stored encrypted and never reach the browser.")}
           </p>
 
           {isAdmin ? (
             <div className="space-y-3 rounded-lg border border-border p-4">
               <div className="space-y-1 text-[12px] text-muted">
-                <span>Agent engine</span>
+                <span>{t("Agent engine")}</span>
                 <div className="grid gap-2 sm:grid-cols-3">
                   {(
                     [
                       {
                         id: "api" as AiEngine,
-                        label: "API key",
-                        sub: ai.configured ? ai.model : "Not configured",
+                        label: t("API key"),
+                        sub: ai.configured ? ai.model : t("Not configured"),
                         ready: ai.configured,
                       },
                       ...ai.cli.map((status) => ({
                         id: status.engine as AiEngine,
                         label: status.label,
                         sub: !status.installed
-                          ? "Not installed"
+                          ? t("Not installed")
                           : status.signedIn
-                            ? (status.model ?? status.account ?? "Signed in")
-                            : "Not signed in",
+                            ? (status.model ?? status.account ?? t("Signed in"))
+                            : t("Not signed in"),
                         ready: status.installed && status.signedIn,
                       })),
                     ]
@@ -1023,7 +1078,7 @@ export function SettingsView({
                 <>
                   <div className="grid grid-cols-2 gap-2">
                     <label className="space-y-1 text-[12px] text-muted">
-                      <span>Provider</span>
+                      <span>{t("Provider")}</span>
                       <select
                         value={aiProvider}
                         onChange={(e) => pickAiProvider(e.target.value as AiProviderId)}
@@ -1031,13 +1086,13 @@ export function SettingsView({
                       >
                         {AI_PRESETS.map((preset) => (
                           <option key={preset.id} value={preset.id}>
-                            {preset.label}
+                            {t(preset.label)}
                           </option>
                         ))}
                       </select>
                     </label>
                     <label className="space-y-1 text-[12px] text-muted">
-                      <span>Model</span>
+                      <span>{t("Model")}</span>
                       <input
                         value={aiModel}
                         onChange={(e) => setAiModel(e.target.value)}
@@ -1048,7 +1103,7 @@ export function SettingsView({
                   </div>
 
                   <label className="block space-y-1 text-[12px] text-muted">
-                    <span>Base URL</span>
+                    <span>{t("Base URL")}</span>
                     <input
                       value={aiBaseUrl}
                       onChange={(e) => setAiBaseUrl(e.target.value)}
@@ -1057,13 +1112,15 @@ export function SettingsView({
                       className="w-full rounded-md border border-border bg-elevated/50 px-2.5 py-1.5 font-mono text-[12.5px] text-text placeholder:text-faint focus:border-border-strong"
                     />
                     <span className="block text-[11.5px] text-faint">
-                      {AI_PRESETS.find((preset) => preset.id === aiProvider)?.hint ??
-                        "Requests go to {baseUrl}/chat/completions."}
+                      {t(
+                        AI_PRESETS.find((preset) => preset.id === aiProvider)?.hint ??
+                          "Requests go to {baseUrl}/chat/completions."
+                      )}
                     </span>
                   </label>
 
                   <label className="block space-y-1 text-[12px] text-muted">
-                    <span>API key</span>
+                    <span>{t("API key")}</span>
                     <input
                       type="password"
                       value={aiKey}
@@ -1071,7 +1128,7 @@ export function SettingsView({
                       autoComplete="off"
                       placeholder={
                         ai.configured && ai.keyHint
-                          ? `Stored ${ai.keyHint} — leave blank to keep`
+                          ? t("Stored {hint} — leave blank to keep", { hint: ai.keyHint })
                           : "sk-…"
                       }
                       className="w-full rounded-md border border-border bg-elevated/50 px-2.5 py-1.5 font-mono text-[12px] text-text placeholder:text-faint focus:border-border-strong"
@@ -1085,7 +1142,7 @@ export function SettingsView({
                   return (
                     <div className="space-y-2 rounded-md bg-elevated/60 p-3 text-[12.5px] leading-relaxed">
                       <div className="flex items-center gap-1.5 font-medium text-text">
-                        {status.label} CLI
+                        {t("{label} CLI", { label: status.label })}
                         <span
                           className={`rounded-full px-2 py-0.5 text-[11px] ${
                             status.installed && status.signedIn
@@ -1093,7 +1150,7 @@ export function SettingsView({
                               : "bg-elevated text-faint"
                           }`}
                         >
-                          {!status.installed ? "Not installed" : status.signedIn ? "Signed in" : "Not signed in"}
+                          {!status.installed ? t("Not installed") : status.signedIn ? t("Signed in") : t("Not signed in")}
                         </span>
                       </div>
                       {status.binary && (
@@ -1102,8 +1159,9 @@ export function SettingsView({
                       {status.hint && <div className="text-muted">{status.hint}</div>}
                       {status.installed && status.signedIn && (
                         <div className="text-faint">
-                          Uses the login from this server&apos;s own {status.label} install — no key is
-                          stored in TaCos.
+                          {t("Uses the login from this server's own {label} install — no key is stored in TaCos.", {
+                            label: status.label,
+                          })}
                         </div>
                       )}
                     </div>
@@ -1113,7 +1171,7 @@ export function SettingsView({
 
               {aiEngine !== "api" && (
                 <label className="block space-y-1 text-[12px] text-muted">
-                  <span>Proxy (optional)</span>
+                  <span>{t("Proxy (optional)")}</span>
                   <input
                     value={aiProxy}
                     onChange={(e) => setAiProxy(e.target.value)}
@@ -1122,8 +1180,7 @@ export function SettingsView({
                     className="w-full rounded-md border border-border bg-elevated/50 px-2.5 py-1.5 font-mono text-[12px] text-text placeholder:text-faint focus:border-border-strong"
                   />
                   <span className="block text-[11.5px] text-faint">
-                    Codex and Pi reach their provider directly. Set a local proxy when this machine
-                    needs one.
+                    {t("Codex and Pi reach their provider directly. Set a local proxy when this machine needs one.")}
                   </span>
                 </label>
               )}
@@ -1136,7 +1193,7 @@ export function SettingsView({
                     onChange={(e) => setAiEnabled(e.target.checked)}
                     className="h-3.5 w-3.5 accent-[#0d0d0d]"
                   />
-                  Enable AI assistant
+                  {t("Enable AI assistant")}
                 </label>
                 <div className="ml-auto flex items-center gap-2">
                   {aiEngine === "api" && (
@@ -1146,7 +1203,7 @@ export function SettingsView({
                       disabled={aiBusy !== null || !aiBaseUrl.trim() || !aiModel.trim()}
                       className="rounded-md border border-border px-2.5 py-1.5 text-[12.5px] font-medium text-muted transition-colors hover:border-border-strong hover:text-text disabled:opacity-40"
                     >
-                      {aiBusy === "test" ? "Testing…" : "Test connection"}
+                      {aiBusy === "test" ? t("Testing…") : t("Test connection")}
                     </button>
                   )}
                   <button
@@ -1156,31 +1213,38 @@ export function SettingsView({
                     className="flex items-center gap-1 rounded-md bg-accent px-3 py-1.5 text-[12.5px] font-medium text-white transition-colors hover:bg-accent-hover disabled:opacity-40"
                   >
                     <Sparkles size={12} />
-                    {aiBusy === "save" ? "Saving…" : "Save"}
+                    {aiBusy === "save" ? t("Saving…") : t("Save")}
                   </button>
                 </div>
               </div>
-              {aiError && <div className="text-[12px] text-danger">{aiError}</div>}
+              {aiError && <div className="text-[12px] text-danger">{t(aiError)}</div>}
               {aiNotice && <div className="text-[12px] text-[#2f7d4f]">{aiNotice}</div>}
             </div>
           ) : (
             <div className="rounded-lg border border-border p-4 text-[13px] text-muted">
               {ai.enabled && (ai.configured || ai.cli.some((status) => status.installed && status.signedIn))
-                ? "The AI assistant is available in this workspace. A workspace admin manages the provider and key."
-                : "AI is not available in this workspace yet. Ask a workspace admin to configure it."}
+                ? t("The AI assistant is available in this workspace. A workspace admin manages the provider and key.")
+                : t("AI is not available in this workspace yet. Ask a workspace admin to configure it.")}
             </div>
           )}
         </section>
 
         <section className="space-y-3">
-          <h2 className="text-[13px] font-semibold">Agent access — REST API keys</h2>
+          <h2 className="text-[13px] font-semibold">{t("Agent access — REST API keys")}</h2>
           <p className="text-[13px] leading-relaxed text-muted">
-            AI agents and scripts read and write issues at{" "}
-            <code className="rounded bg-elevated px-1 font-mono text-[12px] text-text">
-              /api/v1/*
-            </code>{" "}
-            with a Bearer token scoped to this workspace ({workspace.key}). Agent activity is
-            attributed in every issue timeline.
+            {interpolate(
+              t(
+                "AI agents and scripts read and write issues at {path} with a Bearer token scoped to this workspace ({key}). Agent activity is attributed in every issue timeline."
+              ),
+              {
+                path: (
+                  <code className="rounded bg-elevated px-1 font-mono text-[12px] text-text">
+                    /api/v1/*
+                  </code>
+                ),
+                key: workspace.key,
+              }
+            )}
           </p>
 
           <div className="flex items-center gap-2">
@@ -1190,7 +1254,7 @@ export function SettingsView({
               onKeyDown={(e) => {
                 if (e.key === "Enter") void createKey();
               }}
-              placeholder="Key name (e.g. claude-code, triage-bot)"
+              placeholder={t("Key name (e.g. claude-code, triage-bot)")}
               className="w-full rounded-md border border-border bg-elevated/50 px-2.5 py-1.5 text-[13px] placeholder:text-faint focus:border-border-strong"
             />
             <button
@@ -1199,15 +1263,15 @@ export function SettingsView({
               disabled={!newKeyName.trim() || busy}
               className="shrink-0 rounded-md bg-accent px-3 py-1.5 text-[13px] font-medium text-white hover:bg-accent-hover disabled:opacity-40"
             >
-              Generate
+              {t("Generate")}
             </button>
           </div>
-          {keyError && <div className="text-[12px] text-danger">{keyError}</div>}
+          {keyError && <div className="text-[12px] text-danger">{t(keyError)}</div>}
 
           {newKey && (
             <div className="space-y-2 rounded-lg border border-accent/50 bg-accent/10 p-3">
               <div className="text-[12px] font-medium text-text">
-                Copy this key now — it is shown only once.
+                {t("Copy this key now — it is shown only once.")}
               </div>
               <div className="flex items-center gap-2">
                 <code className="min-w-0 flex-1 overflow-x-auto rounded-md bg-bg px-2 py-1.5 font-mono text-[12px] text-text">
@@ -1220,19 +1284,21 @@ export function SettingsView({
 
           <div className="divide-y divide-border rounded-lg border border-border">
             {keys.length === 0 && (
-              <div className="p-4 text-[13px] text-faint">No keys yet.</div>
+              <div className="p-4 text-[13px] text-faint">{t("No keys yet.")}</div>
             )}
             {keys.map((key) => (
               <div key={key.id} className="flex items-center gap-3 px-4 py-2.5 text-[13px]">
                 <span className="font-mono text-[12px] text-text">tac_…</span>
                 <span>{key.name}</span>
-                <span className="text-[12px] text-faint">created {formatDate(key.createdAt)}</span>
+                <span className="text-[12px] text-faint">
+                  {t("created {date}", { date: formatDate(key.createdAt, locale) })}
+                </span>
                 <span suppressHydrationWarning className="text-[12px] text-faint">
-                  {key.lastUsedAt ? `last used ${timeAgo(key.lastUsedAt)} ago` : "never used"}
+                  {key.lastUsedAt ? t("last used {time} ago", { time: timeAgo(key.lastUsedAt, locale) }) : t("never used")}
                 </span>
                 {key.revokedAt ? (
                   <span className="ml-auto rounded-full bg-elevated px-2 py-0.5 text-[11px] text-faint">
-                    Revoked
+                    {t("Revoked")}
                   </span>
                 ) : (
                   <button
@@ -1240,7 +1306,7 @@ export function SettingsView({
                     onClick={() => void revokeKey(key)}
                     className="ml-auto rounded-md border border-border px-2 py-0.5 text-[12px] text-muted transition-colors hover:border-danger hover:text-danger"
                   >
-                    Revoke
+                    {t("Revoke")}
                   </button>
                 )}
               </div>
@@ -1251,35 +1317,46 @@ export function SettingsView({
         </section>
 
         <section className="space-y-3">
-          <h2 className="text-[13px] font-semibold">Agent access — MCP server</h2>
+          <h2 className="text-[13px] font-semibold">{t("Agent access — MCP server")}</h2>
           <p className="text-[13px] leading-relaxed text-muted">
-            For Claude Code / Claude Desktop. The MCP server reads and writes this same database
-            directly, so it works even when the web app is closed. It exposes{" "}
-            <code className="font-mono text-[12px] text-text">
-              list/get/create/update/delete issue, add_comment, list/create label
-            </code>{" "}
-            with project and assignee support.
+            {interpolate(
+              t(
+                "For Claude Code / Claude Desktop. The MCP server reads and writes this same database directly, so it works even when the web app is closed. It exposes {tools} with project and assignee support."
+              ),
+              {
+                tools: (
+                  <code className="font-mono text-[12px] text-text">
+                    list/get/create/update/delete issue, add_comment, list/create label
+                  </code>
+                ),
+              }
+            )}
           </p>
           <div className="text-[12px] font-medium text-muted">Claude Code</div>
           <Snippet code={claudeCodeCmd} />
           <p className="text-[12px] text-faint">
-            For Claude Desktop, add an equivalent{" "}
-            <code className="font-mono">mcpServers.tacos</code> entry with{" "}
-            <code className="font-mono">npx tsx /path/to/mcp/server.ts</code> in{" "}
-            <code className="font-mono">claude_desktop_config.json</code>. See README for details.
+            {interpolate(
+              t("For Claude Desktop, add an equivalent {entry} entry with {command} in {file}. See README for details."),
+              {
+                entry: <code className="font-mono">mcpServers.tacos</code>,
+                command: <code className="font-mono">npx tsx /path/to/mcp/server.ts</code>,
+                file: <code className="font-mono">claude_desktop_config.json</code>,
+              }
+            )}
           </p>
         </section>
 
         {isOwner && (
           <section className="space-y-3">
-            <h2 className="text-[13px] font-semibold text-danger">Danger zone</h2>
+            <h2 className="text-[13px] font-semibold text-danger">{t("Danger zone")}</h2>
             <div className="flex items-center gap-3 rounded-lg border border-danger/40 bg-danger/5 p-4">
               <div className="min-w-0 flex-1">
-                <div className="text-[13px] font-medium">Delete this workspace</div>
+                <div className="text-[13px] font-medium">{t("Delete this workspace")}</div>
                 <p className="mt-0.5 text-[12px] leading-relaxed text-muted">
-                  {workspace.name} moves to your recycle bin and every member is notified. You can
-                  restore it for 30 days; after that its projects, issues, members and API keys are
-                  gone for good.
+                  {t(
+                    "{name} moves to your recycle bin and every member is notified. You can restore it for 30 days; after that its projects, issues, members and API keys are gone for good.",
+                    { name: workspace.name }
+                  )}
                 </p>
               </div>
               <button
@@ -1292,7 +1369,7 @@ export function SettingsView({
                 disabled={busy}
                 className="shrink-0 rounded-md border border-danger px-3 py-1.5 text-[13px] font-medium text-danger transition-colors hover:bg-danger hover:text-white disabled:opacity-40"
               >
-                Delete workspace
+                {t("Delete workspace")}
               </button>
             </div>
           </section>
@@ -1314,14 +1391,19 @@ export function SettingsView({
               className="w-[420px] max-w-[94vw] rounded-xl border border-border bg-overlay p-5 shadow-2xl shadow-black/15"
             >
               <h2 id="delete-workspace-title" className="text-[15px] font-semibold">
-                Delete “{workspace.name}”?
+                {t("Delete “{name}”?", { name: workspace.name })}
               </h2>
               <p className="mt-2 text-[13px] leading-relaxed text-muted">
-                It goes to your recycle bin for 30 days and every member is notified. Type{" "}
-                <code className="rounded bg-elevated px-1 py-0.5 font-mono text-[12px] text-text">
-                  confirmed
-                </code>{" "}
-                to move it there.
+                {interpolate(
+                  t("It goes to your recycle bin for 30 days and every member is notified. Type {word} to move it there."),
+                  {
+                    word: (
+                      <code className="rounded bg-elevated px-1 py-0.5 font-mono text-[12px] text-text">
+                        confirmed
+                      </code>
+                    ),
+                  }
+                )}
               </p>
               <input
                 autoFocus
@@ -1332,10 +1414,10 @@ export function SettingsView({
                   if (e.key === "Enter") void deleteWorkspaceNow();
                 }}
                 placeholder="confirmed"
-                aria-label='Type "confirmed" to delete this workspace'
+                aria-label={t('Type "confirmed" to delete this workspace')}
                 className="mt-3 w-full rounded-md border border-border bg-background px-2.5 py-1.5 text-[13px] outline-none focus:border-danger"
               />
-              {deleteError && <div className="mt-2 text-[12px] text-danger">{deleteError}</div>}
+              {deleteError && <div className="mt-2 text-[12px] text-danger">{t(deleteError)}</div>}
               <div className="mt-4 flex justify-end gap-2">
                 <button
                   type="button"
@@ -1343,7 +1425,7 @@ export function SettingsView({
                   disabled={busy}
                   className="rounded-md border border-border px-3 py-1.5 text-[13px] text-muted transition-colors hover:text-text disabled:opacity-40"
                 >
-                  Cancel
+                  {t("Cancel")}
                 </button>
                 <button
                   type="button"
@@ -1351,7 +1433,7 @@ export function SettingsView({
                   disabled={busy || deleteWord.trim() !== "confirmed"}
                   className="rounded-md border border-danger px-3 py-1.5 text-[13px] font-medium text-danger transition-colors hover:bg-danger hover:text-white disabled:opacity-40"
                 >
-                  {busy ? "Deleting…" : "Delete workspace"}
+                  {busy ? t("Deleting…") : t("Delete workspace")}
                 </button>
               </div>
             </div>

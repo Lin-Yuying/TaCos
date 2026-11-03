@@ -5,6 +5,7 @@ import { IssueBoard } from "@/components/issue-board";
 import { IssueTable } from "@/components/issue-table";
 import { useUI, type IssueLayout as Layout } from "@/components/ui-context";
 import type { IssueWithLabels } from "@/lib/issues";
+import { interpolate, useT } from "@/components/i18n-context";
 
 const LAYOUTS: { key: Layout; label: string; icon: typeof List }[] = [
   { key: "list", label: "List", icon: List },
@@ -12,6 +13,7 @@ const LAYOUTS: { key: Layout; label: string; icon: typeof List }[] = [
 ];
 
 export function LayoutToggle() {
+  const t = useT();
   const { layout, setLayout } = useUI();
   return (
     <div className="flex shrink-0 items-center gap-0.5 rounded-full border border-border bg-elevated/50 p-0.5">
@@ -21,8 +23,8 @@ export function LayoutToggle() {
           type="button"
           onClick={() => setLayout(key)}
           aria-pressed={layout === key}
-          aria-label={label}
-          title={label}
+          aria-label={t(label)}
+          title={t(label)}
           className={`flex h-7 w-8 items-center justify-center rounded-full transition-colors ${
             layout === key
               ? "bg-bg text-text shadow-[0_1px_2px_rgba(0,0,0,0.06)]"
@@ -37,21 +39,22 @@ export function LayoutToggle() {
 }
 
 function Empty() {
+  const t = useT();
   const { setComposerOpen } = useUI();
   return (
     <div className="flex flex-1 flex-col items-center justify-center gap-3 text-center">
-      <div className="text-[15px] font-medium text-muted">No issues found</div>
+      <div className="text-[15px] font-medium text-muted">{t("No issues found")}</div>
       <div className="text-[13px] text-faint">
-        Adjust your filters, or press{" "}
-        <kbd className="rounded border border-border px-1 font-mono text-[11px]">C</kbd> to create
-        one.
+        {interpolate(t("Adjust your filters, or press {key} to create one."), {
+          key: <kbd className="rounded border border-border px-1 font-mono text-[11px]">C</kbd>,
+        })}
       </div>
       <button
         type="button"
         onClick={() => setComposerOpen(true)}
         className="flex items-center gap-1 rounded-md bg-accent px-3 py-1.5 text-[13px] font-medium text-white hover:bg-accent-hover"
       >
-        <Plus size={13} /> New issue
+        <Plus size={13} /> {t("New issue")}
       </button>
     </div>
   );

@@ -45,8 +45,8 @@ assert(consts.includes("Delete actions still ask"), "Full access detail must say
 assert(!consts.includes("No cards, and the agent may touch the machine"), "Full must not claim no cards");
 
 // UI delete actions always use window.confirm (independent of approval mode).
-assert(chat.includes("Delete “${thread.title"), "thread delete confirm required");
-assert(chat.includes("Delete “${active.title"), "active thread delete confirm required");
-assert(chat.includes('Delete the skill "${skillToken(skill)}"'), "skill delete confirm required");
+assert(chat.includes("Delete “${thread.title") || chat.includes("title: thread.title"), "thread delete confirm required");
+assert(chat.includes("Delete “${active.title") || chat.includes("title: active.title"), "active thread delete confirm required");
+assert(chat.includes('Delete the skill "${skillToken(skill)}"') || chat.includes('Delete the skill "{name}"'), "skill delete confirm required");
 
 console.log("check-delete-always-confirm: pass");

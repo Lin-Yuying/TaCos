@@ -9,8 +9,11 @@ import { updateIssueAction } from "@/app/actions";
 import { STATUS_ORDER } from "@/lib/constants";
 import type { IssueWithLabels } from "@/lib/issues";
 import { issueRef, timeAgo } from "@/lib/format";
+import { useLocale, useT } from "@/components/i18n-context";
 
 export function CommandPalette({ workspaceId }: { workspaceId: string }) {
+  const t = useT();
+  const locale = useLocale();
   const { paletteOpen, setPaletteOpen, openIssue, focused, setComposerOpen } = useUI();
   const router = useRouter();
   const [query, setQuery] = useState("");
@@ -65,18 +68,18 @@ export function CommandPalette({ workspaceId }: { workspaceId: string }) {
               autoFocus
               value={query}
               onValueChange={setQuery}
-              placeholder="Search tasks or run a command…"
+              placeholder={t("Search tasks or run a command…")}
             />
           </div>
           <Command.List className="max-h-[380px] overflow-y-auto p-1 pb-2">
             <Command.Empty>
               <div className="px-3 py-6 text-center text-[13px] text-faint">
-                No results for “{query}”
+                {t("No results for “{query}”")}
               </div>
             </Command.Empty>
 
             {query.trim() && results.length > 0 && (
-              <Command.Group heading="Issues">
+              <Command.Group heading={t("Issues")}>
                 {results.map((issue) => (
                   <Command.Item
                     key={issue.id}
@@ -95,14 +98,14 @@ export function CommandPalette({ workspaceId }: { workspaceId: string }) {
                     </span>
                     <span className="min-w-0 flex-1 truncate">{issue.title}</span>
                     <span suppressHydrationWarning className="text-[11px] text-faint">
-                      {timeAgo(issue.updatedAt)}
+                      {timeAgo(issue.updatedAt, locale)}
                     </span>
                   </Command.Item>
                 ))}
               </Command.Group>
             )}
 
-            <Command.Group heading="Actions">
+            <Command.Group heading={t("Actions")}>
               <Command.Item
                 value="new task create"
                 onSelect={() => {
@@ -110,20 +113,20 @@ export function CommandPalette({ workspaceId }: { workspaceId: string }) {
                   close();
                 }}
               >
-                <span className="text-accent">+</span> New task
+                <span className="text-accent">+</span> {t("New task")}
               </Command.Item>
               {focused &&
                 STATUS_ORDER.map((status) => (
                   <Command.Item
                     key={status}
-                    value={`move ${focused.ref} ${STATUS_META[status].label}`}
+                    value={`move ${focused.ref} ${t(STATUS_META[status].label)}`}
                     onSelect={() => {
                       void updateIssueAction(workspaceId, focused.identifier, { status });
                       close();
                     }}
                   >
                     <StatusIcon status={status} size={13} />
-                    Move {focused.ref} to {STATUS_META[status].label}
+                    {t("Move {ref} to {status}", { ref: focused.ref, status: t(STATUS_META[status].label) })}
                   </Command.Item>
                 ))}
               {focused && (
@@ -134,12 +137,12 @@ export function CommandPalette({ workspaceId }: { workspaceId: string }) {
                     close();
                   }}
                 >
-                  <span className="text-muted">⧉</span> Copy identifier ({focused.ref})
+                  <span className="text-muted">⧉</span> {t("Copy identifier ({ref})", { ref: focused.ref })}
                 </Command.Item>
               )}
             </Command.Group>
 
-            <Command.Group heading="Navigation">
+            <Command.Group heading={t("Navigation")}>
               <Command.Item
                 value="all issues"
                 onSelect={() => {
@@ -147,7 +150,7 @@ export function CommandPalette({ workspaceId }: { workspaceId: string }) {
                   close();
                 }}
               >
-                Go to All Tasks
+                {t("Go to All Tasks")}
               </Command.Item>
               <Command.Item
                 value="my issues"
@@ -156,7 +159,7 @@ export function CommandPalette({ workspaceId }: { workspaceId: string }) {
                   close();
                 }}
               >
-                Go to My Issues
+                {t("Go to My Issues")}
               </Command.Item>
               <Command.Item
                 value="notifications inbox"
@@ -165,7 +168,7 @@ export function CommandPalette({ workspaceId }: { workspaceId: string }) {
                   close();
                 }}
               >
-                Go to Inbox
+                {t("Go to Inbox")}
               </Command.Item>
               <Command.Item
                 value="labels"
@@ -174,7 +177,7 @@ export function CommandPalette({ workspaceId }: { workspaceId: string }) {
                   close();
                 }}
               >
-                Go to Labels
+                {t("Go to Labels")}
               </Command.Item>
               <Command.Item
                 value="settings api keys agent members projects"
@@ -183,22 +186,22 @@ export function CommandPalette({ workspaceId }: { workspaceId: string }) {
                   close();
                 }}
               >
-                Go to Settings
+                {t("Go to Settings")}
               </Command.Item>
             </Command.Group>
           </Command.List>
           <div className="flex items-center gap-3 border-t border-border px-3 py-2 text-[11px] text-faint">
             <span>
               <kbd className="rounded border border-border bg-elevated px-1 font-mono">↑↓</kbd>{" "}
-              navigate
+              {t("navigate")}
             </span>
             <span>
               <kbd className="rounded border border-border bg-elevated px-1 font-mono">↵</kbd>{" "}
-              select
+              {t("select")}
             </span>
             <span>
               <kbd className="rounded border border-border bg-elevated px-1 font-mono">esc</kbd>{" "}
-              close
+              {t("close")}
             </span>
           </div>
         </Command>

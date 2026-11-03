@@ -6,6 +6,7 @@ import { Search, X } from "lucide-react";
 import { LayoutToggle } from "@/components/issue-layout";
 import { STATUS_META } from "@/lib/constants";
 import type { Status } from "@/lib/constants";
+import { useT } from "@/components/i18n-context";
 
 type View = "all" | "active" | Status;
 
@@ -36,6 +37,7 @@ export function ListHeader({
   assigneeParam?: string;
   assigneeName?: string;
 }) {
+  const t = useT();
   const router = useRouter();
   const [value, setValue] = useState(q);
 
@@ -71,11 +73,11 @@ export function ListHeader({
   const heading =
     view === "all" && assigneeParam
       ? assigneeParam === "none"
-        ? "Unassigned"
+        ? t("Unassigned")
         : assigneeName
-          ? `${assigneeName}’s tasks`
-          : "All Tasks"
-      : TITLES[view] ?? "Tasks";
+          ? t("{name}’s tasks", { name: assigneeName })
+          : t("All Tasks")
+      : t(TITLES[view] ?? "Tasks");
 
   return (
     <header className="flex h-12 shrink-0 items-center gap-2 overflow-hidden border-b border-border pl-[52px] pr-10 lg:pr-20 xl:pr-32">
@@ -98,7 +100,7 @@ export function ListHeader({
           onClick={() => router.replace(buildUrl({ label: undefined }), { scroll: false })}
           className="hidden max-w-[140px] shrink-0 items-center gap-1 truncate rounded-full bg-elevated px-2 py-0.5 text-[11px] text-muted hover:text-text @min-[420px]:flex"
         >
-          label: {label} <X size={11} className="shrink-0" />
+          {t("label: {label}", { label })} <X size={11} className="shrink-0" />
         </button>
       )}
       <div className="ml-auto flex min-w-0 shrink items-center gap-2">
@@ -107,7 +109,7 @@ export function ListHeader({
           <input
             value={value}
             onChange={(e) => setValue(e.target.value)}
-            placeholder="Search tasks…"
+            placeholder={t("Search tasks…")}
             className="min-w-0 w-full bg-transparent text-[13px] text-text placeholder:text-faint"
           />
           {value && (

@@ -651,6 +651,7 @@ function bootstrap(sqlite: Database.Database) {
   addColumnIfMissing(sqlite, "users", "avatar", "TEXT");
   addColumnIfMissing(sqlite, "users", "role", "TEXT NOT NULL DEFAULT 'member'");
   addColumnIfMissing(sqlite, "users", "last_workspace_id", "TEXT");
+  addColumnIfMissing(sqlite, "users", "locale", "TEXT");
   addColumnIfMissing(sqlite, "workspaces", "icon", "TEXT");
   addColumnIfMissing(sqlite, "workspaces", "created_by", "TEXT");
   addColumnIfMissing(sqlite, "workspaces", "deleted_at", "TEXT");

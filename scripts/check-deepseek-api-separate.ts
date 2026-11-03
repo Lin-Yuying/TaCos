@@ -4,7 +4,7 @@ const read = (p: string) => readFileSync(p, "utf8");
 const fail = (m: string) => { console.error("FAIL", m); process.exit(1); };
 const settings = read("src/components/settings-view.tsx");
 const harnessStart = settings.indexOf('data-testid="harness-settings"');
-const aiStart = settings.indexOf(">AI assistant<");
+const aiStart = Math.max(settings.indexOf(">AI assistant<"), settings.indexOf('>{t("AI assistant")}<'));
 if (harnessStart < 0 || aiStart < 0) fail("settings sections not found");
 const harness = settings.slice(harnessStart, aiStart);
 const ai = settings.slice(aiStart, settings.indexOf("<section", aiStart + 1));

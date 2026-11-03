@@ -2,6 +2,7 @@
 
 import { Plus } from "lucide-react";
 import { useUI } from "@/components/ui-context";
+import { useT } from "@/components/i18n-context";
 import { STATUS_META, type Status } from "@/lib/constants";
 
 /**
@@ -10,7 +11,8 @@ import { STATUS_META, type Status } from "@/lib/constants";
  */
 export function AddIssueButton({ status }: { status: Status }) {
   const { setComposerOpen } = useUI();
-  const label = STATUS_META[status].label;
+  const t = useT();
+  const label = t("New {status} task", { status: t(STATUS_META[status].label) });
   return (
     <button
       type="button"
@@ -18,8 +20,8 @@ export function AddIssueButton({ status }: { status: Status }) {
         e.stopPropagation();
         setComposerOpen(true, status);
       }}
-      title={`New ${label.toLowerCase()} task`}
-      aria-label={`New ${label.toLowerCase()} task`}
+      title={label}
+      aria-label={label}
       className="ml-auto shrink-0 rounded p-0.5 text-faint transition-colors hover:bg-elevated hover:text-text"
     >
       <Plus size={14} />

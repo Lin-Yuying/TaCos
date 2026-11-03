@@ -24,6 +24,7 @@ import type {
   Project,
   ProjectMember,
 } from "@/lib/issues";
+import { useT } from "@/components/i18n-context";
 
 type Counts = Record<Status, number> & { total: number };
 type ProjectDetail = Project & { doc: string; createdBy: string | null };
@@ -67,6 +68,7 @@ export function ProjectWorkspace({
   resources: ProjectResource[];
   trashedTitles: Record<string, string>;
 }) {
+  const t = useT();
   const [tab, setTab] = useState<ProjectTab>(initialTab);
   const [status, setStatus] = useState<Status | null>(null);
   const [q, setQ] = useState("");
@@ -177,11 +179,11 @@ export function ProjectWorkspace({
                 className="flex items-center gap-1.5 rounded-full bg-elevated px-2 py-0.5 text-[12px] text-text transition-colors hover:bg-elevated/70"
               >
                 <StatusIcon status={status} size={12} />
-                {STATUS_META[status].label}
+                {t(STATUS_META[status].label)}
                 <X size={11} className="text-faint" />
               </button>
             ) : (
-              <span className="text-[13px] font-medium text-muted">All tasks</span>
+              <span className="text-[13px] font-medium text-muted">{t("All tasks")}</span>
             )}
             <span className="rounded-full bg-elevated px-2 py-0.5 text-[11px] text-muted">
               {shown.length}
@@ -192,14 +194,14 @@ export function ProjectWorkspace({
                 <input
                   value={q}
                   onChange={(e) => setQ(e.target.value)}
-                  placeholder="Search tasks…"
+                  placeholder={t("Search tasks…")}
                   className="w-full bg-transparent text-[13px] text-text placeholder:text-faint"
                 />
                 {q && (
                   <button
                     type="button"
                     onClick={() => setQ("")}
-                    aria-label="Clear search"
+                    aria-label={t("Clear search")}
                     className="text-faint hover:text-muted"
                   >
                     <X size={12} />

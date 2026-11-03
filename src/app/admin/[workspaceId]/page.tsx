@@ -8,6 +8,8 @@ import {
 } from "@/lib/auth";
 import { getJoinCode, listMembers } from "@/lib/issues";
 import { WorkspaceAdminConsole } from "@/components/workspace-admin-console";
+import { I18nProvider } from "@/components/i18n-context";
+import { resolveLocale } from "@/lib/locale";
 
 // Same blocking gate as /admin: non-members and plain members leave before HTML ships.
 export const instant = false;
@@ -54,12 +56,14 @@ async function WorkspaceAdminView({
   ]);
 
   return (
-    <WorkspaceAdminConsole
-      workspace={{ id: active.id, name: active.name, icon: active.icon }}
-      currentUser={{ id: user.id, displayName: user.displayName }}
-      members={members}
-      joinCode={joinCode}
-      homeUrl={`/${workspaceId}`}
-    />
+    <I18nProvider locale={await resolveLocale(user)}>
+      <WorkspaceAdminConsole
+        workspace={{ id: active.id, name: active.name, icon: active.icon }}
+        currentUser={{ id: user.id, displayName: user.displayName }}
+        members={members}
+        joinCode={joinCode}
+        homeUrl={`/${workspaceId}`}
+      />
+    </I18nProvider>
   );
 }

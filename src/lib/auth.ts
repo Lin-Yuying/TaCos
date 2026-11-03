@@ -4,6 +4,7 @@ import { and, asc, eq, isNull } from "drizzle-orm";
 import { getDb } from "../db/client";
 import { deviceAccounts, sessions, users, workspaceMembers, workspaces } from "../db/schema";
 import { TacosError } from "./issues";
+import { asLocale, type Locale } from "./i18n";
 
 export const SESSION_COOKIE = "tacos_session";
 const SESSION_TTL_DAYS = 30;
@@ -16,6 +17,7 @@ export type SessionUser = {
   // site-wide role; per-workspace roles live in workspace_members
   siteRole: "admin" | "member";
   lastWorkspaceId: string | null;
+  locale: Locale | null;
 };
 
 export async function createSession(userId: string): Promise<string> {
@@ -43,6 +45,7 @@ export async function getSessionUser(): Promise<SessionUser | null> {
       avatar: users.avatar,
       siteRole: users.role,
       lastWorkspaceId: users.lastWorkspaceId,
+      locale: users.locale,
       expiresAt: sessions.expiresAt,
     })
     .from(sessions)
@@ -61,6 +64,7 @@ export async function getSessionUser(): Promise<SessionUser | null> {
     avatar: row.avatar ?? null,
     siteRole: row.siteRole === "admin" ? "admin" : "member",
     lastWorkspaceId: row.lastWorkspaceId ?? null,
+    locale: asLocale(row.locale),
   };
 }
 

@@ -6,6 +6,7 @@ import { useUI } from "@/components/ui-context";
 import { DocPageView } from "@/components/doc-page";
 import type { PageContext, PageRefEntry } from "@/components/markdown";
 import type { DocPage, PageAuthor, PageSummary } from "@/lib/pages";
+import { useT } from "@/components/i18n-context";
 
 type PageDetail = {
   page: DocPage;
@@ -56,6 +57,7 @@ function DocPanel({
   expanded: boolean;
   onToggleExpanded: () => void;
 }) {
+  const t = useT();
   const router = useRouter();
   const { openPage, toast } = useUI();
   const [detail, setDetail] = useState<PageDetail | null>(null);
@@ -85,12 +87,12 @@ function DocPanel({
   // away instead of holding a dead page.
   useEffect(() => {
     if (!missing) return;
-    toast("Document deleted");
+    toast(t("Document deleted"));
     onClose();
-  }, [missing, toast, onClose]);
+  }, [missing, toast, onClose, t]);
 
   if (missing || !detail) {
-    return <div className="flex-1 p-5 text-[13px] text-muted">Loading…</div>;
+    return <div className="flex-1 p-5 text-[13px] text-muted">{t("Loading…")}</div>;
   }
 
   return (

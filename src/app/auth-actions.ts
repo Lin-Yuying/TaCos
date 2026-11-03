@@ -11,6 +11,7 @@ import {
   nextFreeAvatar,
 } from "@/lib/avatars";
 import { createSiteMember } from "@/lib/admin";
+import { asLocale, LOCALE_COOKIE, type Locale } from "@/lib/i18n";
 import {
   createSession,
   deleteSession,
@@ -88,6 +89,27 @@ export async function loginAction(input: {
     const workspaces = await listUserWorkspaces(user.id);
     const landing = landingWorkspaceId(user.id, workspaces, user.lastWorkspaceId ?? null);
     return { next: landing ? `/${landing}` : "/" };
+  });
+}
+
+// Saved on the account so it follows the person to other browsers, and in a cookie so
+// the sign-in screens of this browser match.
+export async function saveLocaleAction(locale: string): Promise<ActionResult<{ locale: Locale }>> {
+  return run(async () => {
+    const chosen = asLocale(locale);
+    if (!chosen) throw new TacosError("Unsupported language", 400);
+    const user = await getSessionUser();
+    if (user) {
+      await getDb().update(users).set({ locale: chosen }).where(eq(users.id, user.id));
+    }
+    const store = await cookies();
+    store.set(LOCALE_COOKIE, chosen, {
+      sameSite: "lax",
+      path: "/",
+      maxAge: 60 * 60 * 24 * 730,
+    });
+    revalidatePath("/", "layout");
+    return { locale: chosen };
   });
 }
 

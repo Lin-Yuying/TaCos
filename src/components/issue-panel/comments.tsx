@@ -5,6 +5,7 @@ import { AssigneeAvatar } from "@/components/issue-table";
 import { timeAgo } from "@/lib/format";
 import type { Comment } from "@/lib/issues";
 import { commentAuthorName } from "./format";
+import { useLocale, useT } from "@/components/i18n-context";
 
 /**
  * Renders straight into the panel footer, so the comments and the composer stay direct
@@ -23,6 +24,8 @@ export function CommentsSection({
   onCommentChange: (value: string) => void;
   onSubmit: () => void;
 }) {
+  const t = useT();
+  const locale = useLocale();
   return (
     <>
       {comments.map((item) => (
@@ -35,9 +38,9 @@ export function CommentsSection({
                 size={16}
               />
             ) : null}
-            <span className="text-[12px] font-medium text-muted">{commentAuthorName(item)}</span>
+            <span className="text-[12px] font-medium text-muted">{commentAuthorName(item, t)}</span>
             <span suppressHydrationWarning className="text-[11px] text-faint">
-              {timeAgo(item.createdAt)}
+              {timeAgo(item.createdAt, locale)}
             </span>
           </div>
           {/* Comments arrive in Markdown too, so an agent's checklist keeps its ticks. */}
@@ -57,7 +60,7 @@ export function CommentsSection({
               onSubmit();
             }
           }}
-          placeholder="Leave a comment…"
+          placeholder={t("Leave a comment…")}
           rows={2}
           className="w-full resize-none bg-transparent text-[13px] text-text placeholder:text-faint"
         />
@@ -68,7 +71,7 @@ export function CommentsSection({
             onClick={onSubmit}
             className="rounded-md bg-accent px-2.5 py-1 text-[12px] font-medium text-white transition-colors hover:bg-accent-hover disabled:opacity-40"
           >
-            Comment
+            {t("Comment")}
           </button>
         </div>
       </div>

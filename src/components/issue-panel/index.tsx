@@ -11,6 +11,7 @@ import { DescriptionSection } from "./description";
 import { ChangelogSection } from "./changelog";
 import { CommentsSection } from "./comments";
 import type { FlatDetail, IssuePatch } from "./types";
+import { useT } from "@/components/i18n-context";
 
 export function IssuePanelHost({
   workspaceId,
@@ -59,6 +60,7 @@ function IssuePanel({
   expanded: boolean;
   onToggleExpanded: () => void;
 }) {
+  const t = useT();
   const [detail, setDetail] = useState<FlatDetail | null>(null);
   const [notFound, setNotFound] = useState(false);
   const [allLabels, setAllLabels] = useState<Label[]>([]);
@@ -74,9 +76,9 @@ function IssuePanel({
   // an empty "not found" card sitting in the split view.
   useEffect(() => {
     if (!notFound) return;
-    toast("Task deleted — it is in Trash");
+    toast(t("Task deleted — it is in Trash"));
     onClose();
-  }, [notFound, toast, onClose]);
+  }, [notFound, toast, onClose, t]);
 
   const scrollToComposer = () => {
     const el = scrollRef.current;
@@ -155,16 +157,16 @@ function IssuePanel({
         detail: { id: result.data, identifier: detail.identifier, title: detail.title },
       })
     );
-    toast("Task deleted — it is in Trash");
+    toast(t("Task deleted — it is in Trash"));
     onClose();
   }
 
   if (notFound) {
-    return <div className="flex-1 p-5 text-[13px] text-muted">Loading…</div>;
+    return <div className="flex-1 p-5 text-[13px] text-muted">{t("Loading…")}</div>;
   }
 
   if (!detail) {
-    return <div className="flex-1 p-5 text-[13px] text-muted">Loading…</div>;
+    return <div className="flex-1 p-5 text-[13px] text-muted">{t("Loading…")}</div>;
   }
 
   const comments = [...detail.comments].sort((a, b) =>
@@ -196,7 +198,7 @@ function IssuePanel({
         <input
           key={`${detail.id}-title`}
           defaultValue={detail.title}
-          placeholder="Task title"
+          placeholder={t("Task title")}
           onBlur={(e) => {
             const title = e.target.value.trim();
             if (title && title !== detail.title) void update({ title });
@@ -237,7 +239,7 @@ function IssuePanel({
           />
         </div>
 
-        {error && <div className="text-[12px] text-danger">{error}</div>}
+        {error && <div className="text-[12px] text-danger">{t(error)}</div>}
       </div>
     </div>
   );

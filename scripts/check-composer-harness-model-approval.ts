@@ -24,7 +24,10 @@ assert(page.includes("listAgentHarnessOptions"), "agent page must load harness o
 assert(!page.includes("agentCliEngineOptions"), "agent page must not use CLI-only engine list");
 
 const chat = read("src/components/agent-chat.tsx");
-assert(chat.includes("<SectionLabel>Harness</SectionLabel>"), "composer must label Harness");
+assert(
+  chat.includes("<SectionLabel>Harness</SectionLabel>") || chat.includes('<SectionLabel>{t("Harness")}</SectionLabel>'),
+  "composer must label Harness",
+);
 assert(chat.includes("ApprovalChip"), "composer must keep ApprovalChip");
 assert(chat.includes("approval: draftApproval"), "start must send approval for every harness");
 assert(chat.includes("rememberHarness"), "composer must persist harness cookie");
