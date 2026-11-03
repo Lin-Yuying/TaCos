@@ -27,7 +27,6 @@ function isReady(_binary: string): { ok: boolean; error: string | null; hint: st
 export const codexAdapter: HarnessAdapter = {
   id: "codex",
   label: LABEL,
-  osSandbox: true,
   detect(): DetectResult {
     const binary = findHarnessBinary("codex");
     if (!binary) {
@@ -40,8 +39,6 @@ export const codexAdapter: HarnessAdapter = {
         ready: false,
         error: "missing_binary",
         hint: INSTALL_HINT,
-        osSandbox: true,
-        riskLabel: null,
       };
     }
     const version = readHarnessVersion("codex", binary);
@@ -55,8 +52,6 @@ export const codexAdapter: HarnessAdapter = {
         ready: false,
         error: "version_unreadable",
         hint: INSTALL_HINT,
-        osSandbox: true,
-        riskLabel: null,
       };
     }
     const ready = isReady(binary);
@@ -69,8 +64,6 @@ export const codexAdapter: HarnessAdapter = {
       ready: ready.ok,
       error: ready.ok ? null : ready.error,
       hint: ready.ok ? null : ready.hint,
-      osSandbox: true,
-      riskLabel: null,
     };
   },
   listModels(): ModelOption[] {

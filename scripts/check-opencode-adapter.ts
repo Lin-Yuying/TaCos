@@ -17,7 +17,6 @@ const adapter = getHarnessAdapter("opencode");
 assert(adapter, "opencode adapter missing");
 const detect = adapter!.detect();
 assert(detect.id === "opencode", "detect id");
-assert(detect.osSandbox === false, "opencode has no OS sandbox");
 assert(typeof adapter!.openTurn === "function", "openTurn missing");
 assert(!read("src/lib/harness/adapters/opencode.ts").includes("notImplementedTurn"), "still stub");
 

@@ -17,7 +17,6 @@ const adapter = getHarnessAdapter("pi");
 assert(adapter, "pi adapter missing");
 const detect = adapter!.detect();
 assert(detect.id === "pi", "detect id");
-assert(detect.osSandbox === false, "pi has no OS sandbox");
 assert(typeof adapter!.openTurn === "function", "openTurn missing");
 assert(!read("src/lib/harness/adapters/pi.ts").includes("notImplementedTurn"), "still stub");
 

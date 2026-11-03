@@ -13,10 +13,6 @@ export type DetectResult = {
   ready: boolean;
   error: string | null;
   hint: string | null;
-  /** True when the harness applies an OS-level sandbox around agent commands. */
-  osSandbox: boolean;
-  /** Short risk label when osSandbox is false (H-P3-20). */
-  riskLabel: string | null;
 };
 
 export type ModelOption = {
@@ -86,8 +82,6 @@ export type InstallResult = {
 export type HarnessAdapter = {
   id: HarnessId;
   label: string;
-  /** Codex has OS sandbox modes. Other first-class harnesses do not (H-P3-20). */
-  osSandbox: boolean;
   detect: () => DetectResult;
   listModels: () => ModelOption[];
   openTurn: (input: TurnInput) => AsyncIterable<TurnEvent>;

@@ -368,9 +368,6 @@ function HarnessChip({
       trigger={
         <span data-testid="composer-harness" className="flex items-center gap-1">
           <span className="max-w-[160px] truncate">{current?.label}</span>
-          {current?.riskLabel ? (
-            <span className="max-w-[110px] truncate text-danger">{t(current.riskLabel)}</span>
-          ) : null}
           <ChevronDown size={11} className="shrink-0 text-muted" />
         </span>
       }
@@ -387,18 +384,7 @@ function HarnessChip({
                 onChange(option.id);
               }}
             >
-              <span className="min-w-0 flex-1 truncate text-left">
-                <span className="block truncate">{option.label}</span>
-                {option.riskLabel ? (
-                  <span
-                    className="block truncate text-[11px] text-danger"
-                    data-testid={`composer-risk-${option.id}`}
-                  >
-                    {t(option.riskLabel)}
-                  </span>
-                ) : null}
-              </span>
-              <span className="shrink-0 text-[11px] text-faint">{option.detail ? t(option.detail) : null}</span>
+              <span className="min-w-0 flex-1 truncate text-left">{option.label}</span>
             </MenuItem>
           ))}
         </>

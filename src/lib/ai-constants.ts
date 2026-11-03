@@ -136,8 +136,6 @@ export type AgentHarnessOption = {
   detail: string | null;
   available: boolean;
   hint: string | null;
-  /** Shown when the harness has no OS sandbox (H-P3-20). */
-  riskLabel: string | null;
 };
 
 // One entry of the Codex model catalogue on this machine.
