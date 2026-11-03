@@ -965,8 +965,7 @@ function piStream(binary: string, prompt: CliPrompt, options: RunOptions): Reada
             "--print",
             "--mode",
             "json",
-            "--no-tools",
-            "--no-mcp",
+            // H-P1-07: do not hard-gate Pi tools/MCP. H-P4-21 wires TaCos MCP + cards.
             "--no-session",
             "--system-prompt",
             prompt.system,

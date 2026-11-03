@@ -210,6 +210,13 @@ export async function POST(request: Request) {
       if (!threadId) {
         throw new TacosError("Pick a project and open a conversation first", 400);
       }
+      if (engine === "api") {
+        throw new TacosError(
+          "Agent turns need a local CLI harness",
+          400,
+          "Pick Codex or Pi in the composer. API keys stay under Settings for inline edits."
+        );
+      }
       // History comes from the thread, not from the browser: whatever scrolled past in
       // this conversation is what the model gets, including turns from other sessions.
       const thread = await loadThreadForTurn(workspaceId, access.user.id, threadId);
@@ -236,10 +243,6 @@ export async function POST(request: Request) {
       });
 
       const turn = { threadId, messageId: assistantId };
-      if (engine === "api") {
-        const stream = await openChatStream(workspaceId, messages, request.signal);
-        return new Response(recordTurn(stream, turn), { headers: STREAM_HEADERS });
-      }
 
       const grant = issueAgentToolGrant({
         threadId,
