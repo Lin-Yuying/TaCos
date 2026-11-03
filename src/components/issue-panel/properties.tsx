@@ -7,6 +7,7 @@ import { AssigneeAvatar, AssigneeStack } from "@/components/issue-table";
 import type { Priority } from "@/lib/constants";
 import type { Label, Member } from "@/lib/issues";
 import type { FlatDetail, IssueUpdate } from "./types";
+import { useT } from "@/components/i18n-context";
 
 export function PropertiesRow({
   detail,
@@ -19,6 +20,7 @@ export function PropertiesRow({
   allLabels: Label[];
   onUpdate: IssueUpdate;
 }) {
+  const t = useT();
   const currentLabelNames = detail.labels.map((l) => l.name);
   const allAssigned = members.every((member) =>
     detail.assignees.some((assignee) => assignee.id === member.id)
@@ -32,7 +34,7 @@ export function PropertiesRow({
         trigger={
           <>
             <PriorityIcon priority={detail.priority} size={13} />
-            {PRIORITY_META[detail.priority].label}
+            {t(PRIORITY_META[detail.priority].label)}
           </>
         }
       >
@@ -48,7 +50,7 @@ export function PropertiesRow({
                 }}
               >
                 <PriorityIcon priority={priority} size={13} />
-                {PRIORITY_META[priority].label}
+                {t(PRIORITY_META[priority].label)}
               </MenuItem>
             ))}
           </>
@@ -61,7 +63,7 @@ export function PropertiesRow({
         trigger={
           <>
             {detail.assignees.length === 0 ? (
-              "Assignee…"
+              t("Assignee…")
             ) : (
               <>
                 {/* Names are spelled out (no "N assignees") and every avatar is shown,
@@ -86,7 +88,7 @@ export function PropertiesRow({
                 void onUpdate({ assigneeIds: [] });
               }}
             >
-              <span className="text-faint">—</span> Unassigned
+              <span className="text-faint">—</span> {t("Unassigned")}
             </MenuItem>
             <MenuItem
               active={members.length > 0 && allAssigned}
@@ -95,7 +97,7 @@ export function PropertiesRow({
                 void onUpdate({ assigneeIds: members.map((member) => member.id) });
               }}
             >
-              <Users size={14} className="text-muted" /> Everyone
+              <Users size={14} className="text-muted" /> {t("Everyone")}
             </MenuItem>
             <div className="my-1 border-t border-border" />
             {members.map((member) => {
@@ -133,7 +135,7 @@ export function PropertiesRow({
         triggerClassName="flex items-center gap-1.5 rounded-md px-2 py-1 text-[13px] text-muted transition-colors hover:bg-elevated hover:text-text"
         trigger={
           detail.labels.length === 0 ? (
-            <span className="text-faint">+ Labels</span>
+            <span className="text-faint">+ {t("Labels")}</span>
           ) : (
             <>
               {detail.labels.slice(0, 2).map((label) => (
@@ -167,7 +169,7 @@ export function PropertiesRow({
             })}
             {allLabels.length === 0 && (
               <div className="px-2 py-1.5 text-[12px] text-faint">
-                No labels yet — create some on the Labels page.
+                {t("No labels yet — create some on the Labels page.")}
               </div>
             )}
           </>

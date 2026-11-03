@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useSyncExternalStore } from "react";
 import { Check, Copy, X } from "lucide-react";
+import { interpolate, useT } from "@/components/i18n-context";
 
 // The register URL is only knowable in the browser; useSyncExternalStore lets the
 // server render the empty snapshot and the client swap in the real origin after
@@ -17,6 +18,7 @@ export function InviteDialog({
   joinCode: string | null;
   onClose: () => void;
 }) {
+  const t = useT();
   const origin = useSyncExternalStore(
     NO_SUBSCRIBE,
     () => window.location.origin,
@@ -52,18 +54,18 @@ export function InviteDialog({
         <div
           role="dialog"
           aria-modal="true"
-          aria-label="Invite teammates"
+          aria-label={t("Invite teammates")}
           className="rounded-xl border border-border bg-overlay shadow-2xl shadow-black/15"
         >
           <div className="flex items-center justify-between border-b border-border px-4 py-2 text-[12px] text-faint">
             <span>
               {workspaceName} <span className="mx-1">›</span>
-              <span className="text-muted">Invite teammates</span>
+              <span className="text-muted">{t("Invite teammates")}</span>
             </span>
             <button
               type="button"
               onClick={onClose}
-              aria-label="Close"
+              aria-label={t("Close")}
               className="rounded p-1 text-faint transition-colors hover:bg-elevated hover:text-text"
             >
               <X size={14} />
@@ -72,13 +74,18 @@ export function InviteDialog({
 
           <div className="space-y-3 px-4 py-4">
             <p className="text-[13px] leading-relaxed text-muted">
-              Share this join code. Teammates register at{" "}
-              <code className="font-mono text-[12px] text-text">{origin || "/register"}</code>,
-              then pick “Join an existing workspace” and enter the code.
+              {interpolate(
+                t(
+                  "Share this join code. Teammates register at {url}, then pick “Join an existing workspace” and enter the code."
+                ),
+                {
+                  url: <code className="font-mono text-[12px] text-text">{origin || "/register"}</code>,
+                }
+              )}
             </p>
             <div className="flex items-center gap-2">
               <code className="min-w-0 flex-1 truncate rounded-md border border-border bg-bg px-2 py-1.5 font-mono text-[13px] tracking-wide text-text">
-                {joinCode ?? "No active code"}
+                {joinCode ?? t("No active code")}
               </code>
               {joinCode && (
                 <button
@@ -87,13 +94,14 @@ export function InviteDialog({
                   className="flex shrink-0 items-center gap-1 rounded-md border border-border px-2 py-1.5 text-[12px] font-medium text-muted transition-colors hover:border-border-strong hover:text-text"
                 >
                   {copied ? <Check size={12} /> : <Copy size={12} />}
-                  {copied ? "Copied" : "Copy"}
+                  {copied ? t("Copied") : t("Copy")}
                 </button>
               )}
             </div>
             <p className="text-[12px] leading-relaxed text-faint">
-              Anyone with the code can join {workspaceName}. Admins can rotate it in
-              Settings → Members.
+              {t("Anyone with the code can join {name}. Admins can rotate it in Settings → Members.", {
+                name: workspaceName,
+              })}
             </p>
           </div>
         </div>

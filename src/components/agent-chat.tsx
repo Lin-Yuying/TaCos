@@ -60,6 +60,7 @@ import {
   type CodexModel,
 } from "@/lib/ai-constants";
 import type { AgentApproval, AgentMode, AgentThread, AgentThreadDetail } from "@/lib/agent-threads";
+import { interpolate, useT } from "@/components/i18n-context";
 
 type ProjectOption = { id: string; name: string; key: string; color: string };
 
@@ -146,11 +147,12 @@ function ApprovalPanel({
   busy: boolean;
   onAnswer: (requestId: string, decision: "accept" | "decline" | "accept-turn") => void;
 }) {
+  const t = useT();
   return (
     <div className="rounded-xl border border-border-strong bg-surface p-3">
       <div className="flex items-center gap-2 text-[12.5px] font-medium">
         <Lock size={13} />
-        Permission needed
+        {t("Permission needed")}
         <span className="ml-auto rounded-full border border-border bg-bg px-2 py-0.5 font-mono text-[11px] text-muted">
           {card.tool}
         </span>
@@ -169,16 +171,16 @@ function ApprovalPanel({
           disabled={busy}
           className="rounded-md border border-border px-2.5 py-1 text-[12px] text-muted transition-colors hover:border-border-strong hover:text-text disabled:opacity-50"
         >
-          Deny
+          {t("Deny")}
         </button>
         <button
           type="button"
           onClick={() => onAnswer(card.requestId, "accept-turn")}
           disabled={busy}
-          title="Stop asking for the rest of this turn"
+          title={t("Stop asking for the rest of this turn")}
           className="rounded-md border border-border px-2.5 py-1 text-[12px] text-muted transition-colors hover:border-border-strong hover:text-text disabled:opacity-50"
         >
-          Allow for this turn
+          {t("Allow for this turn")}
         </button>
         <button
           type="button"
@@ -186,7 +188,7 @@ function ApprovalPanel({
           disabled={busy}
           className="rounded-md bg-accent px-2.5 py-1 text-[12px] font-medium text-white transition-opacity hover:opacity-90 disabled:opacity-50"
         >
-          Allow once
+          {t("Allow once")}
         </button>
       </div>
     </div>
@@ -209,6 +211,7 @@ function ModePills({
   workBlockedReason?: string;
   disabled?: boolean;
 }) {
+  const t = useT();
   return (
     <div className="flex items-center rounded-full bg-elevated p-[3px]">
       {(["chat", "work"] as const).map((id) => {
@@ -222,14 +225,14 @@ function ModePills({
             onClick={() => onChange(id)}
             title={
               blocked
-                ? (workBlockedReason ?? "Work needs the Codex engine — pick it in Settings → AI assistant.")
+                ? t(workBlockedReason ?? "Work needs the Codex engine — pick it in Settings → AI assistant.")
                 : undefined
             }
             className={`rounded-full px-4 py-[3px] text-[12.5px] font-medium transition-colors ${
               selected ? "bg-bg text-text shadow-[0_1px_2px_rgba(0,0,0,0.10)]" : "text-muted hover:text-text"
             } disabled:cursor-not-allowed disabled:opacity-40`}
           >
-            {id === "chat" ? "Chat" : "Work"}
+            {t(id === "chat" ? "Chat" : "Work")}
           </button>
         );
       })}
@@ -248,6 +251,7 @@ function ProjectChip({
   onChange: (projectId: string) => void;
   disabled?: boolean;
 }) {
+  const t = useT();
   const { setProjectComposerOpen } = useUI();
   const current = projects.find((project) => project.id === value);
   return (
@@ -258,14 +262,14 @@ function ProjectChip({
       trigger={
         <>
           <Folder size={13} className="shrink-0" />
-          <span className="max-w-[150px] truncate">{current?.name ?? "Don't work in a project"}</span>
+          <span className="max-w-[150px] truncate">{current?.name ?? t("Don't work in a project")}</span>
           {!disabled && <ChevronDown size={11} className="shrink-0 text-muted" />}
         </>
       }
     >
       {(close) => (
         <>
-          {projects.length === 0 && <p className="px-2 py-2 text-[12px] text-faint">No projects yet.</p>}
+          {projects.length === 0 && <p className="px-2 py-2 text-[12px] text-faint">{t("No projects yet.")}</p>}
           {projects.map((project) => (
             <MenuItem
               key={project.id}
@@ -287,7 +291,7 @@ function ProjectChip({
               onChange("");
             }}
           >
-            <span className="min-w-0 flex-1 truncate text-left">{"Don't work in a project"}</span>
+            <span className="min-w-0 flex-1 truncate text-left">{t("Don't work in a project")}</span>
           </MenuItem>
           <MenuItem
             onSelect={() => {
@@ -296,7 +300,7 @@ function ProjectChip({
               setProjectComposerOpen(true, (project) => onChange(project.id));
             }}
           >
-            <Plus size={13} /> New project
+            <Plus size={13} /> {t("New project")}
           </MenuItem>
         </>
       )}
@@ -325,6 +329,7 @@ function EffortSlider({
   value: string;
   onChange: (id: string) => void;
 }) {
+  const t = useT();
   const rail = useRef<HTMLDivElement>(null);
   const index = Math.max(0, levels.findIndex((level) => level.id === value));
   const ratio = levels.length > 1 ? index / (levels.length - 1) : 0;
@@ -344,7 +349,7 @@ function EffortSlider({
     <div
       role="slider"
       tabIndex={0}
-      aria-label="Reasoning effort"
+      aria-label={t("Reasoning effort")}
       aria-valuemin={1}
       aria-valuemax={levels.length}
       aria-valuenow={index + 1}
@@ -410,6 +415,7 @@ function ModelChip({
   /** Work mode lists the other engines greyed out so the restriction is explained, not hidden. */
   codexOnly?: boolean;
 }) {
+  const t = useT();
   const current = options.find((option) => option.id === value) ?? options[0];
   const picked = models.find((entry) => entry.slug === model) ?? models[0];
   const effortLabel = picked?.efforts.find((level) => level.id === effort)?.label ?? effort;
@@ -441,7 +447,7 @@ function ModelChip({
     >
       {(close) => (
         <>
-          <SectionLabel>Engine</SectionLabel>
+          <SectionLabel>{t("Engine")}</SectionLabel>
           {options.map((option) => {
             const blocked = Boolean(codexOnly) && option.id !== "codex";
             return (
@@ -456,7 +462,7 @@ function ModelChip({
               >
                 <span className="min-w-0 flex-1 truncate text-left">{option.label}</span>
                 <span className="shrink-0 text-[11px] text-faint">
-                  {blocked ? "Chat only — Work needs Codex" : option.detail}
+                  {blocked ? t("Chat only — Work needs Codex") : option.detail}
                 </span>
               </MenuItem>
             );
@@ -464,7 +470,7 @@ function ModelChip({
           {value === "codex" && picked && (
             <>
               <div className="my-1 border-t border-border" />
-              <SectionLabel>Model</SectionLabel>
+              <SectionLabel>{t("Model")}</SectionLabel>
               {models.map((entry) => (
                 <MenuItem
                   key={entry.slug}
@@ -482,7 +488,7 @@ function ModelChip({
               {/* Pinned so effort stays reachable while the model list scrolls. */}
               <div className="sticky bottom-0 -mx-1 -mb-1 border-t border-border bg-overlay px-1 pb-1">
                 <div className="px-2 pt-2 text-center">
-                  <p className="text-[15px] font-semibold leading-5 text-text">{effortLabel || "Default"}</p>
+                  <p className="text-[15px] font-semibold leading-5 text-text">{effortLabel || t("Default")}</p>
                   <p className="mt-0.5 text-[11.5px] text-muted">{prettyModel(picked.label)}</p>
                 </div>
                 <EffortSlider
@@ -513,6 +519,7 @@ function ApprovalChip({
   onChange: (value: AgentApproval) => void;
   disabled?: boolean;
 }) {
+  const t = useT();
   const current = AGENT_APPROVALS.find((entry) => entry.id === value) ?? AGENT_APPROVALS[0];
   return (
     <Menu
@@ -523,7 +530,7 @@ function ApprovalChip({
       } ${disabled ? "pointer-events-none opacity-50" : ""}`}
       trigger={
         <>
-          <span className="max-w-[150px] truncate">{current.label}</span>
+          <span className="max-w-[150px] truncate">{t(current.label)}</span>
           <ChevronDown size={11} className="shrink-0 text-muted" />
         </>
       }
@@ -540,8 +547,8 @@ function ApprovalChip({
               }}
             >
               <span className="min-w-0 flex-1 text-left">
-                <span className="block">{entry.label}</span>
-                <span className="block text-[11px] text-faint">{entry.detail}</span>
+                <span className="block">{t(entry.label)}</span>
+                <span className="block text-[11px] text-faint">{t(entry.detail)}</span>
               </span>
             </MenuItem>
           ))}
@@ -558,15 +565,16 @@ function VisibilityChip({
   value: "private" | "shared";
   onChange: (value: "private" | "shared") => void;
 }) {
+  const t = useT();
   const Icon = value === "shared" ? Users : Lock;
   return (
     <button
       type="button"
       onClick={() => onChange(value === "shared" ? "private" : "shared")}
-      title={value === "shared" ? "Anyone in this workspace can open it" : "Only you can open it"}
+      title={t(value === "shared" ? "Anyone in this workspace can open it" : "Only you can open it")}
       className="flex items-center gap-1.5 rounded-full px-2 py-1 text-[12.5px] text-text transition-colors hover:bg-elevated"
     >
-      <Icon size={12} /> {value === "shared" ? "Shared" : "Private"}
+      <Icon size={12} /> {t(value === "shared" ? "Shared" : "Private")}
     </button>
   );
 }
@@ -618,6 +626,7 @@ function SkillManager({
   onCreated: (skill: AgentSkill) => void;
   onClose: () => void;
 }) {
+  const t = useT();
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
   const [instructions, setInstructions] = useState("");
@@ -650,7 +659,10 @@ function SkillManager({
   async function remove(skill: AgentSkill) {
     if (
       !window.confirm(
-        `Delete the skill "${skillToken(skill)}"? Its folder is removed from this machine, so every workspace using it loses it.`
+        t(
+          'Delete the skill "{name}"? Its folder is removed from this machine, so every workspace using it loses it.',
+          { name: skillToken(skill) }
+        )
       )
     )
       return;
@@ -667,12 +679,12 @@ function SkillManager({
       <div className="fixed inset-x-0 top-[12vh] z-[60] mx-auto flex max-h-[72vh] w-[600px] max-w-[94vw] flex-col overflow-hidden rounded-xl border border-border bg-overlay shadow-2xl shadow-black/15">
         <div className="flex items-center justify-between border-b border-border px-4 py-2 text-[12px] text-faint">
           <span>
-            <span className="text-muted">Skills</span> on this machine
+            {interpolate(t("{skills} on this machine"), { skills: <span className="text-muted">{t("Skills")}</span> })}
           </span>
           <button
             type="button"
             onClick={onClose}
-            aria-label="Close"
+            aria-label={t("Close")}
             className="rounded p-1 transition-colors hover:bg-elevated hover:text-text"
           >
             <X size={13} />
@@ -681,7 +693,7 @@ function SkillManager({
 
         <div className="min-h-0 flex-1 overflow-y-auto p-1.5">
           {skills.length === 0 ? (
-            <div className="px-2 py-3 text-[12.5px] text-faint">No skills found on this machine.</div>
+            <div className="px-2 py-3 text-[12.5px] text-faint">{t("No skills found on this machine.")}</div>
           ) : (
             skills.map((skill) => (
               <div
@@ -703,8 +715,8 @@ function SkillManager({
                     type="button"
                     onClick={() => void remove(skill)}
                     disabled={removing !== null}
-                    title="Delete this skill from this machine"
-                    aria-label={`Delete ${skillToken(skill)}`}
+                    title={t("Delete this skill from this machine")}
+                    aria-label={t("Delete {name}", { name: skillToken(skill) })}
                     className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-faint transition-colors hover:bg-elevated hover:text-danger disabled:opacity-40"
                   >
                     {removing === skill.path ? (
@@ -721,18 +733,18 @@ function SkillManager({
 
         {canManage ? (
           <div className="border-t border-border px-4 py-3">
-            <div className="text-[11px] uppercase tracking-wide text-faint">New skill</div>
+            <div className="text-[11px] uppercase tracking-wide text-faint">{t("New skill")}</div>
             <div className="mt-2 grid grid-cols-2 gap-2">
               <input
                 value={name}
                 onChange={(event) => setName(event.target.value)}
-                placeholder="Name, e.g. release-notes"
+                placeholder={t("Name, e.g. release-notes")}
                 className="min-w-0 rounded-md border border-border bg-surface px-2 py-1.5 text-[13px] outline-none placeholder:text-faint focus:border-border-strong"
               />
               <input
                 value={description}
                 onChange={(event) => setDescription(event.target.value)}
-                placeholder="What it does, when to use it"
+                placeholder={t("What it does, when to use it")}
                 className="min-w-0 rounded-md border border-border bg-surface px-2 py-1.5 text-[13px] outline-none placeholder:text-faint focus:border-border-strong"
               />
             </div>
@@ -740,15 +752,15 @@ function SkillManager({
               value={instructions}
               onChange={(event) => setInstructions(event.target.value)}
               rows={4}
-              placeholder="Instructions the agent follows when this skill is attached (Markdown)"
+              placeholder={t("Instructions the agent follows when this skill is attached (Markdown)")}
               className="mt-2 w-full resize-none rounded-md border border-border bg-surface px-2 py-1.5 text-[13px] leading-relaxed outline-none placeholder:text-faint focus:border-border-strong"
             />
             <div className="mt-2 flex items-center gap-2">
               {error ? (
-                <span className="mr-auto min-w-0 text-[12px] text-danger">{error}</span>
+                <span className="mr-auto min-w-0 text-[12px] text-danger">{t(error)}</span>
               ) : (
                 <span className="mr-auto min-w-0 truncate text-[11px] text-faint">
-                  {"Saved to ~/.codex/skills/<name>/SKILL.md"}
+                  {t("Saved to ~/.codex/skills/<name>/SKILL.md")}
                 </span>
               )}
               <button
@@ -757,13 +769,13 @@ function SkillManager({
                 disabled={!name.trim() || !description.trim() || busy}
                 className="shrink-0 rounded-md bg-accent px-3 py-1.5 text-[13px] font-medium text-white transition-colors hover:bg-accent-hover disabled:opacity-40"
               >
-                {busy ? "Adding…" : "Add skill"}
+                {t(busy ? "Adding…" : "Add skill")}
               </button>
             </div>
           </div>
         ) : (
           <div className="border-t border-border px-4 py-3 text-[12px] text-faint">
-            Only workspace admins can add or remove skills on this machine.
+            {t("Only workspace admins can add or remove skills on this machine.")}
           </div>
         )}
       </div>
@@ -807,6 +819,7 @@ function Composer({
   onCreateSkill?: (input: SkillDraft) => Promise<SkillCreateResult>;
   onDeleteSkill?: (skill: AgentSkill) => Promise<SkillDeleteResult>;
 }) {
+  const t = useT();
   const box = useRef<HTMLTextAreaElement | null>(null);
   // The "+" menu steals focus on click, so remember where the caret was when the
   // textarea last had it.
@@ -890,7 +903,7 @@ function Composer({
           className="absolute inset-x-0 bottom-full z-50 mb-2 overflow-hidden rounded-xl border border-border bg-overlay shadow-xl shadow-black/10"
         >
           <div className="flex items-center justify-between px-3 pb-1 pt-2 text-[11px] text-faint">
-            <span className="font-medium uppercase tracking-wide">Skills</span>
+            <span className="font-medium uppercase tracking-wide">{t("Skills")}</span>
             <span>↑↓ Enter</span>
           </div>
           <div className="max-h-[264px] overflow-y-auto p-1">
@@ -993,7 +1006,7 @@ function Composer({
                         setManageSkills(true);
                       }}
                     >
-                      <Wrench size={13} /> Manage skills…
+                      <Wrench size={13} /> {t("Manage skills…")}
                     </MenuItem>
                     <div className="my-1 border-t border-border" />
                   </>
@@ -1002,7 +1015,7 @@ function Composer({
                 {visibleSkills.length > 0 ? (
                   <>
                     <div className="px-2 pb-1 pt-1 text-[11px] uppercase tracking-wide text-faint">
-                      Skills
+                      {t("Skills")}
                     </div>
                     {visibleSkills.map((skill) => (
                       <MenuItem
@@ -1026,7 +1039,7 @@ function Composer({
                   </>
                 ) : (
                   <div className="px-2 py-1.5 text-[12px] text-faint">
-                    No skills found on this machine.
+                    {t("No skills found on this machine.")}
                   </div>
                 )}
                 <div className="my-1 border-t border-border" />
@@ -1036,7 +1049,7 @@ function Composer({
                     onNew();
                   }}
                 >
-                  <Plus size={13} /> New conversation
+                  <Plus size={13} /> {t("New conversation")}
                 </MenuItem>
               </>
             )}
@@ -1050,8 +1063,8 @@ function Composer({
             onClick={() => (busy && onStop ? onStop() : onSubmit())}
             disabled={!busy && (!value.trim() || submitDisabled)}
             className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[#0d0d0d] text-white transition-opacity hover:opacity-80 disabled:bg-elevated disabled:text-faint disabled:opacity-100"
-            aria-label={busy ? "Stop" : "Send"}
-            title={busy ? "Stop" : "Send"}
+            aria-label={t(busy ? "Stop" : "Send")}
+            title={t(busy ? "Stop" : "Send")}
           >
             {busy ? <Square size={11} fill="currentColor" /> : <ArrowUp size={15} />}
           </button>
@@ -1136,6 +1149,7 @@ function ThreadSidebar({
   variant?: "docked" | "drawer";
   onNavigate?: () => void;
 }) {
+  const t = useT();
   const router = useRouter();
   const { toast } = useUI();
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
@@ -1190,16 +1204,16 @@ function ThreadSidebar({
   const pin = async (thread: AgentThread) => {
     closeMenu();
     const result = await setAgentThreadPinnedAction(workspaceId, thread.id, !thread.pinnedAt);
-    if (!result.ok) toast(result.error);
+    if (!result.ok) toast(t(result.error));
     else router.refresh();
   };
 
   const markUnread = async (thread: AgentThread) => {
     closeMenu();
     const result = await setAgentThreadUnreadAction(workspaceId, thread.id, true);
-    if (!result.ok) toast(result.error);
+    if (!result.ok) toast(t(result.error));
     else {
-      toast("Marked as unread");
+      toast(t("Marked as unread"));
       router.refresh();
     }
   };
@@ -1208,7 +1222,7 @@ function ThreadSidebar({
     closeMenu();
     if (projectId === thread.projectId) return;
     const result = await setAgentThreadProjectAction(workspaceId, thread.id, projectId);
-    if (!result.ok) toast(result.error);
+    if (!result.ok) toast(t(result.error));
     else router.refresh();
   };
 
@@ -1219,7 +1233,7 @@ function ThreadSidebar({
       thread.id,
       thread.visibility === "shared" ? "private" : "shared"
     );
-    if (!result.ok) toast(result.error);
+    if (!result.ok) toast(t(result.error));
     else router.refresh();
   };
 
@@ -1228,9 +1242,9 @@ function ThreadSidebar({
     const url = `${window.location.origin}/${workspaceId}/agent?thread=${thread.id}`;
     try {
       await navigator.clipboard.writeText(url);
-      toast("Link copied");
+      toast(t("Link copied"));
     } catch {
-      toast("Could not copy the link");
+      toast(t("Could not copy the link"));
     }
   };
 
@@ -1241,10 +1255,10 @@ function ThreadSidebar({
 
   const remove = async (thread: AgentThread) => {
     closeMenu();
-    if (!window.confirm(`Delete “${thread.title || "this conversation"}” and its history?`)) return;
+    if (!window.confirm(t("Delete “{title}” and its history?", { title: thread.title || t("this conversation") }))) return;
     const result = await deleteAgentThreadAction(workspaceId, thread.id);
     if (!result.ok) {
-      toast(result.error);
+      toast(t(result.error));
       return;
     }
     if (thread.id === activeId) router.push(`/${workspaceId}/agent`);
@@ -1266,7 +1280,7 @@ function ThreadSidebar({
     const next = current.value.replace(/\s+/g, " ").trim();
     if (!next || next === threads.find((thread) => thread.id === current.id)?.title) return;
     const result = await renameAgentThreadAction(workspaceId, current.id, next);
-    if (!result.ok) toast(result.error);
+    if (!result.ok) toast(t(result.error));
     else router.refresh();
   };
 
@@ -1329,7 +1343,7 @@ function ThreadSidebar({
           className="flex h-full min-w-0 flex-1 items-center gap-1.5 pr-1"
         >
           {thread.unread && (
-            <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-accent" title="Unread" />
+            <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-accent" title={t("Unread")} />
           )}
           <span
             className={`min-w-0 flex-1 truncate ${thread.unread ? "font-medium text-text" : ""}`}
@@ -1353,8 +1367,8 @@ function ThreadSidebar({
           className={`mr-1 flex h-6 w-6 shrink-0 items-center justify-center rounded text-muted transition-colors hover:bg-border/60 hover:text-text ${
             menu?.thread.id === thread.id ? "opacity-100" : "opacity-0 group-hover:opacity-100 focus-visible:opacity-100"
           }`}
-          aria-label="Conversation options"
-          title="Conversation options"
+          aria-label={t("Conversation options")}
+          title={t("Conversation options")}
         >
           <MoreHorizontal size={14} />
         </button>
@@ -1373,7 +1387,7 @@ function ThreadSidebar({
       {/* The workspace switcher and Inbox live in the app sidebar now, so this column
           only has to frame the conversation list. */}
       <div className="flex h-12 shrink-0 items-center gap-1 px-3">
-        <span className="min-w-0 flex-1 truncate text-[13px] font-semibold">Conversations</span>
+        <span className="min-w-0 flex-1 truncate text-[13px] font-semibold">{t("Conversations")}</span>
         <button
           type="button"
           onClick={() => {
@@ -1381,7 +1395,7 @@ function ThreadSidebar({
             setQuery("");
           }}
           className="flex h-7 w-7 items-center justify-center rounded-md text-muted transition-colors hover:bg-elevated hover:text-text"
-          title="Search conversations"
+          title={t("Search conversations")}
         >
           <Search size={14} />
         </button>
@@ -1399,7 +1413,7 @@ function ThreadSidebar({
                 setQuery("");
               }
             }}
-            placeholder="Search conversations"
+            placeholder={t("Search conversations")}
             className="h-[30px] w-full rounded-md border border-border bg-bg px-2 text-[12.5px] outline-none placeholder:text-faint focus:border-border-strong"
           />
         </div>
@@ -1411,7 +1425,7 @@ function ThreadSidebar({
           onClick={onNavigate}
           className="flex h-[30px] items-center gap-2 rounded-md px-2 text-[13px] text-text/85 transition-colors hover:bg-elevated"
         >
-          <Pencil size={13} className="shrink-0 text-faint" /> New chat
+          <Pencil size={13} className="shrink-0 text-faint" /> {t("New chat")}
         </Link>
       </div>
 
@@ -1420,7 +1434,7 @@ function ThreadSidebar({
           matches.length > 0 ? (
             <div className="pt-1">{matches.map((thread) => row(thread))}</div>
           ) : (
-            <p className="px-2 py-2 text-[12px] text-faint">No matches.</p>
+            <p className="px-2 py-2 text-[12px] text-faint">{t("No matches.")}</p>
           )
         ) : (
           <>
@@ -1428,7 +1442,7 @@ function ThreadSidebar({
               <div className="pb-2">
                 <div className="flex items-center gap-1.5 px-2 pb-1 pt-2 text-[12px] text-faint">
                   <Pin size={12} className="shrink-0" />
-                  <span className="min-w-0 flex-1 truncate">Pinned</span>
+                  <span className="min-w-0 flex-1 truncate">{t("Pinned")}</span>
                 </div>
                 {pinned.map((thread) => row(thread))}
               </div>
@@ -1450,7 +1464,7 @@ function ThreadSidebar({
                       onClick={() => setExpanded((prev) => ({ ...prev, [project.id]: true }))}
                       className="ml-7 mt-0.5 rounded px-2 py-0.5 text-[12px] text-faint transition-colors hover:text-text"
                     >
-                      Show more
+                      {t("Show more")}
                     </button>
                   )}
                 </div>
@@ -1461,7 +1475,7 @@ function ThreadSidebar({
               <div className="pb-2">
                 <div className="flex items-center gap-1.5 px-2 pb-1 pt-2 text-[12px] text-faint">
                   <Folder size={12} className="shrink-0" />
-                  <span className="min-w-0 flex-1 truncate">No project</span>
+                  <span className="min-w-0 flex-1 truncate">{t("No project")}</span>
                 </div>
                 {(expanded["no-project"] ? loose : loose.slice(0, 3)).map((thread) => row(thread, true))}
                 {!expanded["no-project"] && loose.length > 3 && (
@@ -1470,15 +1484,15 @@ function ThreadSidebar({
                     onClick={() => setExpanded((prev) => ({ ...prev, "no-project": true }))}
                     className="ml-7 mt-0.5 rounded px-2 py-0.5 text-[12px] text-faint transition-colors hover:text-text"
                   >
-                    Show more
+                    {t("Show more")}
                   </button>
                 )}
               </div>
             )}
 
-            <div className="px-2 pb-1 pt-3 text-[12px] text-muted">Recents</div>
+            <div className="px-2 pb-1 pt-3 text-[12px] text-muted">{t("Recents")}</div>
             {recents.length === 0 ? (
-              <p className="px-2 py-1 text-[12px] text-faint">No conversations yet.</p>
+              <p className="px-2 py-1 text-[12px] text-faint">{t("No conversations yet.")}</p>
             ) : (
               recents.map((thread) => row(thread))
             )}
@@ -1507,13 +1521,13 @@ function ThreadSidebar({
                   onClick={() => setPane("root")}
                   className="mb-1 flex w-full items-center gap-1.5 rounded-md px-2 py-1.5 text-left text-[12px] text-muted transition-colors hover:bg-elevated hover:text-text"
                 >
-                  <ChevronLeft size={13} /> Project
+                  <ChevronLeft size={13} /> {t("Project")}
                 </button>
                 <MenuItem
                   active={!menu.thread.projectId}
                   onSelect={() => void moveToProject(menu.thread, "")}
                 >
-                  <span className="h-1.5 w-1.5 rounded-full bg-faint" /> No project
+                  <span className="h-1.5 w-1.5 rounded-full bg-faint" /> {t("No project")}
                 </MenuItem>
                 {projects.map((project) => (
                   <MenuItem
@@ -1533,20 +1547,20 @@ function ThreadSidebar({
               <>
                 {menu.thread.mine && (
                   <MenuItem onSelect={() => startRename(menu.thread)}>
-                    <Pencil size={13} /> Rename
+                    <Pencil size={13} /> {t("Rename")}
                   </MenuItem>
                 )}
                 <MenuItem onSelect={() => void pin(menu.thread)}>
-                  <Pin size={13} /> {menu.thread.pinnedAt ? "Unpin" : "Pin"}
+                  <Pin size={13} /> {t(menu.thread.pinnedAt ? "Unpin" : "Pin")}
                 </MenuItem>
                 <MenuItem onSelect={() => void markUnread(menu.thread)}>
-                  <Dot size={13} /> Mark as unread
+                  <Dot size={13} /> {t("Mark as unread")}
                 </MenuItem>
                 {menu.thread.mine && (
                   <>
                     <div className="my-1 h-px bg-border" />
                     <MenuItem onSelect={() => setPane("project")}>
-                      <Folder size={13} /> Project
+                      <Folder size={13} /> {t("Project")}
                       <ChevronRight size={13} className="ml-auto text-faint" />
                     </MenuItem>
                     <MenuItem onSelect={() => void toggleShared(menu.thread)}>
@@ -1555,24 +1569,22 @@ function ThreadSidebar({
                       ) : (
                         <Users size={13} />
                       )}
-                      {menu.thread.visibility === "shared"
-                        ? "Make private"
-                        : "Share with workspace"}
+                      {t(menu.thread.visibility === "shared" ? "Make private" : "Share with workspace")}
                     </MenuItem>
                   </>
                 )}
                 <div className="my-1 h-px bg-border" />
                 <MenuItem onSelect={() => void copyLink(menu.thread)}>
-                  <Link2 size={13} /> Copy link
+                  <Link2 size={13} /> {t("Copy link")}
                 </MenuItem>
                 <MenuItem onSelect={() => openInWindow(menu.thread)}>
-                  <ExternalLink size={13} /> Open in new window
+                  <ExternalLink size={13} /> {t("Open in new window")}
                 </MenuItem>
                 {menu.thread.mine && (
                   <>
                     <div className="my-1 h-px bg-border" />
                     <MenuItem danger onSelect={() => void remove(menu.thread)}>
-                      <Trash2 size={13} /> Delete
+                      <Trash2 size={13} /> {t("Delete")}
                     </MenuItem>
                   </>
                 )}
@@ -1634,6 +1646,7 @@ function StartComposer({
   onApproval: (approval: AgentApproval) => void;
   onStart: (text: string) => void;
 }) {
+  const t = useT();
   const [text, setText] = useState("");
   const submit = () => {
     const message = text.trim();
@@ -1645,14 +1658,14 @@ function StartComposer({
       <div className="flex flex-1 flex-col items-center justify-center px-6 pb-16 pt-6">
         <div className="w-full max-w-[720px]">
           <h1 className="text-center text-[32px] font-normal leading-tight tracking-[-0.015em] text-text">
-            {mode === "work" ? "What should we work on?" : "What can I help with?"}
+            {t(mode === "work" ? "What should we work on?" : "What can I help with?")}
           </h1>
           <div className="mt-7">
             <Composer
               value={text}
               onChange={setText}
               onSubmit={submit}
-              placeholder={mode === "work" ? "Work with TaCos" : "Chat with TaCos"}
+              placeholder={t(mode === "work" ? "Work with TaCos" : "Chat with TaCos")}
               onNew={() => setText("")}
               skills={skills}
               canManageSkills={canManageSkills}
@@ -1681,26 +1694,26 @@ function StartComposer({
               <VisibilityChip value={visibility} onChange={onVisibility} />
             </Composer>
           </div>
-          {error && <div className="mt-2 px-2 text-[12px] text-danger">{error}</div>}
+          {error && <div className="mt-2 px-2 text-[12px] text-danger">{t(error)}</div>}
           <div className="mt-3 flex flex-wrap justify-center gap-2">
             {(mode === "work" ? WORK_SUGGESTIONS : CHAT_SUGGESTIONS).map((suggestion) => (
               <button
                 key={suggestion}
                 type="button"
-                onClick={() => setText(suggestion)}
+                onClick={() => setText(t(suggestion))}
                 className="rounded-full border border-border px-3 py-1 text-[12px] text-muted transition-colors hover:bg-elevated hover:text-text"
               >
-                {suggestion}
+                {t(suggestion)}
               </button>
             ))}
           </div>
           <p className="mt-5 text-center text-[11.5px] text-faint">
             {mode === "work"
-              ? "Work can change this project's tasks, comments and docs — every change waits for your Allow."
+              ? t("Work can change this project's tasks, comments and docs — every change waits for your Allow.")
               : projectId
-                ? "Chat reads this project's tasks and documents and cannot change anything."
-                : "Chat reads this workspace's tasks and documents and cannot change anything."}
-            {!codexReady && " Work needs the Codex engine."}
+                ? t("Chat reads this project's tasks and documents and cannot change anything.")
+                : t("Chat reads this workspace's tasks and documents and cannot change anything.")}
+            {!codexReady && ` ${t("Work needs the Codex engine.")}`}
           </p>
         </div>
       </div>
@@ -1747,6 +1760,7 @@ export function AgentWorkspace({
   threads: AgentThread[];
   active: AgentThreadDetail | null;
 }) {
+  const t = useT();
   const router = useRouter();
   const [starting, setStarting] = useState(false);
   const [startError, setStartError] = useState<string | null>(null);
@@ -1899,16 +1913,16 @@ export function AgentWorkspace({
       <div className="flex min-h-0 flex-1 items-center justify-center overflow-y-auto bg-bg p-6">
         <div className="max-w-md rounded-xl border border-border bg-surface p-6">
           <div className="flex items-center gap-2 text-[14px] font-semibold">
-            <Bot size={16} /> The agent needs a model
+            <Bot size={16} /> {t("The agent needs a model")}
           </div>
           <p className="mt-2 text-[13px] leading-relaxed text-muted">
-            Use the Codex or Pi login that already exists on this machine, or add a provider key.
+            {t("Use the Codex or Pi login that already exists on this machine, or add a provider key.")}
           </p>
           <ul className="mt-3 space-y-2">
             {engines.map((option) => (
               <li key={option.id} className="text-[12.5px] leading-relaxed">
                 <span className="font-medium text-text">{option.label}</span>
-                <span className="text-muted"> — {option.hint ?? "Available"}</span>
+                <span className="text-muted"> — {option.hint ? t(option.hint) : t("Available")}</span>
               </li>
             ))}
           </ul>
@@ -1916,7 +1930,7 @@ export function AgentWorkspace({
             href={`/${workspaceId}/settings`}
             className="mt-4 inline-flex items-center gap-1.5 rounded-md bg-accent px-3 py-1.5 text-[12.5px] font-medium text-white transition-opacity hover:opacity-90"
           >
-            <Settings2 size={13} /> Open Settings
+            <Settings2 size={13} /> {t("Open Settings")}
           </Link>
         </div>
       </div>
@@ -1939,7 +1953,7 @@ export function AgentWorkspace({
         <div className="absolute inset-0 z-30 flex @[620px]:hidden">
           <button
             type="button"
-            aria-label="Close conversations"
+            aria-label={t("Close conversations")}
             onClick={() => setDrawer(false)}
             className="absolute inset-0 bg-black/15"
           />
@@ -1984,7 +1998,7 @@ export function AgentWorkspace({
                 type="button"
                 onClick={() => setDrawer(true)}
                 className="absolute left-2 top-2 flex h-8 w-8 items-center justify-center rounded-md text-muted transition-colors hover:bg-elevated hover:text-text @[620px]:hidden"
-                title="Conversations"
+                title={t("Conversations")}
               >
                 <PanelLeft size={15} />
               </button>
@@ -2075,6 +2089,7 @@ function Conversation({
   onOpenSidebar: () => void;
   onNew: () => void;
 }) {
+  const t = useT();
   const router = useRouter();
   const [messages, setMessages] = useState<UiMessage[]>(() => toUi(active));
   const [input, setInput] = useState("");
@@ -2226,7 +2241,7 @@ function Conversation({
 
   async function rename() {
     if (!active.mine) return;
-    const next = window.prompt("Conversation name", active.title || "Untitled conversation");
+    const next = window.prompt(t("Conversation name"), active.title || t("Untitled conversation"));
     if (!next || !next.trim()) return;
     const result = await renameAgentThreadAction(workspaceId, active.id, next.trim());
     if (!result.ok) setError(result.error);
@@ -2278,7 +2293,7 @@ function Conversation({
 
   async function remove() {
     if (!active.mine) return;
-    if (!window.confirm(`Delete “${active.title || "this conversation"}” and its history?`)) return;
+    if (!window.confirm(t("Delete “{title}” and its history?", { title: active.title || t("this conversation") }))) return;
     const result = await deleteAgentThreadAction(workspaceId, active.id);
     if (!result.ok) {
       setError(result.error);
@@ -2296,7 +2311,7 @@ function Conversation({
             type="button"
             onClick={onOpenSidebar}
             className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-muted transition-colors hover:bg-elevated hover:text-text @[620px]:hidden"
-            title="Conversations"
+            title={t("Conversations")}
           >
             <PanelLeft size={15} />
           </button>
@@ -2338,7 +2353,7 @@ function Conversation({
                     }}
                   >
                     {active.visibility === "shared" ? <Lock size={13} /> : <Users size={13} />}
-                    {active.visibility === "shared" ? "Make private" : "Share with workspace"}
+                    {t(active.visibility === "shared" ? "Make private" : "Share with workspace")}
                   </MenuItem>
                   <MenuItem
                     onSelect={() => {
@@ -2346,7 +2361,7 @@ function Conversation({
                       void rename();
                     }}
                   >
-                    <Pencil size={13} /> Rename
+                    <Pencil size={13} /> {t("Rename")}
                   </MenuItem>
                   <MenuItem
                     danger
@@ -2355,7 +2370,7 @@ function Conversation({
                       void remove();
                     }}
                   >
-                    <Trash2 size={13} /> Delete conversation
+                    <Trash2 size={13} /> {t("Delete conversation")}
                   </MenuItem>
                 </>
               )}
@@ -2369,14 +2384,16 @@ function Conversation({
           {messages.length === 0 && (
             <div className="pt-16 text-center">
               <h1 className="text-[28px] font-normal leading-tight tracking-[-0.015em]">
-                {active.mode === "work" ? "What should we work on?" : "What can I help with?"}
+                {t(active.mode === "work" ? "What should we work on?" : "What can I help with?")}
               </h1>
               <p className="mt-2 text-[13px] text-muted">
                 {active.mode === "work"
-                  ? `Work in ${active.projectName} — every change waits for your Allow.`
+                  ? t("Work in {project} — every change waits for your Allow.", { project: active.projectName })
                   : active.projectId
-                    ? `Ask about ${active.projectName}'s tasks, or have the agent draft one for you.`
-                    : "Ask about any project in this workspace, or have the agent draft a task for you."}
+                    ? t("Ask about {project}'s tasks, or have the agent draft one for you.", {
+                        project: active.projectName,
+                      })
+                    : t("Ask about any project in this workspace, or have the agent draft a task for you.")}
               </p>
               <div className="mt-5 flex flex-wrap justify-center gap-2">
                 {(active.mode === "work" ? WORK_SUGGESTIONS : CHAT_SUGGESTIONS).map((suggestion) => (
@@ -2386,7 +2403,7 @@ function Conversation({
                     onClick={() => void send(suggestion)}
                     className="rounded-full border border-border px-3 py-1 text-[12px] text-muted transition-colors hover:bg-elevated hover:text-text"
                   >
-                    {suggestion}
+                    {t(suggestion)}
                   </button>
                 ))}
               </div>
@@ -2412,7 +2429,7 @@ function Conversation({
                 {message.content ? (
                   <Markdown source={message.content} />
                 ) : busy && index === messages.length - 1 ? (
-                  <span className="text-faint">Thinking…</span>
+                  <span className="text-faint">{t("Thinking…")}</span>
                 ) : null}
               </div>
             )
@@ -2431,14 +2448,14 @@ function Conversation({
 
       <div className="shrink-0 px-4 pb-4">
         <div className="mx-auto w-full max-w-3xl">
-          {error && <div className="mb-2 px-1 text-[12px] text-danger">{error}</div>}
+          {error && <div className="mb-2 px-1 text-[12px] text-danger">{t(error)}</div>}
           <Composer
             value={input}
             onChange={setInput}
             onSubmit={() => void send(input)}
             busy={busy}
             onStop={() => abort.current?.abort()}
-            placeholder={active.mode === "work" ? "Tell TaCos what to change" : "Ask TaCos anything"}
+            placeholder={t(active.mode === "work" ? "Tell TaCos what to change" : "Ask TaCos anything")}
             inputRef={box}
             onNew={onNew}
             skills={skills}
@@ -2483,10 +2500,10 @@ function Conversation({
           </Composer>
           <p className="mt-1.5 text-center text-[11px] text-faint">
             {active.mode === "work"
-              ? "Work can create and edit tasks, comments, docs and the overview — every change waits for your Allow."
+              ? t("Work can create and edit tasks, comments, docs and the overview — every change waits for your Allow.")
               : active.projectId
-                ? "Chat reads this project's tasks and documents; it cannot change anything. Switch to Work when you want edits."
-                : "Chat reads this workspace's tasks and documents; it cannot change anything. Pick a project to let it make edits."}
+                ? t("Chat reads this project's tasks and documents; it cannot change anything. Switch to Work when you want edits.")
+                : t("Chat reads this workspace's tasks and documents; it cannot change anything. Pick a project to let it make edits.")}
           </p>
         </div>
       </div>

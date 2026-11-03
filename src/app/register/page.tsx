@@ -3,6 +3,8 @@ import { connection } from "next/server";
 import { redirect } from "next/navigation";
 import { getSessionUser, landingWorkspaceId, listUserWorkspaces } from "@/lib/auth";
 import { AuthForm } from "@/components/auth-form";
+import { I18nProvider } from "@/components/i18n-context";
+import { resolveLocale } from "@/lib/locale";
 
 export default function RegisterPage() {
   return (
@@ -20,5 +22,9 @@ async function RegisterView() {
     const landing = landingWorkspaceId(user.id, workspaces, user.lastWorkspaceId);
     redirect(landing ? `/${landing}` : "/");
   }
-  return <AuthForm mode="register" />;
+  return (
+    <I18nProvider locale={await resolveLocale()}>
+      <AuthForm mode="register" />
+    </I18nProvider>
+  );
 }

@@ -7,6 +7,7 @@ import { LabelPill } from "@/components/icons";
 import { createLabelAction, deleteLabelAction } from "@/app/actions";
 import { LABEL_COLORS } from "@/lib/constants";
 import type { Label } from "@/lib/issues";
+import { useT } from "@/components/i18n-context";
 
 type LabelWithCount = Label & { issueCount: number };
 
@@ -17,6 +18,7 @@ export function LabelsManager({
   workspaceId: string;
   initialLabels: LabelWithCount[];
 }) {
+  const t = useT();
   const router = useRouter();
   const [name, setName] = useState("");
   const [color, setColor] = useState(LABEL_COLORS[3]);
@@ -38,7 +40,7 @@ export function LabelsManager({
   }
 
   async function remove(label: LabelWithCount) {
-    if (!window.confirm(`Delete label "${label.name}"? It will be removed from all issues.`)) return;
+    if (!window.confirm(t('Delete label "{name}"? It will be removed from all issues.', { name: label.name }))) return;
     await deleteLabelAction(workspaceId, label.id);
     router.refresh();
   }
@@ -47,7 +49,7 @@ export function LabelsManager({
     <div className="flex-1 overflow-y-auto p-6">
       <div className="mx-auto max-w-xl space-y-6">
         <div className="space-y-2 rounded-lg border border-border bg-surface/60 p-4">
-          <div className="text-[13px] font-medium">New label</div>
+          <div className="text-[13px] font-medium">{t("New label")}</div>
           <div className="flex items-center gap-2">
             <input
               value={name}
@@ -55,7 +57,7 @@ export function LabelsManager({
               onKeyDown={(e) => {
                 if (e.key === "Enter") void submit();
               }}
-              placeholder="Label name"
+              placeholder={t("Label name")}
               className="w-full rounded-md border border-border bg-elevated/50 px-2.5 py-1.5 text-[13px] placeholder:text-faint focus:border-border-strong"
             />
             <button
@@ -64,7 +66,7 @@ export function LabelsManager({
               disabled={!name.trim() || busy}
               className="shrink-0 rounded-md bg-accent px-3 py-1.5 text-[13px] font-medium text-white hover:bg-accent-hover disabled:opacity-40"
             >
-              Add
+              {t("Add")}
             </button>
           </div>
           <div className="flex flex-wrap gap-1.5 pt-1">
@@ -72,7 +74,7 @@ export function LabelsManager({
               <button
                 key={swatch}
                 type="button"
-                aria-label={`Color ${swatch}`}
+                aria-label={t("Color {color}", { color: swatch })}
                 onClick={() => setColor(swatch)}
                 className={`h-5 w-5 rounded-full transition-transform hover:scale-110 ${
                   color === swatch ? "ring-2 ring-text/70 ring-offset-2 ring-offset-bg" : ""
@@ -81,12 +83,12 @@ export function LabelsManager({
               />
             ))}
           </div>
-          {error && <div className="text-[12px] text-danger">{error}</div>}
+          {error && <div className="text-[12px] text-danger">{t(error)}</div>}
         </div>
 
         <div className="divide-y divide-border rounded-lg border border-border">
           {initialLabels.length === 0 && (
-            <div className="p-4 text-[13px] text-faint">No labels yet.</div>
+            <div className="p-4 text-[13px] text-faint">{t("No labels yet.")}</div>
           )}
           {initialLabels.map((label) => (
             <div key={label.id} className="flex items-center gap-3 px-4 py-2.5">
@@ -98,13 +100,13 @@ export function LabelsManager({
                 }
                 className="text-[12px] text-faint hover:text-muted"
               >
-                {label.issueCount} task{label.issueCount === 1 ? "" : "s"}
+                {t(label.issueCount === 1 ? "{count} task" : "{count} tasks", { count: label.issueCount })}
               </button>
               <button
                 type="button"
                 onClick={() => void remove(label)}
                 className="ml-auto rounded-md p-1 text-faint transition-colors hover:bg-elevated hover:text-danger"
-                aria-label={`Delete ${label.name}`}
+                aria-label={t("Delete {name}", { name: label.name })}
               >
                 <Trash2 size={14} />
               </button>

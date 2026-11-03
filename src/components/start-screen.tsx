@@ -8,6 +8,7 @@ import { useUI } from "@/components/ui-context";
 import { ProjectIcon, WorkspaceMark } from "@/components/icons";
 import type { Project } from "@/lib/issues";
 import type { PageSummary } from "@/lib/pages";
+import { useT } from "@/components/i18n-context";
 
 function ActionCard({
   icon,
@@ -82,6 +83,7 @@ export function StartScreen({
   projects: Project[];
   pages: PageSummary[];
 }) {
+  const t = useT();
   const router = useRouter();
   const { setComposerOpen, setProjectComposerOpen, setPaletteOpen } = useUI();
   // `listPageTree` is already ordered like the sidebar; recency is what belongs here.
@@ -98,7 +100,7 @@ export function StartScreen({
           <div className="min-w-0">
             <div className="truncate text-[14px] font-semibold text-text">{workspaceName}</div>
             <div className="text-[12.5px] text-muted">
-              Nothing is open. Start something, or pick up where you left off.
+              {t("Nothing is open. Start something, or pick up where you left off.")}
             </div>
           </div>
         </div>
@@ -106,32 +108,32 @@ export function StartScreen({
         <div className="grid grid-cols-2 gap-2">
           <ActionCard
             icon={<SquarePen size={16} />}
-            title="New task"
-            hint="Capture something to work on — press C anywhere"
+            title={t("New task")}
+            hint={t("Capture something to work on — press C anywhere")}
             onClick={() => setComposerOpen(true)}
           />
           <ActionCard
             icon={<FolderPlus size={16} />}
-            title="New project"
-            hint="Group tasks under a shared goal"
+            title={t("New project")}
+            hint={t("Group tasks under a shared goal")}
             onClick={() => setProjectComposerOpen(true)}
           />
           <ActionCard
             icon={<Bot size={16} />}
-            title="Ask Agent"
-            hint="Plan, draft and edit with the workspace agent"
+            title={t("Ask Agent")}
+            hint={t("Plan, draft and edit with the workspace agent")}
             onClick={() => router.push(`/${workspaceId}/agent`)}
           />
           <ActionCard
             icon={<List size={16} />}
-            title="All tasks"
-            hint="See everything across projects"
+            title={t("All tasks")}
+            hint={t("See everything across projects")}
             onClick={() => router.push(`/${workspaceId}`)}
           />
           <ActionCard
             icon={<BookOpen size={16} />}
-            title="Documents"
-            hint="Open the document library"
+            title={t("Documents")}
+            hint={t("Open the document library")}
             onClick={() => router.push(`/${workspaceId}/docs`)}
           />
         </div>
@@ -139,7 +141,7 @@ export function StartScreen({
         {recentProjects.length > 0 && (
           <section className="mt-8">
             <h2 className="mb-2 px-1 text-[11px] font-medium uppercase tracking-wider text-faint">
-              Projects
+              {t("Projects")}
             </h2>
             <div className="overflow-hidden rounded-xl border border-border">
               {recentProjects.map((project, index) => (
@@ -158,7 +160,7 @@ export function StartScreen({
         {recentPages.length > 0 && (
           <section className="mt-6">
             <h2 className="mb-2 px-1 text-[11px] font-medium uppercase tracking-wider text-faint">
-              Recent documents
+              {t("Recent documents")}
             </h2>
             <div className="overflow-hidden rounded-xl border border-border">
               {recentPages.map((page, index) => (
@@ -189,11 +191,11 @@ export function StartScreen({
             <kbd className="rounded border border-border bg-surface px-1 py-0.5 text-[10.5px]">
               ⌘K
             </kbd>
-            Jump anywhere
+            {t("Jump anywhere")}
           </button>
           <span className="flex items-center gap-1.5">
             <kbd className="rounded border border-border bg-surface px-1 py-0.5 text-[10.5px]">C</kbd>
-            New task
+            {t("New task")}
           </span>
         </div>
       </div>

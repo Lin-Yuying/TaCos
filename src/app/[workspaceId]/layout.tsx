@@ -16,6 +16,8 @@ import { NewIssueDialog } from "@/components/new-issue-dialog";
 import { NewProjectDialog } from "@/components/new-project-dialog";
 import { CommandPalette } from "@/components/command-palette";
 import { aiReady } from "@/lib/ai";
+import { resolveLocale } from "@/lib/locale";
+import { I18nProvider } from "@/components/i18n-context";
 
 // Auth-gated shell: every request must resolve the session before rendering.
 // Blocking navigation is correct here, so opt out of instant-navigation checks.
@@ -48,39 +50,42 @@ export default async function WorkspaceLayout({
     await setLastWorkspace(user.id, active.id);
   }
   // Server-sourced so router.refresh() after create/delete updates the sidebar list.
-  const [projects, members, favorites, pages, aiEnabled, joinCode] = await Promise.all([
+  const [projects, members, favorites, pages, aiEnabled, joinCode, locale] = await Promise.all([
     listProjects(workspaceId, user.id),
     listMembers(workspaceId),
     listFavoriteProjects(workspaceId, user.id),
     listPageTree(workspaceId, user.id),
     aiReady(workspaceId),
     getJoinCode(workspaceId),
+    resolveLocale(user),
   ]);
 
   return (
-    <UIProvider aiReady={aiEnabled}>
-      <WorkspaceShell
-        workspace={{
-          id: active.id,
-          name: active.name,
-          key: active.key,
-          icon: active.icon,
-          role: active.role,
-          createdBy: active.createdBy,
-        }}
-        user={user}
-        workspaces={workspaces}
-        projects={projects}
-        favorites={favorites}
-        members={members}
-        pages={pages}
-        joinCode={joinCode}
-      >
-        {children}
-      </WorkspaceShell>
-      <NewIssueDialog workspaceId={active.id} />
-      <NewProjectDialog workspaceId={active.id} workspaceName={active.name} />
-      <CommandPalette workspaceId={active.id} />
-    </UIProvider>
+    <I18nProvider locale={locale}>
+      <UIProvider aiReady={aiEnabled}>
+        <WorkspaceShell
+          workspace={{
+            id: active.id,
+            name: active.name,
+            key: active.key,
+            icon: active.icon,
+            role: active.role,
+            createdBy: active.createdBy,
+          }}
+          user={user}
+          workspaces={workspaces}
+          projects={projects}
+          favorites={favorites}
+          members={members}
+          pages={pages}
+          joinCode={joinCode}
+        >
+          {children}
+        </WorkspaceShell>
+        <NewIssueDialog workspaceId={active.id} />
+        <NewProjectDialog workspaceId={active.id} workspaceName={active.name} />
+        <CommandPalette workspaceId={active.id} />
+      </UIProvider>
+    </I18nProvider>
   );
 }

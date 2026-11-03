@@ -59,6 +59,7 @@ import type {
   OverviewDocEdit,
   Project,
 } from "@/lib/issues";
+import { useLocale, useT } from "@/components/i18n-context";
 
 type ProjectDetail = Project & { doc: string; createdBy: string | null };
 type CommentAnchor = { quote: string; occurrence: number };
@@ -228,6 +229,7 @@ function CommentComposer({
   onDraft: (next: string) => void;
   onPost: () => void;
 }) {
+  const t = useT();
   return (
     <div className="flex items-start gap-2">
       <textarea
@@ -250,7 +252,7 @@ function CommentComposer({
         disabled={!draft.trim() || posting}
         className="rounded-md bg-accent px-3 py-1.5 text-[12.5px] font-medium text-white transition-opacity hover:opacity-90 disabled:opacity-40"
       >
-        Comment
+        {t("Comment")}
       </button>
     </div>
   );
@@ -279,6 +281,8 @@ export function ProjectOverview({
   currentUserId: string;
   trashedTitles: Record<string, string>;
 }) {
+  const t = useT();
+  const locale = useLocale();
   const router = useRouter();
   const { setComposerOpen, openIssue, openPage, aiReady } = useUI();
   const [doc, setDoc] = useState(project.doc);
@@ -299,7 +303,7 @@ export function ProjectOverview({
   const [thread, setThread] = useState(comments);
   const [draft, setDraft] = useState("");
   const [posting, setPosting] = useState(false);
-  // A selection offers "Comment"; the marker sits at the corner of the highlighted text
+  // A selection offers t("Comment"); the marker sits at the corner of the highlighted text
   // and clicking it opens that thread in a small card. Nothing lives in a side panel.
   const [selection, setSelection] = useState<{
     anchor: CommentAnchor;
@@ -334,7 +338,7 @@ export function ProjectOverview({
   const [openKey, setOpenKey] = useState<string | null>(null);
   const [replyKey, setReplyKey] = useState<string | null>(null);
   // Anthropic-style fallback: threads whose quoted text was edited away have no marker
-  // on the page, so the count next to "Description" opens them.
+  // on the page, so the count next to t("Description") opens them.
   const [orphansOpen, setOrphansOpen] = useState(false);
   const [orphanPos, setOrphanPos] = useState({ x: 0, y: 0 });
   const [pins, setPins] = useState<CommentPin[]>([]);
@@ -705,7 +709,7 @@ export function ProjectOverview({
     if (!panel.anchor || !panel.source) return;
     const next = replacePassage(panel.source, panel.anchor, text);
     if (next === null) {
-      setError("Could not find that passage any more — the document may have changed.");
+      setError(t("Could not find that passage any more — the document may have changed."));
       return;
     }
     if (next === panel.source) return;
@@ -1109,7 +1113,7 @@ export function ProjectOverview({
     router.refresh();
   }
 
-  // One card per anchored passage; a null quote is legacy data and groups as "General".
+  // One card per anchored passage; a null quote is legacy data and groups as t("General").
   const threads = useMemo(() => {
     const groups = new Map<string, CommentThread>();
     for (const comment of thread) {
@@ -1147,32 +1151,32 @@ export function ProjectOverview({
     return (
       <div>
         <p className="text-[12px] font-medium leading-snug text-text">
-          {group.anchor.quote ? `“${group.anchor.quote}”` : "General comment"}
+          {group.anchor.quote ? `“${group.anchor.quote}”` : t("General comment")}
         </p>
         {editedAway && (
-          <p className="mt-0.5 text-[10.5px] text-faint">The highlighted text has changed.</p>
+          <p className="mt-0.5 text-[10.5px] text-faint">{t("The highlighted text has changed.")}</p>
         )}
         <ul className="mt-2 max-h-[260px] space-y-2.5 overflow-y-auto pr-0.5">
           {group.comments.map((comment) => (
             <li key={comment.id} className="flex items-start gap-2">
               <AssigneeAvatar
-                displayName={comment.author?.displayName ?? "Unknown"}
+                displayName={comment.author?.displayName ?? t("Unknown")}
                 avatar={comment.author?.avatar ?? null}
                 size={20}
               />
               <div className="min-w-0 flex-1">
                 <div className="flex items-center gap-1.5">
                   <span className="truncate text-[11.5px] font-medium text-text">
-                    {comment.author?.displayName ?? "Unknown"}
+                    {comment.author?.displayName ?? t("Unknown")}
                   </span>
                   <span className="shrink-0 text-[10.5px] text-faint">
-                    {timeAgo(comment.createdAt)}
+                    {timeAgo(comment.createdAt, locale)}
                   </span>
                   {(access.manage || comment.author?.id === currentUserId) && (
                     <button
                       type="button"
-                      aria-label="Delete comment"
-                      title="Delete comment"
+                      aria-label={t("Delete comment")}
+                      title={t("Delete comment")}
                       onClick={() => void deleteComment(comment.id)}
                       className="ml-auto text-faint transition-colors hover:text-danger"
                     >
@@ -1196,7 +1200,7 @@ export function ProjectOverview({
             }}
             className="mt-2 ml-7 rounded px-1.5 py-0.5 text-[11px] text-muted transition-colors hover:bg-elevated hover:text-text"
           >
-            Reply
+            {t("Reply")}
           </button>
         )}
         {replyKey === key && access.canComment && (
@@ -1204,7 +1208,7 @@ export function ProjectOverview({
             <CommentComposer
               draft={draft}
               posting={posting}
-              placeholder="Reply…"
+              placeholder={t("Reply…")}
               onDraft={setDraft}
               onPost={() => void postComment(group.anchor, "reply")}
             />
@@ -1222,14 +1226,14 @@ export function ProjectOverview({
         {/* Properties and Resources live in the header now, so the document starts right
             under it. */}
         <div className="w-full px-10 pb-8 pt-3 lg:px-20 xl:px-32">
-          {error && <div className="mb-2 text-[12px] text-danger">{error}</div>}
+          {error && <div className="mb-2 text-[12px] text-danger">{t(error)}</div>}
           <div>
             {orphanComments > 0 && (
               <div className="mb-2 flex min-w-0 items-center gap-2">
                 <button
                   type="button"
                   onClick={openOrphans}
-                  title="Comments on text that has changed or is no longer there"
+                  title={t("Comments on text that has changed or is no longer there")}
                   className="flex h-[22px] items-center gap-1 rounded-full border border-[#ecd28a] bg-[#fdf3c7] px-2 text-[11px] font-medium text-[#8a6d1a] transition-colors hover:border-[#d9b64e]"
                 >
                   <MessageSquare size={11} />
@@ -1257,7 +1261,7 @@ export function ProjectOverview({
                       onBlockSelection={setRangeSelection}
                       onUndo={undoDoc}
                       onRedo={redoDoc}
-                      placeholder="Write down whatever's on your mind…"
+                      placeholder={t("Write down whatever's on your mind…")}
                       issues={issueContext}
                       pages={pageContext}
                     />
@@ -1269,7 +1273,7 @@ export function ProjectOverview({
                       storageId={`project:${project.id}`}
                     />
                   ) : (
-                    <p className="text-[13px] text-faint">Nothing has been written here yet.</p>
+                    <p className="text-[13px] text-faint">{t("Nothing has been written here yet.")}</p>
                   )}
                 </div>
 
@@ -1281,8 +1285,8 @@ export function ProjectOverview({
                       key={pin.key}
                       type="button"
                       data-overview-pin
-                      aria-label="Open comments"
-                      title={`${count} ${count === 1 ? "comment" : "comments"}`}
+                      aria-label={t("Open comments")}
+                      title={t(count === 1 ? "{count} comment" : "{count} comments", { count })}
                       onClick={() => {
                         setOpenKey((prev) => (prev === pin.key ? null : pin.key));
                         setReplyKey(null);
@@ -1310,12 +1314,13 @@ export function ProjectOverview({
                   >
                     <div className="mb-2 flex items-center justify-between gap-2">
                       <span className="text-[11px] font-semibold uppercase tracking-wider text-faint">
-                        {openThread.comments.length}{" "}
-                        {openThread.comments.length === 1 ? "comment" : "comments"}
+                        {t(openThread.comments.length === 1 ? "{count} comment" : "{count} comments", {
+                          count: openThread.comments.length,
+                        })}
                       </span>
                       <button
                         type="button"
-                        aria-label="Close comments"
+                        aria-label={t("Close comments")}
                         onClick={() => setOpenKey(null)}
                         className="rounded p-0.5 text-faint transition-colors hover:bg-elevated hover:text-text"
                       >
@@ -1331,13 +1336,13 @@ export function ProjectOverview({
                 <aside className="sticky top-0 flex max-h-[calc(100vh-7rem)] w-[min(50%,460px)] shrink-0 flex-col self-start overflow-hidden rounded-xl border border-border bg-bg shadow-[0_1px_2px_rgba(0,0,0,0.05)]">
                   <header className="flex h-11 shrink-0 items-center gap-2 border-b border-border px-3">
                     <History size={14} className="text-muted" />
-                    <span className="text-[12.5px] font-semibold text-text">History</span>
+                    <span className="text-[12.5px] font-semibold text-text">{t("History")}</span>
                     <span className="text-[11px] text-faint">
-                      {edits.length} {edits.length === 1 ? "change" : "changes"}
+                      {t(edits.length === 1 ? "{count} change" : "{count} changes", { count: edits.length })}
                     </span>
                     <button
                       type="button"
-                      aria-label="Close history"
+                      aria-label={t("Close history")}
                       onClick={() => setHistoryOpen(false)}
                       className="ml-auto rounded p-1 text-faint transition-colors hover:bg-elevated hover:text-text"
                     >
@@ -1347,7 +1352,7 @@ export function ProjectOverview({
                   <div className="min-h-0 flex-1 overflow-y-auto p-3">
                     {edits.length === 0 ? (
                       <p className="text-[12px] text-faint">
-                        No changes yet. Edits to this document will show up here.
+                        {t("No changes yet. Edits to this document will show up here.")}
                       </p>
                     ) : (
                       <ul className="space-y-3">
@@ -1355,17 +1360,17 @@ export function ProjectOverview({
                           <li key={edit.id} className="rounded-lg border border-border px-2.5 py-2">
                             <div className="flex items-start gap-2">
                               <AssigneeAvatar
-                                displayName={edit.author?.displayName ?? "Unknown"}
+                                displayName={edit.author?.displayName ?? t("Unknown")}
                                 avatar={edit.author?.avatar ?? null}
                                 size={20}
                               />
                               <div className="min-w-0 flex-1">
                                 <div className="flex items-center gap-1.5">
                                   <span className="truncate text-[11.5px] font-medium text-text">
-                                    {edit.author?.displayName ?? "Unknown"}
+                                    {edit.author?.displayName ?? t("Unknown")}
                                   </span>
                                   <span className="shrink-0 text-[10.5px] text-faint">
-                                    {timeAgo(edit.createdAt)}
+                                    {timeAgo(edit.createdAt, locale)}
                                   </span>
                                   <span className="ml-auto shrink-0 text-[10.5px]">
                                     {edit.added > 0 && (
@@ -1426,27 +1431,27 @@ export function ProjectOverview({
                                           onClick={() => void restoreEdit(edit)}
                                           className="rounded-md bg-accent px-2 py-0.5 text-[11px] font-medium text-white transition-opacity hover:opacity-90 disabled:opacity-50"
                                         >
-                                          {restoring === edit.id ? "Restoring…" : "Confirm restore"}
+                                          {restoring === edit.id ? t("Restoring…") : t("Confirm restore")}
                                         </button>
                                         <button
                                           type="button"
                                           onClick={() => setConfirmRestore(null)}
                                           className="rounded px-1.5 py-0.5 text-[11px] text-muted transition-colors hover:bg-elevated hover:text-text"
                                         >
-                                          Cancel
+                                          {t("Cancel")}
                                         </button>
                                         <span className="text-[10.5px] text-faint">
-                                          Replaces the current document
+                                          {t("Replaces the current document")}
                                         </span>
                                       </>
                                     ) : (
                                       <button
                                         type="button"
                                         onClick={() => setConfirmRestore(edit.id)}
-                                        title="Restore the document to how it was before this change"
+                                        title={t("Restore the document to how it was before this change")}
                                         className="flex items-center gap-1 rounded-md border border-border px-1.5 py-0.5 text-[11px] text-muted transition-colors hover:border-border-strong hover:text-text"
                                       >
-                                        <RotateCcw size={11} /> Restore
+                                        <RotateCcw size={11} /> {t("Restore")}
                                       </button>
                                     )}
                                   </div>
@@ -1480,8 +1485,8 @@ export function ProjectOverview({
                       <button
                         key={style}
                         type="button"
-                        title={label}
-                        aria-label={label}
+                        title={t(label)}
+                        aria-label={t(label)}
                         aria-pressed={active}
                         onMouseDown={(event) => {
                           // Keep the browser's selection while the click lands.
@@ -1499,8 +1504,8 @@ export function ProjectOverview({
                   {aiReady && (
                     <button
                       type="button"
-                      title="Edit with AI"
-                      aria-label="Edit with AI"
+                      title={t("Edit with AI")}
+                      aria-label={t("Edit with AI")}
                       onMouseDown={(event) => {
                         event.preventDefault();
                         openAiForSelection();
@@ -1518,8 +1523,8 @@ export function ProjectOverview({
               {!(selection?.multiLine || rangeSelection) && (
                 <button
                   type="button"
-                  title="Create task from selection"
-                  aria-label="Create task from selection"
+                  title={t("Create task from selection")}
+                  aria-label={t("Create task from selection")}
                   onMouseDown={(event) => {
                     event.preventDefault();
                     if (selection) taskFromSelection(selection.anchor, doc, selection.refId);
@@ -1533,8 +1538,8 @@ export function ProjectOverview({
               {access.canComment && !(selection?.multiLine || rangeSelection) && (
                 <button
                   type="button"
-                  title="Comment on selection"
-                  aria-label="Comment on selection"
+                  title={t("Comment on selection")}
+                  aria-label={t("Comment on selection")}
                   onMouseDown={(event) => {
                     // Keep the selection alive long enough to record it, then open the
                     // comment box right where the passage is.
@@ -1561,7 +1566,7 @@ export function ProjectOverview({
                 context: aiPanel.context,
                 allowTasks: aiPanel.kind === "selection",
                 allowContinue: aiPanel.kind === "document",
-                acceptLabel: aiPanel.kind === "selection" ? "Replace" : "Replace document",
+                acceptLabel: aiPanel.kind === "selection" ? t("Replace") : t("Replace document"),
               }}
               onClose={() => setAiPanel(null)}
               onAccept={acceptAi}
@@ -1591,7 +1596,7 @@ export function ProjectOverview({
               <CommentComposer
                 draft={draft}
                 posting={posting}
-                placeholder="Leave a comment…"
+                placeholder={t("Leave a comment…")}
                 onDraft={setDraft}
                 onPost={() => void postComment(composer.anchor, "new")}
               />
@@ -1606,11 +1611,11 @@ export function ProjectOverview({
             >
               <div className="mb-2 flex items-center justify-between gap-2">
                 <span className="text-[11px] font-semibold uppercase tracking-wider text-faint">
-                  Comments on changed text
+                  {t("Comments on changed text")}
                 </span>
                 <button
                   type="button"
-                  aria-label="Close comments"
+                  aria-label={t("Close comments")}
                   onClick={() => setOrphansOpen(false)}
                   className="rounded p-0.5 text-faint transition-colors hover:bg-elevated hover:text-text"
                 >
@@ -1637,10 +1642,10 @@ export function ProjectOverview({
             <button
               type="button"
               onClick={toggleHistory}
-              title="Document history"
+              title={t("Document history")}
               className="flex items-center gap-1.5 rounded-full border border-border bg-overlay px-3 py-1.5 text-[12px] font-medium text-muted shadow-[0_2px_10px_rgba(0,0,0,0.08)] transition-colors hover:border-border-strong hover:text-text"
             >
-              <History size={13} /> History
+              <History size={13} /> {t("History")}
             </button>
             {unseen > 0 && (
               <span className="pointer-events-none absolute -right-1 -top-1 flex h-[15px] min-w-[15px] items-center justify-center rounded-full bg-danger px-1 text-[9.5px] font-semibold leading-none text-white">
@@ -1652,7 +1657,7 @@ export function ProjectOverview({
             <button
               type="button"
               onClick={(event) => openAiForDocument(event.currentTarget)}
-              title="Edit this document with AI"
+              title={t("Edit this document with AI")}
               className="pointer-events-auto flex items-center gap-1.5 rounded-full border border-border bg-overlay px-3 py-1.5 text-[12px] font-medium text-muted shadow-[0_2px_10px_rgba(0,0,0,0.08)] transition-colors hover:border-border-strong hover:text-text"
             >
               <Sparkles size={13} /> AI

@@ -10,6 +10,7 @@ import {
 } from "react";
 import { Check, ChevronDown, ChevronRight, Copy, SlidersHorizontal } from "lucide-react";
 import type { CodeToken } from "@/lib/code-highlight";
+import { useT } from "@/components/i18n-context";
 
 // The languages a fence may carry. The ids stay word-only because the Markdown
 // parser reads the info string with `^```(\w*)`.
@@ -140,6 +141,7 @@ export function CodeTokens({ tokens }: { tokens: CodeToken[] }) {
 
 /** The header's copy control. Always on screen, in both the read and the edit header. */
 export function CodeCopyButton({ code }: { code: string }) {
+  const t = useT();
   const [copied, setCopied] = useState(false);
   const copy = async () => {
     try {
@@ -162,12 +164,12 @@ export function CodeCopyButton({ code }: { code: string }) {
         event.stopPropagation();
         void copy();
       }}
-      title="Copy code"
-      aria-label="Copy code"
+      title={t("Copy code")}
+      aria-label={t("Copy code")}
       className="flex items-center gap-1 rounded px-1.5 py-0.5 text-[11px] text-faint transition-colors hover:bg-elevated hover:text-text"
     >
       {copied ? <Check size={11} /> : <Copy size={11} />}
-      {copied ? "Copied" : "Copy"}
+      {copied ? t("Copied") : t("Copy")}
     </button>
   );
 }
@@ -180,7 +182,8 @@ export function CodeCollapseButton({
   collapsed: boolean;
   onToggle: () => void;
 }) {
-  const label = collapsed ? "Expand code" : "Collapse code";
+  const t = useT();
+  const label = collapsed ? t("Expand code") : t("Collapse code");
   return (
     <button
       type="button"
@@ -233,6 +236,7 @@ export function CodeLanguageMenu({
   lang: string;
   onChange?: (lang: string) => void;
 }) {
+  const t = useT();
   const [open, setOpen] = useState(false);
   const rootRef = useRef<HTMLDivElement | null>(null);
   useOutsideClose(open, rootRef, () => setOpen(false));
@@ -247,7 +251,7 @@ export function CodeLanguageMenu({
     <div ref={rootRef} className="relative" onMouseDown={keep} onClick={keep}>
       <button
         type="button"
-        title="Change language"
+        title={t("Change language")}
         aria-haspopup="menu"
         aria-expanded={open}
         onMouseDown={(event) => event.preventDefault()}
@@ -290,8 +294,9 @@ export function CodeLanguageMenu({
   );
 }
 
-/** The sliders popover: for now the shared "Show line numbers" switch. */
+/** The sliders popover: for now the shared t("Show line numbers") switch. */
 export function CodeOptionsMenu() {
+  const t = useT();
   const showNumbers = useLineNumbers();
   const [open, setOpen] = useState(false);
   const rootRef = useRef<HTMLDivElement | null>(null);
@@ -302,8 +307,8 @@ export function CodeOptionsMenu() {
     <div ref={rootRef} className="relative" onMouseDown={keep} onClick={keep}>
       <button
         type="button"
-        title="Code options"
-        aria-label="Code options"
+        title={t("Code options")}
+        aria-label={t("Code options")}
         aria-haspopup="true"
         aria-expanded={open}
         onMouseDown={(event) => event.preventDefault()}
@@ -324,7 +329,7 @@ export function CodeOptionsMenu() {
             onClick={() => setLineNumbers(!showNumbers)}
             className="flex w-full items-center justify-between gap-4 rounded-md px-2 py-1.5 text-left text-[13px] hover:bg-elevated"
           >
-            Show line numbers
+            {t("Show line numbers")}
             <span
               aria-hidden
               className={`relative h-5 w-9 shrink-0 rounded-full transition-colors ${
