@@ -1766,7 +1766,7 @@ async function toIssueRows(workspaceId: string, rows: IssueRow[]): Promise<Issue
 }
 
 export type ListFilters = {
-  status?: Status | "active" | "all";
+  status?: Status | "active" | "open" | "all";
   priority?: Priority;
   projectId?: string;
   assigneeId?: string | null; // null = unassigned
@@ -1826,6 +1826,11 @@ export async function listIssues(
 
   if (filters.status === "active") {
     conditions.push(inArray(issues.status, ["todo", "in_progress"]));
+  } else if (filters.status === "open") {
+    // Open tasks: approved, not claimed, and not done or canceled. Anyone can claim them.
+    conditions.push(inArray(issues.status, ["todo", "in_progress"]));
+    conditions.push(eq(issues.reviewStatus, "approved"));
+    conditions.push(isNull(issues.claimedBy));
   } else if (filters.status && filters.status !== "all") {
     conditions.push(eq(issues.status, filters.status));
   }

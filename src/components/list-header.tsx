@@ -8,11 +8,12 @@ import { STATUS_META } from "@/lib/constants";
 import type { Status } from "@/lib/constants";
 import { useT } from "@/components/i18n-context";
 
-type View = "all" | "active" | Status;
+type View = "all" | "active" | "open" | Status;
 
 const TITLES: Record<string, string> = {
   all: "All Tasks",
   active: "Active",
+  open: "Open Tasks",
 };
 for (const status of ["in_progress", "todo", "done", "canceled"] as const) {
   TITLES[status] = STATUS_META[status].label;

@@ -825,6 +825,7 @@ const zh: Record<string, string> = {
   // Composer harness chip (H-FIX-31)
   "Harness default model": "Harness 默认模型",
   "This harness uses the model from its own local config.": "此 harness 使用它本地配置里的模型。",
+  "Open Tasks": "可认领",
 };
 
 export default zh;

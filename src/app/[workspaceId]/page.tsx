@@ -6,7 +6,7 @@ import { listIssues, listMembers, listProjects, type Status } from "@/lib/issues
 import { ListHeader } from "@/components/list-header";
 import { IssueLayout } from "@/components/issue-layout";
 
-type View = "all" | "active" | "my" | "unassigned" | Status;
+type View = "all" | "active" | "open" | "my" | "unassigned" | Status;
 
 export default async function WorkspaceIssuesPage({
   params,
@@ -57,6 +57,8 @@ async function IssuesView({
     status:
       view === "active"
         ? "active"
+        : view === "open"
+          ? "open"
         : view === "todo" || view === "in_progress" || view === "done" || view === "canceled"
           ? (view as Status)
           : undefined,
@@ -74,7 +76,7 @@ async function IssuesView({
   return (
     <div className="flex min-h-0 min-w-0 flex-1 flex-col">
       <ListHeader
-        view={view === "all" || view === "active" ? view : (view as Status)}
+        view={view === "all" || view === "active" || view === "open" ? view : (view as Status)}
         q={q}
         label={label}
         count={issues.length}

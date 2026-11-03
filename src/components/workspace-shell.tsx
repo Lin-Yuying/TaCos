@@ -14,6 +14,7 @@ import {
 import { createPortal } from "react-dom";
 import {
   Activity,
+  Hand,
   BookOpen,
   Bot,
   Boxes,
@@ -261,6 +262,9 @@ function SidebarNav({
           icon={<User size={14} />}
         >
           {t("My Tasks")}
+        </NavItem>
+        <NavItem href={link({ view: "open" })} active={active({ view: "open" })} icon={<Hand size={14} />}>
+          {t("Open Tasks")}
         </NavItem>
         <NavItem
           href={`/${workspaceId}/docs`}
@@ -1266,6 +1270,7 @@ function tabMeta(
     if (status)
       return { label: t(STATUS_META[status].label), icon: <StatusIcon status={status} size={13} /> };
     if (view === "active") return { label: t("Active"), icon: <Activity size={13} /> };
+    if (view === "open") return { label: t("Open Tasks"), icon: <Hand size={13} /> };
     return { label: t("All Tasks"), icon: <List size={13} /> };
   }
   const personPage = pathname.match(new RegExp(`^/${workspace.id}/people/([^/]+)$`));
