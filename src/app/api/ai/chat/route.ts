@@ -239,7 +239,7 @@ export async function POST(request: Request) {
       if (thread.engine !== engine) await setThreadEngine(threadId, engine);
 
       const message = text.trim();
-      await appendAgentMessage({ threadId, role: "user", content: message });
+      await appendAgentMessage({ threadId, role: "user", content: message, authorId: access.user.id });
       const assistantId = await appendAgentMessage({ threadId, role: "assistant", content: "" });
 
       const messages = agentMessages({

@@ -683,6 +683,7 @@ function bootstrap(sqlite: Database.Database) {
   addColumnIfMissing(sqlite, "issues", "claimed_at", "TEXT");
   addColumnIfMissing(sqlite, "issues", "source_thread_id", "TEXT");
   addColumnIfMissing(sqlite, "agent_threads", "focus_issue_id", "TEXT");
+  addColumnIfMissing(sqlite, "agent_messages", "author_id", "TEXT");
   addColumnIfMissing(sqlite, "issues", "published_by", "TEXT");
   addColumnIfMissing(sqlite, "issues", "review_status", "TEXT NOT NULL DEFAULT 'approved'");
   addColumnIfMissing(sqlite, "issues", "reviewed_by", "TEXT");

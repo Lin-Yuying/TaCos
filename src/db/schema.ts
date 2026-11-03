@@ -436,6 +436,8 @@ export const agentMessages = sqliteTable(
     threadId: text("thread_id").notNull(),
     // user | assistant
     role: text("role").notNull(),
+    // H-COLLAB-09: who wrote a user message. Null for assistant replies and old rows.
+    authorId: text("author_id"),
     content: text("content").notNull().default(""),
     createdAt: text("created_at").notNull(),
   },

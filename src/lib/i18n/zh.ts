@@ -847,6 +847,7 @@ const zh: Record<string, string> = {
   "+{count} more": "还有 {count} 个",
   "Move forward with Agent": "用 Agent 推进",
   "Opening chat…": "正在打开对话…",
+  "You are writing in {name}'s shared chat. Every change waits for your Allow.": "你正在 {name} 的共享对话中发言。每次改动都要等你允许。",
 };
 
 export default zh;

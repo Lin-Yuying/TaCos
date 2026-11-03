@@ -64,7 +64,14 @@ import { interpolate, useT } from "@/components/i18n-context";
 
 type ProjectOption = { id: string; name: string; key: string; color: string };
 
-type UiMessage = { id: string; role: "user" | "assistant"; content: string; steps: AgentStepFrame[] };
+type UiMessage = {
+  id: string;
+  role: "user" | "assistant";
+  content: string;
+  steps: AgentStepFrame[];
+  // H-COLLAB-09: set when another member wrote this message in a shared chat.
+  author?: string | null;
+};
 
 const availableEngines = (engines: AgentHarnessOption[]) => engines.filter((option) => option.available);
 
@@ -81,6 +88,7 @@ function toUi(thread: AgentThreadDetail | null): UiMessage[] {
     id: message.id,
     role: message.role,
     content: message.content,
+    author: message.role === "user" && !message.fromViewer ? (message.authorName ?? null) : null,
     steps: message.steps.map((step) => ({
       key: step.id,
       kind: step.kind,
@@ -2328,7 +2336,12 @@ function Conversation({
 
           {messages.map((message, index) =>
             message.role === "user" ? (
-              <div key={message.id} className="flex justify-end">
+              <div key={message.id} className="flex flex-col items-end gap-1">
+                {message.author && (
+                  <span className="px-1 text-[11.5px] text-faint" data-testid="message-author">
+                    {message.author}
+                  </span>
+                )}
                 <div className="max-w-[85%] whitespace-pre-wrap rounded-2xl rounded-br-md bg-elevated px-3.5 py-2 text-[13.5px] leading-relaxed">
                   {message.content}
                 </div>
@@ -2416,7 +2429,11 @@ function Conversation({
             )}
           </Composer>
           <p className="mt-1.5 text-center text-[11px] text-faint">
-            {t("The agent can create and edit tasks, comments, docs and the overview. Every change waits for your Allow.")}
+            {active.mine
+              ? t("The agent can create and edit tasks, comments, docs and the overview. Every change waits for your Allow.")
+              : t("You are writing in {name}'s shared chat. Every change waits for your Allow.", {
+                  name: active.createdByName,
+                })}
           </p>
         </div>
       </div>

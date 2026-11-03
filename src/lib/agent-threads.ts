@@ -50,6 +50,11 @@ export type AgentMessageRecord = {
   role: "user" | "assistant";
   content: string;
   createdAt: string;
+  // H-COLLAB-09: the author of a user message in a shared chat.
+  authorId: string | null;
+  authorName: string | null;
+  // True when the viewer wrote this user message.
+  fromViewer: boolean;
   steps: AgentStepRecord[];
 };
 
@@ -276,6 +281,16 @@ async function requireThreadRow(
     });
     stepsByMessage.set(step.messageId, list);
   }
+  const authorIds = [...new Set(messages.map((m) => m.authorId).filter((v): v is string => Boolean(v)))];
+  const authors = new Map<string, string>();
+  if (authorIds.length) {
+    for (const u of await db
+      .select({ id: users.id, name: users.displayName })
+      .from(users)
+      .where(inArray(users.id, authorIds))) {
+      authors.set(u.id, u.name);
+    }
+  }
   return {
     thread: threadRow(row.thread, row, userId, messages.length),
     messages: messages.map((message) => ({
@@ -283,6 +298,9 @@ async function requireThreadRow(
       role: message.role === "assistant" ? "assistant" : "user",
       content: message.content,
       createdAt: message.createdAt,
+      authorId: message.authorId ?? null,
+      authorName: message.authorId ? (authors.get(message.authorId) ?? null) : null,
+      fromViewer: (message.authorId ?? row.thread.createdBy) === userId,
       steps: stepsByMessage.get(message.id) ?? [],
     })),
   };
@@ -476,10 +494,18 @@ export async function loadThreadForTurn(
   historyLimit = 30
 ): Promise<TurnThread> {
   const { thread, messages } = await requireThreadRow(workspaceId, userId, threadId);
+  // H-COLLAB-09: in a chat with more than one writer, the model sees who wrote each message.
+  const multi = messages.some((m) => m.authorId && m.authorId !== thread.createdBy);
   const history = messages
     .filter((message) => message.content.trim())
     .slice(-historyLimit)
-    .map((message) => ({ role: message.role, content: message.content }));
+    .map((message) => ({
+      role: message.role,
+      content:
+        multi && message.role === "user" && message.authorName
+          ? `${message.authorName}: ${message.content}`
+          : message.content,
+    }));
   return {
     id: thread.id,
     workspaceId: thread.workspaceId,
@@ -489,7 +515,8 @@ export async function loadThreadForTurn(
     engine: thread.engine,
     model: thread.model,
     effort: thread.effort,
-    approval: thread.approval,
+    // A collaborator does not get the owner's auto or full mode. Every write asks.
+    approval: thread.createdBy === userId ? thread.approval : "ask",
     createdBy: thread.createdBy,
     focusIssueId: await focusIssueOf(thread.id),
     messages: history,
@@ -500,6 +527,7 @@ export async function appendAgentMessage(input: {
   threadId: string;
   role: "user" | "assistant";
   content: string;
+  authorId?: string;
 }): Promise<string> {
   const id = crypto.randomUUID();
   const now = new Date().toISOString();
@@ -509,6 +537,7 @@ export async function appendAgentMessage(input: {
     threadId: input.threadId,
     role: input.role,
     content: input.content,
+    authorId: input.role === "user" ? (input.authorId ?? null) : null,
     createdAt: now,
   });
   // The first question names the thread; later turns only bump ordering.
