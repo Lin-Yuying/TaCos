@@ -4,6 +4,7 @@ import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { getSessionUser, requireWorkspace } from "@/lib/auth";
 import { agentCliEngineOptions, getAiSettingsView } from "@/lib/ai";
+import { getWorkspaceHarnessGate } from "@/lib/harness";
 import { listProjects } from "@/lib/issues";
 import { ENGINE_COOKIE, type AgentEngineOption } from "@/lib/ai-constants";
 import { codexDefaults, listCodexModels, listCodexSkills } from "@/lib/cli-agents";
@@ -41,9 +42,11 @@ async function AgentContent({
   if (!user) redirect("/login");
   const { role } = await requireWorkspace(workspaceId);
   const ai = await getAiSettingsView(workspaceId);
+  const gate = await getWorkspaceHarnessGate(workspaceId);
 
   const engines: AgentEngineOption[] = await agentCliEngineOptions(workspaceId);
-  const ready = engines.some((engine) => engine.available);
+  // Agent opens only when Settings has at least one enabled+ready harness (H-P3-16).
+  const ready = gate.agentAllowed;
   const usable = (id: string | undefined) =>
     engines.find((engine) => engine.id === id && engine.available)?.id;
   const saved = (await cookies()).get(ENGINE_COOKIE)?.value;

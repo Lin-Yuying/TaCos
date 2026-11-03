@@ -1813,13 +1813,16 @@ export function AgentWorkspace({
 
   if (!ready) {
     return (
-      <div className="flex min-h-0 flex-1 items-center justify-center overflow-y-auto bg-bg p-6">
+      <div
+        className="flex min-h-0 flex-1 items-center justify-center overflow-y-auto bg-bg p-6"
+        data-testid="agent-harness-gate"
+      >
         <div className="max-w-md rounded-xl border border-border bg-surface p-6">
           <div className="flex items-center gap-2 text-[14px] font-semibold">
-            <Bot size={16} /> The agent needs a model
+            <Bot size={16} /> Agent needs a ready harness
           </div>
           <p className="mt-2 text-[13px] leading-relaxed text-muted">
-            Use the Codex or Pi login that already exists on this machine, or add a provider key.
+            Enable at least one local harness that is installed and ready. Open Settings to turn a harness on, install it, or sign in.
           </p>
           <ul className="mt-3 space-y-2">
             {engines.map((option) => (
