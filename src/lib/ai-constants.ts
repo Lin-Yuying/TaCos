@@ -63,6 +63,9 @@ export const AI_EDIT_CHAR_LIMIT = 8_000;
 // borrow the ChatGPT / Pi login that already exists on this machine.
 export type AiEngine = "api" | "codex" | "pi";
 export type CliEngine = "codex" | "pi";
+/** Agent composer harness id (no API-as-agent). */
+export type AgentHarnessId = "codex" | "pi" | "opencode" | "dsh" | "codebuddy";
+export const AGENT_HARNESS_IDS: AgentHarnessId[] = ["codex", "pi", "opencode", "dsh", "codebuddy"];
 
 // The Agent tab reopens on whichever engine the user chose last. It lives in a cookie so
 // the server can resolve the default and the chip never hydrates to a stale value.
@@ -123,6 +126,15 @@ export type AgentEngineOption = {
   detail: string | null;
   available: boolean;
   // Shown in the empty state when the engine cannot be used yet.
+  hint: string | null;
+};
+
+/** Composer harness picker row (H-P3-17). */
+export type AgentHarnessOption = {
+  id: AgentHarnessId;
+  label: string;
+  detail: string | null;
+  available: boolean;
   hint: string | null;
 };
 

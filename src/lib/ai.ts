@@ -10,6 +10,7 @@ import {
   AI_EDIT_CHAR_LIMIT,
   presetFor,
   type AgentEngineOption,
+  type AgentHarnessOption,
   type AiEditAction,
   type AiEngine,
   type AiSettingsView,
@@ -187,6 +188,19 @@ export async function aiEngineOptions(workspaceId: string): Promise<AgentEngineO
 export async function agentCliEngineOptions(workspaceId: string): Promise<AgentEngineOption[]> {
   const all = await aiEngineOptions(workspaceId);
   return all.filter((option) => option.id === "codex" || option.id === "pi");
+}
+
+/** Enabled+ready harness options for the Agent composer (H-P3-17). */
+export async function listAgentHarnessOptions(workspaceId: string): Promise<AgentHarnessOption[]> {
+  const { getWorkspaceHarnessGate } = await import("@/lib/harness");
+  const gate = await getWorkspaceHarnessGate(workspaceId);
+  return gate.enabledReady.map((row) => ({
+    id: row.id,
+    label: row.label,
+    detail: row.version,
+    available: true,
+    hint: null,
+  }));
 }
 
 // Cheap check used by pages that only need to know whether the sparkle buttons

@@ -36,7 +36,7 @@ import {
 import { Menu, MenuItem } from "@/components/menu";
 import { useUI } from "@/components/ui-context";
 import { Markdown } from "@/components/markdown";
-import { rememberEngine, streamAiEdit, type AgentApprovalCard, type AgentStepFrame } from "@/lib/ai-client";
+import { rememberHarness, streamAiEdit, type AgentApprovalCard, type AgentStepFrame } from "@/lib/ai-client";
 import {
   createAgentSkillAction,
   deleteAgentSkillAction,
@@ -53,9 +53,9 @@ import {
 } from "@/app/agent-actions";
 import {
   AGENT_APPROVALS,
-  type AgentEngineOption,
+  type AgentHarnessId,
+  type AgentHarnessOption,
   type AgentSkill,
-  type AiEngine,
   type CodexModel,
 } from "@/lib/ai-constants";
 import type { AgentApproval, AgentThread, AgentThreadDetail } from "@/lib/agent-threads";
@@ -64,7 +64,7 @@ type ProjectOption = { id: string; name: string; key: string; color: string };
 
 type UiMessage = { id: string; role: "user" | "assistant"; content: string; steps: AgentStepFrame[] };
 
-const availableEngines = (engines: AgentEngineOption[]) => engines.filter((option) => option.available);
+const availableEngines = (engines: AgentHarnessOption[]) => engines.filter((option) => option.available);
 
 
 const WORK_SUGGESTIONS = [
@@ -349,9 +349,9 @@ function ModelChip({
   onModel,
   disabled,
 }: {
-  options: AgentEngineOption[];
-  value: AiEngine;
-  onChange: (engine: AiEngine) => void;
+  options: AgentHarnessOption[];
+  value: AgentHarnessId;
+  onChange: (engine: AgentHarnessId) => void;
   models: CodexModel[];
   model: string;
   effort: string;
@@ -389,7 +389,7 @@ function ModelChip({
     >
       {(close) => (
         <>
-          <SectionLabel>Engine</SectionLabel>
+          <SectionLabel>Harness</SectionLabel>
           {options.map((option) => (
               <MenuItem
                 key={option.id}
@@ -1551,7 +1551,7 @@ function StartComposer({
   onStart,
 }: {
   projects: ProjectOption[];
-  options: AgentEngineOption[];
+  options: AgentHarnessOption[];
   models: CodexModel[];
   skills: AgentSkill[];
   canManageSkills: boolean;
@@ -1559,7 +1559,7 @@ function StartComposer({
   onDeleteSkill: (skill: AgentSkill) => Promise<SkillDeleteResult>;
   projectId: string;
   visibility: "private" | "shared";
-  engine: AiEngine;
+  engine: AgentHarnessId;
   model: string;
   effort: string;
   approval: AgentApproval;
@@ -1568,7 +1568,7 @@ function StartComposer({
   codexReady: boolean;
   onProject: (projectId: string) => void;
   onVisibility: (visibility: "private" | "shared") => void;
-  onEngine: (engine: AiEngine) => void;
+  onEngine: (engine: AgentHarnessId) => void;
   onModel: (model: string, effort: string) => void;
   onApproval: (approval: AgentApproval) => void;
   onStart: (text: string) => void;
@@ -1646,7 +1646,7 @@ const PREFS_KEY = "tacos.agent.prefs";
 type AgentDraftPrefs = {
   project: string;
   visibility: "private" | "shared";
-  engine: AiEngine;
+  engine: AgentHarnessId;
   model: string;
   effort: string;
   approval: AgentApproval;
@@ -1667,8 +1667,8 @@ export function AgentWorkspace({
 }: {
   workspaceId: string;
   ready: boolean;
-  engines: AgentEngineOption[];
-  defaultEngine: AiEngine;
+  engines: AgentHarnessOption[];
+  defaultEngine: AgentHarnessId;
   models: CodexModel[];
   skills: AgentSkill[];
   canManageSkills: boolean;
@@ -1683,7 +1683,7 @@ export function AgentWorkspace({
   const [drawer, setDrawer] = useState(false);
   const [draftProject, setDraftProject] = useState(projects[0]?.id ?? "");
   const [draftVisibility, setDraftVisibility] = useState<"private" | "shared">("private");
-  const [draftEngine, setDraftEngine] = useState<AiEngine>(defaultEngine);
+  const [draftEngine, setDraftEngine] = useState<AgentHarnessId>(defaultEngine);
   const [draftModel, setDraftModel] = useState(codexDefault.model);
   const [draftEffort, setDraftEffort] = useState(codexDefault.effort);
   const [draftApproval, setDraftApproval] = useState<AgentApproval>("ask");
@@ -1748,9 +1748,9 @@ export function AgentWorkspace({
     }
   }
 
-  function chooseEngine(engine: AiEngine) {
+  function chooseEngine(engine: AgentHarnessId) {
     setDraftEngine(engine);
-    rememberEngine(engine);
+    rememberHarness(engine);
     rememberPrefs({ engine });
   }
 
@@ -1783,10 +1783,9 @@ export function AgentWorkspace({
         projectId: draftProject,
         visibility: draftVisibility,
         engine: draftEngine,
-        // The model list only describes Codex; the other engines carry their own.
-        ...(draftEngine === "codex"
-          ? { model: draftModel, effort: draftEffort, approval: draftApproval }
-          : {}),
+        approval: draftApproval,
+        // The model list currently describes Codex; other harnesses use their own defaults.
+        ...(draftEngine === "codex" ? { model: draftModel, effort: draftEffort } : {}),
       });
     } catch {
       // A server action from a page opened before the server restarted rejects here; without
@@ -1974,14 +1973,14 @@ function Conversation({
   workspaceId: string;
   active: AgentThreadDetail;
   projects: ProjectOption[];
-  options: AgentEngineOption[];
+  options: AgentHarnessOption[];
   models: CodexModel[];
   skills: AgentSkill[];
   canManageSkills: boolean;
   onCreateSkill: (input: SkillDraft) => Promise<SkillCreateResult>;
   onDeleteSkill: (skill: AgentSkill) => Promise<SkillDeleteResult>;
   codexDefault: { model: string; effort: string };
-  defaultEngine: AiEngine;
+  defaultEngine: AgentHarnessId;
   codexReady: boolean;
   onOpenSidebar: () => void;
   onNew: () => void;
@@ -1990,19 +1989,21 @@ function Conversation({
   const [messages, setMessages] = useState<UiMessage[]>(() => toUi(active));
   const [input, setInput] = useState("");
   const [busy, setBusy] = useState(false);
-  // Work only ever runs on Codex; anything else opens on the engine the user picked last.
-  const [engine, setEngine] = useState<AiEngine>(() =>
-    defaultEngine
-  );
+  // Harness is a turn preference on this session. New chat creates a new session.
+  const [engine, setEngine] = useState<AgentHarnessId>(() => {
+    const fromThread = active.engine;
+    if (options.some((option) => option.id === fromThread)) return fromThread as AgentHarnessId;
+    return defaultEngine;
+  });
   const [model, setModel] = useState(active.model || codexDefault.model);
   const [effort, setEffort] = useState(active.effort || codexDefault.effort);
   const [approvalMode, setApprovalMode] = useState<AgentApproval>(active.approval);
 
   // Harness is a turn pref on this session. Persist last-used. Do not open a new thread.
-  async function chooseEngine(next: AiEngine) {
+  async function chooseEngine(next: AgentHarnessId) {
     const before = engine;
     setEngine(next);
-    rememberEngine(next);
+    rememberHarness(next);
     const result = await setAgentThreadEngineAction(workspaceId, active.id, next);
     if (!result.ok) {
       setEngine(before);

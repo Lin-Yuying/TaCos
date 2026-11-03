@@ -3,10 +3,10 @@ import { connection } from "next/server";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { getSessionUser, requireWorkspace } from "@/lib/auth";
-import { agentCliEngineOptions, getAiSettingsView } from "@/lib/ai";
+import { getAiSettingsView, listAgentHarnessOptions } from "@/lib/ai";
 import { getWorkspaceHarnessGate } from "@/lib/harness";
 import { listProjects } from "@/lib/issues";
-import { ENGINE_COOKIE, type AgentEngineOption } from "@/lib/ai-constants";
+import { ENGINE_COOKIE, type AgentHarnessId, type AgentHarnessOption } from "@/lib/ai-constants";
 import { codexDefaults, listCodexModels, listCodexSkills } from "@/lib/cli-agents";
 import {
   getAgentThread,
@@ -44,17 +44,17 @@ async function AgentContent({
   const ai = await getAiSettingsView(workspaceId);
   const gate = await getWorkspaceHarnessGate(workspaceId);
 
-  const engines: AgentEngineOption[] = await agentCliEngineOptions(workspaceId);
+  const engines: AgentHarnessOption[] = await listAgentHarnessOptions(workspaceId);
   // Agent opens only when Settings has at least one enabled+ready harness (H-P3-16).
   const ready = gate.agentAllowed;
-  const usable = (id: string | undefined) =>
+  const usable = (id: string | undefined): AgentHarnessId | undefined =>
     engines.find((engine) => engine.id === id && engine.available)?.id;
   const saved = (await cookies()).get(ENGINE_COOKIE)?.value;
-  // Agent reopens on the CLI the user picked last. Default to Codex when it is ready.
-  // The API key engine is not offered on the Agent page (H-P1-07).
-  const cliPreferred = ai.engine === "api" ? undefined : usable(ai.engine);
-  const defaultEngine =
-    usable(saved) ?? cliPreferred ?? usable("codex") ?? engines.find((engine) => engine.available)?.id ?? "codex";
+  // Agent reopens on the harness the user picked last. Default to Codex when it is ready.
+  const settingsPreferred =
+    ai.engine === "api" ? undefined : usable(ai.engine as AgentHarnessId);
+  const defaultEngine: AgentHarnessId =
+    usable(saved) ?? settingsPreferred ?? usable("codex") ?? engines[0]?.id ?? "codex";
 
   const sp = await searchParams;
   const threadId = typeof sp.thread === "string" ? sp.thread : "";
