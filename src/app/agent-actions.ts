@@ -9,7 +9,6 @@ import {
   deleteAgentThread,
   renameAgentThread,
   setAgentThreadApproval,
-  setAgentThreadMode,
   setAgentThreadModel,
   setAgentThreadPinned,
   setAgentThreadProject,
@@ -17,7 +16,6 @@ import {
   setAgentThreadVisibility,
   startAgentThread,
   type AgentApproval,
-  type AgentMode,
   type AgentThread,
   type AgentVisibility,
 } from "@/lib/agent-threads";
@@ -39,7 +37,6 @@ export async function startAgentThreadAction(
   workspaceId: string,
   input: {
     projectId: string;
-    mode: AgentMode;
     visibility: AgentVisibility;
     engine: string;
     model?: string;
@@ -81,18 +78,6 @@ export async function setAgentThreadVisibilityAction(
   });
 }
 
-export async function setAgentThreadModeAction(
-  workspaceId: string,
-  threadId: string,
-  mode: AgentMode
-): Promise<ActionResult<AgentThread>> {
-  return run(async () => {
-    const { user } = await requireWorkspace(workspaceId);
-    const thread = await setAgentThreadMode(workspaceId, user.id, threadId, mode);
-    refresh(workspaceId);
-    return thread;
-  });
-}
 
 export async function setAgentThreadProjectAction(
   workspaceId: string,

@@ -213,10 +213,6 @@ export async function POST(request: Request) {
       // History comes from the thread, not from the browser: whatever scrolled past in
       // this conversation is what the model gets, including turns from other sessions.
       const thread = await loadThreadForTurn(workspaceId, access.user.id, threadId);
-      const work = thread.mode === "work";
-      if (work && engine !== "codex") {
-        throw new TacosError("Work mode needs the Codex engine", 400, "Switch the engine in Settings → AI assistant.");
-      }
       if (thread.engine !== engine) await setThreadEngine(threadId, engine);
 
       const message = text.trim();
@@ -226,7 +222,6 @@ export async function POST(request: Request) {
       const messages = agentMessages({
         message,
         history: thread.messages,
-        mode: thread.mode,
         context: await agentContext({
           workspaceId,
           userId: access.user.id,
@@ -246,15 +241,13 @@ export async function POST(request: Request) {
         return new Response(recordTurn(stream, turn), { headers: STREAM_HEADERS });
       }
 
-      const grant = work
-        ? issueAgentToolGrant({
-            threadId,
-            workspaceId,
-            projectId: thread.projectId,
-            projectKey: thread.projectKey,
-            userId: access.user.id,
-          })
-        : null;
+      const grant = issueAgentToolGrant({
+        threadId,
+        workspaceId,
+        projectId: thread.projectId,
+        projectKey: thread.projectKey,
+        userId: access.user.id,
+      });
       // Only Codex has skills; "@name" tokens are matched against the skills this machine
       // really has, so ordinary prose containing an @ sign is left alone.
       const skills =
@@ -264,7 +257,6 @@ export async function POST(request: Request) {
         proxy: runtime.proxy,
         signal: request.signal,
         agent: {
-          mode: thread.mode,
           ...(skills.length > 0 ? { skills } : {}),
           cwd: path.join(DATA_DIR, "agent", workspaceId, thread.projectId || "general"),
           // A thread that never picked a model follows the machine's Codex config.

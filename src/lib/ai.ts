@@ -588,14 +588,13 @@ export function agentMessages(input: {
   history?: ChatMessage[];
   message: string;
   context?: string;
-  mode?: "chat" | "work";
 }): ChatMessage[] {
   const message = input.message.trim();
   if (!message) throw new TacosError("Write something for the agent first");
   if (message.length > MAX_PROMPT) {
     throw new TacosError("That message is too long for the agent", 400, "Split it into shorter turns.");
   }
-  const parts = [AGENT_SYSTEM, input.mode === "work" ? WORK_RULES : CHAT_RULES];
+  const parts = [AGENT_SYSTEM, WORK_RULES];
   if (input.context?.trim()) {
     parts.push(`Workspace context:\n"""\n${input.context.slice(0, 8_000)}\n"""`);
   }

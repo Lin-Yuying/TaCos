@@ -15,7 +15,6 @@ import {
   ExternalLink,
   FileText,
   Folder,
-  Hammer,
   Info,
   Link2,
   Loader2,
@@ -44,7 +43,6 @@ import {
   deleteAgentThreadAction,
   renameAgentThreadAction,
   setAgentThreadApprovalAction,
-  setAgentThreadModeAction,
   setAgentThreadModelAction,
   setAgentThreadPinnedAction,
   setAgentThreadProjectAction,
@@ -59,7 +57,7 @@ import {
   type AiEngine,
   type CodexModel,
 } from "@/lib/ai-constants";
-import type { AgentApproval, AgentMode, AgentThread, AgentThreadDetail } from "@/lib/agent-threads";
+import type { AgentApproval, AgentThread, AgentThreadDetail } from "@/lib/agent-threads";
 
 type ProjectOption = { id: string; name: string; key: string; color: string };
 
@@ -67,11 +65,6 @@ type UiMessage = { id: string; role: "user" | "assistant"; content: string; step
 
 const availableEngines = (engines: AgentEngineOption[]) => engines.filter((option) => option.available);
 
-const CHAT_SUGGESTIONS = [
-  "What is in progress in this project?",
-  "Split the next milestone into tasks",
-  "Draft a short project summary",
-];
 
 const WORK_SUGGESTIONS = [
   "Create tasks for the next milestone",
@@ -193,50 +186,7 @@ function ApprovalPanel({
   );
 }
 
-// Codex frames a thread with a segmented control at the top, a big prompt card in the
-// middle and one composer at the bottom; these are the pieces both states share.
-function ModePills({
-  mode,
-  onChange,
-  workAvailable,
-  workBlockedReason,
-  disabled,
-}: {
-  mode: AgentMode;
-  onChange: (mode: AgentMode) => void;
-  workAvailable: boolean;
-  // Why Work is unavailable — Codex missing, or a conversation with no project.
-  workBlockedReason?: string;
-  disabled?: boolean;
-}) {
-  return (
-    <div className="flex items-center rounded-full bg-elevated p-[3px]">
-      {(["chat", "work"] as const).map((id) => {
-        const selected = mode === id;
-        const blocked = id === "work" && !workAvailable;
-        return (
-          <button
-            key={id}
-            type="button"
-            disabled={blocked || disabled}
-            onClick={() => onChange(id)}
-            title={
-              blocked
-                ? (workBlockedReason ?? "Work needs the Codex engine — pick it in Settings → AI assistant.")
-                : undefined
-            }
-            className={`rounded-full px-4 py-[3px] text-[12.5px] font-medium transition-colors ${
-              selected ? "bg-bg text-text shadow-[0_1px_2px_rgba(0,0,0,0.10)]" : "text-muted hover:text-text"
-            } disabled:cursor-not-allowed disabled:opacity-40`}
-          >
-            {id === "chat" ? "Chat" : "Work"}
-          </button>
-        );
-      })}
-    </div>
-  );
-}
-
+// Composer chips shared by the empty state and an open conversation.
 function ProjectChip({
   projects,
   value,
@@ -407,7 +357,7 @@ function ModelChip({
   effort: string;
   onModel: (model: string, effort: string) => void;
   disabled?: boolean;
-  /** Work mode lists the other engines greyed out so the restriction is explained, not hidden. */
+  /** When true, non-Codex engines stay greyed out with an explanation. */
   codexOnly?: boolean;
 }) {
   const current = options.find((option) => option.id === value) ?? options[0];
@@ -1337,7 +1287,6 @@ function ThreadSidebar({
             {thread.title || "New conversation"}
           </span>
           {thread.visibility === "shared" && <Users size={11} className="shrink-0 text-faint" />}
-          {thread.mode === "work" && <Hammer size={11} className="shrink-0 text-faint" />}
         </Link>
         <button
           type="button"
@@ -1593,7 +1542,6 @@ function StartComposer({
   canManageSkills,
   onCreateSkill,
   onDeleteSkill,
-  mode,
   projectId,
   visibility,
   engine,
@@ -1617,7 +1565,6 @@ function StartComposer({
   canManageSkills: boolean;
   onCreateSkill: (input: SkillDraft) => Promise<SkillCreateResult>;
   onDeleteSkill: (skill: AgentSkill) => Promise<SkillDeleteResult>;
-  mode: AgentMode;
   projectId: string;
   visibility: "private" | "shared";
   engine: AiEngine;
@@ -1645,14 +1592,14 @@ function StartComposer({
       <div className="flex flex-1 flex-col items-center justify-center px-6 pb-16 pt-6">
         <div className="w-full max-w-[720px]">
           <h1 className="text-center text-[32px] font-normal leading-tight tracking-[-0.015em] text-text">
-            {mode === "work" ? "What should we work on?" : "What can I help with?"}
+            What should we work on?
           </h1>
           <div className="mt-7">
             <Composer
               value={text}
               onChange={setText}
               onSubmit={submit}
-              placeholder={mode === "work" ? "Work with TaCos" : "Chat with TaCos"}
+              placeholder="Message TaCos"
               onNew={() => setText("")}
               skills={skills}
               canManageSkills={canManageSkills}
@@ -1660,9 +1607,7 @@ function StartComposer({
               onDeleteSkill={onDeleteSkill}
               actions={
                 <>
-                  {mode === "work" && (
-                    <ApprovalChip value={approval} onChange={onApproval} disabled={busy} />
-                  )}
+                  <ApprovalChip value={approval} onChange={onApproval} disabled={busy} />
                   <ModelChip
                     options={options}
                     value={engine}
@@ -1672,7 +1617,7 @@ function StartComposer({
                     effort={effort}
                     onModel={onModel}
                     disabled={busy}
-                    codexOnly={mode === "work"}
+                    codexOnly={false}
                   />
                 </>
               }
@@ -1683,7 +1628,7 @@ function StartComposer({
           </div>
           {error && <div className="mt-2 px-2 text-[12px] text-danger">{error}</div>}
           <div className="mt-3 flex flex-wrap justify-center gap-2">
-            {(mode === "work" ? WORK_SUGGESTIONS : CHAT_SUGGESTIONS).map((suggestion) => (
+            {WORK_SUGGESTIONS.map((suggestion) => (
               <button
                 key={suggestion}
                 type="button"
@@ -1695,12 +1640,7 @@ function StartComposer({
             ))}
           </div>
           <p className="mt-5 text-center text-[11.5px] text-faint">
-            {mode === "work"
-              ? "Work can change this project's tasks, comments and docs — every change waits for your Allow."
-              : projectId
-                ? "Chat reads this project's tasks and documents and cannot change anything."
-                : "Chat reads this workspace's tasks and documents and cannot change anything."}
-            {!codexReady && " Work needs the Codex engine."}
+            The agent can change this project&apos;s tasks, comments and docs. Every change waits for your Allow.
           </p>
         </div>
       </div>
@@ -1713,7 +1653,6 @@ function StartComposer({
 const PREFS_KEY = "tacos.agent.prefs";
 
 type AgentDraftPrefs = {
-  mode: AgentMode;
   project: string;
   visibility: "private" | "shared";
   engine: AiEngine;
@@ -1751,7 +1690,6 @@ export function AgentWorkspace({
   const [starting, setStarting] = useState(false);
   const [startError, setStartError] = useState<string | null>(null);
   const [drawer, setDrawer] = useState(false);
-  const [draftMode, setDraftMode] = useState<AgentMode>("chat");
   const [draftProject, setDraftProject] = useState(projects[0]?.id ?? "");
   const [draftVisibility, setDraftVisibility] = useState<"private" | "shared">("private");
   const [draftEngine, setDraftEngine] = useState<AiEngine>(defaultEngine);
@@ -1762,7 +1700,6 @@ export function AgentWorkspace({
   const options = availableEngines(engines);
   const prefsKey = `${PREFS_KEY}.${workspaceId}`;
   const current = useRef<AgentDraftPrefs>({
-    mode: draftMode,
     project: draftProject,
     visibility: draftVisibility,
     engine: draftEngine,
@@ -1791,8 +1728,6 @@ export function AgentWorkspace({
     const engine = options.some((entry) => entry.id === saved.engine)
       ? saved.engine!
       : fallback.engine;
-    // Work only runs on Codex with a project; anything stale falls back to Chat.
-    const mode: AgentMode = saved.mode === "work" && codexReady && project ? "work" : "chat";
     const model = models.some((entry) => entry.slug === saved.model) ? saved.model! : fallback.model;
     const picked = models.find((entry) => entry.slug === model);
     const effort = picked?.efforts.some((level) => level.id === saved.effort)
@@ -1802,14 +1737,13 @@ export function AgentWorkspace({
       ? saved.approval!
       : fallback.approval;
     const visibility = saved.visibility === "shared" ? "shared" : "private";
-    setDraftMode(mode);
     setDraftProject(project);
     setDraftVisibility(visibility);
     setDraftEngine(engine);
     setDraftModel(model);
     setDraftEffort(effort);
     setDraftApproval(approval);
-    current.current = { mode, project, visibility, engine, model, effort, approval };
+    current.current = { project, visibility, engine, model, effort, approval };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -1829,13 +1763,6 @@ export function AgentWorkspace({
     rememberPrefs({ engine });
   }
 
-  function pickMode(mode: AgentMode) {
-    setDraftMode(mode);
-    // Work only runs on Codex; carrying an API engine into it would fail on the first send.
-    const forcesCodex = mode === "work" && draftEngine !== "codex" && codexReady;
-    if (forcesCodex) setDraftEngine("codex");
-    rememberPrefs({ mode, ...(forcesCodex ? { engine: "codex" as const } : {}) });
-  }
 
   // Both actions revalidate the Agent page, so the list behind the dialog comes back from
   // the server render that follows the call.
@@ -1863,7 +1790,6 @@ export function AgentWorkspace({
     try {
       result = await startAgentThreadAction(workspaceId, {
         projectId: draftProject,
-        mode: draftMode,
         visibility: draftVisibility,
         engine: draftEngine,
         // The model list only describes Codex; the other engines carry their own.
@@ -1988,12 +1914,6 @@ export function AgentWorkspace({
               >
                 <PanelLeft size={15} />
               </button>
-              <ModePills
-                mode={draftMode}
-                onChange={pickMode}
-                workAvailable={codexReady && Boolean(draftProject)}
-                workBlockedReason={draftProject ? undefined : "Work needs a project — pick one below."}
-              />
             </header>
             <StartComposer
               projects={projects}
@@ -2003,7 +1923,6 @@ export function AgentWorkspace({
               canManageSkills={canManageSkills}
               onCreateSkill={createSkill}
               onDeleteSkill={deleteSkill}
-              mode={draftMode}
               projectId={draftProject}
               visibility={draftVisibility}
               engine={draftEngine}
@@ -2024,10 +1943,7 @@ export function AgentWorkspace({
               }}
               onProject={(projectId) => {
                 setDraftProject(projectId);
-                // Work writes into a project; without one the composer would fail on send.
-                const blocked = !projectId && draftMode === "work";
-                if (blocked) setDraftMode("chat");
-                rememberPrefs({ project: projectId, ...(blocked ? { mode: "chat" as const } : {}) });
+                rememberPrefs({ project: projectId });
               }}
               onVisibility={(visibility) => {
                 setDraftVisibility(visibility);
@@ -2081,7 +1997,7 @@ function Conversation({
   const [busy, setBusy] = useState(false);
   // Work only ever runs on Codex; anything else opens on the engine the user picked last.
   const [engine, setEngine] = useState<AiEngine>(() =>
-    active.mode === "work" && codexReady ? "codex" : defaultEngine
+    defaultEngine
   );
   const [model, setModel] = useState(active.model || codexDefault.model);
   const [effort, setEffort] = useState(active.effort || codexDefault.effort);
@@ -2240,30 +2156,9 @@ function Conversation({
       setError(result.error);
       return;
     }
-    // Dropping the project turns a Work conversation into Chat on the server; refresh so the
-    // pills and the footer say the same thing as the chip.
     router.refresh();
   }
 
-  async function switchMode(mode: AgentMode) {
-    if (!active.mine || active.mode === mode) return;
-    if (mode === "work" && !codexReady) {
-      setError("Work mode needs the Codex engine. Choose Codex in Settings → AI assistant.");
-      return;
-    }
-    if (mode === "work" && !active.projectId) {
-      setError("Work needs a project. Start a conversation inside a project to make changes.");
-      return;
-    }
-    const result = await setAgentThreadModeAction(workspaceId, active.id, mode);
-    if (!result.ok) setError(result.error);
-    else {
-      // The server only runs Work turns on Codex; keep the chip honest instead of letting
-      // the next send come back with "Work mode needs the Codex engine".
-      if (mode === "work" && engine !== "codex") setEngine("codex");
-      router.refresh();
-    }
-  }
 
   async function toggleVisibility() {
     if (!active.mine) return;
@@ -2309,17 +2204,6 @@ function Conversation({
           {!active.mine && <span className="shrink-0 text-faint">· {active.createdByName}</span>}
         </div>
         <div className="absolute left-1/2 -translate-x-1/2">
-          <ModePills
-            mode={active.mode}
-            onChange={(mode) => void switchMode(mode)}
-            workAvailable={codexReady && Boolean(active.projectId)}
-            workBlockedReason={
-              active.projectId
-                ? undefined
-                : "This conversation isn't bound to a project, so Work has nothing to change."
-            }
-            disabled={!active.mine}
-          />
         </div>
         <div className="flex shrink-0 items-center">
           {active.mine && (
@@ -2369,17 +2253,15 @@ function Conversation({
           {messages.length === 0 && (
             <div className="pt-16 text-center">
               <h1 className="text-[28px] font-normal leading-tight tracking-[-0.015em]">
-                {active.mode === "work" ? "What should we work on?" : "What can I help with?"}
+                What should we work on?
               </h1>
               <p className="mt-2 text-[13px] text-muted">
-                {active.mode === "work"
+                {active.projectId
                   ? `Work in ${active.projectName} — every change waits for your Allow.`
-                  : active.projectId
-                    ? `Ask about ${active.projectName}'s tasks, or have the agent draft one for you.`
-                    : "Ask about any project in this workspace, or have the agent draft a task for you."}
+                  : "Ask about any project in this workspace, or have the agent draft a task for you."}
               </p>
               <div className="mt-5 flex flex-wrap justify-center gap-2">
-                {(active.mode === "work" ? WORK_SUGGESTIONS : CHAT_SUGGESTIONS).map((suggestion) => (
+                {WORK_SUGGESTIONS.map((suggestion) => (
                   <button
                     key={suggestion}
                     type="button"
@@ -2438,7 +2320,7 @@ function Conversation({
             onSubmit={() => void send(input)}
             busy={busy}
             onStop={() => abort.current?.abort()}
-            placeholder={active.mode === "work" ? "Tell TaCos what to change" : "Ask TaCos anything"}
+            placeholder="Message TaCos"
             inputRef={box}
             onNew={onNew}
             skills={skills}
@@ -2447,13 +2329,11 @@ function Conversation({
             onDeleteSkill={onDeleteSkill}
             actions={
               <>
-                {active.mode === "work" && (
-                  <ApprovalChip
-                    value={approvalMode}
-                    onChange={(next) => void changeApproval(next)}
-                    disabled={busy || !active.mine}
-                  />
-                )}
+                <ApprovalChip
+                  value={approvalMode}
+                  onChange={(next) => void changeApproval(next)}
+                  disabled={busy || !active.mine}
+                />
                 <ModelChip
                   options={options}
                   value={engine}
@@ -2463,7 +2343,7 @@ function Conversation({
                   effort={effort}
                   onModel={(nextModel, nextEffort) => void changeModel(nextModel, nextEffort)}
                   disabled={busy || !active.mine}
-                  codexOnly={active.mode === "work"}
+                  codexOnly={false}
                 />
               </>
             }
@@ -2482,11 +2362,7 @@ function Conversation({
             )}
           </Composer>
           <p className="mt-1.5 text-center text-[11px] text-faint">
-            {active.mode === "work"
-              ? "Work can create and edit tasks, comments, docs and the overview — every change waits for your Allow."
-              : active.projectId
-                ? "Chat reads this project's tasks and documents; it cannot change anything. Switch to Work when you want edits."
-                : "Chat reads this workspace's tasks and documents; it cannot change anything. Pick a project to let it make edits."}
+            The agent can create and edit tasks, comments, docs and the overview. Every change waits for your Allow.
           </p>
         </div>
       </div>
