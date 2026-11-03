@@ -165,7 +165,7 @@ export type AgentSkill = {
 export const AGENT_APPROVALS = [
   { id: "ask", label: "Ask for approval", detail: "Every TaCos write waits for a card." },
   { id: "auto", label: "Approve for me", detail: "Writes go through; risky ones still ask." },
-  { id: "full", label: "Full access", detail: "No cards, and the agent may touch the machine." },
+  { id: "full", label: "Full access", detail: "The agent may touch the machine. Delete actions still ask." },
 ] as const;
 
 export const AI_EDIT_ACTIONS: { id: AiEditAction; label: string }[] = [

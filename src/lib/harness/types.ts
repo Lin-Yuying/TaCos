@@ -48,6 +48,8 @@ export type TurnInput = {
   approval: ApprovalMode;
   mcp?: McpStdioConfig | null;
   autoApproveTools?: string[];
+  /** Delete tools never auto-approve, even when approval is Full (H-P3-19). */
+  neverAutoApproveTools?: string[];
   skills?: { name: string; path: string }[];
   isTurnApproved: () => boolean;
   /** Wait for the browser card after the adapter yields an approval event. */

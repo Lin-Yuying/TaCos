@@ -1,6 +1,7 @@
 import {
   addComment,
   createIssue,
+  deleteIssue,
   getIssueDetail,
   getProject,
   listIssues,
@@ -16,10 +17,9 @@ import {
 import { createPage, listPages, updatePage } from "./pages";
 import { PRIORITY_NAMES, STATUS_META } from "./constants";
 
-// Tools the Agent can call in Work mode. Every call is already approved by the person
-// in the Agent tab before Codex reaches this module, and each one is scoped to the
-// project the conversation is bound to: an agent that was asked about project A cannot
-// quietly edit project B.
+// Tools the Agent can call through the TaCos MCP bridge. Delete tools always wait for
+// a card, even when approval is Full (H-P3-19). Each call is scoped to the project the
+// conversation is bound to.
 
 export type AgentToolContext = {
   workspaceId: string;
@@ -38,6 +38,8 @@ export type AgentToolSpec = {
   };
   // Reads are cheap and harmless; writes show up in TaCos and need the permission card.
   write: boolean;
+  // Delete tools always wait for a card, even when approval is Full (H-P3-19).
+  delete?: boolean;
 };
 
 const PRIORITY_LIST = Object.values(PRIORITY_NAMES).join(", ");
@@ -243,9 +245,29 @@ export const AGENT_TOOLS: AgentToolSpec[] = [
       required: ["id", "markdown"],
     },
   },
+  {
+    name: "delete_task",
+    description:
+      "Move a task to Trash. Always asks for a confirmation card, even when approval is Full.",
+    write: true,
+    delete: true,
+    inputSchema: {
+      type: "object",
+      properties: {
+        id: { type: "string", description: "Task id or identifier (for example PROJ-12)" },
+      },
+      required: ["id"],
+    },
+  },
 ];
 
 const READ_TOOLS = new Set(AGENT_TOOLS.filter((tool) => !tool.write).map((tool) => tool.name));
+const DELETE_TOOLS = new Set(AGENT_TOOLS.filter((tool) => tool.delete).map((tool) => tool.name));
+
+export function isDeleteTool(name: string): boolean {
+  return DELETE_TOOLS.has(name);
+}
+
 
 function asRecord(value: unknown): Record<string, unknown> {
   return value && typeof value === "object" ? (value as Record<string, unknown>) : {};
@@ -546,6 +568,11 @@ export async function executeAgentTool(
       // updatePage applies the person's own page permissions to the agent's write.
       const page = await updatePage(ctx.workspaceId, id, ctx.userId, { doc: markdown });
       return { text: `Replaced document "${page.title}" (${markdown.length} characters)` };
+    }
+    case "delete_task": {
+      const { issue } = await requireProjectTask(ctx, str(args.id));
+      await deleteIssue(ctx.workspaceId, issue.identifier);
+      return { text: `Moved ${issue.identifier} to Trash — ${issue.title}` };
     }
     default:
       throw new TacosError(`Unknown tool "${name}"`, 400);

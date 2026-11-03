@@ -520,6 +520,8 @@ export type AgentRun = {
   mcp?: { command: string; args: string[]; env: Record<string, string> };
   // Read-only tools the agent may use without a card; every write is still asked.
   autoApprove?: string[];
+  // Delete tools always wait for a card, even when approval is Full (H-P3-19).
+  neverAutoApprove?: string[];
   // True once the person chose "Allow for this turn" on an earlier card.
   isTurnApproved?: () => boolean;
   onStep?: (step: AgentStepEvent) => void;
@@ -749,7 +751,10 @@ function codexStream(binary: string, prompt: CliPrompt, options: RunOptions): Re
         }
         const message = String(params.message ?? "Allow this tool call?");
         const toolName = message.match(/run tool "([^"]+)"/)?.[1] ?? "call";
-        if (agent.autoApprove?.includes(toolName) || agent.isTurnApproved?.()) {
+        if (
+          !agent.neverAutoApprove?.includes(toolName) &&
+          (agent.autoApprove?.includes(toolName) || agent.isTurnApproved?.())
+        ) {
           send({ jsonrpc: "2.0", id, result: { action: "accept", content: {} } });
           return;
         }
@@ -860,10 +865,9 @@ function codexStream(binary: string, prompt: CliPrompt, options: RunOptions): Re
             method: "thread/start",
             params: {
               cwd,
-              // "Full access" is Codex's own posture: no sandbox around the folder and no
-              // approvals at all. Anything less keeps the turn inside the project.
+              // Full opens the machine sandbox. MCP still uses on-request so delete tools can ask (H-P3-19).
               sandbox: work && agent?.approval === "full" ? "danger-full-access" : work ? "workspace-write" : "read-only",
-              approvalPolicy: work && agent?.approval !== "full" ? "on-request" : "never",
+              approvalPolicy: work ? "on-request" : "never",
               ephemeral: true,
               baseInstructions: prompt.system,
             },

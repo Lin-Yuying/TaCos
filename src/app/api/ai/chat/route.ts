@@ -282,6 +282,7 @@ export async function POST(request: Request) {
           approval: thread.approval,
           skills: skills.length > 0 ? skills : undefined,
           autoApproveTools: AGENT_TOOLS.filter((tool) => !tool.write).map((tool) => tool.name),
+          neverAutoApproveTools: AGENT_TOOLS.filter((tool) => tool.delete).map((tool) => tool.name),
           isTurnApproved,
           waitForApproval: async (approvalRequest) =>
             mapDecision(
@@ -328,6 +329,7 @@ export async function POST(request: Request) {
                   },
                 },
                 autoApprove: AGENT_TOOLS.filter((tool) => !tool.write).map((tool) => tool.name),
+                neverAutoApprove: AGENT_TOOLS.filter((tool) => tool.delete).map((tool) => tool.name),
                 isTurnApproved,
               }
             : {}),

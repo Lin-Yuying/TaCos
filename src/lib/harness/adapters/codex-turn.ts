@@ -238,7 +238,12 @@ export async function* openCodexTurn(input: TurnInput): AsyncGenerator<TurnEvent
     }
     const message = String(params.message ?? "Allow this tool call?");
     const toolName = message.match(/run tool "([^"]+)"/)?.[1] ?? "call";
-    if (input.autoApproveTools?.includes(toolName) || input.isTurnApproved()) {
+    // H-P3-19: delete tools always wait for a card, even when approval is Full.
+    const forceConfirm = input.neverAutoApproveTools?.includes(toolName);
+    if (
+      !forceConfirm &&
+      (input.autoApproveTools?.includes(toolName) || input.isTurnApproved())
+    ) {
       send({ jsonrpc: "2.0", id, result: { action: "accept", content: {} } });
       return;
     }
@@ -347,7 +352,8 @@ export async function* openCodexTurn(input: TurnInput): AsyncGenerator<TurnEvent
         params: {
           cwd: input.cwd,
           sandbox: input.approval === "full" ? "danger-full-access" : "workspace-write",
-          approvalPolicy: input.approval !== "full" ? "on-request" : "never",
+          // Full keeps machine sandbox open. MCP still uses on-request so delete tools can ask (H-P3-19).
+          approvalPolicy: "on-request",
           ephemeral: true,
           baseInstructions: input.prompt.system,
         },
