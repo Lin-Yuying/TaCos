@@ -1,4 +1,5 @@
 import { AGENT_TOOLS, executeAgentTool } from "@/lib/agent-tools";
+import { decideToolApproval } from "@/lib/agent-tool-policy";
 import {
   publishToolApproval,
   resolveAgentToolGrant,
@@ -55,28 +56,20 @@ export async function POST(request: Request) {
     return denied(`Unknown tool "${name}"`);
   }
 
-  // TaCos mediates approval for harnesses without native elicitation (Pi and others).
-  if (spec.write) {
-    const forceConfirm = Boolean(spec.delete) || grant.neverAutoApproveTools.includes(name);
-    const autoOk =
-      !forceConfirm &&
-      (grant.autoApproveTools.includes(name) ||
-        grant.autoApproveTurn ||
-        grant.approval !== "ask");
-    if (!autoOk) {
-      const requestId = `approval-${grant.threadId}-${name}-${Date.now()}`;
-      const card = {
-        requestId,
-        tool: `tacos.${name}`,
-        message: `Allow tool "${name}"?`,
-        description: spec.description,
-        params: body.arguments,
-      };
-      publishToolApproval(grant.threadId, card);
-      const decision = await waitForAgentApproval(requestId);
-      if (decision !== "accept") {
-        return denied(`The person denied tool "${name}".`);
-      }
+  // TaCos mediates approval for every harness. Delete always confirms (H-P5-26).
+  if (decideToolApproval(spec, grant) === "confirm") {
+    const requestId = `approval-${grant.threadId}-${name}-${Date.now()}`;
+    const card = {
+      requestId,
+      tool: `tacos.${name}`,
+      message: `Allow tool "${name}"?`,
+      description: spec.description,
+      params: body.arguments,
+    };
+    publishToolApproval(grant.threadId, card);
+    const decision = await waitForAgentApproval(requestId);
+    if (decision !== "accept") {
+      return denied(`The person denied tool "${name}".`);
     }
   }
 

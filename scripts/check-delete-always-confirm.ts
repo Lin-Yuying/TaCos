@@ -37,7 +37,9 @@ assert(cli.includes("!agent.neverAutoApprove?.includes(toolName)"), "cli must fo
 assert(cli.includes('approvalPolicy: work ? "on-request" : "never"'), "cli Agent path must keep on-request");
 
 assert(route.includes("neverAutoApproveTools: AGENT_TOOLS.filter((tool) => tool.delete)"), "route must pass delete tools to adapter");
-assert(route.includes("neverAutoApprove: AGENT_TOOLS.filter((tool) => tool.delete)"), "route must pass delete tools to cli path");
+// H-P4-22 removed the cli Agent path. Each harness branch must pass delete tools instead (H-P5-26).
+const neverAutoCount = route.split("neverAutoApproveTools: AGENT_TOOLS.filter((tool) => tool.delete)").length - 1;
+assert(neverAutoCount >= 5, `every harness branch must pass delete tools (found ${neverAutoCount})`);
 
 assert(consts.includes("Delete actions still ask"), "Full access detail must say delete still asks");
 assert(!consts.includes("No cards, and the agent may touch the machine"), "Full must not claim no cards");

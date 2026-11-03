@@ -35,7 +35,8 @@ assert(route.includes('engine === "pi"'), "route must branch on pi");
 const tools = read("src/app/api/agent/tools/route.ts");
 assert(tools.includes("publishToolApproval"), "tools route must publish cards for Pi");
 assert(tools.includes("waitForAgentApproval"), "tools route must wait for Allow/Deny");
-assert(tools.includes("neverAutoApproveTools"), "delete tools must still force confirm");
+assert(tools.includes("decideToolApproval"), "tools route must use the shared policy");
+assert(read("src/lib/agent-tool-policy.ts").includes("neverAutoApproveTools"), "delete tools must still force confirm");
 
 const sessions = read("src/lib/agent-sessions.ts");
 assert(sessions.includes("subscribeToolApprovals"), "approval pubsub required");
