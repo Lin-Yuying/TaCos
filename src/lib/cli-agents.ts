@@ -510,7 +510,6 @@ export type AgentApprovalRequest = {
 // in, whether it may change things, the TaCos MCP server it can call, and the two
 // callbacks that carry the trajectory and permission cards back to the browser.
 export type AgentRun = {
-  mode: "chat" | "work";
   cwd: string;
   // Empty means "leave Codex on whatever its config says".
   model?: string;
@@ -658,7 +657,7 @@ function codexStream(binary: string, prompt: CliPrompt, options: RunOptions): Re
   let stop = () => {};
 
   const agent = options.agent;
-  const work = agent?.mode === "work";
+  const work = true; // Unified Agent always mounts TaCos tools (H-P1-06).
   const cwd = agent?.cwd ?? agentCwd();
   fs.mkdirSync(cwd, { recursive: true });
 
