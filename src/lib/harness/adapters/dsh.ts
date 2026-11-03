@@ -1,20 +1,16 @@
 import os from "node:os";
 import path from "node:path";
 import { findHarnessBinary, readHarnessVersion, readJsonFile } from "../detect-bin";
-import { notImplementedTurn } from "../stub-turn";
 import type { DetectResult, HarnessAdapter, ModelOption, TurnInput } from "../types";
+import { openDshTurn } from "./dsh-turn";
 import { installHarnessRecipe, upgradeHarnessRecipe } from "../install-recipes";
 
 const LABEL = "DeepSeek Harness";
 const INSTALL_HINT = "Install dsh (npm i -g @deepseek-ai/dsh). Requires Node ^22.19 or >=24.";
 
 function isReady(_binary: string): { ok: boolean; error: string | null; hint: string | null } {
-  // dsh is often missing. Ready needs a later ACP/headless proof (H-P4).
-  return {
-    ok: false,
-    error: "adapter_incomplete",
-    hint: "Install dsh (npm i -g @deepseek-ai/dsh), then complete the ACP adapter.",
-  };
+  // Binary + version is ready. dsh owns its DeepSeek key; a missing key shows as a turn error.
+  return { ok: true, error: null, hint: null };
 }
 
 
@@ -71,7 +67,7 @@ export const dshAdapter: HarnessAdapter = {
     return [];
   },
   openTurn(input: TurnInput) {
-    return notImplementedTurn("dsh", input);
+    return openDshTurn(input);
   },
   install() {
     return installHarnessRecipe("dsh");

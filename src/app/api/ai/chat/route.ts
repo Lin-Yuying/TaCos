@@ -465,6 +465,52 @@ export async function POST(request: Request) {
         );
       }
 
+      // DeepSeek Harness (dsh) Agent turns (MCP + TaCos-mediated cards).
+      if (engine === "dsh") {
+        const adapter = getHarnessAdapter("dsh");
+        if (!adapter) {
+          throw new TacosError("DeepSeek Harness is not registered", 500);
+        }
+        const mapDecision = (value: "accept" | "decline"): HarnessApprovalDecision =>
+          value === "accept" ? "allow" : "deny";
+        const events = adapter.openTurn({
+          sessionId: threadId,
+          cwd,
+          prompt,
+          model: thread.model || null,
+          effort: thread.effort || null,
+          approval: thread.approval,
+          skills: skills.length > 0 ? skills : undefined,
+          autoApproveTools: AGENT_TOOLS.filter((tool) => !tool.write).map((tool) => tool.name),
+          neverAutoApproveTools: AGENT_TOOLS.filter((tool) => tool.delete).map((tool) => tool.name),
+          isTurnApproved,
+          waitForApproval: async (approvalRequest) =>
+            mapDecision(
+              await waitForAgentApproval(approvalRequest.requestId, { signal: request.signal })
+            ),
+          signal: request.signal,
+          proxy: runtime.proxy,
+          ...(grant
+            ? {
+                mcp: {
+                  command: process.execPath,
+                  args: [shimPath()],
+                  env: {
+                    TACOS_AGENT_URL: origin,
+                    TACOS_AGENT_TOKEN: grant.token,
+                    ...(process.versions.electron ? { ELECTRON_RUN_AS_NODE: "1" } : {}),
+                  },
+                },
+              }
+            : { mcp: null }),
+        });
+        const stream = turnEventsToSse(events);
+        return new Response(
+          recordTurn(stream, { ...turn, onEnd: grant ? () => revokeAgentToolGrant(grant.token) : undefined }),
+          { headers: STREAM_HEADERS }
+        );
+      }
+
       throw new TacosError(
         `Agent turns for ${engine} are not wired yet`,
         400,
