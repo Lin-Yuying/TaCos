@@ -253,6 +253,9 @@ export async function POST(request: Request) {
         projectId: thread.projectId,
         projectKey: thread.projectKey,
         userId: access.user.id,
+        approval: thread.approval,
+        autoApproveTools: AGENT_TOOLS.filter((tool) => !tool.write).map((tool) => tool.name),
+        neverAutoApproveTools: AGENT_TOOLS.filter((tool) => tool.delete).map((tool) => tool.name),
       });
       // Only Codex has skills; "@name" tokens are matched against the skills this machine
       // really has, so ordinary prose containing an @ sign is left alone.
@@ -279,6 +282,52 @@ export async function POST(request: Request) {
           prompt,
           model: thread.model || defaults.model || null,
           effort: thread.effort || defaults.effort || null,
+          approval: thread.approval,
+          skills: skills.length > 0 ? skills : undefined,
+          autoApproveTools: AGENT_TOOLS.filter((tool) => !tool.write).map((tool) => tool.name),
+          neverAutoApproveTools: AGENT_TOOLS.filter((tool) => tool.delete).map((tool) => tool.name),
+          isTurnApproved,
+          waitForApproval: async (approvalRequest) =>
+            mapDecision(
+              await waitForAgentApproval(approvalRequest.requestId, { signal: request.signal })
+            ),
+          signal: request.signal,
+          proxy: runtime.proxy,
+          ...(grant
+            ? {
+                mcp: {
+                  command: process.execPath,
+                  args: [shimPath()],
+                  env: {
+                    TACOS_AGENT_URL: origin,
+                    TACOS_AGENT_TOKEN: grant.token,
+                    ...(process.versions.electron ? { ELECTRON_RUN_AS_NODE: "1" } : {}),
+                  },
+                },
+              }
+            : { mcp: null }),
+        });
+        const stream = turnEventsToSse(events);
+        return new Response(
+          recordTurn(stream, { ...turn, onEnd: grant ? () => revokeAgentToolGrant(grant.token) : undefined }),
+          { headers: STREAM_HEADERS }
+        );
+      }
+
+      // Pi Agent turns go through the harness adapter (MCP + TaCos-mediated cards).
+      if (engine === "pi") {
+        const adapter = getHarnessAdapter("pi");
+        if (!adapter) {
+          throw new TacosError("Pi harness is not registered", 500);
+        }
+        const mapDecision = (value: "accept" | "decline"): HarnessApprovalDecision =>
+          value === "accept" ? "allow" : "deny";
+        const events = adapter.openTurn({
+          sessionId: threadId,
+          cwd,
+          prompt,
+          model: thread.model || null,
+          effort: thread.effort || null,
           approval: thread.approval,
           skills: skills.length > 0 ? skills : undefined,
           autoApproveTools: AGENT_TOOLS.filter((tool) => !tool.write).map((tool) => tool.name),

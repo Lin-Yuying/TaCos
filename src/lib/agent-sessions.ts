@@ -17,6 +17,18 @@ export type ToolGrant = {
   expiresAt: number;
   // Set by "Allow for this turn": later writes in the same turn skip their card.
   autoApproveTurn: boolean;
+  /** Ask / auto / full for this turn (H-P4-21 Pi mediation). */
+  approval: "ask" | "auto" | "full";
+  autoApproveTools: string[];
+  neverAutoApproveTools: string[];
+};
+
+export type ToolApprovalCard = {
+  requestId: string;
+  tool: string;
+  message: string;
+  description?: string;
+  params?: unknown;
 };
 
 export type ApprovalDecision = "accept" | "decline";
@@ -28,7 +40,7 @@ type Waiter = (decision: ApprovalDecision) => void;
 
 type Store = {
   grants: Map<string, ToolGrant>;
-  approvals: Map<string, Waiter>;
+  approvals: Map<string, Set<Waiter>>;
 };
 
 const globalStore = globalThis as unknown as { __tacosAgentRuntime?: Store };
@@ -41,7 +53,11 @@ function store(): Store {
 }
 
 export function issueAgentToolGrant(
-  input: Omit<ToolGrant, "token" | "expiresAt" | "autoApproveTurn">
+  input: Omit<ToolGrant, "token" | "expiresAt" | "autoApproveTurn"> & {
+    approval?: ToolGrant["approval"];
+    autoApproveTools?: string[];
+    neverAutoApproveTools?: string[];
+  }
 ): ToolGrant {
   const now = Date.now();
   const grants = store().grants;
@@ -50,6 +66,9 @@ export function issueAgentToolGrant(
   }
   const grant: ToolGrant = {
     ...input,
+    approval: input.approval ?? "ask",
+    autoApproveTools: input.autoApproveTools ?? [],
+    neverAutoApproveTools: input.neverAutoApproveTools ?? [],
     token: crypto.randomBytes(32).toString("base64url"),
     expiresAt: now + GRANT_TTL_MS,
     autoApproveTurn: false,
@@ -103,7 +122,11 @@ export function waitForAgentApproval(
     const finish = (decision: ApprovalDecision) => {
       if (settled) return;
       settled = true;
-      approvals.delete(requestId);
+      const set = approvals.get(requestId);
+      if (set) {
+        set.delete(finish);
+        if (set.size === 0) approvals.delete(requestId);
+      }
       clearTimeout(timer);
       options.signal?.removeEventListener("abort", onAbort);
       resolve(decision);
@@ -112,13 +135,57 @@ export function waitForAgentApproval(
     const timer = setTimeout(() => finish("decline"), options.timeoutMs ?? APPROVAL_TTL_MS);
     if (options.signal?.aborted) return finish("decline");
     options.signal?.addEventListener("abort", onAbort, { once: true });
-    approvals.set(requestId, finish);
+    let set = approvals.get(requestId);
+    if (!set) {
+      set = new Set();
+      approvals.set(requestId, set);
+    }
+    set.add(finish);
   });
 }
 
 export function answerAgentApproval(requestId: string, decision: ApprovalDecision): boolean {
-  const waiter = store().approvals.get(requestId);
-  if (!waiter) return false;
-  waiter(decision);
+  const set = store().approvals.get(requestId);
+  if (!set || set.size === 0) return false;
+  // Copy before notify: finish() mutates the set.
+  for (const waiter of [...set]) waiter(decision);
   return true;
+}
+
+
+type ApprovalListener = (card: ToolApprovalCard) => void;
+
+const approvalListeners = new Map<string, Set<ApprovalListener>>();
+const approvalQueues = new Map<string, ToolApprovalCard[]>();
+
+/** Publish a tool approval card for a running turn (Pi / non-elicitation harnesses). */
+export function publishToolApproval(threadId: string, card: ToolApprovalCard): void {
+  const listeners = approvalListeners.get(threadId);
+  if (listeners && listeners.size > 0) {
+    for (const listener of listeners) listener(card);
+    return;
+  }
+  const queue = approvalQueues.get(threadId) ?? [];
+  queue.push(card);
+  approvalQueues.set(threadId, queue);
+}
+
+/** Subscribe to tool approval cards for this thread. Returns an unsubscribe function. */
+export function subscribeToolApprovals(
+  threadId: string,
+  listener: ApprovalListener
+): () => void {
+  const queued = approvalQueues.get(threadId) ?? [];
+  approvalQueues.delete(threadId);
+  for (const card of queued) listener(card);
+  let set = approvalListeners.get(threadId);
+  if (!set) {
+    set = new Set();
+    approvalListeners.set(threadId, set);
+  }
+  set.add(listener);
+  return () => {
+    set?.delete(listener);
+    if (set && set.size === 0) approvalListeners.delete(threadId);
+  };
 }

@@ -1,7 +1,7 @@
 import os from "node:os";
 import path from "node:path";
 import { findHarnessBinary, readHarnessVersion, readJsonFile } from "../detect-bin";
-import { notImplementedTurn } from "../stub-turn";
+import { openPiTurn } from "./pi-turn";
 import type { DetectResult, HarnessAdapter, ModelOption, TurnInput } from "../types";
 import { installHarnessRecipe, upgradeHarnessRecipe } from "../install-recipes";
 
@@ -74,7 +74,7 @@ export const piAdapter: HarnessAdapter = {
     return [];
   },
   openTurn(input: TurnInput) {
-    return notImplementedTurn("pi", input);
+    return openPiTurn(input);
   },
   install() {
     return installHarnessRecipe("pi");

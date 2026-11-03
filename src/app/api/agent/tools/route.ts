@@ -1,9 +1,14 @@
 import { AGENT_TOOLS, executeAgentTool } from "@/lib/agent-tools";
-import { resolveAgentToolGrant } from "@/lib/agent-sessions";
+import {
+  publishToolApproval,
+  resolveAgentToolGrant,
+  waitForAgentApproval,
+} from "@/lib/agent-sessions";
 
-// The Codex MCP shim calls this from a child process, not from a browser: the bearer
+// The Codex/Pi MCP shim calls this from a child process, not from a browser: the bearer
 // token is issued per Agent turn and pins the call to one thread, project and person.
 // Nothing here trusts the caller's idea of which workspace it is talking to.
+// H-P4-21: write/delete tools wait for a browser card when the harness has no elicitation.
 
 function grantFor(request: Request) {
   const header = request.headers.get("authorization") ?? "";
@@ -13,6 +18,13 @@ function grantFor(request: Request) {
 
 function unauthorized() {
   return Response.json({ error: "Agent tool session expired" }, { status: 401 });
+}
+
+function denied(message: string) {
+  return Response.json({
+    content: [{ type: "text", text: message }],
+    isError: true,
+  });
 }
 
 export async function GET(request: Request) {
@@ -38,6 +50,36 @@ export async function POST(request: Request) {
   }
   const name = typeof body.name === "string" ? body.name : "";
   if (!name) return Response.json({ error: "Tool name is required" }, { status: 400 });
+  const spec = AGENT_TOOLS.find((tool) => tool.name === name);
+  if (!spec) {
+    return denied(`Unknown tool "${name}"`);
+  }
+
+  // TaCos mediates approval for harnesses without native elicitation (Pi and others).
+  if (spec.write) {
+    const forceConfirm = Boolean(spec.delete) || grant.neverAutoApproveTools.includes(name);
+    const autoOk =
+      !forceConfirm &&
+      (grant.autoApproveTools.includes(name) ||
+        grant.autoApproveTurn ||
+        grant.approval !== "ask");
+    if (!autoOk) {
+      const requestId = `approval-${grant.threadId}-${name}-${Date.now()}`;
+      const card = {
+        requestId,
+        tool: `tacos.${name}`,
+        message: `Allow tool "${name}"?`,
+        description: spec.description,
+        params: body.arguments,
+      };
+      publishToolApproval(grant.threadId, card);
+      const decision = await waitForAgentApproval(requestId);
+      if (decision !== "accept") {
+        return denied(`The person denied tool "${name}".`);
+      }
+    }
+  }
+
   try {
     const result = await executeAgentTool(
       {
