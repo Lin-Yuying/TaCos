@@ -179,6 +179,13 @@ CREATE TABLE IF NOT EXISTS issues (
   reminder TEXT,
   deleted_at TEXT,
   position REAL NOT NULL DEFAULT 0,
+  claimed_by TEXT,
+  claimed_at TEXT,
+  source_thread_id TEXT,
+  published_by TEXT,
+  review_status TEXT NOT NULL DEFAULT 'approved',
+  reviewed_by TEXT,
+  reviewed_at TEXT,
   created_at TEXT NOT NULL,
   updated_at TEXT NOT NULL
 );
@@ -671,6 +678,15 @@ function bootstrap(sqlite: Database.Database) {
   addColumnIfMissing(sqlite, "issues", "position", "REAL NOT NULL DEFAULT 0");
   addColumnIfMissing(sqlite, "issues", "due_date", "TEXT");
   addColumnIfMissing(sqlite, "issues", "reminder", "TEXT");
+  // H-COLLAB-01: claim, source chat, publisher and review gate.
+  addColumnIfMissing(sqlite, "issues", "claimed_by", "TEXT");
+  addColumnIfMissing(sqlite, "issues", "claimed_at", "TEXT");
+  addColumnIfMissing(sqlite, "issues", "source_thread_id", "TEXT");
+  addColumnIfMissing(sqlite, "issues", "published_by", "TEXT");
+  addColumnIfMissing(sqlite, "issues", "review_status", "TEXT NOT NULL DEFAULT 'approved'");
+  addColumnIfMissing(sqlite, "issues", "reviewed_by", "TEXT");
+  addColumnIfMissing(sqlite, "issues", "reviewed_at", "TEXT");
+  sqlite.exec("CREATE INDEX IF NOT EXISTS issues_claimed_idx ON issues (claimed_by)");
   // Inline comments quote the passage they belong to instead of storing offsets, which
   // would drift as soon as the overview is edited.
   addColumnIfMissing(sqlite, "ai_settings", "engine", "TEXT NOT NULL DEFAULT 'api'");

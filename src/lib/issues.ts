@@ -2370,6 +2370,50 @@ export async function moveIssue(
 
 // Deleting an issue sends it to the Trash rather than erasing it: comments and history
 // stay attached so a restore brings the issue back exactly as it was.
+export type IssueClaim = {
+  id: string;
+  identifier: string;
+  claimedBy: string | null;
+  claimedAt: string | null;
+};
+
+// H-COLLAB-01: claim is one conditional UPDATE, so two parallel claims cannot both win.
+// Assignees stay as they are. Only approved, open tasks can be claimed.
+export async function claimIssue(workspaceId: string, idOrIdentifier: string, userId: string): Promise<IssueClaim> {
+  const row = await findIssueRow(workspaceId, idOrIdentifier);
+  if (!row) throw new TacosError(`Issue "${idOrIdentifier}" not found`, 404);
+  if (row.reviewStatus !== "approved") throw new TacosError("This task is waiting for review", 409);
+  if (row.status === "done" || row.status === "canceled") throw new TacosError("This task is closed", 409);
+  const now = nowIso();
+  const updated = await getDb()
+    .update(issues)
+    .set({ claimedBy: userId, claimedAt: now, updatedAt: now })
+    .where(
+      and(
+        eq(issues.workspaceId, workspaceId),
+        eq(issues.id, row.id),
+        isNull(issues.claimedBy),
+        eq(issues.reviewStatus, "approved")
+      )
+    )
+    .returning({ id: issues.id });
+  if (updated.length === 0) throw new TacosError("Someone else already claimed this task", 409);
+  return { id: row.id, identifier: row.identifier, claimedBy: userId, claimedAt: now };
+}
+
+// Only the current claimer can release. Reassign comes in a later id with notifications.
+export async function releaseIssue(workspaceId: string, idOrIdentifier: string, userId: string): Promise<IssueClaim> {
+  const row = await findIssueRow(workspaceId, idOrIdentifier);
+  if (!row) throw new TacosError(`Issue "${idOrIdentifier}" not found`, 404);
+  const updated = await getDb()
+    .update(issues)
+    .set({ claimedBy: null, claimedAt: null, updatedAt: nowIso() })
+    .where(and(eq(issues.workspaceId, workspaceId), eq(issues.id, row.id), eq(issues.claimedBy, userId)))
+    .returning({ id: issues.id });
+  if (updated.length === 0) throw new TacosError("Only the person who claimed this task can release it", 403);
+  return { id: row.id, identifier: row.identifier, claimedBy: null, claimedAt: null };
+}
+
 export async function deleteIssue(workspaceId: string, idOrIdentifier: string): Promise<Issue> {
   const row = await findIssueRow(workspaceId, idOrIdentifier);
   if (!row) throw new TacosError(`Issue "${idOrIdentifier}" not found`, 404);

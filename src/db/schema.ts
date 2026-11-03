@@ -265,10 +265,24 @@ export const issues = sqliteTable(
     // manual order; higher sits further up in a column. Fractional so a drop can be
     // placed between two neighbours without renumbering the rest of the board.
     position: real("position").notNull().default(0),
+    // H-COLLAB-01: one person may claim a task to push it forward. The claim does not
+    // replace the assignees. Null when nobody holds the claim.
+    claimedBy: text("claimed_by"),
+    claimedAt: text("claimed_at"),
+    // agent thread that produced this task, if any
+    sourceThreadId: text("source_thread_id"),
+    // the person who published the task (for agent tasks: the user who ran the agent)
+    publishedBy: text("published_by"),
+    // approved | pending | rejected. Agent-published tasks start as pending and need a
+    // human reviewer before anyone can claim them.
+    reviewStatus: text("review_status").notNull().default("approved"),
+    reviewedBy: text("reviewed_by"),
+    reviewedAt: text("reviewed_at"),
     createdAt: text("created_at").notNull(),
     updatedAt: text("updated_at").notNull(),
   },
   (t) => [
+    index("issues_claimed_idx").on(t.claimedBy),
     index("issues_workspace_idx").on(t.workspaceId),
     index("issues_project_idx").on(t.projectId),
     index("issues_status_idx").on(t.status),

@@ -6,6 +6,7 @@ import {
   addComment,
   addOverviewComment,
   addProjectMember,
+  claimIssue,
   createApiKey,
   createIssue,
   createLabel,
@@ -18,6 +19,7 @@ import {
   purgeProject,
   removeOverviewComment,
   removeOverviewGrant,
+  releaseIssue,
   removeProjectMember,
   restoreIssue,
   restoreOverviewDocEdit,
@@ -32,6 +34,7 @@ import {
   updateIssue,
   updateProject,
   type CreateIssueInput,
+  type IssueClaim,
   type IssueDetail,
   type IssueWithLabels,
   type Label,
@@ -107,6 +110,24 @@ export async function moveIssueAction(
     const result = await moveIssue(workspaceId, idOrIdentifier, input, userActor(user));
     refresh(workspaceId);
     return result.issue;
+  });
+}
+
+export async function claimIssueAction(workspaceId: string, idOrIdentifier: string) {
+  return run<IssueClaim>(async () => {
+    const { user } = await requireWorkspace(workspaceId);
+    const result = await claimIssue(workspaceId, idOrIdentifier, user.id);
+    refresh(workspaceId);
+    return result;
+  });
+}
+
+export async function releaseIssueAction(workspaceId: string, idOrIdentifier: string) {
+  return run<IssueClaim>(async () => {
+    const { user } = await requireWorkspace(workspaceId);
+    const result = await releaseIssue(workspaceId, idOrIdentifier, user.id);
+    refresh(workspaceId);
+    return result;
   });
 }
 

@@ -2,6 +2,11 @@
 // `{name}` placeholders must survive translation unchanged. Grouped by the file that
 // first uses a string; `npm run i18n:check` lists keys used in code but missing here.
 const zh: Record<string, string> = {
+  // collab (H-COLLAB-01)
+  "This task is waiting for review": "这个任务还在等待审核",
+  "This task is closed": "这个任务已关闭",
+  "Someone else already claimed this task": "这个任务已被其他人认领",
+  "Only the person who claimed this task can release it": "只有认领人才能释放这个任务",
   // agent
   "AI result": "AI 结果",
   "Add a member": "添加成员",
