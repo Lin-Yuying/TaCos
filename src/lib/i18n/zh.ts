@@ -7,6 +7,20 @@ const zh: Record<string, string> = {
   "This task is closed": "这个任务已关闭",
   "Someone else already claimed this task": "这个任务已被其他人认领",
   "Only the person who claimed this task can release it": "只有认领人才能释放这个任务",
+  // collab (H-COLLAB-03)
+  Review: "待审核",
+  Approve: "批准",
+  Reject: "驳回",
+  "No tasks wait for review.": "没有待审核的任务。",
+  "Tasks that an agent published wait here. Approve one to let anyone claim it. Reject one to remove it from the board.":
+    "Agent 发布的任务会先放在这里。批准后任何人都能认领，驳回后会从看板上移除。",
+  "published by {name} through an agent on {date}": "{name} 通过 Agent 发布于 {date}",
+  "This task is not waiting for review": "这个任务不在待审核状态",
+  "Unknown review decision": "未知的审核操作",
+  "approved the task": "批准了任务",
+  "rejected the task": "驳回了任务",
+  "claimed the task": "认领了任务",
+  "released the task": "释放了任务",
   // agent
   "AI result": "AI 结果",
   "Add a member": "添加成员",

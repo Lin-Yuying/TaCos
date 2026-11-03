@@ -1817,6 +1817,7 @@ export async function listIssues(
   const conditions = [
     eq(issues.workspaceId, workspaceId),
     isNull(issues.deletedAt),
+    ne(issues.reviewStatus, "rejected"),
     sql`EXISTS (SELECT 1 FROM projects WHERE projects.id = ${issues.projectId} AND projects.deleted_at IS NULL)`,
   ];
   if (filters.viewerId && !(await seesAllTasks(workspaceId, filters.viewerId))) {
@@ -2433,6 +2434,87 @@ export async function releaseIssue(workspaceId: string, idOrIdentifier: string, 
     .returning({ id: issues.id });
   if (updated.length === 0) throw new TacosError("Only the person who claimed this task can release it", 403);
   return { id: row.id, identifier: row.identifier, claimedBy: null, claimedAt: null };
+}
+
+export type PendingReviewIssue = {
+  id: string;
+  identifier: string;
+  number: number;
+  title: string;
+  description: string;
+  status: Status;
+  projectName: string;
+  projectColor: string;
+  publishedBy: string | null;
+  publisherName: string | null;
+  createdVia: Via;
+  createdAt: string;
+};
+
+// Agent-published tasks that wait for a person to approve or reject them (H-COLLAB-03).
+export async function listPendingReview(workspaceId: string): Promise<PendingReviewIssue[]> {
+  const rows = await getDb()
+    .select({
+      id: issues.id,
+      identifier: issues.identifier,
+      number: issues.number,
+      title: issues.title,
+      description: issues.description,
+      status: issues.status,
+      projectName: projects.name,
+      projectColor: projects.color,
+      publishedBy: issues.publishedBy,
+      publisherName: users.displayName,
+      createdVia: issues.createdVia,
+      createdAt: issues.createdAt,
+    })
+    .from(issues)
+    .leftJoin(projects, eq(projects.id, issues.projectId))
+    .leftJoin(users, eq(users.id, issues.publishedBy))
+    .where(
+      and(
+        eq(issues.workspaceId, workspaceId),
+        isNull(issues.deletedAt),
+        isNull(projects.deletedAt),
+        eq(issues.reviewStatus, "pending")
+      )
+    )
+    .orderBy(sql`${issues.createdAt} ASC`);
+  return rows.map((row) => ({
+    ...row,
+    status: row.status as Status,
+    projectName: row.projectName ?? "(no project)",
+    projectColor: row.projectColor ?? DEFAULT_PROJECT_COLOR,
+    createdVia: row.createdVia as Via,
+  }));
+}
+
+export type ReviewDecision = "approve" | "reject";
+
+// Only a person reviews, never an agent. One conditional UPDATE so two reviewers cannot both decide.
+export async function reviewIssue(
+  workspaceId: string,
+  idOrIdentifier: string,
+  reviewerId: string,
+  decision: ReviewDecision
+): Promise<{ id: string; reviewStatus: ReviewStatus; reviewedBy: string; reviewedAt: string }> {
+  if (decision !== "approve" && decision !== "reject") throw new TacosError("Unknown review decision", 400);
+  const row = await findIssueRow(workspaceId, idOrIdentifier);
+  if (!row) throw new TacosError(`Issue "${idOrIdentifier}" not found`, 404);
+  const now = nowIso();
+  const reviewStatus: ReviewStatus = decision === "approve" ? "approved" : "rejected";
+  const updated = await getDb()
+    .update(issues)
+    .set({ reviewStatus, reviewedBy: reviewerId, reviewedAt: now, updatedAt: now })
+    .where(and(eq(issues.workspaceId, workspaceId), eq(issues.id, row.id), eq(issues.reviewStatus, "pending")))
+    .returning({ id: issues.id });
+  if (updated.length === 0) throw new TacosError("This task is not waiting for review", 409);
+  await recordEvent(row.id, decision === "approve" ? "review_approved" : "review_rejected", {}, {
+    kind: "user",
+    userId: reviewerId,
+    displayName: "",
+  });
+  return { id: row.id, reviewStatus, reviewedBy: reviewerId, reviewedAt: now };
 }
 
 export async function deleteIssue(workspaceId: string, idOrIdentifier: string): Promise<Issue> {

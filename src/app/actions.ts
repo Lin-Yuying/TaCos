@@ -22,6 +22,7 @@ import {
   releaseIssue,
   removeProjectMember,
   restoreIssue,
+  reviewIssue,
   restoreOverviewDocEdit,
   restoreProject,
   revokeApiKey,
@@ -35,6 +36,7 @@ import {
   updateProject,
   type CreateIssueInput,
   type IssueClaim,
+  type ReviewDecision,
   type IssueDetail,
   type IssueWithLabels,
   type Label,
@@ -128,6 +130,15 @@ export async function releaseIssueAction(workspaceId: string, idOrIdentifier: st
     const result = await releaseIssue(workspaceId, idOrIdentifier, user.id);
     refresh(workspaceId);
     return result;
+  });
+}
+
+export async function reviewIssueAction(workspaceId: string, idOrIdentifier: string, decision: ReviewDecision) {
+  return run<{ id: string }>(async () => {
+    const { user } = await requireWorkspace(workspaceId);
+    const result = await reviewIssue(workspaceId, idOrIdentifier, user.id, decision);
+    refresh(workspaceId);
+    return { id: result.id };
   });
 }
 

@@ -60,6 +60,14 @@ export function eventText(event: ActivityEvent, t: Translate, locale: Locale): s
   switch (event.type) {
     case "created":
       return t("created the task");
+    case "review_approved":
+      return t("approved the task");
+    case "review_rejected":
+      return t("rejected the task");
+    case "claimed":
+      return t("claimed the task");
+    case "released":
+      return t("released the task");
     case "status_changed": {
       const from = event.data.from as Status;
       const to = event.data.to as Status;

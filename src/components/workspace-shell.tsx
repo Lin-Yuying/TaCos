@@ -33,6 +33,7 @@ import {
   Star,
   Tag,
   Trash2,
+  ShieldCheck,
   User,
   UserRoundX,
   Users,
@@ -1008,6 +1009,13 @@ function SidebarRail({
           />
         )}
         <RailLink
+          href={`/${workspaceId}/review`}
+          active={pathname.endsWith("/review")}
+          label={t("Review")}
+          icon={<ShieldCheck size={16} />}
+          labeled={labeled}
+        />
+        <RailLink
           href={`/${workspaceId}/trash`}
           active={pathname.endsWith("/trash")}
           label={t("Trash")}
@@ -1283,6 +1291,7 @@ function tabMeta(
   if (pathname.endsWith("/agent")) return { label: t("Agent"), icon: <Bot size={13} /> };
   if (pathname.endsWith("/labels")) return { label: t("Labels"), icon: <Tag size={13} /> };
   if (pathname.endsWith("/trash")) return { label: t("Trash"), icon: <Trash2 size={13} /> };
+  if (pathname.endsWith("/review")) return { label: t("Review"), icon: <ShieldCheck size={13} /> };
   if (pathname.endsWith("/help")) return { label: t("Help"), icon: <CircleHelp size={13} /> };
   if (pathname.endsWith("/notifications"))
     return { label: t("Inbox"), icon: <Inbox size={13} /> };
@@ -1702,6 +1711,13 @@ export function WorkspaceShell({
                     {t("Labels")}
                   </NavItem>
                 )}
+                <NavItem
+                  href={`/${workspace.id}/review`}
+                  active={pathname.endsWith("/review")}
+                  icon={<ShieldCheck size={14} />}
+                >
+                  {t("Review")}
+                </NavItem>
                 <NavItem
                   href={`/${workspace.id}/trash`}
                   active={pathname.endsWith("/trash")}
