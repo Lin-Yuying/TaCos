@@ -23,6 +23,7 @@ import {
   saveAiSettingsAction,
   setHarnessEnabledAction,
   runHarnessInstallAction,
+  checkHarnessUpdatesAction,
   testAiConnectionAction,
 } from "@/app/ai-actions";
 import {
@@ -205,8 +206,28 @@ export function SettingsView({
       setHarnessError(result.error);
       return;
     }
+    setHarnessRows(result.data.rows);
     setHarnessNotice(result.data.message);
-    router.refresh();
+  }
+
+  async function checkHarnessUpdates() {
+    if (!isAdmin) return;
+    setHarnessBusy("check-updates");
+    setHarnessError(null);
+    setHarnessNotice(null);
+    const result = await checkHarnessUpdatesAction(workspace.id);
+    setHarnessBusy(null);
+    if (!result.ok) {
+      setHarnessError(result.error);
+      return;
+    }
+    setHarnessRows(result.data.rows);
+    const available = result.data.rows.filter((row) => row.updateAvailable).length;
+    setHarnessNotice(
+      available > 0
+        ? `${available} harness update${available === 1 ? "" : "s"} available.`
+        : "All harnesses are up to date on npm."
+    );
   }
 
   async function rotateCode() {
@@ -779,11 +800,21 @@ export function SettingsView({
         </section>
 
         <section className="space-y-3" data-testid="harness-settings">
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <h2 className="text-[13px] font-semibold">Harness</h2>
             <span className="rounded-full bg-elevated px-2 py-0.5 text-[11px] text-faint">
               {harnessRows.filter((row) => row.enabled && row.ready).length} ready
             </span>
+            {isAdmin && (
+              <button
+                type="button"
+                disabled={Boolean(harnessBusy)}
+                onClick={() => void checkHarnessUpdates()}
+                className="ml-auto rounded-md border border-border px-2 py-1 text-[11.5px] text-muted hover:bg-elevated disabled:opacity-40"
+              >
+                {harnessBusy === "check-updates" ? "Checking…" : "Check for updates"}
+              </button>
+            )}
           </div>
           <p className="text-[13px] leading-relaxed text-muted">
             Local CLI harnesses for the Agent tab. Turn each one on or off for this workspace.
@@ -813,6 +844,14 @@ export function SettingsView({
                   </div>
                   <div className="text-[12px] text-muted">
                     Version: {row.version ?? "—"}
+                    {row.latestVersion ? (
+                      <span className="ml-2 text-faint">Latest: {row.latestVersion}</span>
+                    ) : null}
+                    {row.updateAvailable ? (
+                      <span className="ml-2 rounded-full bg-accent/10 px-2 py-0.5 text-[11px] font-medium text-accent">
+                        Update available
+                      </span>
+                    ) : null}
                     {row.binary ? (
                       <span className="ml-2 font-mono text-[11px] text-faint">{row.binary}</span>
                     ) : null}

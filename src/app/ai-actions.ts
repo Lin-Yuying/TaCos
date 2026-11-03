@@ -107,25 +107,67 @@ export async function runHarnessInstallAction(
   workspaceId: string,
   id: string,
   mode: "install" | "upgrade"
-): Promise<ActionResult<{ ok: boolean; message: string; version: string | null }>> {
+): Promise<
+  ActionResult<{
+    ok: boolean;
+    message: string;
+    version: string | null;
+    rows: import("@/lib/harness/types").HarnessStatus[];
+  }>
+> {
   return run(async () => {
     await requireAdmin(workspaceId);
     const {
       FIRST_CLASS_HARNESS_IDS,
       runHarnessInstall,
       runHarnessUpgrade,
+      refreshHarnessSettingsView,
     } = await import("@/lib/harness");
     if (!(FIRST_CLASS_HARNESS_IDS as readonly string[]).includes(id)) {
       throw new Error("Unknown harness");
     }
     const harnessId = id as import("@/lib/harness").HarnessId;
     const result = mode === "upgrade" ? await runHarnessUpgrade(harnessId) : await runHarnessInstall(harnessId);
+    const view = await refreshHarnessSettingsView(workspaceId);
     revalidatePath(`/${workspaceId}/settings`, "page");
     revalidatePath(`/${workspaceId}/agent`, "page");
     return {
       ok: result.ok,
       message: result.message,
       version: result.version ?? null,
+      rows: view.rows,
     };
+  });
+}
+
+export async function checkHarnessUpdatesAction(
+  workspaceId: string
+): Promise<
+  ActionResult<{
+    rows: import("@/lib/harness/types").HarnessStatus[];
+  }>
+> {
+  return run(async () => {
+    await requireAdmin(workspaceId);
+    const {
+      getHarnessSettingsView,
+      checkAllHarnessUpdates,
+    } = await import("@/lib/harness");
+    const view = await getHarnessSettingsView(workspaceId);
+    const currentById = Object.fromEntries(view.rows.map((row) => [row.id, row.version])) as Record<
+      string,
+      string | null
+    >;
+    const updates = await checkAllHarnessUpdates(currentById);
+    const byId = new Map(updates.map((item) => [item.id, item]));
+    const rows = view.rows.map((row) => {
+      const info = byId.get(row.id);
+      return {
+        ...row,
+        latestVersion: info?.latest ?? null,
+        updateAvailable: info?.updateAvailable ?? false,
+      };
+    });
+    return { rows };
   });
 }

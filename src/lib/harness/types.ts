@@ -89,6 +89,8 @@ export type HarnessAdapter = {
 
 export type HarnessStatus = DetectResult & {
   enabled: boolean;
+  latestVersion?: string | null;
+  updateAvailable?: boolean;
 };
 
 export type HarnessGate = {

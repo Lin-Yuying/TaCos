@@ -40,9 +40,11 @@ export { turnEventsToSse } from "./sse";
 export {
   getHarnessSettingsView,
   loadHarnessEnabledMap,
+  refreshHarnessSettingsView,
   setHarnessEnabled,
 } from "./settings";
 
 export { runHarnessInstall, runHarnessUpgrade } from "./registry";
 export { installHarnessRecipe, upgradeHarnessRecipe } from "./install-recipes";
 
+export { checkAllHarnessUpdates, checkHarnessUpdate, isNewerVersion } from "./update-check";
