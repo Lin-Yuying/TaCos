@@ -1,4 +1,5 @@
 import crypto from "node:crypto";
+import { parseMentions } from "./mentions";
 import {
   and,
   desc,
@@ -1985,7 +1986,7 @@ async function notify(input: {
   workspaceId: string;
   userId: string;
   issueId: string;
-  type: "assigned" | "commented" | ClaimNotice;
+  type: "assigned" | "commented" | "mentioned" | ClaimNotice;
   body: string;
 }) {
   await getDb().insert(notifications).values({
@@ -2142,6 +2143,7 @@ export async function createIssue(
     await db.insert(issueAssignees).values({ issueId: id, userId: assigneeId, createdAt: now });
   }
   await recordEvent(id, "created", { title }, actor);
+  if (description) await notifyMentions(workspaceId, id, description, actor);
 
   for (const assigneeId of assigneeIds) {
     if (assigneeId !== actorUserId) {
@@ -2312,6 +2314,12 @@ export async function updateIssue(
     await db.update(issues).set(sets).where(eq(issues.id, row.id));
     for (const change of changes) {
       await recordEvent(row.id, change.type, change.data, actor);
+    }
+    if (typeof sets.description === "string") {
+      // Only members that the old text did not mention get a notice.
+      const before = new Set(parseMentions(row.description ?? ""));
+      const added = parseMentions(sets.description).filter((name) => !before.has(name));
+      if (added.length) await notifyMentions(workspaceId, row.id, added.map((n) => `@${n}`).join(" "), actor);
     }
     const assigneeChange = changes.find((c) => c.type === "assignee_changed");
     if (assigneeChange) {
@@ -2488,6 +2496,29 @@ async function userActor(userId: string): Promise<MutationActor & { kind: "user"
 }
 
 // The creator and the assignees follow a task. The person who acts gets no notice.
+// H-COLLAB-10: notify each workspace member that the text mentions, except the actor and
+// the ids in `skip`. Returns the ids that got a notice.
+async function notifyMentions(
+  workspaceId: string,
+  issueId: string,
+  text: string,
+  actor: MutationActor,
+  skip: Set<string> = new Set()
+): Promise<Set<string>> {
+  const names = parseMentions(text);
+  const sent = new Set<string>();
+  if (names.length === 0) return sent;
+  const actorUserId = actor.kind === "user" ? actor.userId : null;
+  const who = actor.kind === "user" ? actor.displayName : `Agent (${actor.label})`;
+  for (const member of await listMembers(workspaceId)) {
+    if (!names.includes(member.username.toLowerCase())) continue;
+    if (member.id === actorUserId || skip.has(member.id)) continue;
+    await notify({ workspaceId, userId: member.id, issueId, type: "mentioned", body: who });
+    sent.add(member.id);
+  }
+  return sent;
+}
+
 async function notifyClaimWatchers(workspaceId: string, issueId: string, type: ClaimNotice, actorId: string) {
   const db = getDb();
   const [issue] = await db.select({ createdBy: issues.createdBy }).from(issues).where(eq(issues.id, issueId));
@@ -2745,7 +2776,10 @@ export async function addComment(
     targets.add(row.createdBy);
   }
   const who = actor.kind === "user" ? actor.displayName : `Agent (${actor.label})`;
+  // A mentioned member gets one "mentioned" notice instead of the "commented" one.
+  const mentioned = await notifyMentions(workspaceId, row.id, text, actor);
   for (const userId of targets) {
+    if (mentioned.has(userId)) continue;
     await notify({
       workspaceId,
       userId,

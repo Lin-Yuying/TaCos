@@ -848,6 +848,8 @@ const zh: Record<string, string> = {
   "Move forward with Agent": "用 Agent 推进",
   "Opening chat…": "正在打开对话…",
   "You are writing in {name}'s shared chat. Every change waits for your Allow.": "你正在 {name} 的共享对话中发言。每次改动都要等你允许。",
+  "Leave a comment… Type @ to mention someone": "写评论… 输入 @ 提及成员",
+  "{name} mentioned you": "{name} 提到了你",
 };
 
 export default zh;

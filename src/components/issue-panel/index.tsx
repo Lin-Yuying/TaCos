@@ -253,6 +253,7 @@ function IssuePanel({
         <div className="shrink-0 space-y-2 border-t border-border pt-4">
           <ChangelogSection events={changelog} />
           <CommentsSection
+            members={members}
             comments={comments}
             comment={comment}
             busy={busy}

@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { splitMentions } from "@/lib/mentions";
 import {
   useEffect,
   useMemo,
@@ -236,6 +237,25 @@ function IssueChip({
   );
 }
 
+// H-COLLAB-10: "@username" shows as a chip.
+function renderMentions(text: string, key: string): ReactNode {
+  const parts = splitMentions(text);
+  if (parts.length === 1 && !parts[0].mention) return text;
+  return parts.map((part, i) =>
+    part.mention ? (
+      <span
+        key={`${key}-m${i}`}
+        data-testid="mention-chip"
+        className="rounded bg-accent/10 px-1 py-px font-medium text-accent"
+      >
+        {part.text}
+      </span>
+    ) : (
+      part.text
+    )
+  );
+}
+
 function renderInline(
   nodes: Inline[],
   keyPrefix: string,
@@ -300,7 +320,7 @@ function renderInline(
       case "issue":
         return <IssueChip key={key} issueId={node.issueId} fallback={node.text} ctx={issues} />;
       default:
-        return node.text;
+        return renderMentions(node.text, key);
     }
   });
 }
