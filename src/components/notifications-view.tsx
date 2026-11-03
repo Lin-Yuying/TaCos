@@ -176,6 +176,7 @@ export function NotificationsView({
 function noticeText(type: string, body: string, t: ReturnType<typeof useT>): string {
   if (type === "claimed") return t("{name} claimed a task you follow", { name: body });
   if (type === "released") return t("{name} released a task you follow", { name: body });
+  if (type === "due_soon") return t("Due {date}: reminder", { date: body });
   if (type === "mentioned") return t("{name} mentioned you", { name: body });
   if (type === "claim_transferred") return t("{name} handed a task to you", { name: body });
   return body;

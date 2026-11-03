@@ -40,6 +40,7 @@ import {
   LABEL_COLORS,
   PROJECT_COLORS,
   DEFAULT_PROJECT_COLOR,
+  REMINDER_META,
   REMINDER_PRESETS,
   STATUS_ORDER,
   type Priority,
@@ -1986,7 +1987,7 @@ async function notify(input: {
   workspaceId: string;
   userId: string;
   issueId: string;
-  type: "assigned" | "commented" | "mentioned" | ClaimNotice;
+  type: "assigned" | "commented" | "mentioned" | "due_soon" | ClaimNotice;
   body: string;
 }) {
   await getDb().insert(notifications).values({
@@ -3019,4 +3020,73 @@ export async function revokeApiKey(workspaceId: string, id: string) {
     .update(apiKeys)
     .set({ revokedAt: nowIso() })
     .where(and(eq(apiKeys.id, id), eq(apiKeys.workspaceId, workspaceId)));
+}
+
+// H-COLLAB-11: the due moment is the end of the due day in server local time.
+function reminderFireAt(dueDate: string, preset: ReminderPreset): Date {
+  const [y, m, d] = dueDate.split("-").map(Number);
+  const end = new Date(y, m - 1, d, 23, 59, 59);
+  return new Date(end.getTime() - REMINDER_META[preset].hours * 3600_000);
+}
+
+// Sends one "due_soon" notice per task when now reaches dueDate minus the preset.
+// The creator, the claimer and the assignees get it. Returns the number of tasks.
+export async function sendDueReminders(now: Date = new Date()): Promise<number> {
+  const db = getDb();
+  const rows = await db
+    .select({
+      id: issues.id,
+      workspaceId: issues.workspaceId,
+      dueDate: issues.dueDate,
+      reminder: issues.reminder,
+      sentFor: issues.reminderSentFor,
+      createdBy: issues.createdBy,
+      claimedBy: issues.claimedBy,
+    })
+    .from(issues)
+    .where(
+      and(
+        isNotNull(issues.dueDate),
+        isNotNull(issues.reminder),
+        isNull(issues.deletedAt),
+        notInArray(issues.status, ["done", "canceled"])
+      )
+    );
+  let sent = 0;
+  for (const row of rows) {
+    const preset = row.reminder as ReminderPreset;
+    if (!row.dueDate || !REMINDER_META[preset]) continue;
+    const key = `${row.dueDate}|${preset}`;
+    if (row.sentFor === key || reminderFireAt(row.dueDate, preset) > now) continue;
+    // Claim the key first so two overlapping runs cannot both send.
+    const claimed = await db
+      .update(issues)
+      .set({ reminderSentFor: key })
+      .where(and(eq(issues.id, row.id), or(isNull(issues.reminderSentFor), ne(issues.reminderSentFor, key))))
+      .returning({ id: issues.id });
+    if (claimed.length === 0) continue;
+    const people = new Set<string>();
+    if (row.createdBy) people.add(row.createdBy);
+    if (row.claimedBy) people.add(row.claimedBy);
+    const assigned = await db
+      .select({ userId: issueAssignees.userId })
+      .from(issueAssignees)
+      .where(eq(issueAssignees.issueId, row.id));
+    for (const a of assigned) people.add(a.userId);
+    for (const userId of people) {
+      await notify({ workspaceId: row.workspaceId, userId, issueId: row.id, type: "due_soon", body: row.dueDate });
+    }
+    sent++;
+  }
+  return sent;
+}
+
+let reminderTimer: ReturnType<typeof setInterval> | null = null;
+// Starts the reminder scheduler once per server process (every minute).
+export function startDueReminderScheduler(intervalMs = 60_000) {
+  if (reminderTimer) return;
+  const tick = () => void sendDueReminders().catch((err) => console.error("due reminders:", err));
+  tick();
+  reminderTimer = setInterval(tick, intervalMs);
+  reminderTimer.unref?.();
 }

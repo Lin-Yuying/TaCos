@@ -850,6 +850,7 @@ const zh: Record<string, string> = {
   "You are writing in {name}'s shared chat. Every change waits for your Allow.": "你正在 {name} 的共享对话中发言。每次改动都要等你允许。",
   "Leave a comment… Type @ to mention someone": "写评论… 输入 @ 提及成员",
   "{name} mentioned you": "{name} 提到了你",
+  "Due {date}: reminder": "截止提醒：{date} 到期",
 };
 
 export default zh;

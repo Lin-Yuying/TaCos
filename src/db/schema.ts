@@ -258,6 +258,9 @@ export const issues = sqliteTable(
     dueDate: text("due_date"),
     // how long before dueDate to remind: 12h | 1d | 3d | 5d | 7d
     reminder: text("reminder"),
+    // H-COLLAB-11: "<dueDate>|<preset>" of the reminder already sent. A new due date or
+    // preset gives a new key, so the reminder fires again; the same key never fires twice.
+    reminderSentFor: text("reminder_sent_for"),
     // web | api | mcp — who created it (app vs agent)
     createdVia: text("created_via").notNull().default("web"),
     // set when the issue was sent to Trash; restore clears it

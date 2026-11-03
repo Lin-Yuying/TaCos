@@ -705,6 +705,7 @@ function bootstrap(sqlite: Database.Database) {
   if (addColumnIfMissing(sqlite, "pages", "project_id", "TEXT")) {
     sqlite.exec("CREATE INDEX IF NOT EXISTS pages_project_idx ON pages (project_id)");
   }
+  addColumnIfMissing(sqlite, "issues", "reminder_sent_for", "TEXT");
   const addedIssueCreator = addColumnIfMissing(sqlite, "issues", "created_by", "TEXT");
   if (!hadIssueAssignees && hasColumn(sqlite, "issues", "assignee_id")) {
     // Old boards held exactly one assignee per issue; carry it into the join table.
