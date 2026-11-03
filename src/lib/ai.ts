@@ -663,6 +663,8 @@ export async function agentContext(input: {
   userName: string;
   // A conversation is bound to one project; the context leads with it and lists its tasks.
   project?: { id: string; name: string; key: string };
+  // H-COLLAB-08: the task that this chat works on.
+  focusIssueId?: string | null;
 }): Promise<string> {
   const [allProjects, allIssues] = await Promise.all([
     listProjects(input.workspaceId, input.userId),
@@ -704,6 +706,16 @@ export async function agentContext(input: {
   }
   if (open.length > MAX_AGENT_TASKS) {
     lines.push(`- …and ${open.length - MAX_AGENT_TASKS} more open tasks`);
+  }
+  const focus = input.focusIssueId ? allIssues.find((issue) => issue.id === input.focusIssueId) : undefined;
+  if (focus) {
+    lines.push(
+      "",
+      `Focus task: ${focus.identifier} ${focus.title} [${STATUS_META[focus.status].label}]`,
+      "The user opened this chat to move this task forward. Work on it first.",
+      "Description:",
+      focus.description?.trim() || "(empty)"
+    );
   }
   return lines.join("\n");
 }

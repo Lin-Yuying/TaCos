@@ -1,8 +1,8 @@
 import crypto from "node:crypto";
 import { and, asc, desc, eq, inArray, isNull, or } from "drizzle-orm";
 import { getDb } from "@/db/client";
-import { agentMessages, agentSteps, agentThreadFlags, agentThreads, projects, users } from "@/db/schema";
-import { listIssues, TacosError, type Status } from "./issues";
+import { agentMessages, agentSteps, agentThreadFlags, agentThreads, issues, projects, users } from "@/db/schema";
+import { claimIssue, listIssues, TacosError, type Status } from "./issues";
 
 // Agent conversations are TaCos records, not browser state: a thread is bound to a
 // project, carries its history and trajectory, and can be reopened from the Agent tab.
@@ -463,6 +463,7 @@ export type TurnThread = {
   effort: string;
   approval: AgentApproval;
   createdBy: string;
+  focusIssueId: string | null;
   messages: { role: "user" | "assistant"; content: string }[];
 };
 
@@ -490,6 +491,7 @@ export async function loadThreadForTurn(
     effort: thread.effort,
     approval: thread.approval,
     createdBy: thread.createdBy,
+    focusIssueId: await focusIssueOf(thread.id),
     messages: history,
   };
 }
@@ -627,5 +629,74 @@ export async function listThreadTasks(
   viewerId: string
 ): Promise<ThreadTask[]> {
   const rows = await listIssues(workspaceId, { sourceThreadId: threadId, viewerId, status: "all", limit: 50 });
-  return rows.map((r) => ({ id: r.id, identifier: r.identifier, title: r.title, status: r.status }));
+  const out = rows.map((r) => ({ id: r.id, identifier: r.identifier, title: r.title, status: r.status }));
+  // H-COLLAB-08: a chat opened for a task also shows that task.
+  const focus = await focusIssueOf(threadId);
+  if (focus && !out.some((r) => r.id === focus)) {
+    const [row] = await getDb()
+      .select({ id: issues.id, identifier: issues.identifier, title: issues.title, status: issues.status })
+      .from(issues)
+      .where(and(eq(issues.workspaceId, workspaceId), eq(issues.id, focus)))
+      .limit(1);
+    if (row) out.unshift({ ...row, status: row.status as Status });
+  }
+  return out;
+}
+
+async function focusIssueOf(threadId: string): Promise<string | null> {
+  const [row] = await getDb()
+    .select({ focus: agentThreads.focusIssueId })
+    .from(agentThreads)
+    .where(eq(agentThreads.id, threadId))
+    .limit(1);
+  return row?.focus ?? null;
+}
+
+// H-COLLAB-08: "用 Agent 推进". Claims the task when nobody has it, then opens the
+// user's chat for this task. A second click reopens the same chat.
+export async function startTaskChat(workspaceId: string, issueId: string, userId: string): Promise<AgentThread> {
+  const db = getDb();
+  const [task] = await db
+    .select()
+    .from(issues)
+    .where(and(eq(issues.workspaceId, workspaceId), or(eq(issues.id, issueId), eq(issues.identifier, issueId))))
+    .limit(1);
+  if (!task) throw new TacosError("Task not found", 404);
+  if (task.reviewStatus !== "approved") throw new TacosError("This task is waiting for review", 409);
+  if (task.claimedBy && task.claimedBy !== userId) {
+    throw new TacosError("Someone else already claimed this task", 409);
+  }
+  if (!task.claimedBy) await claimIssue(workspaceId, task.id, userId);
+
+  const [existing] = await db
+    .select({ id: agentThreads.id })
+    .from(agentThreads)
+    .where(
+      and(
+        eq(agentThreads.workspaceId, workspaceId),
+        eq(agentThreads.focusIssueId, task.id),
+        eq(agentThreads.createdBy, userId)
+      )
+    )
+    .orderBy(desc(agentThreads.updatedAt))
+    .limit(1);
+  if (existing) {
+    const thread = await getAgentThread(workspaceId, userId, existing.id);
+    if (thread) return thread;
+  }
+
+  const thread = await startAgentThread({
+    workspaceId,
+    projectId: task.projectId,
+    visibility: "private",
+    engine: "codex",
+    userId,
+  });
+  await db
+    .update(agentThreads)
+    .set({ focusIssueId: task.id, title: `${task.identifier} ${task.title}`.slice(0, 120) })
+    .where(eq(agentThreads.id, thread.id));
+  const opened = await getAgentThread(workspaceId, userId, thread.id);
+  if (!opened) throw new TacosError("Could not open the conversation", 500);
+  return opened;
 }

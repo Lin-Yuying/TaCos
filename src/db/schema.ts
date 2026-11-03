@@ -407,6 +407,8 @@ export const agentThreads = sqliteTable(
     approval: text("approval").notNull().default("ask"),
     // private: only the author; shared: every workspace member can read and follow along
     visibility: text("visibility").notNull().default("private"),
+    // H-COLLAB-08: the task that "用 Agent 推进" opened this chat for, or null.
+    focusIssueId: text("focus_issue_id"),
     createdBy: text("created_by").notNull(),
     createdAt: text("created_at").notNull(),
     updatedAt: text("updated_at").notNull(),

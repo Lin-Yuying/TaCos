@@ -21,6 +21,7 @@ import {
   type AgentVisibility,
   getSourceThread,
   listThreadTasks,
+  startTaskChat,
   type SourceThread,
   type ThreadTask,
 } from "@/lib/agent-threads";
@@ -229,5 +230,15 @@ export async function listThreadTasksAction(
   return run(async () => {
     const { user } = await requireWorkspace(workspaceId);
     return listThreadTasks(workspaceId, threadId, user.id);
+  });
+}
+
+// H-COLLAB-08: "用 Agent 推进" from the task panel.
+export async function startTaskChatAction(workspaceId: string, issueId: string): Promise<ActionResult<AgentThread>> {
+  return run(async () => {
+    const { user } = await requireWorkspace(workspaceId);
+    const thread = await startTaskChat(workspaceId, issueId, user.id);
+    refresh(workspaceId);
+    return thread;
   });
 }

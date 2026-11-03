@@ -250,6 +250,7 @@ export async function POST(request: Request) {
           userId: access.user.id,
           workspaceName: access.workspace.name,
           userName: access.user.displayName,
+          focusIssueId: thread.focusIssueId,
           // A conversation started with "Don't work in a project" gets the whole
           // workspace instead of one project's slice.
           ...(thread.projectId

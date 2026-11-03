@@ -9,6 +9,7 @@ import { PropertiesRow } from "./properties";
 import { DueRow } from "./due-row";
 import { ClaimRow } from "./claim-row";
 import { SourceChatRow } from "./source-chat-row";
+import { AdvanceButton } from "./advance-button";
 import { DescriptionSection } from "./description";
 import { ChangelogSection } from "./changelog";
 import { CommentsSection } from "./comments";
@@ -227,6 +228,14 @@ function IssuePanel({
           members={members}
           currentUserId={currentUserId}
           onDetail={(next) => setDetail({ ...next.issue, comments: next.comments, events: next.events })}
+          onError={setError}
+        />
+
+        <AdvanceButton
+          workspaceId={workspaceId}
+          detail={detail}
+          currentUserId={currentUserId}
+          onClaimed={() => setDetail({ ...detail, claimedBy: currentUserId })}
           onError={setError}
         />
 

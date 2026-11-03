@@ -845,6 +845,8 @@ const zh: Record<string, string> = {
   "Made in a private chat": "来自一个私有对话",
   "Tasks from this chat": "此对话发布的任务",
   "+{count} more": "还有 {count} 个",
+  "Move forward with Agent": "用 Agent 推进",
+  "Opening chat…": "正在打开对话…",
 };
 
 export default zh;
