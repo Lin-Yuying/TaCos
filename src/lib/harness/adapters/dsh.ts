@@ -3,6 +3,7 @@ import path from "node:path";
 import { findHarnessBinary, readHarnessVersion, readJsonFile } from "../detect-bin";
 import { notImplementedTurn } from "../stub-turn";
 import type { DetectResult, HarnessAdapter, ModelOption, TurnInput } from "../types";
+import { installHarnessRecipe, upgradeHarnessRecipe } from "../install-recipes";
 
 const LABEL = "DeepSeek Harness";
 const INSTALL_HINT = "Install dsh (npm i -g @deepseek-ai/dsh). Requires Node ^22.19 or >=24.";
@@ -64,5 +65,11 @@ export const dshAdapter: HarnessAdapter = {
   },
   openTurn(input: TurnInput) {
     return notImplementedTurn("dsh", input);
+  },
+  install() {
+    return installHarnessRecipe("dsh");
+  },
+  upgrade() {
+    return upgradeHarnessRecipe("dsh");
   },
 };

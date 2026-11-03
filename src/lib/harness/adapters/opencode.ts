@@ -3,6 +3,7 @@ import path from "node:path";
 import { findHarnessBinary, readHarnessVersion, readJsonFile } from "../detect-bin";
 import { notImplementedTurn } from "../stub-turn";
 import type { DetectResult, HarnessAdapter, ModelOption, TurnInput } from "../types";
+import { installHarnessRecipe, upgradeHarnessRecipe } from "../install-recipes";
 
 const LABEL = "OpenCode";
 const INSTALL_HINT = "Install OpenCode (curl -fsSL https://opencode.ai/install | bash).";
@@ -61,5 +62,11 @@ export const opencodeAdapter: HarnessAdapter = {
   },
   openTurn(input: TurnInput) {
     return notImplementedTurn("opencode", input);
+  },
+  install() {
+    return installHarnessRecipe("opencode");
+  },
+  upgrade() {
+    return upgradeHarnessRecipe("opencode");
   },
 };

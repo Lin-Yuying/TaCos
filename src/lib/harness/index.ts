@@ -42,3 +42,7 @@ export {
   loadHarnessEnabledMap,
   setHarnessEnabled,
 } from "./settings";
+
+export { runHarnessInstall, runHarnessUpgrade } from "./registry";
+export { installHarnessRecipe, upgradeHarnessRecipe } from "./install-recipes";
+

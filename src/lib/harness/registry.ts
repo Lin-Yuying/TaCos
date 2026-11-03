@@ -3,7 +3,7 @@ import { codexAdapter } from "./adapters/codex";
 import { dshAdapter } from "./adapters/dsh";
 import { opencodeAdapter } from "./adapters/opencode";
 import { piAdapter } from "./adapters/pi";
-import type { DetectResult, HarnessAdapter, HarnessId } from "./types";
+import type { DetectResult, HarnessAdapter, HarnessId, InstallResult } from "./types";
 
 const ADAPTERS: HarnessAdapter[] = [
   codexAdapter,
@@ -42,3 +42,20 @@ export const FIRST_CLASS_HARNESS_IDS: HarnessId[] = [
   "dsh",
   "codebuddy",
 ];
+
+
+export async function runHarnessInstall(id: HarnessId): Promise<InstallResult> {
+  const adapter = getHarnessAdapter(id);
+  if (!adapter?.install) {
+    return { ok: false, message: `No install recipe for ${id}.` };
+  }
+  return adapter.install();
+}
+
+export async function runHarnessUpgrade(id: HarnessId): Promise<InstallResult> {
+  const adapter = getHarnessAdapter(id);
+  if (!adapter?.upgrade) {
+    return { ok: false, message: `No upgrade recipe for ${id}.` };
+  }
+  return adapter.upgrade();
+}

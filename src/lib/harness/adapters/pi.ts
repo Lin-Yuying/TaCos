@@ -3,6 +3,7 @@ import path from "node:path";
 import { findHarnessBinary, readHarnessVersion, readJsonFile } from "../detect-bin";
 import { notImplementedTurn } from "../stub-turn";
 import type { DetectResult, HarnessAdapter, ModelOption, TurnInput } from "../types";
+import { installHarnessRecipe, upgradeHarnessRecipe } from "../install-recipes";
 
 const LABEL = "Pi";
 const INSTALL_HINT = "Install Pi (npm i -g @earendil-works/pi-coding-agent), then run pi and /login.";
@@ -67,5 +68,11 @@ export const piAdapter: HarnessAdapter = {
   },
   openTurn(input: TurnInput) {
     return notImplementedTurn("pi", input);
+  },
+  install() {
+    return installHarnessRecipe("pi");
+  },
+  upgrade() {
+    return upgradeHarnessRecipe("pi");
   },
 };

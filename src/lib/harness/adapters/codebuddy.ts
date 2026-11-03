@@ -3,6 +3,7 @@ import path from "node:path";
 import { findHarnessBinary, readHarnessVersion, readJsonFile } from "../detect-bin";
 import { notImplementedTurn } from "../stub-turn";
 import type { DetectResult, HarnessAdapter, ModelOption, TurnInput } from "../types";
+import { installHarnessRecipe, upgradeHarnessRecipe } from "../install-recipes";
 
 const LABEL = "WorkBuddy";
 const INSTALL_HINT = "Install WorkBuddy CLI (npm i -g @tencent-ai/codebuddy-code).";
@@ -60,5 +61,11 @@ export const codebuddyAdapter: HarnessAdapter = {
   },
   openTurn(input: TurnInput) {
     return notImplementedTurn("codebuddy", input);
+  },
+  install() {
+    return installHarnessRecipe("codebuddy");
+  },
+  upgrade() {
+    return upgradeHarnessRecipe("codebuddy");
   },
 };

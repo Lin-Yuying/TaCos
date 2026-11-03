@@ -101,3 +101,31 @@ export async function setHarnessEnabledAction(
     return { id, enabled };
   });
 }
+
+
+export async function runHarnessInstallAction(
+  workspaceId: string,
+  id: string,
+  mode: "install" | "upgrade"
+): Promise<ActionResult<{ ok: boolean; message: string; version: string | null }>> {
+  return run(async () => {
+    await requireAdmin(workspaceId);
+    const {
+      FIRST_CLASS_HARNESS_IDS,
+      runHarnessInstall,
+      runHarnessUpgrade,
+    } = await import("@/lib/harness");
+    if (!(FIRST_CLASS_HARNESS_IDS as readonly string[]).includes(id)) {
+      throw new Error("Unknown harness");
+    }
+    const harnessId = id as import("@/lib/harness").HarnessId;
+    const result = mode === "upgrade" ? await runHarnessUpgrade(harnessId) : await runHarnessInstall(harnessId);
+    revalidatePath(`/${workspaceId}/settings`, "page");
+    revalidatePath(`/${workspaceId}/agent`, "page");
+    return {
+      ok: result.ok,
+      message: result.message,
+      version: result.version ?? null,
+    };
+  });
+}

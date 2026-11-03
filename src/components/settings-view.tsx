@@ -22,6 +22,7 @@ import {
 import {
   saveAiSettingsAction,
   setHarnessEnabledAction,
+  runHarnessInstallAction,
   testAiConnectionAction,
 } from "@/app/ai-actions";
 import {
@@ -172,6 +173,7 @@ export function SettingsView({
   const [harnessRows, setHarnessRows] = useState(harness.rows);
   const [harnessBusy, setHarnessBusy] = useState<string | null>(null);
   const [harnessError, setHarnessError] = useState<string | null>(null);
+  const [harnessNotice, setHarnessNotice] = useState<string | null>(null);
 
   const origin = typeof window !== "undefined" ? window.location.origin : "http://localhost:3000";
 
@@ -188,6 +190,22 @@ export function SettingsView({
       setHarnessError(result.error);
       return;
     }
+    router.refresh();
+  }
+
+
+  async function runHarnessRecipe(id: string, mode: "install" | "upgrade") {
+    if (!isAdmin) return;
+    setHarnessBusy(`${id}:${mode}`);
+    setHarnessError(null);
+    setHarnessNotice(null);
+    const result = await runHarnessInstallAction(workspace.id, id, mode);
+    setHarnessBusy(null);
+    if (!result.ok) {
+      setHarnessError(result.error);
+      return;
+    }
+    setHarnessNotice(result.data.message);
     router.refresh();
   }
 
@@ -806,20 +824,43 @@ export function SettingsView({
                     </div>
                   )}
                 </div>
-                <label className="flex items-center gap-2 text-[12.5px] text-muted">
-                  <input
-                    type="checkbox"
-                    checked={row.enabled}
-                    disabled={!isAdmin || harnessBusy === row.id}
-                    onChange={(e) => void toggleHarness(row.id, e.target.checked)}
-                    className="h-3.5 w-3.5 accent-[#0d0d0d]"
-                  />
-                  {row.enabled ? "On" : "Off"}
-                </label>
+                <div className="flex flex-wrap items-center gap-2">
+                  {isAdmin && (
+                    <>
+                      <button
+                        type="button"
+                        disabled={Boolean(harnessBusy)}
+                        onClick={() => void runHarnessRecipe(row.id, "install")}
+                        className="rounded-md border border-border px-2 py-1 text-[11.5px] text-muted hover:bg-elevated disabled:opacity-40"
+                      >
+                        {harnessBusy === `${row.id}:install` ? "Installing…" : "Install"}
+                      </button>
+                      <button
+                        type="button"
+                        disabled={Boolean(harnessBusy) || !row.installed}
+                        onClick={() => void runHarnessRecipe(row.id, "upgrade")}
+                        className="rounded-md border border-border px-2 py-1 text-[11.5px] text-muted hover:bg-elevated disabled:opacity-40"
+                      >
+                        {harnessBusy === `${row.id}:upgrade` ? "Upgrading…" : "Upgrade"}
+                      </button>
+                    </>
+                  )}
+                  <label className="flex items-center gap-2 text-[12.5px] text-muted">
+                    <input
+                      type="checkbox"
+                      checked={row.enabled}
+                      disabled={!isAdmin || harnessBusy === `${row.id}` || Boolean(harnessBusy)}
+                      onChange={(e) => void toggleHarness(row.id, e.target.checked)}
+                      className="h-3.5 w-3.5 accent-[#0d0d0d]"
+                    />
+                    {row.enabled ? "On" : "Off"}
+                  </label>
+                </div>
               </div>
             ))}
           </div>
           {harnessError && <div className="text-[12px] text-danger">{harnessError}</div>}
+          {harnessNotice && <div className="text-[12px] text-muted">{harnessNotice}</div>}
           {!isAdmin && (
             <p className="text-[12px] text-faint">Only a workspace admin can change harness toggles.</p>
           )}

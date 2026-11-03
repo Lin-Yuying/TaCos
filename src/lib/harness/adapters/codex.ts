@@ -3,6 +3,7 @@ import path from "node:path";
 import { listCodexModels } from "@/lib/cli-agents";
 import { findHarnessBinary, readHarnessVersion, readJsonFile } from "../detect-bin";
 import type { DetectResult, HarnessAdapter, ModelOption, TurnInput } from "../types";
+import { installHarnessRecipe, upgradeHarnessRecipe } from "../install-recipes";
 import { openCodexTurn } from "./codex-turn";
 
 const LABEL = "Codex";
@@ -75,5 +76,11 @@ export const codexAdapter: HarnessAdapter = {
   },
   openTurn(input: TurnInput) {
     return openCodexTurn(input);
+  },
+  install() {
+    return installHarnessRecipe("codex");
+  },
+  upgrade() {
+    return upgradeHarnessRecipe("codex");
   },
 };
