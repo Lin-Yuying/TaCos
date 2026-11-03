@@ -42,6 +42,7 @@ import {
 } from "lucide-react";
 import { Menu, MenuItem } from "@/components/menu";
 import { InviteDialog } from "@/components/invite-dialog";
+import { LiveRefresh } from "@/components/live-refresh";
 import { DesktopOpenFiles } from "@/components/desktop-open-files";
 import { leaveWorkspaceAction } from "@/app/auth-actions";
 import { DOCS_DELETED_EVENT } from "@/components/tab-events";
@@ -1772,6 +1773,7 @@ export function WorkspaceShell({
         </main>
       </div>
 
+      <LiveRefresh workspaceId={workspace.id} />
       {inviteOpen && (
         <InviteDialog
           workspaceId={workspace.id}

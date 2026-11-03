@@ -2043,6 +2043,14 @@ function Conversation({
   const [messages, setMessages] = useState<UiMessage[]>(() => toUi(active));
   const [input, setInput] = useState("");
   const [busy, setBusy] = useState(false);
+  // H-COLLAB-13: a live refresh brings new server messages (another member's turn).
+  // Take them when no turn of ours is running; a running turn owns the list.
+  const serverKey = `${active.id}:${active.messages.length}:${active.messages.at(-1)?.id ?? ""}`;
+  const [seenKey, setSeenKey] = useState(serverKey);
+  if (serverKey !== seenKey && !busy) {
+    setSeenKey(serverKey);
+    setMessages(toUi(active));
+  }
   // Harness is a turn preference on this session. New chat creates a new session.
   const [engine, setEngine] = useState<AgentHarnessId>(() => {
     const fromThread = active.engine;

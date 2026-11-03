@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { useLiveTick } from "@/components/live-refresh";
 import { ISSUE_DELETED, useUI, type DeletedIssue } from "@/components/ui-context";
 import { addCommentAction, deleteIssueAction, updateIssueDetailAction } from "@/app/actions";
 import type { Label, Member } from "@/lib/issues";
@@ -73,6 +74,8 @@ function IssuePanel({
   const [error, setError] = useState<string | null>(null);
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const { toast } = useUI();
+  // H-COLLAB-13: reload the task when another member changes something.
+  const live = useLiveTick();
 
   // A task that vanished underneath the panel (deleted here, on another device, or from
   // the Inbox) has nothing left to show — close the pane and say so instead of leaving
@@ -90,6 +93,26 @@ function IssuePanel({
   };
 
   // The panel is remounted per issue id, so loading state starts clean without resets here.
+  useEffect(() => {
+    if (live === 0) return;
+    let cancelled = false;
+    fetch(`/api/internal/${workspaceId}/issues/${encodeURIComponent(id)}`)
+      .then(async (res) => {
+        if (res.status === 404) {
+          if (!cancelled) setNotFound(true);
+          return null;
+        }
+        return res.ok ? res.json() : null;
+      })
+      .then((data) => {
+        if (!cancelled && data) setDetail(data as FlatDetail);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [live, id, workspaceId]);
+
   useEffect(() => {
     let cancelled = false;
     fetch(`/api/internal/${workspaceId}/issues/${encodeURIComponent(id)}`)
