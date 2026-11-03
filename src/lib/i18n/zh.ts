@@ -806,6 +806,9 @@ const zh: Record<string, string> = {
   "OpenCode is not installed on this machine.": "这台电脑上没有安装 OpenCode。",
   "Pi is not installed on this machine.": "这台电脑上没有安装 Pi。",
   "WorkBuddy (codebuddy) is not installed on this machine.": "这台电脑上没有安装 WorkBuddy（codebuddy）。",
+  // Composer harness chip (H-FIX-31)
+  "Harness default model": "Harness 默认模型",
+  "This harness uses the model from its own local config.": "此 harness 使用它本地配置里的模型。",
 };
 
 export default zh;

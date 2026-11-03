@@ -343,19 +343,81 @@ function EffortSlider({
   );
 }
 
-function ModelChip({
+// H-FIX-31: harness picker. Only enabled and ready harnesses reach `options`.
+function HarnessChip({
   options,
   value,
   onChange,
+  disabled,
+}: {
+  options: AgentHarnessOption[];
+  value: AgentHarnessId;
+  onChange: (engine: AgentHarnessId) => void;
+  disabled?: boolean;
+}) {
+  const t = useT();
+  const current = options.find((option) => option.id === value) ?? options[0];
+  if (options.length === 0) return null;
+  return (
+    <Menu
+      width={300}
+      align="right"
+      triggerClassName={`flex items-center gap-1 rounded-full px-2 py-1 text-[12.5px] text-text transition-colors hover:bg-elevated ${
+        disabled ? "pointer-events-none opacity-50" : ""
+      }`}
+      trigger={
+        <span data-testid="composer-harness" className="flex items-center gap-1">
+          <span className="max-w-[160px] truncate">{current?.label}</span>
+          {current?.riskLabel ? (
+            <span className="max-w-[110px] truncate text-danger">{t(current.riskLabel)}</span>
+          ) : null}
+          <ChevronDown size={11} className="shrink-0 text-muted" />
+        </span>
+      }
+    >
+      {(close) => (
+        <>
+          <SectionLabel>{t("Harness")}</SectionLabel>
+          {options.map((option) => (
+            <MenuItem
+              key={option.id}
+              active={option.id === value}
+              onSelect={() => {
+                close();
+                onChange(option.id);
+              }}
+            >
+              <span className="min-w-0 flex-1 truncate text-left">
+                <span className="block truncate">{option.label}</span>
+                {option.riskLabel ? (
+                  <span
+                    className="block truncate text-[11px] text-danger"
+                    data-testid={`composer-risk-${option.id}`}
+                  >
+                    {t(option.riskLabel)}
+                  </span>
+                ) : null}
+              </span>
+              <span className="shrink-0 text-[11px] text-faint">{option.detail ? t(option.detail) : null}</span>
+            </MenuItem>
+          ))}
+        </>
+      )}
+    </Menu>
+  );
+}
+
+// Model and effort for the current harness. Only Codex lists models; other harnesses
+// use the model from their own local config.
+function ModelChip({
+  engine,
   models,
   model,
   effort,
   onModel,
   disabled,
 }: {
-  options: AgentHarnessOption[];
-  value: AgentHarnessId;
-  onChange: (engine: AgentHarnessId) => void;
+  engine: AgentHarnessId;
   models: CodexModel[];
   model: string;
   effort: string;
@@ -363,11 +425,19 @@ function ModelChip({
   disabled?: boolean;
 }) {
   const t = useT();
-  const current = options.find((option) => option.id === value) ?? options[0];
   const picked = models.find((entry) => entry.slug === model) ?? models[0];
   const effortLabel = picked?.efforts.find((level) => level.id === effort)?.label ?? effort;
-  if (options.length === 0) return null;
-  const showingModel = value === "codex" && Boolean(picked);
+  if (engine !== "codex" || !picked) {
+    return (
+      <span
+        data-testid="composer-model"
+        title={t("This harness uses the model from its own local config.")}
+        className="flex items-center rounded-full px-2 py-1 text-[12.5px] text-muted"
+      >
+        {t("Harness default model")}
+      </span>
+    );
+  }
   return (
     <Menu
       width={330}
@@ -376,88 +446,48 @@ function ModelChip({
         disabled ? "pointer-events-none opacity-50" : ""
       }`}
       trigger={
-        <>
-          {showingModel ? (
-            <span className="max-w-[220px] truncate">
-              {prettyModel(picked.label)}
-              {effortLabel && <span className="text-muted"> {effortLabel}</span>}
-            </span>
-          ) : (
-            <>
-              <span className="max-w-[190px] truncate">{current?.label}</span>
-              {current?.riskLabel ? (
-                <span className="max-w-[120px] truncate text-danger">{t(current.riskLabel)}</span>
-              ) : current?.detail ? (
-                <span className="max-w-[110px] truncate text-faint">{t(current.detail)}</span>
-              ) : null}
-            </>
-          )}
+        <span data-testid="composer-model" className="flex items-center gap-1">
+          <span className="max-w-[220px] truncate">
+            {prettyModel(picked.label)}
+            {effortLabel && <span className="text-muted"> {effortLabel}</span>}
+          </span>
           <ChevronDown size={11} className="shrink-0 text-muted" />
-        </>
+        </span>
       }
     >
-      {(close) => (
+      {() => (
         <>
-          <SectionLabel>{t("Harness")}</SectionLabel>
-          {options.map((option) => (
-              <MenuItem
-                key={option.id}
-                active={option.id === value}
-                onSelect={() => {
-                  close();
-                  onChange(option.id);
-                }}
-              >
-                <span className="min-w-0 flex-1 truncate text-left">
-                  <span className="block truncate">{option.label}</span>
-                  {option.riskLabel ? (
-                    <span
-                      className="block truncate text-[11px] text-danger"
-                      data-testid={`composer-risk-${option.id}`}
-                    >
-                      {t(option.riskLabel)}
-                    </span>
-                  ) : null}
-                </span>
-                <span className="shrink-0 text-[11px] text-faint">{option.detail ? t(option.detail) : null}</span>
-              </MenuItem>
-            ))}
-          {value === "codex" && picked && (
-            <>
-              <div className="my-1 border-t border-border" />
-              <SectionLabel>{t("Model")}</SectionLabel>
-              {models.map((entry) => (
-                <MenuItem
-                  key={entry.slug}
-                  active={entry.slug === picked.slug}
-                  // Keep the menu open: picking a model usually leads straight to an effort.
-                  onSelect={() => onModel(entry.slug, entry.efforts.some((level) => level.id === effort) ? effort : entry.defaultEffort)}
-                >
-                  <span className="min-w-0 flex-1 text-left">
-                    <span className="block truncate">{prettyModel(entry.label)}</span>
-                    <span className="block truncate text-[11px] text-faint">{entry.description}</span>
-                  </span>
-                </MenuItem>
-              ))}
-              <div className="my-1 border-t border-border" />
-              {/* Pinned so effort stays reachable while the model list scrolls. */}
-              <div className="sticky bottom-0 -mx-1 -mb-1 border-t border-border bg-overlay px-1 pb-1">
-                <div className="px-2 pt-2 text-center">
-                  <p className="text-[15px] font-semibold leading-5 text-text">{effortLabel || t("Default")}</p>
-                  <p className="mt-0.5 text-[11.5px] text-muted">{prettyModel(picked.label)}</p>
-                </div>
-                <EffortSlider
-                  levels={picked.efforts}
-                  value={effort}
-                  onChange={(id) => onModel(picked.slug, id)}
-                />
-                <div className="flex justify-between px-3.5 pb-0.5 text-[10.5px] text-faint">
-                  <span>{picked.efforts[0]?.label}</span>
-                  <span>{picked.efforts[picked.efforts.length - 1]?.label}</span>
-                </div>
-              </div>
-            </>
-          )}
+          <SectionLabel>{t("Model")}</SectionLabel>
+          {models.map((entry) => (
+            <MenuItem
+              key={entry.slug}
+              active={entry.slug === picked.slug}
+              // Keep the menu open: picking a model usually leads straight to an effort.
+              onSelect={() => onModel(entry.slug, entry.efforts.some((level) => level.id === effort) ? effort : entry.defaultEffort)}
+            >
+              <span className="min-w-0 flex-1 text-left">
+                <span className="block truncate">{prettyModel(entry.label)}</span>
+                <span className="block truncate text-[11px] text-faint">{entry.description}</span>
+              </span>
+            </MenuItem>
+          ))}
+          <div className="my-1 border-t border-border" />
+          {/* Pinned so effort stays reachable while the model list scrolls. */}
+          <div className="sticky bottom-0 -mx-1 -mb-1 border-t border-border bg-overlay px-1 pb-1">
+            <div className="px-2 pt-2 text-center">
+              <p className="text-[15px] font-semibold leading-5 text-text">{effortLabel || t("Default")}</p>
+              <p className="mt-0.5 text-[11.5px] text-muted">{prettyModel(picked.label)}</p>
+            </div>
+            <EffortSlider
+              levels={picked.efforts}
+              value={effort}
+              onChange={(id) => onModel(picked.slug, id)}
+            />
+            <div className="flex justify-between px-3.5 pb-0.5 text-[10.5px] text-faint">
+              <span>{picked.efforts[0]?.label}</span>
+              <span>{picked.efforts[picked.efforts.length - 1]?.label}</span>
+            </div>
+          </div>
         </>
       )}
     </Menu>
@@ -1628,10 +1658,9 @@ function StartComposer({
               actions={
                 <>
                   <ApprovalChip value={approval} onChange={onApproval} disabled={busy} />
+                  <HarnessChip options={options} value={engine} onChange={onEngine} disabled={busy} />
                   <ModelChip
-                    options={options}
-                    value={engine}
-                    onChange={onEngine}
+                    engine={engine}
                     models={models}
                     model={model}
                     effort={effort}
@@ -2368,10 +2397,14 @@ function Conversation({
                   onChange={(next) => void changeApproval(next)}
                   disabled={busy || !active.mine}
                 />
-                <ModelChip
+                <HarnessChip
                   options={options}
                   value={engine}
                   onChange={(next) => void chooseEngine(next)}
+                  disabled={busy || !active.mine}
+                />
+                <ModelChip
+                  engine={engine}
                   models={models}
                   model={model}
                   effort={effort}
