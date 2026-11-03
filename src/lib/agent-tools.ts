@@ -1,5 +1,6 @@
 import {
   addComment,
+  claimIssue,
   createIssue,
   deleteIssue,
   getIssueDetail,
@@ -57,7 +58,10 @@ export const AGENT_TOOLS: AgentToolSpec[] = [
     inputSchema: {
       type: "object",
       properties: {
-        status: { type: "string", description: 'todo, in_progress, done, canceled, "active" or "all"' },
+        status: {
+          type: "string",
+          description: 'todo, in_progress, done, canceled, "active", "open" (approved and unclaimed) or "all"',
+        },
         q: { type: "string", description: "Free-text search across title, description and identifier" },
         limit: { type: "number", description: "Max results (default 30, max 100)" },
       },
@@ -194,6 +198,17 @@ export const AGENT_TOOLS: AgentToolSpec[] = [
         body: { type: "string", description: "Markdown comment" },
       },
       required: ["id", "body"],
+    },
+  },
+  {
+    name: "claim_task",
+    description:
+      "Claim an approved, open task for the current user so they push it forward. A task that waits for review cannot be claimed.",
+    write: true,
+    inputSchema: {
+      type: "object",
+      properties: { id: { type: "string", description: "Task identifier or id" } },
+      required: ["id"],
     },
   },
   {
@@ -417,7 +432,7 @@ export async function executeAgentTool(
       const issues = await listIssues(ctx.workspaceId, {
         projectId: ctx.projectId,
         viewerId: ctx.userId,
-        status: status === "active" || status === "all" ? status : asStatus(status) ?? "all",
+        status: status === "active" || status === "open" || status === "all" ? status : asStatus(status) ?? "all",
         q: str(args.q) || undefined,
         limit: Math.min(100, Math.max(1, Number(args.limit) || 30)),
       });
@@ -452,6 +467,12 @@ export async function executeAgentTool(
           2
         ),
       };
+    }
+    case "claim_task": {
+      // The agent claims for the person who runs it; the claim is theirs, not the agent's.
+      const { issue } = await requireProjectTask(ctx, str(args.id));
+      await claimIssue(ctx.workspaceId, issue.id, ctx.userId);
+      return { text: `Claimed ${issue.identifier} — ${issue.title} for you` };
     }
     case "get_overview": {
       const project = await getProject(ctx.workspaceId, ctx.projectId);
