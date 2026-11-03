@@ -172,6 +172,7 @@ export function SettingsView({
   const [aiError, setAiError] = useState<string | null>(null);
   const [aiNotice, setAiNotice] = useState<string | null>(null);
   const [harnessRows, setHarnessRows] = useState(harness.rows);
+  const [harnessGateView, setHarnessGateView] = useState(harness.gate);
   const [harnessBusy, setHarnessBusy] = useState<string | null>(null);
   const [harnessError, setHarnessError] = useState<string | null>(null);
   const [harnessNotice, setHarnessNotice] = useState<string | null>(null);
@@ -191,7 +192,15 @@ export function SettingsView({
       setHarnessError(result.error);
       return;
     }
-    router.refresh();
+    const nextRows = before.map((row) => (row.id === id ? { ...row, enabled } : row));
+    setHarnessRows(nextRows);
+    const enabledReady = nextRows.filter((row) => row.enabled && row.ready);
+    const anyEnabled = nextRows.some((row) => row.enabled);
+    setHarnessGateView({
+      enabledReady,
+      anyReady: enabledReady.length > 0,
+      agentAllowed: anyEnabled && enabledReady.length > 0,
+    });
   }
 
 
@@ -207,6 +216,13 @@ export function SettingsView({
       return;
     }
     setHarnessRows(result.data.rows);
+    const enabledReady = result.data.rows.filter((row) => row.enabled && row.ready);
+    const anyEnabled = result.data.rows.some((row) => row.enabled);
+    setHarnessGateView({
+      enabledReady,
+      anyReady: enabledReady.length > 0,
+      agentAllowed: anyEnabled && enabledReady.length > 0,
+    });
     setHarnessNotice(result.data.message);
   }
 
@@ -820,6 +836,11 @@ export function SettingsView({
             Local CLI harnesses for the Agent tab. Turn each one on or off for this workspace.
             The list shows version, ready state, and the last detect error.
           </p>
+          {!harnessGateView.agentAllowed && (
+            <div className="rounded-md border border-border bg-elevated px-3 py-2 text-[12.5px] text-muted" data-testid="harness-agent-disabled">
+              The Agent tab is disabled. Enable at least one ready harness to use Agent.
+            </div>
+          )}
           <div className="overflow-hidden rounded-lg border border-border">
             {harnessRows.map((row, index) => (
               <div

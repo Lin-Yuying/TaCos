@@ -3,7 +3,7 @@ import { getDb } from "@/db/client";
 import { aiSettings } from "@/db/schema";
 import { clearHarnessDetectCache } from "./detect-bin";
 import { FIRST_CLASS_HARNESS_IDS, listHarnessDetect } from "./registry";
-import type { HarnessId, HarnessSettingsView, HarnessStatus } from "./types";
+import type { HarnessGate, HarnessId, HarnessSettingsView, HarnessStatus } from "./types";
 export type { HarnessSettingsView } from "./types";
 import { harnessGate } from "./gate";
 
@@ -90,5 +90,11 @@ export async function setHarnessEnabled(
 export async function refreshHarnessSettingsView(workspaceId: string): Promise<HarnessSettingsView> {
   clearHarnessDetectCache();
   return getHarnessSettingsView(workspaceId);
+}
+
+/** Load persisted toggles and return the workspace harness gate. */
+export async function getWorkspaceHarnessGate(workspaceId: string): Promise<HarnessGate> {
+  const enabledById = await loadHarnessEnabledMap(workspaceId);
+  return harnessGate(enabledById);
 }
 

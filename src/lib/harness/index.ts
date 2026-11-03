@@ -39,6 +39,7 @@ export { turnEventsToSse } from "./sse";
 
 export {
   getHarnessSettingsView,
+  getWorkspaceHarnessGate,
   loadHarnessEnabledMap,
   refreshHarnessSettingsView,
   setHarnessEnabled,
