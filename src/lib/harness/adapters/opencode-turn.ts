@@ -8,6 +8,7 @@ import { spawn, type ChildProcess } from "node:child_process";
 import { subscribeToolApprovals, waitForAgentApproval } from "@/lib/agent-sessions";
 import { findHarnessBinary } from "../detect-bin";
 import type { TurnEvent, TurnInput } from "../types";
+import type { TurnLog } from "../turn-log";
 
 const TURN_TIMEOUT_MS = 300_000;
 const PROXY_KEYS = ["HTTPS_PROXY", "https_proxy", "HTTP_PROXY", "http_proxy", "ALL_PROXY", "all_proxy"];
@@ -63,7 +64,7 @@ function messageText(input: TurnInput): string {
   return body || system || "Hello";
 }
 
-export async function* openOpencodeTurn(input: TurnInput): AsyncGenerator<TurnEvent> {
+export async function* openOpencodeTurn(input: TurnInput, log?: TurnLog): AsyncGenerator<TurnEvent> {
   const binary = findHarnessBinary("opencode");
   if (!binary) {
     yield { type: "error", message: "OpenCode is not installed on this machine." };
@@ -146,6 +147,7 @@ export async function* openOpencodeTurn(input: TurnInput): AsyncGenerator<TurnEv
     child.stderr.setEncoding("utf8");
     child.stderr.on("data", (chunk: string) => {
       stderr = `${stderr}${chunk}`.slice(-4_000);
+      log?.write(chunk);
     });
   }
 

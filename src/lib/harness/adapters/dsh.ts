@@ -3,6 +3,7 @@ import path from "node:path";
 import { findHarnessBinary, readHarnessVersion, readJsonFile } from "../detect-bin";
 import type { DetectResult, HarnessAdapter, ModelOption, TurnInput } from "../types";
 import { openDshTurn } from "./dsh-turn";
+import { loggedTurn } from "../turn-log";
 import { installHarnessRecipe, upgradeHarnessRecipe } from "../install-recipes";
 
 const LABEL = "DeepSeek Harness";
@@ -67,7 +68,7 @@ export const dshAdapter: HarnessAdapter = {
     return [];
   },
   openTurn(input: TurnInput) {
-    return openDshTurn(input);
+    return loggedTurn("dsh", input, (log) => openDshTurn(input, log));
   },
   install() {
     return installHarnessRecipe("dsh");

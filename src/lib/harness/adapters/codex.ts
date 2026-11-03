@@ -5,6 +5,7 @@ import { findHarnessBinary, readHarnessVersion, readJsonFile } from "../detect-b
 import type { DetectResult, HarnessAdapter, ModelOption, TurnInput } from "../types";
 import { installHarnessRecipe, upgradeHarnessRecipe } from "../install-recipes";
 import { openCodexTurn } from "./codex-turn";
+import { loggedTurn } from "../turn-log";
 
 const LABEL = "Codex";
 const INSTALL_HINT = "Install the Codex CLI (npm i -g @openai/codex), then run codex login in Terminal.";
@@ -82,7 +83,7 @@ export const codexAdapter: HarnessAdapter = {
     }));
   },
   openTurn(input: TurnInput) {
-    return openCodexTurn(input);
+    return loggedTurn("codex", input, (log) => openCodexTurn(input, log));
   },
   install() {
     return installHarnessRecipe("codex");

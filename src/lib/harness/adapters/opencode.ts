@@ -3,6 +3,7 @@ import path from "node:path";
 import { findHarnessBinary, readHarnessVersion, readJsonFile } from "../detect-bin";
 import type { DetectResult, HarnessAdapter, ModelOption, TurnInput } from "../types";
 import { openOpencodeTurn } from "./opencode-turn";
+import { loggedTurn } from "../turn-log";
 import { installHarnessRecipe, upgradeHarnessRecipe } from "../install-recipes";
 
 const LABEL = "OpenCode";
@@ -68,7 +69,7 @@ export const opencodeAdapter: HarnessAdapter = {
     return [];
   },
   openTurn(input: TurnInput) {
-    return openOpencodeTurn(input);
+    return loggedTurn("opencode", input, (log) => openOpencodeTurn(input, log));
   },
   install() {
     return installHarnessRecipe("opencode");

@@ -11,6 +11,7 @@ import path from "node:path";
 import { subscribeToolApprovals, waitForAgentApproval } from "@/lib/agent-sessions";
 import { findHarnessBinary } from "../detect-bin";
 import type { TurnEvent, TurnInput } from "../types";
+import type { TurnLog } from "../turn-log";
 
 const TURN_TIMEOUT_MS = 300_000;
 const PROXY_KEYS = ["HTTPS_PROXY", "https_proxy", "HTTP_PROXY", "http_proxy", "ALL_PROXY", "all_proxy"];
@@ -104,7 +105,7 @@ export function explainDshError(message: string): string {
   return message;
 }
 
-export async function* openDshTurn(input: TurnInput): AsyncGenerator<TurnEvent> {
+export async function* openDshTurn(input: TurnInput, log?: TurnLog): AsyncGenerator<TurnEvent> {
   const binary = findHarnessBinary("dsh");
   if (!binary) {
     yield { type: "error", message: "DeepSeek Harness (dsh) is not installed on this machine." };
@@ -192,6 +193,7 @@ export async function* openDshTurn(input: TurnInput): AsyncGenerator<TurnEvent> 
     child.stderr.setEncoding("utf8");
     child.stderr.on("data", (chunk: string) => {
       stderr = `${stderr}${chunk}`.slice(-4_000);
+      log?.write(chunk);
     });
   }
 

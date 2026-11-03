@@ -3,6 +3,7 @@ import path from "node:path";
 import { findHarnessBinary, readHarnessVersion, readJsonFile } from "../detect-bin";
 import type { DetectResult, HarnessAdapter, ModelOption, TurnInput } from "../types";
 import { openCodebuddyTurn } from "./codebuddy-turn";
+import { loggedTurn } from "../turn-log";
 import { installHarnessRecipe, upgradeHarnessRecipe } from "../install-recipes";
 
 const LABEL = "WorkBuddy";
@@ -67,7 +68,7 @@ export const codebuddyAdapter: HarnessAdapter = {
     return [];
   },
   openTurn(input: TurnInput) {
-    return openCodebuddyTurn(input);
+    return loggedTurn("codebuddy", input, (log) => openCodebuddyTurn(input, log));
   },
   install() {
     return installHarnessRecipe("codebuddy");

@@ -5,6 +5,7 @@
 import { spawn, type ChildProcess } from "node:child_process";
 import fs from "node:fs";
 import type { ApprovalDecision, TurnEvent, TurnInput } from "../types";
+import type { TurnLog } from "../turn-log";
 import { findHarnessBinary } from "../detect-bin";
 
 const TURN_TIMEOUT_MS = 300_000;
@@ -147,7 +148,7 @@ function toCodexAction(decision: ApprovalDecision): { action: "accept"; content:
  * Open one Codex app-server turn and yield harness TurnEvent values.
  * Uses mcpServer/elicitation/request for MCP tool approval.
  */
-export async function* openCodexTurn(input: TurnInput): AsyncGenerator<TurnEvent> {
+export async function* openCodexTurn(input: TurnInput, log?: TurnLog): AsyncGenerator<TurnEvent> {
   const binary = findHarnessBinary("codex");
   if (!binary) {
     yield { type: "error", message: "Codex is not available on this machine." };
@@ -400,6 +401,7 @@ export async function* openCodexTurn(input: TurnInput): AsyncGenerator<TurnEvent
   proc.stderr.setEncoding("utf8");
   proc.stderr.on("data", (chunk: string) => {
     stderr = `${stderr}${chunk}`.slice(-4_000);
+    log?.write(chunk);
   });
   proc.on("error", (err) => finish(`Could not start Codex: ${err.message}`));
   proc.on("exit", (code) => {
