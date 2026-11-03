@@ -7,6 +7,8 @@ import {
   addOverviewComment,
   addProjectMember,
   claimIssue,
+  getIssueDetail,
+  transferClaim,
   createApiKey,
   createIssue,
   createLabel,
@@ -35,7 +37,6 @@ import {
   updateIssue,
   updateProject,
   type CreateIssueInput,
-  type IssueClaim,
   type ReviewDecision,
   type IssueDetail,
   type IssueWithLabels,
@@ -115,21 +116,37 @@ export async function moveIssueAction(
   });
 }
 
+// Claim actions return the fresh task detail so the open panel can show the new claimer.
+async function claimedDetail(workspaceId: string, id: string, viewerId: string): Promise<IssueDetail> {
+  const detail = await getIssueDetail(workspaceId, id, viewerId);
+  if (!detail) throw new TacosError("Task not found", 404);
+  return detail;
+}
+
 export async function claimIssueAction(workspaceId: string, idOrIdentifier: string) {
-  return run<IssueClaim>(async () => {
+  return run<IssueDetail>(async () => {
     const { user } = await requireWorkspace(workspaceId);
     const result = await claimIssue(workspaceId, idOrIdentifier, user.id);
     refresh(workspaceId);
-    return result;
+    return claimedDetail(workspaceId, result.id, user.id);
   });
 }
 
 export async function releaseIssueAction(workspaceId: string, idOrIdentifier: string) {
-  return run<IssueClaim>(async () => {
+  return run<IssueDetail>(async () => {
     const { user } = await requireWorkspace(workspaceId);
     const result = await releaseIssue(workspaceId, idOrIdentifier, user.id);
     refresh(workspaceId);
-    return result;
+    return claimedDetail(workspaceId, result.id, user.id);
+  });
+}
+
+export async function transferClaimAction(workspaceId: string, idOrIdentifier: string, toUserId: string) {
+  return run<IssueDetail>(async () => {
+    const { user } = await requireWorkspace(workspaceId);
+    const result = await transferClaim(workspaceId, idOrIdentifier, user.id, toUserId);
+    refresh(workspaceId);
+    return claimedDetail(workspaceId, result.id, user.id);
   });
 }
 

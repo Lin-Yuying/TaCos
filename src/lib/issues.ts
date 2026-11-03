@@ -1980,7 +1980,7 @@ async function notify(input: {
   workspaceId: string;
   userId: string;
   issueId: string;
-  type: "assigned" | "commented";
+  type: "assigned" | "commented" | ClaimNotice;
   body: string;
 }) {
   await getDb().insert(notifications).values({
@@ -2425,6 +2425,8 @@ export async function claimIssue(workspaceId: string, idOrIdentifier: string, us
     )
     .returning({ id: issues.id });
   if (updated.length === 0) throw new TacosError("Someone else already claimed this task", 409);
+  await recordEvent(row.id, "claimed", {}, await userActor(userId));
+  await notifyClaimWatchers(workspaceId, row.id, "claimed", userId);
   return { id: row.id, identifier: row.identifier, claimedBy: userId, claimedAt: now };
 }
 
@@ -2438,7 +2440,63 @@ export async function releaseIssue(workspaceId: string, idOrIdentifier: string, 
     .where(and(eq(issues.workspaceId, workspaceId), eq(issues.id, row.id), eq(issues.claimedBy, userId)))
     .returning({ id: issues.id });
   if (updated.length === 0) throw new TacosError("Only the person who claimed this task can release it", 403);
+  await recordEvent(row.id, "released", {}, await userActor(userId));
+  await notifyClaimWatchers(workspaceId, row.id, "released", userId);
   return { id: row.id, identifier: row.identifier, claimedBy: null, claimedAt: null };
+}
+
+// The claimer hands the task to another workspace member. The new claimer gets a notification.
+export async function transferClaim(
+  workspaceId: string,
+  idOrIdentifier: string,
+  fromUserId: string,
+  toUserId: string
+): Promise<IssueClaim> {
+  const row = await findIssueRow(workspaceId, idOrIdentifier);
+  if (!row) throw new TacosError(`Issue "${idOrIdentifier}" not found`, 404);
+  const [member] = await getDb()
+    .select({ userId: workspaceMembers.userId })
+    .from(workspaceMembers)
+    .where(and(eq(workspaceMembers.workspaceId, workspaceId), eq(workspaceMembers.userId, toUserId)));
+  if (!member) throw new TacosError("That person is not a member of this workspace", 400);
+  const now = nowIso();
+  const updated = await getDb()
+    .update(issues)
+    .set({ claimedBy: toUserId, claimedAt: now, updatedAt: now })
+    .where(and(eq(issues.workspaceId, workspaceId), eq(issues.id, row.id), eq(issues.claimedBy, fromUserId)))
+    .returning({ id: issues.id });
+  if (updated.length === 0) throw new TacosError("Only the person who claimed this task can hand it over", 403);
+  const actor = await userActor(fromUserId);
+  await recordEvent(row.id, "claim_transferred", { to: toUserId }, actor);
+  if (toUserId !== fromUserId) {
+    await notify({ workspaceId, userId: toUserId, issueId: row.id, type: "claim_transferred", body: actor.displayName });
+  }
+  return { id: row.id, identifier: row.identifier, claimedBy: toUserId, claimedAt: now };
+}
+
+// Claim notices store the actor's name in body. The inbox builds the localized sentence from it.
+export type ClaimNotice = "claimed" | "released" | "claim_transferred";
+
+async function userActor(userId: string): Promise<MutationActor & { kind: "user" }> {
+  const [user] = await getDb().select({ displayName: users.displayName }).from(users).where(eq(users.id, userId));
+  return { kind: "user", userId, displayName: user?.displayName ?? "" };
+}
+
+// The creator and the assignees follow a task. The person who acts gets no notice.
+async function notifyClaimWatchers(workspaceId: string, issueId: string, type: ClaimNotice, actorId: string) {
+  const db = getDb();
+  const [issue] = await db.select({ createdBy: issues.createdBy }).from(issues).where(eq(issues.id, issueId));
+  const assignees = await db
+    .select({ userId: issueAssignees.userId })
+    .from(issueAssignees)
+    .where(eq(issueAssignees.issueId, issueId));
+  const watchers = new Set<string>(assignees.map((a) => a.userId));
+  if (issue?.createdBy) watchers.add(issue.createdBy);
+  watchers.delete(actorId);
+  const actor = await userActor(actorId);
+  for (const userId of watchers) {
+    await notify({ workspaceId, userId, issueId, type, body: actor.displayName });
+  }
 }
 
 export type PendingReviewIssue = {

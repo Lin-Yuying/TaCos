@@ -68,6 +68,8 @@ export function eventText(event: ActivityEvent, t: Translate, locale: Locale): s
       return t("claimed the task");
     case "released":
       return t("released the task");
+    case "claim_transferred":
+      return t("handed the task to another member");
     case "status_changed": {
       const from = event.data.from as Status;
       const to = event.data.to as Status;

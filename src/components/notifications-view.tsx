@@ -142,7 +142,7 @@ export function NotificationsView({
                 style={{ background: isUnread(item) ? "var(--color-accent)" : "transparent" }}
               />
               <span className="min-w-0 flex-1">
-                <span className="block truncate text-[13px] text-text">{item.body}</span>
+                <span className="block truncate text-[13px] text-text">{noticeText(item.type, item.body, t)}</span>
                 <span className="block text-[11px] text-faint">
                   {item.type === "workspace_deleted"
                     ? t("Workspace deleted")
@@ -170,4 +170,12 @@ export function NotificationsView({
       </div>
     </div>
   );
+}
+
+// Claim notices store only the actor's name, so the sentence follows the reader's language.
+function noticeText(type: string, body: string, t: ReturnType<typeof useT>): string {
+  if (type === "claimed") return t("{name} claimed a task you follow", { name: body });
+  if (type === "released") return t("{name} released a task you follow", { name: body });
+  if (type === "claim_transferred") return t("{name} handed a task to you", { name: body });
+  return body;
 }

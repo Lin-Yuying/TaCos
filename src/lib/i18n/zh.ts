@@ -826,6 +826,21 @@ const zh: Record<string, string> = {
   "Harness default model": "Harness 默认模型",
   "This harness uses the model from its own local config.": "此 harness 使用它本地配置里的模型。",
   "Open Tasks": "可认领",
+  "Waiting for review — no one can claim it yet": "待审核，暂时不能认领",
+  "You claimed this task": "你已认领此任务",
+  "{name} claimed this task": "{name} 已认领此任务",
+  "Release": "释放",
+  "Hand over…": "转交…",
+  "Closed tasks cannot be claimed": "已关闭的任务不能认领",
+  "No one has claimed this task": "还没有人认领",
+  "Claim": "认领",
+  "handed the task to another member": "把任务转交给了其他成员",
+  "{name} claimed a task you follow": "{name} 认领了你关注的任务",
+  "{name} released a task you follow": "{name} 释放了你关注的任务",
+  "{name} handed a task to you": "{name} 把任务转交给了你",
+  "Only the person who claimed this task can hand it over": "只有认领人可以转交此任务",
+  "That person is not a member of this workspace": "此人不是该工作区的成员",
+  "Task not found": "找不到任务",
 };
 
 export default zh;

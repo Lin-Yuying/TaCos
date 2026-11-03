@@ -7,6 +7,7 @@ import type { Label, Member } from "@/lib/issues";
 import { PanelHeader } from "./header";
 import { PropertiesRow } from "./properties";
 import { DueRow } from "./due-row";
+import { ClaimRow } from "./claim-row";
 import { DescriptionSection } from "./description";
 import { ChangelogSection } from "./changelog";
 import { CommentsSection } from "./comments";
@@ -217,6 +218,15 @@ function IssuePanel({
           members={members}
           allLabels={allLabels}
           onUpdate={update}
+        />
+
+        <ClaimRow
+          workspaceId={workspaceId}
+          detail={detail}
+          members={members}
+          currentUserId={currentUserId}
+          onDetail={(next) => setDetail({ ...next.issue, comments: next.comments, events: next.events })}
+          onError={setError}
         />
 
         <DueRow detail={detail} onUpdate={update} />
