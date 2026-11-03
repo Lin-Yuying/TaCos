@@ -1777,6 +1777,8 @@ export type ListFilters = {
   // The signed-in user. Omitted by agents, which are unrestricted; when present it
   // applies the workspace's task-visibility setting.
   viewerId?: string;
+  // Tasks that one agent chat published (H-COLLAB-07).
+  sourceThreadId?: string;
 };
 
 // Totals for a project's Overview page; grouped in SQL so the count stays right
@@ -1824,6 +1826,9 @@ export async function listIssues(
     conditions.push(ownIssueProjectCondition(filters.viewerId));
   }
 
+  if (filters.sourceThreadId) {
+    conditions.push(eq(issues.sourceThreadId, filters.sourceThreadId));
+  }
   if (filters.status === "active") {
     conditions.push(inArray(issues.status, ["todo", "in_progress"]));
   } else if (filters.status === "open") {

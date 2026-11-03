@@ -2,7 +2,7 @@ import crypto from "node:crypto";
 import { and, asc, desc, eq, inArray, isNull, or } from "drizzle-orm";
 import { getDb } from "@/db/client";
 import { agentMessages, agentSteps, agentThreadFlags, agentThreads, projects, users } from "@/db/schema";
-import { TacosError } from "./issues";
+import { listIssues, TacosError, type Status } from "./issues";
 
 // Agent conversations are TaCos records, not browser state: a thread is bound to a
 // project, carries its history and trajectory, and can be reopened from the Agent tab.
@@ -599,4 +599,33 @@ export async function setAgentThreadEngine(
     .set({ engine: next, updatedAt: new Date().toISOString() })
     .where(eq(agentThreads.id, threadId));
   return threadOnly(await getAgentThread(workspaceId, userId, threadId));
+}
+
+// H-COLLAB-07: a task and the chat that published it link to each other.
+export type SourceThread = { id: string; title: string };
+
+// The source chat of a task, or null when the viewer cannot read it (private, not theirs).
+export async function getSourceThread(
+  workspaceId: string,
+  threadId: string,
+  viewerId: string
+): Promise<SourceThread | null> {
+  const [row] = await getDb()
+    .select({ id: agentThreads.id, title: agentThreads.title })
+    .from(agentThreads)
+    .where(and(eq(agentThreads.workspaceId, workspaceId), eq(agentThreads.id, threadId), visibleTo(viewerId)))
+    .limit(1);
+  return row ?? null;
+}
+
+export type ThreadTask = { id: string; identifier: string; title: string; status: Status };
+
+// Tasks that a chat published. Task visibility rules apply to the viewer.
+export async function listThreadTasks(
+  workspaceId: string,
+  threadId: string,
+  viewerId: string
+): Promise<ThreadTask[]> {
+  const rows = await listIssues(workspaceId, { sourceThreadId: threadId, viewerId, status: "all", limit: 50 });
+  return rows.map((r) => ({ id: r.id, identifier: r.identifier, title: r.title, status: r.status }));
 }

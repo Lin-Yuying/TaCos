@@ -8,6 +8,7 @@ import { PanelHeader } from "./header";
 import { PropertiesRow } from "./properties";
 import { DueRow } from "./due-row";
 import { ClaimRow } from "./claim-row";
+import { SourceChatRow } from "./source-chat-row";
 import { DescriptionSection } from "./description";
 import { ChangelogSection } from "./changelog";
 import { CommentsSection } from "./comments";
@@ -228,6 +229,8 @@ function IssuePanel({
           onDetail={(next) => setDetail({ ...next.issue, comments: next.comments, events: next.events })}
           onError={setError}
         />
+
+        <SourceChatRow workspaceId={workspaceId} threadId={detail.sourceThreadId} />
 
         <DueRow detail={detail} onUpdate={update} />
 

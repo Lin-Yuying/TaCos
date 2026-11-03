@@ -19,6 +19,10 @@ import {
   type AgentApproval,
   type AgentThread,
   type AgentVisibility,
+  getSourceThread,
+  listThreadTasks,
+  type SourceThread,
+  type ThreadTask,
 } from "@/lib/agent-threads";
 import type { ActionResult } from "./actions";
 
@@ -204,5 +208,26 @@ export async function deleteAgentSkillAction(
     clearSkillCache();
     refresh(workspaceId);
     return removed;
+  });
+}
+
+// H-COLLAB-07: the task panel names its source chat; the chat lists the tasks it published.
+export async function getSourceThreadAction(
+  workspaceId: string,
+  threadId: string
+): Promise<ActionResult<SourceThread | null>> {
+  return run(async () => {
+    const { user } = await requireWorkspace(workspaceId);
+    return getSourceThread(workspaceId, threadId, user.id);
+  });
+}
+
+export async function listThreadTasksAction(
+  workspaceId: string,
+  threadId: string
+): Promise<ActionResult<ThreadTask[]>> {
+  return run(async () => {
+    const { user } = await requireWorkspace(workspaceId);
+    return listThreadTasks(workspaceId, threadId, user.id);
   });
 }

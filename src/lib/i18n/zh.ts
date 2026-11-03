@@ -841,6 +841,10 @@ const zh: Record<string, string> = {
   "Only the person who claimed this task can hand it over": "只有认领人可以转交此任务",
   "That person is not a member of this workspace": "此人不是该工作区的成员",
   "Task not found": "找不到任务",
+  "Source chat: {title}": "来源对话：{title}",
+  "Made in a private chat": "来自一个私有对话",
+  "Tasks from this chat": "此对话发布的任务",
+  "+{count} more": "还有 {count} 个",
 };
 
 export default zh;

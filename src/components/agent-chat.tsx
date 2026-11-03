@@ -35,6 +35,7 @@ import {
 } from "lucide-react";
 import { Menu, MenuItem } from "@/components/menu";
 import { useUI } from "@/components/ui-context";
+import { ThreadTaskChips } from "@/components/thread-task-chips";
 import { Markdown } from "@/components/markdown";
 import { rememberHarness, streamAiEdit, type AgentApprovalCard, type AgentStepFrame } from "@/lib/ai-client";
 import {
@@ -2253,6 +2254,7 @@ function Conversation({
           {!active.mine && <span className="shrink-0 text-faint">· {active.createdByName}</span>}
         </div>
         <div className="absolute left-1/2 -translate-x-1/2">
+          <ThreadTaskChips workspaceId={workspaceId} threadId={active.id} busy={busy} />
         </div>
         <div className="flex shrink-0 items-center">
           {active.mine && (
