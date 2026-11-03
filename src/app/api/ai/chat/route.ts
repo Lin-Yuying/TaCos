@@ -10,7 +10,7 @@ import {
   flattenMessages,
   openChatStream,
 } from "@/lib/ai";
-import { AI_EDIT_ACTIONS, type AiChatAction, type AiEngine } from "@/lib/ai-constants";
+import { AGENT_HARNESS_IDS, AI_EDIT_ACTIONS, type AgentHarnessId, type AiChatAction, type AiEngine } from "@/lib/ai-constants";
 import { AGENT_TOOLS } from "@/lib/agent-tools";
 import {
   issueAgentToolGrant,
@@ -189,9 +189,11 @@ export async function POST(request: Request) {
     const context = typeof body.context === "string" ? body.context : undefined;
 
     const runtime = await agentRuntime(workspaceId);
-    const engine: AiEngine =
-      body.engine === "codex" || body.engine === "pi" || body.engine === "api"
-        ? body.engine
+    const requested = typeof body.engine === "string" ? body.engine : "";
+    const harnessRequested = (AGENT_HARNESS_IDS as readonly string[]).includes(requested);
+    const engine: AiEngine | AgentHarnessId =
+      requested === "api" || harnessRequested
+        ? (requested as AiEngine | AgentHarnessId)
         : runtime.engine;
 
     if (engine !== "api") {
@@ -202,9 +204,20 @@ export async function POST(request: Request) {
           "An admin can enable it in Settings."
         );
       }
-      // Codex and Pi sign in under the OS account that runs this server, so the login
-      // belongs to the machine rather than to one TaCos user: every member may spend it.
-      requireCli(engine);
+      // Local CLIs sign in under the OS account that runs this server.
+      if (engine === "codex" || engine === "pi") {
+        requireCli(engine);
+      } else {
+        const adapter = getHarnessAdapter(engine);
+        const detect = adapter?.detect();
+        if (!adapter || !detect?.ready) {
+          throw new TacosError(
+            `${adapter?.label ?? engine} is not ready on this server`,
+            400,
+            detect?.hint ?? "Install or enable the harness in Settings → Harness."
+          );
+        }
+      }
     }
 
     if (action === "agent") {
@@ -216,7 +229,7 @@ export async function POST(request: Request) {
         throw new TacosError(
           "Agent turns need a local CLI harness",
           400,
-          "Pick Codex or Pi in the composer. API keys stay under Settings for inline edits."
+          "Pick a harness in the composer. API keys stay under Settings for inline edits."
         );
       }
       // History comes from the thread, not from the browser: whatever scrolled past in
@@ -360,12 +373,31 @@ export async function POST(request: Request) {
         );
       }
 
-      const stream = openCliStream(engine, prompt, {
-        proxy: runtime.proxy,
-        signal: request.signal,
-        agent: {
+      // OpenCode Agent turns go through the harness adapter (MCP + TaCos-mediated cards).
+      if (engine === "opencode") {
+        const adapter = getHarnessAdapter("opencode");
+        if (!adapter) {
+          throw new TacosError("OpenCode harness is not registered", 500);
+        }
+        const mapDecision = (value: "accept" | "decline"): HarnessApprovalDecision =>
+          value === "accept" ? "allow" : "deny";
+        const events = adapter.openTurn({
+          sessionId: threadId,
           cwd,
+          prompt,
+          model: thread.model || null,
+          effort: thread.effort || null,
           approval: thread.approval,
+          skills: skills.length > 0 ? skills : undefined,
+          autoApproveTools: AGENT_TOOLS.filter((tool) => !tool.write).map((tool) => tool.name),
+          neverAutoApproveTools: AGENT_TOOLS.filter((tool) => tool.delete).map((tool) => tool.name),
+          isTurnApproved,
+          waitForApproval: async (approvalRequest) =>
+            mapDecision(
+              await waitForAgentApproval(approvalRequest.requestId, { signal: request.signal })
+            ),
+          signal: request.signal,
+          proxy: runtime.proxy,
           ...(grant
             ? {
                 mcp: {
@@ -377,17 +409,20 @@ export async function POST(request: Request) {
                     ...(process.versions.electron ? { ELECTRON_RUN_AS_NODE: "1" } : {}),
                   },
                 },
-                autoApprove: AGENT_TOOLS.filter((tool) => !tool.write).map((tool) => tool.name),
-                neverAutoApprove: AGENT_TOOLS.filter((tool) => tool.delete).map((tool) => tool.name),
-                isTurnApproved,
               }
-            : {}),
-          onApproval: (approval) => waitForAgentApproval(approval.requestId, { signal: request.signal }),
-        },
-      });
-      return new Response(
-        recordTurn(stream, { ...turn, onEnd: grant ? () => revokeAgentToolGrant(grant.token) : undefined }),
-        { headers: STREAM_HEADERS }
+            : { mcp: null }),
+        });
+        const stream = turnEventsToSse(events);
+        return new Response(
+          recordTurn(stream, { ...turn, onEnd: grant ? () => revokeAgentToolGrant(grant.token) : undefined }),
+          { headers: STREAM_HEADERS }
+        );
+      }
+
+      throw new TacosError(
+        `Agent turns for ${engine} are not wired yet`,
+        400,
+        "Pick Codex, Pi, or OpenCode until the other adapters land."
       );
     }
 
@@ -407,8 +442,15 @@ export async function POST(request: Request) {
       const stream = await openChatStream(workspaceId, messages, request.signal);
       return new Response(stream, { headers: STREAM_HEADERS });
     }
-    // The inline editor can borrow the CLI login too: no tools, no thread, one prompt
+    // The inline editor can borrow the Codex/Pi login: no tools, no thread, one prompt
     // out and the replacement text back.
+    if (engine !== "codex" && engine !== "pi") {
+      throw new TacosError(
+        "Inline edits need Codex, Pi, or an API key",
+        400,
+        "Other harnesses are Agent-only for now."
+      );
+    }
     const stream = openCliStream(engine, flattenMessages(messages), {
       proxy: runtime.proxy,
       signal: request.signal,
