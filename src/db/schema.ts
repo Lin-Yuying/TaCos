@@ -382,9 +382,7 @@ export const agentThreads = sqliteTable(
     workspaceId: text("workspace_id").notNull(),
     projectId: text("project_id").notNull(),
     title: text("title").notNull().default(""),
-    // Legacy Chat/Work column; product ignores it (drop in H-P1-08).
-    mode: text("mode").notNull().default("work"),
-    // codex | pi | api — recorded so a reopened thread shows what answered it
+    // codex | pi | … — recorded so a reopened thread shows what answered it
     engine: text("engine").notNull().default("codex"),
     // Codex model slug and reasoning effort; empty means "whatever the CLI is set to"
     model: text("model").notNull().default(""),

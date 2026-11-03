@@ -256,14 +256,13 @@ CREATE TABLE IF NOT EXISTS api_keys (
 CREATE INDEX IF NOT EXISTS api_keys_workspace_idx ON api_keys (workspace_id);
 
 -- Agent conversations live beside the workspace they belong to: each one is bound to a
--- project, the way a Codex thread is bound to a folder. Messages and the work trajectory
--- (commands, file changes, tool calls) are kept so a thread can be reopened later.
+-- project, the way a Codex thread is bound to a folder. Messages and trajectory steps
+-- are kept so a thread can be reopened later.
 CREATE TABLE IF NOT EXISTS agent_threads (
   id TEXT PRIMARY KEY,
   workspace_id TEXT NOT NULL,
   project_id TEXT NOT NULL,
   title TEXT NOT NULL DEFAULT '',
-  mode TEXT NOT NULL DEFAULT 'chat',
   engine TEXT NOT NULL DEFAULT 'codex',
   visibility TEXT NOT NULL DEFAULT 'private',
   created_by TEXT NOT NULL,
@@ -582,6 +581,17 @@ function addColumnIfMissing(
   return true;
 }
 
+function dropColumnIfPresent(sqlite: Database.Database, table: string, column: string): boolean {
+  if (!hasColumn(sqlite, table, column)) return false;
+  try {
+    sqlite.exec(`ALTER TABLE ${table} DROP COLUMN ${column}`);
+    return true;
+  } catch {
+    // Older SQLite builds reject DROP COLUMN. The app no longer reads this field.
+    return false;
+  }
+}
+
 export const BUILT_IN_ADMIN = "admin";
 
 // Guarantees the superuser exists so a fresh install is never locked out.
@@ -669,6 +679,8 @@ function bootstrap(sqlite: Database.Database) {
   addColumnIfMissing(sqlite, "agent_threads", "model", "TEXT NOT NULL DEFAULT ''");
   addColumnIfMissing(sqlite, "agent_threads", "effort", "TEXT NOT NULL DEFAULT ''");
   addColumnIfMissing(sqlite, "agent_threads", "approval", "TEXT NOT NULL DEFAULT 'ask'");
+  // H-P1-08: Chat/Work mode is gone from the product. Drop the legacy column when SQLite allows it.
+  dropColumnIfPresent(sqlite, "agent_threads", "mode");
   if (addColumnIfMissing(sqlite, "pages", "project_id", "TEXT")) {
     sqlite.exec("CREATE INDEX IF NOT EXISTS pages_project_idx ON pages (project_id)");
   }

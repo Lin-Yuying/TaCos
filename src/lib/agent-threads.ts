@@ -114,8 +114,6 @@ export async function startAgentThread(input: {
     workspaceId: input.workspaceId,
     projectId,
     title: "",
-    // Legacy DB column kept until H-P1-08 drops it. Product no longer has Chat/Work.
-    mode: "work",
     engine: input.engine || "codex",
     model: (input.model ?? "").trim(),
     effort: (input.effort ?? "").trim(),
