@@ -1,5 +1,5 @@
 import { getSessionUser, requireWorkspace } from "@/lib/auth";
-import { listIssues } from "@/lib/issues";
+import { searchWorkspace } from "@/lib/search";
 
 export async function GET(req: Request, ctx: { params: Promise<{ workspaceId: string }> }) {
   const { workspaceId } = await ctx.params;
@@ -12,6 +12,5 @@ export async function GET(req: Request, ctx: { params: Promise<{ workspaceId: st
   }
   const q = new URL(req.url).searchParams.get("q")?.trim() ?? "";
   if (!q) return Response.json([]);
-  const issues = await listIssues(workspaceId, { q, limit: 20 });
-  return Response.json(issues);
+  return Response.json(await searchWorkspace(workspaceId, user.id, q));
 }

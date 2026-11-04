@@ -27,7 +27,7 @@ Item-level checks stay cheap (types, check scripts). End-to-end tests and screen
 | 4 | Document trash | done | Check script: delete, restore, purge |
 | 5 | Document and paragraph comments, count, @ notify | done | Check script: anchor survives an edit before it; mention creates a notification |
 | 6 | Document permissions: visible to all; view, comment or edit per person | done | Check script: each level allows and refuses the right actions |
-| 7 | Global search over documents, tasks, comments | todo | Check script: 3+ character and 2-character Chinese queries both hit; private documents of others do not |
+| 7 | Global search over documents, tasks, comments | done | Check script: 3+ character and 2-character Chinese queries both hit; private documents of others do not |
 | 8 | Sidebar shared and private tree, multi-level breadcrumb, document favorites | todo | Check script for move rules; screenshots in item 15 |
 | 9 | Cover, image and attachment upload with size limit | todo | Check script: over-limit upload refused; resumed upload completes |
 | 10 | Database on tasks: custom fields, table, board, calendar views, filter, sort | todo | Check script for field and filter logic; screenshots in item 15 |
@@ -53,3 +53,7 @@ Item-level checks stay cheap (types, check scripts). End-to-end tests and screen
 ### Item 6: document permissions
 
 Levels are view, comment and edit (`src/lib/page-level.ts`). A shared page has one level for every member (`pages.share_level`, default edit, as 2.1 behaved), and `page_access` overrides it for one person, up or down. Only the author changes sharing, and a change covers the subtree. A new subpage copies its parent's sharing and people's levels, and creating one needs edit on the parent. Visibility itself stays all or nothing: shared means every member sees it.
+
+### Item 7: global search
+
+`search_fts` (FTS5 trigram) is kept in step by SQL triggers and filled once when an older database opens. Terms of 3+ characters use the index; a query with a shorter term scans with LIKE. `src/lib/search.ts` filters hits by what the person may read: the workspace's project visibility, shared or own documents, nothing deleted. The palette (`cmdk`, Cmd+K) shows documents, tasks and comments, and each comment opens its parent.

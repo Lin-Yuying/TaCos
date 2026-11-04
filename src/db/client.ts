@@ -722,6 +722,71 @@ function ensureInitialAvatars(sqlite: Database.Database) {
   }
 }
 
+// Triggers keep search_fts in step with every write path. The trigram tokenizer needs no word
+// breaks, so Chinese matches without a dictionary. Titles of tasks carry the identifier.
+function ensureSearchIndex(sqlite: Database.Database) {
+  const fresh = !tableExists(sqlite, "search_fts");
+  sqlite.exec(`
+    CREATE VIRTUAL TABLE IF NOT EXISTS search_fts USING fts5(
+      kind UNINDEXED, ref_id UNINDEXED, workspace_id UNINDEXED, title, body, tokenize = 'trigram'
+    );
+    CREATE TRIGGER IF NOT EXISTS search_pages_ai AFTER INSERT ON pages BEGIN
+      INSERT INTO search_fts (kind, ref_id, workspace_id, title, body)
+      VALUES ('doc', new.id, new.workspace_id, new.title, new.doc);
+    END;
+    CREATE TRIGGER IF NOT EXISTS search_pages_au AFTER UPDATE OF title, doc ON pages BEGIN
+      DELETE FROM search_fts WHERE kind = 'doc' AND ref_id = old.id;
+      INSERT INTO search_fts (kind, ref_id, workspace_id, title, body)
+      VALUES ('doc', new.id, new.workspace_id, new.title, new.doc);
+    END;
+    CREATE TRIGGER IF NOT EXISTS search_pages_ad AFTER DELETE ON pages BEGIN
+      DELETE FROM search_fts WHERE kind = 'doc' AND ref_id = old.id;
+    END;
+    CREATE TRIGGER IF NOT EXISTS search_issues_ai AFTER INSERT ON issues BEGIN
+      INSERT INTO search_fts (kind, ref_id, workspace_id, title, body)
+      VALUES ('task', new.id, new.workspace_id, new.identifier || ' ' || new.title, new.description);
+    END;
+    CREATE TRIGGER IF NOT EXISTS search_issues_au AFTER UPDATE OF identifier, title, description ON issues BEGIN
+      DELETE FROM search_fts WHERE kind = 'task' AND ref_id = old.id;
+      INSERT INTO search_fts (kind, ref_id, workspace_id, title, body)
+      VALUES ('task', new.id, new.workspace_id, new.identifier || ' ' || new.title, new.description);
+    END;
+    CREATE TRIGGER IF NOT EXISTS search_issues_ad AFTER DELETE ON issues BEGIN
+      DELETE FROM search_fts WHERE kind = 'task' AND ref_id = old.id;
+    END;
+    CREATE TRIGGER IF NOT EXISTS search_comments_ai AFTER INSERT ON comments BEGIN
+      INSERT INTO search_fts (kind, ref_id, workspace_id, title, body)
+      VALUES ('task_comment', new.id, (SELECT workspace_id FROM issues WHERE id = new.issue_id), '', new.body);
+    END;
+    CREATE TRIGGER IF NOT EXISTS search_comments_au AFTER UPDATE OF body ON comments BEGIN
+      DELETE FROM search_fts WHERE kind = 'task_comment' AND ref_id = old.id;
+      INSERT INTO search_fts (kind, ref_id, workspace_id, title, body)
+      VALUES ('task_comment', new.id, (SELECT workspace_id FROM issues WHERE id = new.issue_id), '', new.body);
+    END;
+    CREATE TRIGGER IF NOT EXISTS search_comments_ad AFTER DELETE ON comments BEGIN
+      DELETE FROM search_fts WHERE kind = 'task_comment' AND ref_id = old.id;
+    END;
+    CREATE TRIGGER IF NOT EXISTS search_page_comments_ai AFTER INSERT ON page_comments BEGIN
+      INSERT INTO search_fts (kind, ref_id, workspace_id, title, body)
+      VALUES ('doc_comment', new.id, new.workspace_id, '', new.body);
+    END;
+    CREATE TRIGGER IF NOT EXISTS search_page_comments_ad AFTER DELETE ON page_comments BEGIN
+      DELETE FROM search_fts WHERE kind = 'doc_comment' AND ref_id = old.id;
+    END;
+  `);
+  if (!fresh) return;
+  sqlite.exec(`
+    INSERT INTO search_fts (kind, ref_id, workspace_id, title, body)
+    SELECT 'doc', id, workspace_id, title, doc FROM pages;
+    INSERT INTO search_fts (kind, ref_id, workspace_id, title, body)
+    SELECT 'task', id, workspace_id, identifier || ' ' || title, description FROM issues;
+    INSERT INTO search_fts (kind, ref_id, workspace_id, title, body)
+    SELECT 'task_comment', c.id, i.workspace_id, '', c.body FROM comments c JOIN issues i ON i.id = c.issue_id;
+    INSERT INTO search_fts (kind, ref_id, workspace_id, title, body)
+    SELECT 'doc_comment', id, workspace_id, '', body FROM page_comments;
+  `);
+}
+
 function bootstrap(sqlite: Database.Database) {
   const hadIssueAssignees = tableExists(sqlite, "issue_assignees");
   sqlite.exec(DDL);
@@ -840,6 +905,7 @@ function bootstrap(sqlite: Database.Database) {
   seed(sqlite);
   ensureSuperAdmin(sqlite);
   ensureInitialAvatars(sqlite);
+  ensureSearchIndex(sqlite);
   // Rows that predate manual ordering (and freshly seeded demo issues) get a slot in
   // insertion order. New issues are created with MAX(position) + 1, so they never hit 0.
   sqlite.exec("UPDATE issues SET position = rowid * 1000 WHERE position = 0");

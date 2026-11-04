@@ -271,7 +271,7 @@ const zh: Record<string, string> = {
   "Invalid username or password": "用户名或密码不对",
   "Something went wrong": "出错了",
   // command-palette
-  "Search tasks or run a command…": "搜索任务或执行命令…",
+  "Search documents, tasks and comments, or run a command…": "搜索文档、任务和评论，或运行命令…",
   "No results for “{query}”": "没有找到「{query}」",
   Issues: "任务",
   Actions: "操作",
