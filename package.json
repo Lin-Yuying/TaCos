@@ -1,7 +1,7 @@
 {
   "name": "tacos",
   "productName": "TaCos",
-  "version": "2.0.0",
+  "version": "2.1.0",
   "private": true,
   "description": "TaCos — self-hosted issue tracker for teams and their agents",
   "license": "MIT",
@@ -38,11 +38,13 @@
     "next": "16.4.2",
     "react": "19.3.0",
     "react-dom": "19.3.0",
+    "undici": "^7.30.1",
     "zod": "^4.6.7"
   },
   "devDependencies": {
     "@tailwindcss/turbopack": "^4",
     "@types/better-sqlite3": "^9.6.0",
+    "@types/js-yaml": "^4.0.9",
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",
@@ -50,6 +52,7 @@
     "electron-builder": "^26.0.12",
     "eslint": "^9",
     "eslint-config-next": "16.4.2",
+    "js-yaml": "^4.3.2",
     "tailwindcss": "^4",
     "tsx": "^4.23.15",
     "typescript": "^5"
