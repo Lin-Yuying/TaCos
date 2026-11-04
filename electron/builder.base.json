@@ -58,6 +58,12 @@
         "arch": [
           "arm64"
         ]
+      },
+      {
+        "target": "zip",
+        "arch": [
+          "arm64"
+        ]
       }
     ]
   },
@@ -95,5 +101,13 @@
     "oneClick": false,
     "allowToChangeInstallationDirectory": true,
     "artifactName": "${productName}-Setup-${version}.${ext}"
-  }
+  },
+  "publish": [
+    {
+      "provider": "github",
+      "owner": "Lin-Yuying",
+      "repo": "TaCos",
+      "releaseType": "release"
+    }
+  ]
 }
