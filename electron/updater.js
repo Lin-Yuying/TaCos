@@ -2,10 +2,13 @@ const { app, ipcMain, BrowserWindow } = require("electron");
 const fs = require("node:fs");
 const path = require("node:path");
 
-// H-DESKTOP-UPDATE-01: desktop app binary updates via electron-updater.
+// H-DESKTOP-UPDATE-01/04: desktop app binary updates via electron-updater.
 // This is not the Settings › Harness CLI update path.
 
 const STATUS_EVENT = "tacos:app-update:status-changed";
+// First check after the window is up. Later checks about every 4 hours.
+const FIRST_CHECK_DELAY_MS = 15_000;
+const CHECK_INTERVAL_MS = 4 * 60 * 60 * 1000;
 
 let status = {
   enabled: false,
@@ -18,6 +21,11 @@ let status = {
 
 let autoUpdater = null;
 let ipcReady = false;
+let timersStarted = false;
+let firstCheckTimer = null;
+let intervalTimer = null;
+let checkInFlight = false;
+let downloadInFlight = false;
 let log = (message) => console.log("[tacos-updater]", message);
 
 function snapshot() {
@@ -46,8 +54,6 @@ function setStatus(patch) {
 }
 
 function configureGithubFeed(updater) {
-  // Prefer app-update.yml from a packaged build (H-DESKTOP-UPDATE-02).
-  // When that file is missing, use the GitHub repo from package.json.
   try {
     const yml = path.join(process.resourcesPath || "", "app-update.yml");
     if (fs.existsSync(yml)) return;
@@ -69,6 +75,65 @@ function configureGithubFeed(updater) {
   }
 }
 
+async function runCheck(reason) {
+  if (!status.enabled || !autoUpdater || checkInFlight) return null;
+  checkInFlight = true;
+  log(`app update check (${reason})`);
+  try {
+    return await autoUpdater.checkForUpdates();
+  } catch (err) {
+    const message = err && err.message ? err.message : String(err);
+    setStatus({ state: "error", error: message });
+    log(`app update check failed: ${message}`);
+    return null;
+  } finally {
+    checkInFlight = false;
+  }
+}
+
+async function maybeDownload() {
+  if (!status.enabled || !autoUpdater) return;
+  if (downloadInFlight) return;
+  if (status.state !== "available" && status.state !== "downloading") return;
+  if (status.state === "downloaded") return;
+  downloadInFlight = true;
+  try {
+    log("app update download start");
+    await autoUpdater.downloadUpdate();
+  } catch (err) {
+    const message = err && err.message ? err.message : String(err);
+    setStatus({ state: "error", error: message });
+    log(`app update download failed: ${message}`);
+  } finally {
+    downloadInFlight = false;
+  }
+}
+
+function startSchedule() {
+  if (timersStarted || !status.enabled) return;
+  timersStarted = true;
+  firstCheckTimer = setTimeout(() => {
+    void runCheck("startup").then(() => maybeDownload());
+  }, FIRST_CHECK_DELAY_MS);
+  intervalTimer = setInterval(() => {
+    void runCheck("interval").then(() => maybeDownload());
+  }, CHECK_INTERVAL_MS);
+  // Allow the process to exit in tests and short-lived launches.
+  if (typeof firstCheckTimer.unref === "function") firstCheckTimer.unref();
+  if (typeof intervalTimer.unref === "function") intervalTimer.unref();
+  log(
+    `app update schedule armed (first=${FIRST_CHECK_DELAY_MS}ms interval=${CHECK_INTERVAL_MS}ms)`,
+  );
+}
+
+function stopSchedule() {
+  if (firstCheckTimer) clearTimeout(firstCheckTimer);
+  if (intervalTimer) clearInterval(intervalTimer);
+  firstCheckTimer = null;
+  intervalTimer = null;
+  timersStarted = false;
+}
+
 function registerIpc() {
   if (ipcReady) return;
   ipcReady = true;
@@ -83,18 +148,16 @@ function registerIpc() {
         status: snapshot(),
       };
     }
-    try {
-      const result = await autoUpdater.checkForUpdates();
-      return {
-        ok: true,
-        status: snapshot(),
-        updateInfo: result && result.updateInfo ? result.updateInfo : null,
-      };
-    } catch (err) {
-      const message = err && err.message ? err.message : String(err);
-      setStatus({ state: "error", error: message });
-      return { ok: false, error: message, status: snapshot() };
+    const result = await runCheck("manual");
+    if (status.state === "available") await maybeDownload();
+    if (status.state === "error") {
+      return { ok: false, error: status.error, status: snapshot() };
     }
+    return {
+      ok: true,
+      status: snapshot(),
+      updateInfo: result && result.updateInfo ? result.updateInfo : null,
+    };
   });
 
   ipcMain.handle("tacos:app-update:download", async () => {
@@ -151,6 +214,8 @@ function bindUpdaterEvents(updater) {
       availableVersion: info && info.version ? info.version : null,
       error: null,
     });
+    // Background download for scheduled and manual checks (H-DESKTOP-UPDATE-04).
+    void maybeDownload();
   });
   updater.on("update-not-available", () => {
     setStatus({ state: "not-available", availableVersion: null, error: null });
@@ -178,7 +243,7 @@ function bindUpdaterEvents(updater) {
 
 /**
  * Wire electron-updater for packaged builds only. Dev / unpackaged runs stay idle.
- * Call once from app.whenReady. No UI and no timers here (later backlog ids).
+ * Call once from app.whenReady.
  */
 function initAppUpdater(options = {}) {
   if (typeof options.log === "function") log = options.log;
@@ -193,7 +258,6 @@ function initAppUpdater(options = {}) {
   }
 
   try {
-    // CommonJS export shape from electron-updater.
     autoUpdater = require("electron-updater").autoUpdater;
   } catch (err) {
     const message = err && err.message ? err.message : String(err);
@@ -203,11 +267,12 @@ function initAppUpdater(options = {}) {
   }
 
   status.enabled = true;
-  // H-DESKTOP-UPDATE-04 owns scheduled download. Keep manual download through IPC for now.
+  // Scheduled and event-driven download owns the transfer (H-DESKTOP-UPDATE-04).
   autoUpdater.autoDownload = false;
   autoUpdater.autoInstallOnAppQuit = true;
   configureGithubFeed(autoUpdater);
   bindUpdaterEvents(autoUpdater);
+  startSchedule();
   log(`app updater ready v${status.currentVersion}`);
   return { enabled: true };
 }
@@ -216,7 +281,17 @@ function getAppUpdateStatus() {
   return snapshot();
 }
 
+function getAppUpdateScheduleForTests() {
+  return {
+    firstCheckDelayMs: FIRST_CHECK_DELAY_MS,
+    checkIntervalMs: CHECK_INTERVAL_MS,
+    timersStarted,
+  };
+}
+
 module.exports = {
   initAppUpdater,
   getAppUpdateStatus,
+  getAppUpdateScheduleForTests,
+  stopSchedule,
 };
