@@ -54,6 +54,7 @@ async function DocContent({
       author={author}
       canEdit={canEditPage(page, user.id)}
       isOwner={page.createdBy === user.id}
+      viewerId={user.id}
       subpages={subpages}
       ctx={{ lookup: pageLookup(refs), base: `/${workspaceId}/docs/`, embeds }}
       refs={refs}

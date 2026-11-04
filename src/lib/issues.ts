@@ -36,6 +36,7 @@ import {
   users,
   workspaceMembers,
   workspaces,
+  pageComments,
   pageVersions,
   pages,
 } from "../db/schema";
@@ -423,6 +424,7 @@ const WORKSPACE_TRASH_DAYS = 30;
 // Hard delete: only the 30-day sweep and an expired restore call this.
 async function purgeWorkspaceData(db: ReturnType<typeof getDb>, workspaceId: string) {
   await db.delete(pageVersions).where(eq(pageVersions.workspaceId, workspaceId));
+  await db.delete(pageComments).where(eq(pageComments.workspaceId, workspaceId));
   await db.delete(pages).where(eq(pages.workspaceId, workspaceId));
   const workspaceIssues = await db
     .select({ id: issues.id })
@@ -2838,6 +2840,8 @@ export type NotificationRow = {
   issueNumber: number | null;
   issueProjectName: string | null;
   issueTitle: string;
+  pageId: string | null;
+  pageTitle: string | null;
   type: string;
   body: string;
   readAt: string | null;
@@ -2853,6 +2857,8 @@ export async function listNotifications(workspaceId: string, userId: string): Pr
       issueNumber: issues.number,
       issueProjectName: projects.name,
       issueTitle: issues.title,
+      pageId: notifications.pageId,
+      pageTitle: pages.title,
       type: notifications.type,
       body: notifications.body,
       readAt: notifications.readAt,
@@ -2861,6 +2867,7 @@ export async function listNotifications(workspaceId: string, userId: string): Pr
     .from(notifications)
     .leftJoin(issues, eq(issues.id, notifications.issueId))
     .leftJoin(projects, eq(projects.id, issues.projectId))
+    .leftJoin(pages, eq(pages.id, notifications.pageId))
     // A deleted workspace cannot be opened, so its farewell notice follows the member
     // into whichever workspace they still have.
     .where(

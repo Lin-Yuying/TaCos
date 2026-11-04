@@ -1,7 +1,7 @@
 import crypto from "node:crypto";
 import { and, desc, eq, inArray, isNotNull, isNull, lt, or } from "drizzle-orm";
 import { getDb } from "../db/client";
-import { pageVersions, pages, users } from "../db/schema";
+import { notifications, pageComments, pageVersions, pages, users } from "../db/schema";
 import { TacosError, getProject, nowIso } from "./issues";
 
 export type DocPage = {
@@ -712,6 +712,8 @@ export async function purgePage(
       .where(and(eq(pages.workspaceId, workspaceId), eq(pages.trashRoot, pageId)))
   ).map((page) => page.id);
   await db.delete(pageVersions).where(inArray(pageVersions.pageId, ids));
+  await db.delete(pageComments).where(inArray(pageComments.pageId, ids));
+  await db.delete(notifications).where(inArray(notifications.pageId, ids));
   await db.delete(pages).where(inArray(pages.id, ids));
 }
 

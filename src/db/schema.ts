@@ -266,6 +266,25 @@ export const pageVersions = sqliteTable(
   (t) => [uniqueIndex("page_versions_page_seq_idx").on(t.pageId, t.seq)]
 );
 
+export const pageComments = sqliteTable(
+  "page_comments",
+  {
+    id: text("id").primaryKey(),
+    pageId: text("page_id").notNull(),
+    workspaceId: text("workspace_id").notNull(),
+    authorId: text("author_id").notNull(),
+    body: text("body").notNull(),
+    // The passage it is about, with its surroundings; empty for a comment on the document.
+    quote: text("quote"),
+    prefix: text("prefix").notNull().default(""),
+    suffix: text("suffix").notNull().default(""),
+    via: text("via").notNull().default("you"),
+    resolvedAt: text("resolved_at"),
+    createdAt: text("created_at").notNull(),
+  },
+  (t) => [index("page_comments_page_idx").on(t.pageId)]
+);
+
 export const issues = sqliteTable(
   "issues",
   {
@@ -394,7 +413,9 @@ export const notifications = sqliteTable(
     workspaceId: text("workspace_id").notNull(),
     userId: text("user_id").notNull(),
     issueId: text("issue_id").notNull(),
-    // assigned | commented | mentioned
+    // Set on a document's notice; issueId is empty then.
+    pageId: text("page_id"),
+    // assigned | commented | mentioned | doc_commented | doc_mentioned
     type: text("type").notNull(),
     body: text("body").notNull(),
     readAt: text("read_at"),

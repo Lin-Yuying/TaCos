@@ -24,7 +24,7 @@ export function NotificationsView({
   const t = useT();
   const locale = useLocale();
   const router = useRouter();
-  const { openIssue } = useUI();
+  const { openIssue, openPage } = useUI();
   const [marking, setMarking] = useState(false);
   const [clearing, setClearing] = useState(false);
   // Rows the user has opened since this view loaded. The server data refreshes a
@@ -43,7 +43,8 @@ export function NotificationsView({
   function open(item: NotificationRow) {
     // Workspace-deletion notices have no issue behind them and no workspace left to
     // open; reading them is all a click can do.
-    if (item.type !== "workspace_deleted") openIssue(item.issueId);
+    if (item.pageId) openPage(item.pageId);
+    else if (item.type !== "workspace_deleted") openIssue(item.issueId);
     if (!isUnread(item)) return;
     setOpened((prev) => [...prev, item.id]);
     void markNotificationReadAction(workspaceId, item.id).then(() => {
@@ -146,7 +147,9 @@ export function NotificationsView({
                 <span className="block text-[11px] text-faint">
                   {item.type === "workspace_deleted"
                     ? t("Workspace deleted")
-                    : `${issueRef({
+                    : item.pageId
+                      ? item.pageTitle ?? t("Deleted document")
+                      : `${issueRef({
                         projectName: item.issueProjectName,
                         number: item.issueNumber,
                         identifier: item.issueIdentifier,
@@ -178,6 +181,8 @@ function noticeText(type: string, body: string, t: ReturnType<typeof useT>): str
   if (type === "released") return t("{name} released a task you follow", { name: body });
   if (type === "due_soon") return t("Due {date}: reminder", { date: body });
   if (type === "mentioned") return t("{name} mentioned you", { name: body });
+  if (type === "doc_mentioned") return t("{name} mentioned you in a document", { name: body });
+  if (type === "doc_commented") return t("{name} commented on your document", { name: body });
   if (type === "claim_transferred") return t("{name} handed a task to you", { name: body });
   return body;
 }

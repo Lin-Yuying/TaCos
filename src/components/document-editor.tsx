@@ -5,6 +5,8 @@ import { useRouter } from "next/navigation";
 import { EditorContent, useEditor, type Editor, type Range } from "@tiptap/react";
 import { BubbleMenu } from "@tiptap/react/menus";
 import { Extension } from "@tiptap/core";
+import { Plugin, PluginKey } from "@tiptap/pm/state";
+import { Decoration, DecorationSet } from "@tiptap/pm/view";
 import Placeholder from "@tiptap/extension-placeholder";
 import Suggestion, { type SuggestionProps } from "@tiptap/suggestion";
 import {
@@ -17,6 +19,7 @@ import {
   Italic,
   List,
   ListOrdered,
+  MessageSquare,
   Minus,
   Quote,
   Strikethrough,
@@ -25,6 +28,8 @@ import {
 } from "lucide-react";
 import { documentExtensions } from "@/lib/editor/extensions";
 import { documentMarkdown, markdownToDocument } from "@/lib/editor/document-markdown";
+import { anchorFromSelection, anchorRanges } from "@/lib/editor/anchors";
+import type { DocAnchor } from "@/lib/doc-anchor";
 import type { PageContext } from "@/components/markdown";
 import { useT } from "@/components/i18n-context";
 
@@ -58,16 +63,87 @@ function matchCommands(query: string): SlashCommand[] {
 
 type MenuState = { items: SlashCommand[]; selected: number; x: number; y: number; pick: (c: SlashCommand) => void };
 
+export type EditorAnchor = DocAnchor & { id: string };
+
+const NO_ANCHORS: EditorAnchor[] = [];
+
+const anchorsKey = new PluginKey<DecorationSet>("commentAnchors");
+
+// What the highlight plugin reads; the component keeps it current.
+class AnchorStore {
+  anchors: EditorAnchor[] = NO_ANCHORS;
+  active: string | null = null;
+  onClick: (id: string) => void = () => {};
+  update(anchors: EditorAnchor[], active: string | null, onClick: (id: string) => void) {
+    this.anchors = anchors;
+    this.active = active;
+    this.onClick = onClick;
+  }
+}
+
+// Paints the passages comments are about.
+const CommentAnchors = Extension.create<{ store: AnchorStore }>({
+  name: "commentAnchors",
+  addOptions() {
+    return { store: new AnchorStore() };
+  },
+  addProseMirrorPlugins() {
+    const storage = this.options.store;
+    const build = (doc: Parameters<typeof anchorRanges>[0]) =>
+      DecorationSet.create(
+        doc,
+        anchorRanges(doc, storage.anchors).map(({ anchor, from, to }) =>
+          Decoration.inline(
+            from,
+            to,
+            { class: anchor.id === storage.active ? "doc-comment-anchor is-active" : "doc-comment-anchor" },
+            { id: anchor.id }
+          )
+        )
+      );
+    return [
+      new Plugin<DecorationSet>({
+        key: anchorsKey,
+        state: {
+          init: (_, state) => build(state.doc),
+          apply: (tr, set) => (tr.docChanged || tr.getMeta(anchorsKey) ? build(tr.doc) : set),
+        },
+        props: {
+          decorations: (state) => anchorsKey.getState(state),
+          handleClick: (view, pos) => {
+            const hit = anchorsKey.getState(view.state)?.find(pos, pos)[0];
+            if (hit) storage.onClick((hit.spec as { id: string }).id);
+            return false;
+          },
+        },
+      }),
+    ];
+  },
+});
+
 export function DocumentEditor({
   value,
   onChange,
   placeholder,
   pages,
+  editable = true,
+  anchors = NO_ANCHORS,
+  activeAnchor = null,
+  onComment,
+  onAnchorClick,
+  onAnchorsLocated,
 }: {
   value: string;
   onChange: (next: string) => void;
   placeholder?: string;
   pages?: PageContext;
+  // A reader who cannot edit still sees the same page and can select text to comment on.
+  editable?: boolean;
+  anchors?: EditorAnchor[];
+  activeAnchor?: string | null;
+  onComment?: (anchor: DocAnchor) => void;
+  onAnchorClick?: (id: string) => void;
+  onAnchorsLocated?: (ids: Set<string>) => void;
 }) {
   const t = useT();
   const router = useRouter();
@@ -77,11 +153,16 @@ export function DocumentEditor({
   const pagesRef = useRef(pages);
   const [menu, setMenu] = useState<MenuState | null>(null);
   const menuRef = useRef<MenuState | null>(null);
+  const [anchorStore] = useState(() => new AnchorStore());
+  const locatedRef = useRef(onAnchorsLocated);
+  const anchorClickRef = useRef(onAnchorClick);
 
   useEffect(() => {
     onChangeRef.current = onChange;
     pagesRef.current = pages;
     menuRef.current = menu;
+    anchorClickRef.current = onAnchorClick;
+    locatedRef.current = onAnchorsLocated;
   });
 
   const slash = useMemo(
@@ -138,8 +219,9 @@ export function DocumentEditor({
 
   const editor = useEditor({
     immediatelyRender: false,
-    extensions: [...documentExtensions(), Placeholder.configure({ placeholder: placeholder ?? "" }), slash],
+    extensions: [...documentExtensions(), Placeholder.configure({ placeholder: placeholder ?? "" }), slash, CommentAnchors.configure({ store: anchorStore })],
     content: markdownToDocument(markdown, value),
+    editable,
     editorProps: {
       handleClickOn: (_view, _pos, node) => {
         if (node.type.name !== "pageRef" && node.type.name !== "pageEmbed") return false;
@@ -167,6 +249,24 @@ export function DocumentEditor({
     editor.commands.setContent(markdownToDocument(markdown, value), { emitUpdate: false });
   }, [editor, markdown, value]);
 
+  useEffect(() => {
+    if (editor) editor.setEditable(editable, false);
+  }, [editor, editable]);
+
+  // New comments, or a comment picked in the panel: repaint, and bring the passage into view.
+  useEffect(() => {
+    if (!editor) return;
+    anchorStore.update(anchors, activeAnchor, (id) => anchorClickRef.current?.(id));
+    editor.view.dispatch(editor.state.tr.setMeta(anchorsKey, true));
+    const ranges = anchorRanges(editor.state.doc, anchors);
+    locatedRef.current?.(new Set(ranges.map((range) => range.anchor.id)));
+    const active = ranges.find((range) => range.anchor.id === activeAnchor);
+    if (active) {
+      const { node } = editor.view.domAtPos(active.from);
+      (node instanceof Element ? node : node.parentElement)?.scrollIntoView({ block: "center", behavior: "smooth" });
+    }
+  }, [editor, anchorStore, anchors, activeAnchor, value]);
+
   const marks = [
     { label: "Bold", icon: Bold, name: "bold", run: (e: Editor) => e.chain().focus().toggleBold().run() },
     { label: "Italic", icon: Italic, name: "italic", run: (e: Editor) => e.chain().focus().toggleItalic().run() },
@@ -179,9 +279,10 @@ export function DocumentEditor({
       {editor && (
         <BubbleMenu
           editor={editor}
+          shouldShow={({ state, view }) => !state.selection.empty && view.hasFocus()}
           className="flex items-center gap-0.5 rounded-md border border-border bg-overlay p-0.5 shadow-md"
         >
-          {marks.map((mark) => (
+          {editable && marks.map((mark) => (
             <button
               key={mark.name}
               type="button"
@@ -195,6 +296,21 @@ export function DocumentEditor({
               <mark.icon size={14} />
             </button>
           ))}
+          {onComment && (
+            <button
+              type="button"
+              title={t("Comment")}
+              aria-label={t("Comment")}
+              onClick={() => {
+                const { from, to } = editor.state.selection;
+                const anchor = anchorFromSelection(editor.state.doc, from, to);
+                if (anchor) onComment(anchor);
+              }}
+              className="rounded p-1 text-muted transition-colors hover:bg-elevated"
+            >
+              <MessageSquare size={14} />
+            </button>
+          )}
         </BubbleMenu>
       )}
       <EditorContent editor={editor} />

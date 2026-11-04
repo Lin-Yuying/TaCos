@@ -159,6 +159,21 @@ CREATE TABLE IF NOT EXISTS pages (
 );
 CREATE INDEX IF NOT EXISTS pages_workspace_idx ON pages (workspace_id);
 
+CREATE TABLE IF NOT EXISTS page_comments (
+  id TEXT PRIMARY KEY,
+  page_id TEXT NOT NULL,
+  workspace_id TEXT NOT NULL,
+  author_id TEXT NOT NULL,
+  body TEXT NOT NULL,
+  quote TEXT,
+  prefix TEXT NOT NULL DEFAULT '',
+  suffix TEXT NOT NULL DEFAULT '',
+  via TEXT NOT NULL DEFAULT 'you',
+  resolved_at TEXT,
+  created_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS page_comments_page_idx ON page_comments (page_id);
+
 CREATE TABLE IF NOT EXISTS page_versions (
   id TEXT PRIMARY KEY,
   page_id TEXT NOT NULL,
@@ -754,6 +769,7 @@ function bootstrap(sqlite: Database.Database) {
     sqlite.exec("CREATE INDEX IF NOT EXISTS pages_project_idx ON pages (project_id)");
   }
   addColumnIfMissing(sqlite, "pages", "revision", "INTEGER NOT NULL DEFAULT 0");
+  addColumnIfMissing(sqlite, "notifications", "page_id", "TEXT");
   addColumnIfMissing(sqlite, "pages", "deleted_at", "TEXT");
   addColumnIfMissing(sqlite, "pages", "trash_root", "TEXT");
   addColumnIfMissing(sqlite, "issues", "reminder_sent_for", "TEXT");

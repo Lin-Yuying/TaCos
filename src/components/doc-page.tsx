@@ -8,6 +8,7 @@ import {
   Link2,
   Lock,
   Maximize2,
+  MessageSquare,
   Minimize2,
   Paperclip,
   Plus,
@@ -16,20 +17,28 @@ import {
   Users,
 } from "lucide-react";
 import { Menu, MenuItem } from "@/components/menu";
-import { Markdown, type PageContext, type PageRefEntry } from "@/components/markdown";
-import { DocumentEditor } from "@/components/document-editor";
+import type { PageContext, PageRefEntry } from "@/components/markdown";
+import { DocumentEditor, type EditorAnchor } from "@/components/document-editor";
+import { DocCommentsPanel } from "@/components/doc-comments";
 import { AssigneeAvatar } from "@/components/issue-table";
 import { AiEditPanel } from "@/components/ai-assist";
 import { DiffLines, DocUpdatesPanel } from "@/components/doc-updates";
 import { useUI } from "@/components/ui-context";
 import {
+  addPageCommentAction,
   createPageAction,
   deletePageAction,
+  listPageCommentsAction,
+  removePageCommentAction,
   savePageDocAction,
+  setPageCommentResolvedAction,
   setPageSharedAction,
   updatePageAction,
 } from "@/app/pages-actions";
 import { announceDocsDeleted } from "@/components/tab-events";
+import type { DocAnchor } from "@/lib/doc-anchor";
+import type { Member } from "@/lib/issues";
+import type { PageComment } from "@/lib/page-comments";
 import type { DocPage, PageAuthor, PageSummary } from "@/lib/pages";
 import { useT } from "@/components/i18n-context";
 
@@ -55,6 +64,7 @@ export function DocPageView({
   author,
   canEdit,
   isOwner,
+  viewerId,
   subpages,
   ctx,
   refs,
@@ -69,6 +79,7 @@ export function DocPageView({
   author?: PageAuthor | null;
   canEdit: boolean;
   isOwner: boolean;
+  viewerId: string;
   subpages: PageSummary[];
   ctx: PageContext;
   refs: PageRefEntry[];
@@ -93,7 +104,13 @@ export function DocPageView({
   const [saved, setSaved] = useState(false);
   const [aiPanel, setAiPanel] = useState<{ x: number; y: number } | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [updatesOpen, setUpdatesOpen] = useState(false);
+  const [side, setSide] = useState<"updates" | "comments" | null>(null);
+  const [comments, setComments] = useState<PageComment[]>([]);
+  const [members, setMembers] = useState<Member[]>([]);
+  const [located, setLocated] = useState<Set<string>>(new Set());
+  const [draftAnchor, setDraftAnchor] = useState<DocAnchor | null>(null);
+  const [activeComment, setActiveComment] = useState<string | null>(null);
+  const [commentBusy, setCommentBusy] = useState(false);
   const [conflict, setConflict] = useState<{ doc: string; revision: number; by: string | null } | null>(null);
   const pending = useRef<string | null>(null);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -182,6 +199,54 @@ export function DocPageView({
     setDoc(next.doc);
     setTitle(next.title);
     router.refresh();
+  }
+
+  useEffect(() => {
+    let live = true;
+    void listPageCommentsAction(workspaceId, page.id).then((result) => {
+      if (!live || !result.ok) return;
+      setComments(result.data.comments);
+      setMembers(result.data.members);
+    });
+    return () => {
+      live = false;
+    };
+  }, [workspaceId, page.id]);
+
+  const anchors = useMemo<EditorAnchor[]>(
+    () =>
+      comments.flatMap((comment) =>
+        comment.quote && !comment.resolvedAt
+          ? [{ id: comment.id, quote: comment.quote, prefix: comment.prefix, suffix: comment.suffix }]
+          : []
+      ),
+    [comments]
+  );
+
+  async function addComment(body: string): Promise<boolean> {
+    if (!body.trim() || commentBusy) return false;
+    setCommentBusy(true);
+    const result = await addPageCommentAction(workspaceId, page.id, { body, anchor: draftAnchor });
+    setCommentBusy(false);
+    if (!result.ok) {
+      setError(result.error);
+      return false;
+    }
+    setComments(result.data);
+    setDraftAnchor(null);
+    return true;
+  }
+
+  async function resolveComment(id: string, resolved: boolean) {
+    const result = await setPageCommentResolvedAction(workspaceId, page.id, id, resolved);
+    if (result.ok) setComments(result.data);
+    else setError(result.error);
+  }
+
+  async function removeComment(id: string) {
+    const result = await removePageCommentAction(workspaceId, page.id, id);
+    if (result.ok) setComments(result.data);
+    else setError(result.error);
   }
 
   async function saveTitle() {
@@ -282,6 +347,7 @@ export function DocPageView({
   );
   const parent = page.parentId ? refs.find((ref) => ref.id === page.parentId) ?? null : null;
   const placed = useMemo(() => placedPageKeys(doc), [doc]);
+  const openComments = comments.filter((comment) => !comment.resolvedAt).length;
   const unplaced = subpages.filter(
     (child) => !placed.has(child.id) && !placed.has(child.title.toLowerCase())
   );
@@ -319,12 +385,25 @@ export function DocPageView({
           </span>
           <button
             type="button"
-            onClick={() => setUpdatesOpen((open) => !open)}
+            onClick={() => setSide((open) => (open === "comments" ? null : "comments"))}
+            title={t("Comments")}
+            aria-label={t("Comments")}
+            aria-pressed={side === "comments"}
+            className={`flex items-center gap-1 rounded-md border px-2 py-1 text-[12px] font-medium transition-colors hover:border-border-strong hover:text-text ${
+              side === "comments" ? "border-border-strong text-text" : "border-border text-muted"
+            }`}
+          >
+            <MessageSquare size={12} />
+            {openComments > 0 && <span data-comment-count>{openComments}</span>}
+          </button>
+          <button
+            type="button"
+            onClick={() => setSide((open) => (open === "updates" ? null : "updates"))}
             title={t("Updates")}
             aria-label={t("Updates")}
-            aria-pressed={updatesOpen}
+            aria-pressed={side === "updates"}
             className={`flex items-center gap-1 rounded-md border px-2 py-1 text-[12px] font-medium transition-colors hover:border-border-strong hover:text-text ${
-              updatesOpen ? "border-border-strong text-text" : "border-border text-muted"
+              side === "updates" ? "border-border-strong text-text" : "border-border text-muted"
             }`}
           >
             <History size={12} />
@@ -539,47 +618,52 @@ export function DocPageView({
 
             {/* Anything you can edit opens in the editor directly — there is no
                 read/edit toggle to switch out of, so the caret is where you click. */}
-            {canEdit ? (
-              <>
-                <DocumentEditor
-                  value={doc}
-                  onChange={editDoc}
-                  pages={pageCtx}
-                  placeholder={t("Write something, or type / for commands…")}
-                />
-                <div className="mt-4 flex items-center gap-2">
-                  <Menu
-                    width={240}
-                    triggerClassName="flex items-center gap-1 rounded-md border border-border px-2 py-1 text-[12px] text-muted transition-colors hover:border-border-strong hover:text-text"
-                    trigger={
-                      <>
-                        <Link2 size={12} /> {t("Link a page")}
-                      </>
-                    }
-                  >
-                    {(close) => <PagePicker refs={refs} close={close} onPick={(ref) => insertRef(ref, false)} />}
-                  </Menu>
-                  <Menu
-                    width={240}
-                    triggerClassName="flex items-center gap-1 rounded-md border border-border px-2 py-1 text-[12px] text-muted transition-colors hover:border-border-strong hover:text-text"
-                    trigger={
-                      <>
-                        <Paperclip size={12} /> {t("Embed a page")}
-                      </>
-                    }
-                  >
-                    {(close) => <PagePicker refs={refs} close={close} onPick={(ref) => insertRef(ref, true)} />}
-                  </Menu>
-                </div>
-              </>
-            ) : (
-              <>
-                {doc.trim() ? (
-                  <Markdown source={doc} pages={pageCtx} storageId={`doc:${page.id}`} />
-                ) : (
-                  <p className="text-[13.5px] text-faint">{t("This page is empty.")}</p>
-                )}
-              </>
+            {!canEdit && !doc.trim() && <p className="text-[13.5px] text-faint">{t("This page is empty.")}</p>}
+            {(canEdit || doc.trim()) && (
+              <DocumentEditor
+                value={doc}
+                onChange={editDoc}
+                pages={pageCtx}
+                editable={canEdit}
+                placeholder={t("Write something, or type / for commands…")}
+                anchors={anchors}
+                activeAnchor={activeComment}
+                onComment={(anchor) => {
+                  setDraftAnchor(anchor);
+                  setSide("comments");
+                }}
+                onAnchorClick={(id) => {
+                  setActiveComment(id);
+                  setSide("comments");
+                }}
+                onAnchorsLocated={setLocated}
+              />
+            )}
+            {canEdit && (
+              <div className="mt-4 flex items-center gap-2">
+                <Menu
+                  width={240}
+                  triggerClassName="flex items-center gap-1 rounded-md border border-border px-2 py-1 text-[12px] text-muted transition-colors hover:border-border-strong hover:text-text"
+                  trigger={
+                    <>
+                      <Link2 size={12} /> {t("Link a page")}
+                    </>
+                  }
+                >
+                  {(close) => <PagePicker refs={refs} close={close} onPick={(ref) => insertRef(ref, false)} />}
+                </Menu>
+                <Menu
+                  width={240}
+                  triggerClassName="flex items-center gap-1 rounded-md border border-border px-2 py-1 text-[12px] text-muted transition-colors hover:border-border-strong hover:text-text"
+                  trigger={
+                    <>
+                      <Paperclip size={12} /> {t("Embed a page")}
+                    </>
+                  }
+                >
+                  {(close) => <PagePicker refs={refs} close={close} onPick={(ref) => insertRef(ref, true)} />}
+                </Menu>
+              </div>
             )}
           </div>
 
@@ -594,7 +678,7 @@ export function DocPageView({
           </div>
         </div>
       </div>
-      {updatesOpen && (
+      {side === "updates" && (
         <DocUpdatesPanel
           workspaceId={workspaceId}
           pageId={page.id}
@@ -602,7 +686,26 @@ export function DocPageView({
           compact={compact}
           beforeRestore={beforeRestore}
           onRestored={restored}
-          onClose={() => setUpdatesOpen(false)}
+          onClose={() => setSide(null)}
+        />
+      )}
+      {side === "comments" && (
+        <DocCommentsPanel
+          comments={comments}
+          members={members}
+          userId={viewerId}
+          isOwner={isOwner}
+          compact={compact}
+          located={located}
+          draftAnchor={draftAnchor}
+          active={activeComment}
+          busy={commentBusy}
+          onAdd={addComment}
+          onResolve={(id, resolved) => void resolveComment(id, resolved)}
+          onRemove={(id) => void removeComment(id)}
+          onSelect={setActiveComment}
+          onClearDraft={() => setDraftAnchor(null)}
+          onClose={() => setSide(null)}
         />
       )}
       </div>

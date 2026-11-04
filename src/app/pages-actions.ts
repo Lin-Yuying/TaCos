@@ -20,7 +20,15 @@ import {
   type PageVersion,
   type PageVersionChange,
 } from "@/lib/pages";
-import { TacosError } from "@/lib/issues";
+import { TacosError, listMembers, type Member } from "@/lib/issues";
+import {
+  addPageComment,
+  listPageComments,
+  removePageComment,
+  setPageCommentResolved,
+  type PageComment,
+} from "@/lib/page-comments";
+import type { DocAnchor } from "@/lib/doc-anchor";
 import type { ActionResult } from "./actions";
 
 function refresh(workspaceId: string) {
@@ -183,5 +191,52 @@ export async function purgePageAction(
     const { user, workspace } = await requireWorkspace(workspaceId);
     await purgePage(workspaceId, pageId, user.id, workspace.createdBy === user.id);
     refresh(workspaceId);
+  });
+}
+
+export async function listPageCommentsAction(
+  workspaceId: string,
+  pageId: string
+): Promise<ActionResult<{ comments: PageComment[]; members: Member[] }>> {
+  return run(async () => {
+    const { user } = await requireWorkspace(workspaceId);
+    return {
+      comments: await listPageComments(workspaceId, pageId, user.id),
+      members: await listMembers(workspaceId),
+    };
+  });
+}
+
+export async function addPageCommentAction(
+  workspaceId: string,
+  pageId: string,
+  input: { body: string; anchor?: DocAnchor | null }
+): Promise<ActionResult<PageComment[]>> {
+  return run(async () => {
+    const { user } = await requireWorkspace(workspaceId);
+    return addPageComment(workspaceId, pageId, user.id, input);
+  });
+}
+
+export async function setPageCommentResolvedAction(
+  workspaceId: string,
+  pageId: string,
+  commentId: string,
+  resolved: boolean
+): Promise<ActionResult<PageComment[]>> {
+  return run(async () => {
+    const { user } = await requireWorkspace(workspaceId);
+    return setPageCommentResolved(workspaceId, pageId, user.id, commentId, resolved);
+  });
+}
+
+export async function removePageCommentAction(
+  workspaceId: string,
+  pageId: string,
+  commentId: string
+): Promise<ActionResult<PageComment[]>> {
+  return run(async () => {
+    const { user } = await requireWorkspace(workspaceId);
+    return removePageComment(workspaceId, pageId, user.id, commentId);
   });
 }

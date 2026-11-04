@@ -31,6 +31,7 @@ export async function GET(_req: Request, ctx: Ctx) {
       author,
       canEdit: canEditPage(page, user.id),
       isOwner: page.createdBy === user.id,
+      viewerId: user.id,
       subpages,
       refs,
       ctx: { lookup: pageLookup(refs), base: `/${workspaceId}/docs/`, embeds },

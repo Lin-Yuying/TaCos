@@ -13,6 +13,7 @@ type PageDetail = {
   author: PageAuthor | null;
   canEdit: boolean;
   isOwner: boolean;
+  viewerId: string;
   subpages: PageSummary[];
   refs: PageRefEntry[];
   ctx: PageContext;
@@ -102,6 +103,7 @@ function DocPanel({
       author={detail.author}
       canEdit={detail.canEdit}
       isOwner={detail.isOwner}
+      viewerId={detail.viewerId}
       subpages={detail.subpages}
       ctx={detail.ctx}
       refs={detail.refs}
