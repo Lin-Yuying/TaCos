@@ -52,6 +52,30 @@ No migration CLI — the SQLite schema is created/updated idempotently by `src/d
 - Errors: throw `TacosError(message, status, hint?)` from lib code; REST maps it to `{error, hint}` JSON, actions catch it and return `{ok:false}`.
 - Server actions return `ActionResult<T>` (`{ok:true,data} | {ok:false,error}`), never throw to the client.
 
+## Working rules
+
+Always-on rules for this repo. Put occasional workflows in skills or docs, and delete a rule here once a check enforces it.
+
+- **Use one word per thing** (see Glossary). Names in code, UI copy, docs and commits follow it; add a term here before introducing a new one.
+- **Reuse before building**: if a mature public component covers the need, use it instead of writing our own. Compare candidates first and record in the plan what was chosen and why. Check that the license fits MIT distribution, that it is maintained, and that the free edition covers the need. Write our own code only for what no such component covers, and say why.
+- **"Done" needs evidence from outside the author**: a check script, a build, or the real flow driven end to end. Agents overrate their own work, so have a fresh context review a batch before a release. Report what was not tested.
+- **Long work lives on disk**: keep a plan with a pass/fail state per item under `docs/plans/`. Each session reads it and `git log`, runs a smoke test, then takes one unfinished item. One item, one commit.
+- **Stop conditions**: if the same failure survives two different fixes, mark the item blocked with the failure output and move to the next item. Never weaken a check to make it pass.
+- **Copy says what to do**: no filler, no closing summaries, no vague terms in UI text or docs.
+- **Numbers that change in place** (timers, counters, unread badges) use `font-variant-numeric: tabular-nums`, so they do not jump.
+
+## Glossary
+
+| Term | Means | In code |
+| --- | --- | --- |
+| Workspace | One team's shared space. Everything shared in it is visible to all its members. | `workspaces` |
+| Member | A person in a workspace. | `workspace_members` |
+| Project | A group of tasks and documents inside a workspace. | `projects` |
+| Task | A unit of work. | `issues` |
+| Document | A markdown page. Either private to its author or shared with the workspace. | `pages` |
+| Harness | An agent CLI a member runs: `codex`, `pi`, `opencode`, `codebuddy`, `dsh`. | `src/lib/harness` |
+| Thread / turn | A conversation with Agent / one request and its reply inside it. | `agent_threads` |
+
 <!-- BEGIN:nextjs-agent-rules -->
 
 ## This is NOT the Next.js you know
