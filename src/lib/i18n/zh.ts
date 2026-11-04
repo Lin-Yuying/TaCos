@@ -894,6 +894,17 @@ const zh: Record<string, string> = {
   "Write something, or type / for commands…": "写点什么，或者输入 / 选择命令…",
   "Rows and columns": "行和列",
   Table: "表格",
+  "Your computer is not connected": "你的电脑没有连上",
+  "Your computer stopped responding during this turn.": "这一轮进行中，你的电脑没有响应了。",
+  "Open TaCos on your computer, then try again.": "在你的电脑上打开 TaCos，再试一次。",
+  "Install it on your computer, then try again.": "先在你的电脑上安装，再试一次。",
+  "Model APIs stay on each member's computer": "模型 API 只保存在每位成员自己的电脑上",
+  "Open TaCos on your own computer to change them.": "在你自己的电脑上打开 TaCos 再修改。",
+  "Your APIs stay on your own computer. Open the TaCos desktop app to add or change them.":
+    "你的 API 只保存在你自己的电脑上。打开 TaCos 桌面端来添加或修改。",
+  "Your own APIs, for you only. Each member fills in their own. They are saved on this computer, in a file only your account can read, not encrypted, and they never reach the server. Pi and DeepSeek Harness have no subscription, so they need an API, and DeepSeek Harness only runs on a DeepSeek address.":
+    "你自己的 API，只有你能用，每位成员各填各的。它们保存在这台电脑上一个只有你的账户能读的文件里，没有加密，不会发到服务器。Pi 和 DeepSeek Harness 没有订阅，所以需要 API，DeepSeek Harness 只能用 DeepSeek 的地址。",
+  "Saved, not verified: the API could not be reached from this computer.": "已保存，但未验证：这台电脑连不上这个 API。",
 };
 
 export default zh;

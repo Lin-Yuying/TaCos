@@ -1,3 +1,4 @@
+import { TacosError } from "./tacos-error";
 import crypto from "node:crypto";
 import { parseMentions } from "./mentions";
 import {
@@ -52,16 +53,7 @@ import {
 export { LABEL_COLORS, PRIORITY_NAMES, REMINDER_PRESETS, REMINDER_META, STATUS_ORDER, STATUS_META } from "./constants";
 export type { Priority, ReminderPreset, Status, Via } from "./constants";
 
-export class TacosError extends Error {
-  status: number;
-  hint?: string;
-
-  constructor(message: string, status = 400, hint?: string) {
-    super(message);
-    this.status = status;
-    this.hint = hint;
-  }
-}
+export { TacosError };
 
 export type Label = { id: string; name: string; color: string };
 export type Member = {

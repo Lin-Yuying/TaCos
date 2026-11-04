@@ -123,6 +123,7 @@ export function SettingsView({
   ai,
   mcpServerPath,
   modelKeys,
+  serverMode,
   harness,
   isOwner,
   nextWorkspaceHref,
@@ -139,6 +140,7 @@ export function SettingsView({
   ai: AiSettingsView;
   mcpServerPath: string | null;
   modelKeys: ModelKeysView;
+  serverMode: boolean;
   harness: HarnessSettingsView;
   isOwner: boolean;
   nextWorkspaceHref: string;
@@ -932,7 +934,7 @@ export function SettingsView({
                   )}
                 </div>
                 <div className="flex flex-wrap items-center gap-2">
-                  {isAdmin && !row.installed && (
+                  {isAdmin && !serverMode && !row.installed && (
                     <button
                       type="button"
                       disabled={Boolean(harnessBusy)}
@@ -942,7 +944,7 @@ export function SettingsView({
                       {harnessBusy === `${row.id}:install` ? t("Installing…") : t("Install")}
                     </button>
                   )}
-                  {isAdmin && row.installed && row.updateAvailable && (
+                  {isAdmin && !serverMode && row.installed && row.updateAvailable && (
                     <button
                       type="button"
                       disabled={Boolean(harnessBusy)}
@@ -973,7 +975,7 @@ export function SettingsView({
           )}
         </section>
 
-        <ModelKeysSection workspaceId={workspace.id} view={modelKeys} />
+        <ModelKeysSection workspaceId={workspace.id} view={modelKeys} serverMode={serverMode} />
 
         <details className="group/advanced" data-testid="settings-advanced">
           <summary className="flex cursor-pointer list-none items-center gap-1.5 text-[13px] font-semibold [&::-webkit-details-marker]:hidden">

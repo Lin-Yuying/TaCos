@@ -11,13 +11,15 @@ import {
 import { listFavoriteProjects, listMembers, listProjects, getJoinCode } from "@/lib/issues";
 import { listPageTree } from "@/lib/pages";
 import { UIProvider } from "@/components/ui-context";
+import { RunnerBridge } from "@/components/runner-bridge";
+import { isServerMode } from "@/lib/server-mode";
 import { WorkspaceShell } from "@/components/workspace-shell";
 import { NewIssueDialog } from "@/components/new-issue-dialog";
 import { NewProjectDialog } from "@/components/new-project-dialog";
 import { CommandPalette } from "@/components/command-palette";
 import { aiReady } from "@/lib/ai";
 import { getWorkspaceHarnessGate } from "@/lib/harness";
-import { harnessesWithKeys } from "@/lib/model-keys";
+import { harnessViewFor } from "@/lib/model-keys";
 import { resolveLocale } from "@/lib/locale";
 import { I18nProvider } from "@/components/i18n-context";
 
@@ -59,7 +61,7 @@ export default async function WorkspaceLayout({
     listPageTree(workspaceId, user.id),
     aiReady(workspaceId, user.id),
     getJoinCode(workspaceId),
-    getWorkspaceHarnessGate(workspaceId, await harnessesWithKeys(user.id)),
+    getWorkspaceHarnessGate(workspaceId, ...(await harnessViewFor(user.id))),
     resolveLocale(user),
   ]);
 
@@ -89,6 +91,7 @@ export default async function WorkspaceLayout({
         <NewIssueDialog workspaceId={active.id} />
         <NewProjectDialog workspaceId={active.id} workspaceName={active.name} />
         <CommandPalette workspaceId={active.id} />
+        {isServerMode() && <RunnerBridge userId={user.id} />}
       </UIProvider>
     </I18nProvider>
   );

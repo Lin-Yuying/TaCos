@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { TacosError } from "./issues";
+import { TacosError } from "./tacos-error";
 import { isServerMode } from "./server-mode";
 
 // Codex reads skills from these two folders on the machine running the server. TaCos may

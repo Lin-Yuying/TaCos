@@ -1,5 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
+import { isServerMode } from "@/lib/server-mode";
 import { Suspense } from "react";
 import { connection } from "next/server";
 import { redirect } from "next/navigation";
@@ -14,7 +15,7 @@ import {
 } from "@/lib/issues";
 import { getAiSettingsView } from "@/lib/ai";
 import { getHarnessSettingsView } from "@/lib/harness";
-import { getModelKeysView, harnessesWithKeys } from "@/lib/model-keys";
+import { getModelKeysView, harnessViewFor } from "@/lib/model-keys";
 import { SettingsView } from "@/components/settings-view";
 
 export default async function SettingsPage({
@@ -45,7 +46,7 @@ async function View({ params }: { params: Promise<{ workspaceId: string }> }) {
       listDeletedWorkspaces(ws.user.id),
       getMembersSeeAllTasks(workspaceId),
       getAiSettingsView(workspaceId),
-      getHarnessSettingsView(workspaceId, await harnessesWithKeys(ws.user.id)),
+      getHarnessSettingsView(workspaceId, ...(await harnessViewFor(ws.user.id))),
       getModelKeysView(ws.user.id),
     ]);
   // Where deleting this workspace lands you: the next team you belong to, or the
@@ -65,6 +66,7 @@ async function View({ params }: { params: Promise<{ workspaceId: string }> }) {
       ai={ai}
       mcpServerPath={fs.existsSync(mcpServerPath) ? mcpServerPath : null}
       modelKeys={modelKeys}
+      serverMode={isServerMode()}
       harness={harness}
       isOwner={ws.workspace.createdBy === ws.user.id}
       nextWorkspaceHref={next ? `/${next.id}` : "/onboarding"}

@@ -693,6 +693,7 @@ const TUNNEL_REMOTE_PORT = 3200;
 const sshKeyPath = () => path.join(app.getPath("home"), ".ssh", "tacos_ed25519");
 
 function stopTunnel() {
+  stopRunner();
   if (tunnel) tunnel.stop();
   tunnel = null;
 }
@@ -766,6 +767,82 @@ ipcMain.handle("tacos:ssh-public-key", () => {
     }
   }
   return { ok: true, publicKey: fs.readFileSync(`${key}.pub`, "utf8").trim() };
+});
+
+/* ---------------------------------------------------------------------------
+ * Agent on this computer.
+ *
+ * Connected to a TaCos server, this app is what runs the signed-in person's Agent: the server
+ * holds no keys and runs no harness. The token lives only in this process's memory.
+ * ------------------------------------------------------------------------- */
+
+let runner = null;
+const KEY_OPERATIONS = new Set(["listKeys", "saveKey", "removeKey", "setEditModel"]);
+
+function runnerDir() {
+  if (process.env.TACOS_RUNNER_BUNDLE_DIR) return path.resolve(process.env.TACOS_RUNNER_BUNDLE_DIR);
+  if (app.isPackaged) return path.join(process.resourcesPath, "server", "runner");
+  return path.join(__dirname, "..", "dist", "server", "runner");
+}
+
+function stopRunner() {
+  if (!runner) return;
+  const { child } = runner;
+  runner = null;
+  logLine("stopping runner");
+  child.kill();
+}
+
+function startRunner({ token, userId }) {
+  stopRunner();
+  const dir = runnerDir();
+  const dataDir = path.join(app.getPath("home"), ".tacos", "runner");
+  fs.mkdirSync(dataDir, { recursive: true, mode: 0o700 });
+  logLine(`starting runner for ${serverUrl}`);
+  const child = utilityProcess.fork(path.join(dir, "runner.cjs"), [], {
+    cwd: dataDir,
+    env: {
+      ...process.env,
+      TACOS_RUNNER_URL: serverUrl,
+      TACOS_RUNNER_TOKEN: token,
+      TACOS_DATA_DIR: dataDir,
+    },
+    stdio: ["ignore", "pipe", "pipe"],
+    serviceName: "TaCos Agent",
+  });
+  const relay = (chunk) => {
+    const text = chunk.toString().trimEnd();
+    if (text) logLine(text);
+  };
+  child.stdout.on("data", relay);
+  child.stderr.on("data", relay);
+  child.on("exit", (code) => {
+    logLine(`runner exited code=${code}`);
+    if (runner?.child === child) runner = null;
+  });
+  runner = { child, userId };
+}
+
+ipcMain.handle("tacos:runner:status", () => ({ running: Boolean(runner), userId: runner?.userId ?? null }));
+
+ipcMain.handle("tacos:runner:ensure", (_event, input) => {
+  if (!serverUrl || typeof input?.token !== "string" || typeof input?.userId !== "string") return;
+  if (runner?.userId === input.userId) return;
+  startRunner(input);
+});
+
+ipcMain.handle("tacos:runner:stop", () => stopRunner());
+
+ipcMain.handle("tacos:runner:keys", async (_event, operation, ...args) => {
+  if (!KEY_OPERATIONS.has(operation)) return { ok: false, error: "Unknown operation" };
+  try {
+    const keys = require(path.join(runnerDir(), "runner-keys.cjs"));
+    const data = await keys[operation](...args);
+    if (operation !== "listKeys") runner?.child.postMessage("refresh");
+    return { ok: true, data };
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : "Could not change this API" };
+  }
 });
 
 ipcMain.handle("tacos:connect", async (_event, raw) => {
@@ -1048,6 +1125,7 @@ if (!app.requestSingleInstanceLock()) {
   // would find its port taken and its database locked.
   app.on("before-quit", () => {
     quitting = true;
+    stopRunner();
     stopTunnel();
     stopLocalServer();
     stopDevServer();

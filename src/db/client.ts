@@ -1,3 +1,4 @@
+import { DATA_DIR } from "@/lib/data-dir";
 import Database from "better-sqlite3";
 import { drizzle } from "drizzle-orm/better-sqlite3";
 import { existsSync, mkdirSync } from "node:fs";
@@ -7,11 +8,7 @@ import { DEFAULT_PROJECT_COLOR, PROJECT_COLORS } from "../lib/constants";
 import { BUILTIN_AVATAR_PREFIX, builtinAvatarId, nextFreeAvatar } from "../lib/avatars";
 import * as schema from "./schema";
 
-// A packaged desktop install cannot write next to its read-only app bundle, so the
-// data directory comes from the environment and only falls back to the repo checkout.
-export const DATA_DIR = process.env.TACOS_DATA_DIR
-  ? path.resolve(process.env.TACOS_DATA_DIR)
-  : path.join(process.cwd(), "data");
+export { DATA_DIR };
 
 const DDL = `
 CREATE TABLE IF NOT EXISTS users (
@@ -335,6 +332,29 @@ CREATE TABLE IF NOT EXISTS user_model_keys (
   updated_at TEXT NOT NULL,
   PRIMARY KEY (user_id, provider)
 );
+CREATE TABLE IF NOT EXISTS runner_tokens (
+  token_hash TEXT PRIMARY KEY,
+  user_id TEXT NOT NULL,
+  created_at TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS runner_status (
+  user_id TEXT PRIMARY KEY,
+  capabilities TEXT NOT NULL,
+  last_seen_at TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS agent_runs (
+  id TEXT PRIMARY KEY,
+  user_id TEXT NOT NULL,
+  workspace_id TEXT NOT NULL,
+  thread_id TEXT,
+  issue_id TEXT,
+  payload TEXT NOT NULL,
+  status TEXT NOT NULL,
+  error TEXT,
+  created_at TEXT NOT NULL,
+  finished_at TEXT
+);
+CREATE INDEX IF NOT EXISTS agent_runs_user_status ON agent_runs(user_id, status);
 `;
 
 export function hashPassword(password: string): string {

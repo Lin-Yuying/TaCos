@@ -1,9 +1,10 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { removeModelEndpointAction, saveEditModelAction, saveModelEndpointAction } from "@/app/ai-actions";
 import type { ModelEndpointView, ModelKeysView } from "@/lib/ai-constants";
+import { desktopRunner, type DesktopResult } from "@/components/runner-bridge";
 import { useT } from "@/components/i18n-context";
 
 const BUTTON =
@@ -11,7 +12,37 @@ const BUTTON =
 const INPUT =
   "w-full rounded-md border border-border bg-elevated/50 px-2.5 py-1.5 text-[12px] text-text placeholder:text-faint focus:border-border-strong";
 
-export function ModelKeysSection({ workspaceId, view: initial }: { workspaceId: string; view: ModelKeysView }) {
+// Connected to a server, keys live in a file on this computer and the page reaches them through
+// the desktop app. They never pass through the server.
+function keyStore(workspaceId: string, serverMode: boolean) {
+  if (!serverMode) {
+    return {
+      save: (input: { id?: string; label: string; baseUrl: string; key: string; models: string }) =>
+        saveModelEndpointAction(workspaceId, input),
+      remove: (id: string) => removeModelEndpointAction(workspaceId, id),
+      setEditModel: (id: string, model: string) => saveEditModelAction(workspaceId, id, model),
+    };
+  }
+  const missing = <T,>(): Promise<DesktopResult<T>> =>
+    Promise.resolve({ ok: false, error: "Open TaCos on your own computer to change them." });
+  const keys = desktopRunner()?.keys;
+  return {
+    save: (input: { id?: string; label: string; baseUrl: string; key: string; models: string }) =>
+      keys ? keys.save(input) : missing<{ view: ModelKeysView; verified: boolean }>(),
+    remove: (id: string) => (keys ? keys.remove(id) : missing<ModelKeysView>()),
+    setEditModel: (id: string, model: string) => (keys ? keys.setEditModel(id, model) : missing<ModelKeysView>()),
+  };
+}
+
+export function ModelKeysSection({
+  workspaceId,
+  view: initial,
+  serverMode = false,
+}: {
+  workspaceId: string;
+  view: ModelKeysView;
+  serverMode?: boolean;
+}) {
   const t = useT();
   const router = useRouter();
   const [view, setView] = useState(initial);
@@ -21,6 +52,21 @@ export function ModelKeysSection({ workspaceId, view: initial }: { workspaceId: 
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  // null until the page has asked the desktop app, which a server render cannot do.
+  const [onThisComputer, setOnThisComputer] = useState<boolean | null>(serverMode ? null : true);
+  const store = keyStore(workspaceId, serverMode);
+
+  useEffect(() => {
+    if (!serverMode) return;
+    const keys = desktopRunner()?.keys;
+    setOnThisComputer(Boolean(keys));
+    if (!keys) return;
+    void keys.list().then((result) => {
+      if (!result.ok) return;
+      setView(result.data);
+      setFormId(result.data.endpoints.length === 0 ? "" : null);
+    });
+  }, [serverMode]);
 
   function openForm(current?: ModelEndpointView) {
     setFormId(current?.id ?? "");
@@ -39,7 +85,7 @@ export function ModelKeysSection({ workspaceId, view: initial }: { workspaceId: 
     setBusy(true);
     setError(null);
     setNotice(null);
-    const result = await saveModelEndpointAction(workspaceId, { ...form, id: formId || undefined });
+    const result = await store.save({ ...form, id: formId || undefined });
     setBusy(false);
     if (!result.ok) {
       setError(result.error);
@@ -48,7 +94,13 @@ export function ModelKeysSection({ workspaceId, view: initial }: { workspaceId: 
     setView(result.data.view);
     setFormId(null);
     setNotice(
-      result.data.verified ? t("Saved. The API accepted this key.") : form.key.trim() ? t("Saved, not verified: the API could not be reached from this server.") : t("Saved.")
+      result.data.verified
+        ? t("Saved. The API accepted this key.")
+        : !form.key.trim()
+          ? t("Saved.")
+          : serverMode
+            ? t("Saved, not verified: the API could not be reached from this computer.")
+            : t("Saved, not verified: the API could not be reached from this server.")
     );
     router.refresh();
   }
@@ -58,7 +110,7 @@ export function ModelKeysSection({ workspaceId, view: initial }: { workspaceId: 
     setBusy(true);
     setError(null);
     setNotice(null);
-    const result = await removeModelEndpointAction(workspaceId, endpoint.id);
+    const result = await store.remove(endpoint.id);
     setBusy(false);
     if (!result.ok) {
       setError(result.error);
@@ -74,7 +126,7 @@ export function ModelKeysSection({ workspaceId, view: initial }: { workspaceId: 
     setBusy(true);
     setError(null);
     setNotice(null);
-    const result = await saveEditModelAction(workspaceId, id, model.join("/"));
+    const result = await store.setEditModel(id, model.join("/"));
     setBusy(false);
     if (!result.ok) {
       setError(result.error);
@@ -84,14 +136,33 @@ export function ModelKeysSection({ workspaceId, view: initial }: { workspaceId: 
     router.refresh();
   }
 
+  if (onThisComputer !== true) {
+    return (
+      <section className="space-y-3" data-testid="model-keys-settings">
+        <h2 className="text-[13px] font-semibold">{t("Model API")}</h2>
+        <p className="text-[13px] leading-relaxed text-muted">
+          {t("Your APIs stay on your own computer. Open the TaCos desktop app to add or change them.")}
+        </p>
+      </section>
+    );
+  }
+
   return (
     <section className="space-y-3" data-testid="model-keys-settings">
       <h2 className="text-[13px] font-semibold">{t("Model API")}</h2>
+      {serverMode ? (
+        <p className="text-[13px] leading-relaxed text-muted">
+          {t(
+            "Your own APIs, for you only. Each member fills in their own. They are saved on this computer, in a file only your account can read, not encrypted, and they never reach the server. Pi and DeepSeek Harness have no subscription, so they need an API, and DeepSeek Harness only runs on a DeepSeek address."
+          )}
+        </p>
+      ) : (
       <p className="text-[13px] leading-relaxed text-muted">
         {t(
           "Your own APIs, for you only. Each member fills in their own. Any service that speaks the OpenAI API works, and its models appear in every harness's model menu. A harness needs something to spend: its own subscription or your API. Pi and DeepSeek Harness have no subscription, so they need an API, and DeepSeek Harness only runs on a DeepSeek address. Other members cannot see or use your API. Keys are stored encrypted and never reach the browser."
         )}
       </p>
+      )}
       {view.endpoints.map((endpoint) => (
         <div
           key={endpoint.id}

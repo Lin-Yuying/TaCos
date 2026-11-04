@@ -13,7 +13,11 @@ import {
   type AiTaskDraft,
 } from "./ai-constants";
 import { listCliStatuses, normalizeProxy } from "./cli-agents";
-import { harnessesWithKeys, resolveEditConfig } from "./model-keys";
+import { readyWithKeys } from "./harness/gate";
+import { harnessViewFor, resolveEditConfig } from "./model-keys";
+import { requireRunnerOnline, runnerViewFor, startRun } from "./runner/hub";
+import { turnEventsToSse } from "./harness/sse";
+import { isServerMode } from "./server-mode";
 
 const MAX_PROMPT = AI_EDIT_CHAR_LIMIT;
 
@@ -55,6 +59,31 @@ function asEngine(value: string | null | undefined): AiEngine {
 // engines this viewer may actually run. A CLI signs in on the machine that hosts this
 // server, so that machine's subscription serves everyone in the workspace.
 export async function aiEngineOptions(workspaceId: string, userId: string): Promise<AgentEngineOption[]> {
+  if (isServerMode()) {
+    const { online, capabilities } = await runnerViewFor(userId);
+    const hint = "Open TaCos on your computer, then try again.";
+    return [
+      {
+        id: "api",
+        label: capabilities?.editModel || "API key",
+        detail: null,
+        available: online && Boolean(capabilities?.editModel),
+        hint: capabilities?.editModel ? hint : "Add your API key in Settings → Model API.",
+      },
+      ...(capabilities?.harnesses ?? [])
+        .filter((detect): detect is typeof detect & { id: "codex" | "pi" } => detect.id === "codex" || detect.id === "pi")
+        .map((detect) => {
+          const status = readyWithKeys(detect, capabilities?.keyed ?? []);
+          return {
+            id: status.id,
+            label: status.label,
+            detail: status.version,
+            available: online && status.ready,
+            hint: status.ready ? hint : status.hint,
+          };
+        }),
+    ];
+  }
   const ai = await getAiSettingsView(workspaceId);
   const edit = await resolveEditConfig(userId);
   return [
@@ -84,7 +113,7 @@ export async function agentCliEngineOptions(workspaceId: string, userId: string)
 /** Enabled+ready harness options for the Agent composer (H-P3-17). */
 export async function listAgentHarnessOptions(workspaceId: string, userId: string): Promise<AgentHarnessOption[]> {
   const { getWorkspaceHarnessGate } = await import("@/lib/harness");
-  const gate = await getWorkspaceHarnessGate(workspaceId, await harnessesWithKeys(userId));
+  const gate = await getWorkspaceHarnessGate(workspaceId, ...(await harnessViewFor(userId)));
   return gate.enabledReady.map((row) => ({
     id: row.id,
     label: row.label,
@@ -97,6 +126,7 @@ export async function listAgentHarnessOptions(workspaceId: string, userId: strin
 // Cheap check used by pages that only need to know whether the sparkle buttons
 // should be offered at all. A viewer without a key of their own gets none.
 export async function aiReady(workspaceId: string, userId: string): Promise<boolean> {
+  if (isServerMode()) return Boolean((await runnerViewFor(userId)).capabilities?.editModel);
   return Boolean(await resolveEditConfig(userId));
 }
 
@@ -132,6 +162,35 @@ async function resolveConfig(userId: string): Promise<ResolvedConfig> {
     throw new TacosError("AI is not configured yet", 400, "Add your API key in Settings → Model API.");
   }
   return config;
+}
+
+// On a server the API and its key are on the member's computer, so the call goes through there.
+async function runnerChat(
+  workspaceId: string,
+  userId: string,
+  messages: ChatMessage[],
+  opts: { maxTokens: number; temperature: number; json?: boolean; signal?: AbortSignal }
+) {
+  const capabilities = await requireRunnerOnline(userId);
+  if (!capabilities.editModel) {
+    throw new TacosError("AI is not configured yet", 400, "Add your API key in Settings → Model API.");
+  }
+  const { proxy } = await agentRuntime(workspaceId);
+  return startRun({
+    userId,
+    workspaceId,
+    payload: {
+      kind: "edit",
+      engine: "api",
+      messages,
+      prompt: flattenMessages(messages),
+      proxy,
+      maxTokens: opts.maxTokens,
+      temperature: opts.temperature,
+      json: opts.json,
+    },
+    signal: opts.signal,
+  });
 }
 
 // --- provider calls --------------------------------------------------------
@@ -242,6 +301,21 @@ export async function completeChat(
   messages: ChatMessage[],
   opts: { maxTokens?: number; temperature?: number; json?: boolean } = {}
 ): Promise<string> {
+  if (isServerMode()) {
+    const events = await runnerChat(workspaceId, userId, messages, {
+      maxTokens: opts.maxTokens ?? 1_500,
+      temperature: opts.temperature ?? 0.4,
+      json: opts.json,
+      signal: withTimeout(undefined, 90_000),
+    });
+    let text = "";
+    for await (const event of events) {
+      if (event.type === "delta") text += event.text;
+      if (event.type === "error") throw new TacosError(event.message, 502);
+    }
+    if (text) return text;
+    throw new TacosError("The AI provider returned an empty response", 502);
+  }
   const config = await resolveConfig(userId);
   const response = await sendChat(config, messages, {
     stream: false,
@@ -277,6 +351,14 @@ export async function openChatStream(
   messages: ChatMessage[],
   signal?: AbortSignal
 ): Promise<ReadableStream<Uint8Array>> {
+  if (isServerMode()) {
+    const events = await runnerChat(workspaceId, userId, messages, {
+      maxTokens: 2_500,
+      temperature: 0.4,
+      signal: withTimeout(signal, 180_000),
+    });
+    return turnEventsToSse(events);
+  }
   const config = await resolveConfig(userId);
   const response = await sendChat(config, messages, {
     stream: true,

@@ -500,3 +500,33 @@ export const aiSettings = sqliteTable("ai_settings", {
   // JSON map of HarnessId -> enabled. Empty object means every harness is enabled.
   harnessEnabled: text("harness_enabled").notNull().default("{}"),
 });
+
+// One per member's computer. Only the hash is stored; the runner holds the token.
+export const runnerTokens = sqliteTable("runner_tokens", {
+  tokenHash: text("token_hash").primaryKey(),
+  userId: text("user_id").notNull(),
+  createdAt: text("created_at").notNull(),
+});
+
+// What a member's computer last said it can run. Holds no key.
+export const runnerStatus = sqliteTable("runner_status", {
+  userId: text("user_id").primaryKey(),
+  capabilities: text("capabilities").notNull(),
+  lastSeenAt: text("last_seen_at").notNull(),
+});
+
+// A piece of Agent work waiting for, or running on, the member's computer. It only runs on
+// the computer of the member who started it.
+export const agentRuns = sqliteTable("agent_runs", {
+  id: text("id").primaryKey(),
+  userId: text("user_id").notNull(),
+  workspaceId: text("workspace_id").notNull(),
+  threadId: text("thread_id"),
+  issueId: text("issue_id"),
+  payload: text("payload").notNull(),
+  // queued | running | done | failed | cancelled
+  status: text("status").notNull(),
+  error: text("error"),
+  createdAt: text("created_at").notNull(),
+  finishedAt: text("finished_at"),
+});

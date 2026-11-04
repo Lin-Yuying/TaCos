@@ -6,6 +6,7 @@ import { AssigneeAvatar } from "@/components/issue-table";
 import { Menu, MenuItem } from "@/components/menu";
 import { listSwitchableUsersAction, switchUserAction, type SwitchUser } from "@/app/admin-actions";
 import { logoutAction } from "@/app/auth-actions";
+import { desktopRunner } from "@/components/runner-bridge";
 import { useT } from "@/components/i18n-context";
 
 export type UserInfo = {
@@ -164,6 +165,7 @@ export function UserMenu({
               // Wait for the session to be deleted before leaving the page; navigating
               // immediately can cancel the request and land back as the old account.
               void (async () => {
+                await desktopRunner()?.stop();
                 await logoutAction();
                 window.location.href = "/login";
               })();

@@ -39,6 +39,8 @@ import { harnessKeysFor, harnessesWithKeys, modelAccessFor } from "@/lib/model-k
 import { readyWithKeys } from "@/lib/harness/gate";
 import type { ApprovalDecision as HarnessApprovalDecision } from "@/lib/harness";
 import { TacosError } from "@/lib/issues";
+import { requireRunnerOnline, startRun } from "@/lib/runner/hub";
+import { isServerMode } from "@/lib/server-mode";
 
 const EDIT_ACTIONS = new Set<string>([
   ...AI_EDIT_ACTIONS.map((action) => action.id),
@@ -198,7 +200,18 @@ export async function POST(request: Request) {
         ? (requested as AiEngine | AgentHarnessId)
         : runtime.engine;
 
-    if (engine !== "api") {
+    if (engine !== "api" && isServerMode()) {
+      const capabilities = await requireRunnerOnline(access.user.id);
+      const found = capabilities.harnesses.find((detect) => detect.id === engine);
+      const detect = found && readyWithKeys(found, capabilities.keyed);
+      if (!detect?.ready) {
+        throw new TacosError(
+          `${detect?.label ?? engine} is not ready on your computer`,
+          400,
+          detect?.hint ?? "Install it on your computer, then try again."
+        );
+      }
+    } else if (engine !== "api") {
       // A harness needs its own subscription, signed in under the OS account that runs this
       // server, or the viewer's own API.
       const keyed = await harnessesWithKeys(access.user.id);
@@ -257,6 +270,31 @@ export async function POST(request: Request) {
       });
 
       const turn = { threadId, messageId: assistantId };
+
+      // On a server the turn runs on this person's own computer, with their keys and logins.
+      if (isServerMode()) {
+        const events = await startRun({
+          userId: access.user.id,
+          workspaceId,
+          threadId,
+          payload: {
+            kind: "turn",
+            harness: engine,
+            threadId,
+            projectId: thread.projectId,
+            prompt: flattenMessages(messages),
+            message,
+            model: thread.model,
+            effort: thread.effort,
+            approval: thread.approval,
+            autoApproveTools: AGENT_TOOLS.filter((tool) => !tool.write).map((tool) => tool.name),
+            neverAutoApproveTools: AGENT_TOOLS.filter((tool) => tool.delete).map((tool) => tool.name),
+            proxy: runtime.proxy,
+          },
+          signal: request.signal,
+        });
+        return new Response(recordTurn(turnEventsToSse(events), turn), { headers: STREAM_HEADERS });
+      }
 
       const grant = issueAgentToolGrant({
         threadId,
@@ -551,6 +589,15 @@ export async function POST(request: Request) {
         400,
         "Other harnesses are Agent-only for now."
       );
+    }
+    if (isServerMode()) {
+      const events = await startRun({
+        userId: access.user.id,
+        workspaceId,
+        payload: { kind: "edit", engine, messages, prompt: flattenMessages(messages), proxy: runtime.proxy },
+        signal: request.signal,
+      });
+      return new Response(turnEventsToSse(events), { headers: STREAM_HEADERS });
     }
     const stream = openCliStream(engine, flattenMessages(messages), {
       proxy: runtime.proxy,

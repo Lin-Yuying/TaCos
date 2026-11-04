@@ -5,7 +5,9 @@ import { redirect } from "next/navigation";
 import { getSessionUser, requireWorkspace } from "@/lib/auth";
 import { getAiSettingsView, listAgentHarnessOptions } from "@/lib/ai";
 import { getWorkspaceHarnessGate } from "@/lib/harness";
-import { harnessesWithKeys, modelAccessFor } from "@/lib/model-keys";
+import { harnessViewFor, modelAccessFor } from "@/lib/model-keys";
+import { runnerViewFor } from "@/lib/runner/hub";
+import { isServerMode } from "@/lib/server-mode";
 import { listProjects } from "@/lib/issues";
 import { ENGINE_COOKIE, type AgentHarnessId, type AgentHarnessOption } from "@/lib/ai-constants";
 import { codexDefaults, listCodexSkills } from "@/lib/cli-agents";
@@ -44,7 +46,7 @@ async function AgentContent({
   if (!user) redirect("/login");
   const { role } = await requireWorkspace(workspaceId);
   const ai = await getAiSettingsView(workspaceId);
-  const gate = await getWorkspaceHarnessGate(workspaceId, await harnessesWithKeys(user.id));
+  const gate = await getWorkspaceHarnessGate(workspaceId, ...(await harnessViewFor(user.id)));
 
   const engines: AgentHarnessOption[] = await listAgentHarnessOptions(workspaceId, user.id);
   // Agent opens only when Settings has at least one enabled+ready harness (H-P3-16).
@@ -58,16 +60,20 @@ async function AgentContent({
   const defaultEngine: AgentHarnessId =
     usable(saved) ?? settingsPreferred ?? usable("codex") ?? engines[0]?.id ?? "codex";
 
+  // On a server these belong to this person's computer, which reported them.
+  const computer = isServerMode() ? (await runnerViewFor(user.id)).capabilities : undefined;
   const sp = await searchParams;
   const threadId = typeof sp.thread === "string" ? sp.thread : "";
   const [projects, threads, skills, modelsByEngine] = await Promise.all([
     listProjects(workspaceId, user.id),
     listAgentThreads(workspaceId, user.id),
-    listCodexSkills(),
-    listComposerModels(
-      engines.filter((engine) => engine.available).map((engine) => engine.id),
-      await modelAccessFor(user.id)
-    ),
+    isServerMode() ? (computer?.skills ?? []) : listCodexSkills(),
+    isServerMode()
+      ? (computer?.models ?? {})
+      : listComposerModels(
+          engines.filter((engine) => engine.available).map((engine) => engine.id),
+          await modelAccessFor(user.id)
+        ),
   ]);
   // A thread the viewer cannot read is treated like a missing one: the Agent tab opens on
   // the start panel instead of leaking whether that id exists.
@@ -84,8 +90,8 @@ async function AgentContent({
       defaultEngine={defaultEngine}
       modelsByEngine={modelsByEngine}
       skills={skills}
-      canManageSkills={role === "admin"}
-      codexDefault={codexDefaults()}
+      canManageSkills={role === "admin" && !isServerMode()}
+      codexDefault={isServerMode() ? (computer?.codexDefaults ?? { model: "", effort: "" }) : codexDefaults()}
       projects={projects.map((project) => ({
         id: project.id,
         name: project.name,
