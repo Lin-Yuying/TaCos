@@ -11,6 +11,7 @@ import {
 import { ProjectIcon, StatusIcon } from "@/components/icons";
 import { formatDate, issueRef } from "@/lib/format";
 import type { TrashedIssue, TrashedProject } from "@/lib/issues";
+import { useLocale, useT } from "@/components/i18n-context";
 
 export function TrashView({
   workspaceId,
@@ -26,6 +27,8 @@ export function TrashView({
   projects: TrashedProject[];
   issues: TrashedIssue[];
 }) {
+  const t = useT();
+  const locale = useLocale();
   const router = useRouter();
 
   async function restoreProject(project: TrashedProject) {
@@ -36,9 +39,12 @@ export function TrashView({
   async function purgeProject(project: TrashedProject) {
     if (
       !window.confirm(
-        `Delete "${project.name}" and its ${project.issueCount} ${
-          project.issueCount === 1 ? "task" : "tasks"
-        } permanently? This cannot be undone.`
+        t(
+          project.issueCount === 1
+            ? 'Delete "{name}" and its {count} task permanently? This cannot be undone.'
+            : 'Delete "{name}" and its {count} tasks permanently? This cannot be undone.',
+          { name: project.name, count: project.issueCount }
+        )
       )
     )
       return;
@@ -62,12 +68,13 @@ export function TrashView({
     <div className="flex-1 overflow-y-auto px-10 pb-10 pt-6 lg:px-20 xl:px-32">
       <div className="space-y-4">
         <p className="text-[13px] leading-relaxed text-muted">
-          Deleted issues and projects wait here. Restore puts one back exactly as it was; deleting it
-          for good cannot be undone.
+          {t(
+            "Deleted issues and projects wait here. Restore puts one back exactly as it was; deleting it for good cannot be undone."
+          )}
         </p>
         {empty && (
           <div className="rounded-lg border border-border p-4 text-[13px] text-faint">
-            Trash is empty.
+            {t("Trash is empty.")}
           </div>
         )}
         {issues.length > 0 && (
@@ -87,15 +94,15 @@ export function TrashView({
                       <ProjectIcon color={issue.projectColor} size={12} />
                     </span>
                     <span className="truncate">{issue.projectName}</span>
-                    <span className="shrink-0">· deleted {formatDate(issue.deletedAt)}</span>
+                    <span className="shrink-0">· {t("deleted {date}", { date: formatDate(issue.deletedAt, locale) })}</span>
                   </div>
                 </div>
                 <div className="flex shrink-0 items-center gap-1">
                   <button
                     type="button"
                     onClick={() => void restoreIssue(issue)}
-                    title="Restore"
-                    aria-label={`Restore ${issueRef(issue)}`}
+                    title={t("Restore")}
+                    aria-label={t("Restore {name}", { name: issueRef(issue) })}
                     className="rounded-md border border-border p-1.5 text-faint transition-colors hover:border-border-strong hover:text-text"
                   >
                     <RotateCcw size={13} />
@@ -103,8 +110,8 @@ export function TrashView({
                   <button
                     type="button"
                     onClick={() => void purgeIssue(issue)}
-                    title="Delete forever"
-                    aria-label={`Delete ${issueRef(issue)} forever`}
+                    title={t("Delete forever")}
+                    aria-label={t("Delete {name} forever", { name: issueRef(issue) })}
                     className="rounded-md p-1.5 text-faint transition-colors hover:bg-elevated hover:text-danger"
                   >
                     <Trash2 size={13} />
@@ -124,16 +131,18 @@ export function TrashView({
                 <div className="min-w-0 flex-1">
                   <div className="truncate text-[13px]">{project.name}</div>
                   <div className="mt-0.5 text-[12px] text-faint">
-                    {project.issueCount} {project.issueCount === 1 ? "task" : "tasks"} · deleted{" "}
-                    {formatDate(project.deletedAt)}
+                    {t(project.issueCount === 1 ? "{count} task" : "{count} tasks", {
+                      count: project.issueCount,
+                    })}{" "}
+                    · {t("deleted {date}", { date: formatDate(project.deletedAt, locale) })}
                   </div>
                 </div>
                 <div className="flex shrink-0 items-center gap-1">
                   <button
                     type="button"
                     onClick={() => void restoreProject(project)}
-                    title="Restore"
-                    aria-label={`Restore ${project.name}`}
+                    title={t("Restore")}
+                    aria-label={t("Restore {name}", { name: project.name })}
                     className="rounded-md border border-border p-1.5 text-faint transition-colors hover:border-border-strong hover:text-text"
                   >
                     <RotateCcw size={13} />
@@ -142,8 +151,8 @@ export function TrashView({
                     <button
                       type="button"
                       onClick={() => void purgeProject(project)}
-                      title="Delete forever"
-                      aria-label={`Delete ${project.name} forever`}
+                      title={t("Delete forever")}
+                      aria-label={t("Delete {name} forever", { name: project.name })}
                       className="rounded-md p-1.5 text-faint transition-colors hover:bg-elevated hover:text-danger"
                     >
                       <Trash2 size={13} />

@@ -28,6 +28,7 @@ import {
 } from "@/app/pages-actions";
 import { announceDocsDeleted } from "@/components/tab-events";
 import type { DocPage, PageAuthor, PageSummary } from "@/lib/pages";
+import { useT } from "@/components/i18n-context";
 
 const ICONS = ["📄", "📘", "📝", "🗂️", "🧭", "🚀", "🧪", "🌱", "🍅", "✨", "🐙", "🔭"];
 
@@ -79,6 +80,7 @@ export function DocPageView({
   // would also navigate away from the page the pane is sitting beside.
   onDeleted?: (pageIds: string[]) => void;
 }) {
+  const t = useT();
   const router = useRouter();
   const { aiReady } = useUI();
   const [title, setTitle] = useState(page.title);
@@ -157,7 +159,7 @@ export function DocPageView({
   }
 
   async function removePage() {
-    if (!window.confirm(`Delete “${page.title}” and everything inside it?`)) return;
+    if (!window.confirm(t("Delete “{title}” and everything inside it?", { title: page.title }))) return;
     const result = await deletePageAction(workspaceId, page.id);
     if (!result.ok) {
       setError(result.error);
@@ -231,20 +233,20 @@ export function DocPageView({
       <header className="flex h-11 shrink-0 items-center gap-2 border-b border-border px-4 text-[12px] text-muted">
         <span
           className="flex shrink-0 items-center gap-1"
-          title={shared ? "Shared with the workspace" : "Private"}
+          title={shared ? t("Shared with the workspace") : t("Private")}
         >
           {shared ? <Users size={13} /> : <Lock size={13} />}
-          {!compact && (shared ? "Shared with the workspace" : "Private")}
+          {!compact && (shared ? t("Shared with the workspace") : t("Private"))}
         </span>
         {!compact && <span className="text-faint">·</span>}
         <span className="flex min-w-0 flex-1 items-center gap-2">
-          <span className="min-w-0 truncate">{parent ? `Docs / ${parent.title}` : "Docs"}</span>
+          <span className="min-w-0 truncate">{parent ? t("Docs / {title}", { title: parent.title }) : t("Docs")}</span>
           {/* A shared document says whose it is right where it says what it is. */}
           {author && (
             <span data-doc-author className="flex shrink-0 items-center gap-1 text-[12px] text-muted">
               <AssigneeAvatar displayName={author.displayName} avatar={author.avatar} size={14} />
               <span className="max-w-[160px] truncate">
-                by {isOwner ? "you" : author.displayName}
+                {isOwner ? t("by you") : t("by {name}", { name: author.displayName })}
               </span>
             </span>
           )}
@@ -255,7 +257,7 @@ export function DocPageView({
               saved ? "opacity-100" : "opacity-0"
             }`}
           >
-            Saved
+            {t("Saved")}
           </span>
           {canEdit && aiReady && (
             <button
@@ -273,20 +275,20 @@ export function DocPageView({
             <button
               type="button"
               onClick={() => void toggleShared()}
-              title={shared ? "Make private" : "Share with the workspace"}
-              aria-label={shared ? "Make private" : "Share with the workspace"}
+              title={shared ? t("Make private") : t("Share with the workspace")}
+              aria-label={shared ? t("Make private") : t("Share with the workspace")}
               className="flex items-center gap-1 rounded-md border border-border px-2 py-1 text-[12px] font-medium text-muted transition-colors hover:border-border-strong hover:text-text"
             >
               {shared ? <Lock size={12} /> : <Users size={12} />}
-              {!compact && (shared ? "Private" : "Share")}
+              {!compact && (shared ? t("Private") : t("Share"))}
             </button>
           )}
           {isOwner && (
             <button
               type="button"
               onClick={() => void removePage()}
-              aria-label="Delete page"
-              title="Delete page"
+              aria-label={t("Delete page")}
+              title={t("Delete page")}
               className="rounded-md p-1.5 text-muted transition-colors hover:bg-elevated hover:text-danger"
             >
               <Trash2 size={15} />
@@ -296,8 +298,8 @@ export function DocPageView({
             <button
               type="button"
               onClick={onToggleExpanded}
-              title={expanded ? "Shrink panel" : "Expand panel"}
-              aria-label={expanded ? "Shrink panel" : "Expand panel"}
+              title={expanded ? t("Shrink panel") : t("Expand panel")}
+              aria-label={expanded ? t("Shrink panel") : t("Expand panel")}
               className="rounded-md p-1.5 text-muted transition-colors hover:bg-elevated hover:text-text"
             >
               {expanded ? <Minimize2 size={15} /> : <Maximize2 size={15} />}
@@ -307,8 +309,8 @@ export function DocPageView({
             <button
               type="button"
               onClick={onClose}
-              aria-label="Close document"
-              title="Close document"
+              aria-label={t("Close document")}
+              title={t("Close document")}
               className="rounded-md px-1.5 py-1 text-[16px] leading-none text-muted transition-colors hover:bg-elevated hover:text-text"
             >
               ×
@@ -326,7 +328,7 @@ export function DocPageView({
             mode: "document",
             text: doc,
             allowContinue: true,
-            acceptLabel: doc.trim() ? "Replace document" : "Insert",
+            acceptLabel: doc.trim() ? t("Replace document") : t("Insert"),
           }}
           onClose={() => setAiPanel(null)}
           onAccept={acceptAi}
@@ -346,7 +348,7 @@ export function DocPageView({
               width={196}
               triggerClassName="shrink-0 rounded-md p-1 text-[26px] leading-none transition-colors hover:bg-elevated"
               trigger={
-                <span title="Change icon">
+                <span title={t("Change icon")}>
                   {icon ?? "📄"}
                 </span>
               }
@@ -379,22 +381,22 @@ export function DocPageView({
                   if (event.key === "Escape") setTitle(page.title);
                 }}
                 readOnly={!canEdit}
-                aria-label="Page title"
+                aria-label={t("Page title")}
                 className={`w-full rounded-md bg-transparent font-semibold leading-tight tracking-tight text-text placeholder:text-faint hover:bg-elevated/40 focus:bg-bg focus:outline-none ${
                   compact ? "text-[22px]" : "text-[28px]"
                 }`}
-                placeholder="Untitled"
+                placeholder={t("Untitled")}
               />
             </div>
           </div>
 
-          {error && <div className="mt-3 text-[12px] text-danger">{error}</div>}
+          {error && <div className="mt-3 text-[12px] text-danger">{t(error)}</div>}
 
           <div className="mt-6">
             {unplaced.length > 0 && (
               <div className="mb-4 space-y-0.5">
                 {unplaced.length < subpages.length && (
-                  <div className="px-1 pb-0.5 text-[11.5px] text-faint">Not placed in the page</div>
+                  <div className="px-1 pb-0.5 text-[11.5px] text-faint">{t("Not placed in the page")}</div>
                 )}
                 {unplaced.map((child) => (
                   <div
@@ -419,8 +421,8 @@ export function DocPageView({
                       <button
                         type="button"
                         onClick={() => placeSubpage(child)}
-                        title="Place in the page"
-                        aria-label={`Place ${child.title} in the page`}
+                        title={t("Place in the page")}
+                        aria-label={t("Place {title} in the page", { title: child.title })}
                         className="rounded p-0.5 text-faint opacity-0 transition-opacity hover:bg-elevated hover:text-text focus-visible:opacity-100 group-hover:opacity-100"
                       >
                         <Plus size={13} />
@@ -438,7 +440,7 @@ export function DocPageView({
                 <MarkdownEditor
                   value={doc}
                   onChange={editDoc}
-                  placeholder="Write something, or press '-' for a list…"
+                  placeholder={t("Write something, or press '-' for a list…")}
                 />
                 <div className="mt-4 flex items-center gap-2">
                   <Menu
@@ -446,7 +448,7 @@ export function DocPageView({
                     triggerClassName="flex items-center gap-1 rounded-md border border-border px-2 py-1 text-[12px] text-muted transition-colors hover:border-border-strong hover:text-text"
                     trigger={
                       <>
-                        <Link2 size={12} /> Link a page
+                        <Link2 size={12} /> {t("Link a page")}
                       </>
                     }
                   >
@@ -457,7 +459,7 @@ export function DocPageView({
                     triggerClassName="flex items-center gap-1 rounded-md border border-border px-2 py-1 text-[12px] text-muted transition-colors hover:border-border-strong hover:text-text"
                     trigger={
                       <>
-                        <Paperclip size={12} /> Embed a page
+                        <Paperclip size={12} /> {t("Embed a page")}
                       </>
                     }
                   >
@@ -470,7 +472,7 @@ export function DocPageView({
                 {doc.trim() ? (
                   <Markdown source={doc} pages={pageCtx} storageId={`doc:${page.id}`} />
                 ) : (
-                  <p className="text-[13.5px] text-faint">This page is empty.</p>
+                  <p className="text-[13.5px] text-faint">{t("This page is empty.")}</p>
                 )}
               </>
             )}
@@ -482,7 +484,7 @@ export function DocPageView({
               onClick={() => void addSubpage()}
               className="flex items-center gap-1.5 rounded px-1 py-1 text-[13px] text-muted transition-colors hover:bg-elevated/60 hover:text-text"
             >
-              <Plus size={13} /> Add a subpage
+              <Plus size={13} /> {t("Add a subpage")}
             </button>
           </div>
         </div>
@@ -500,8 +502,9 @@ function PagePicker({
   close: () => void;
   onPick: (ref: PageRefEntry) => void;
 }) {
+  const t = useT();
   if (refs.length === 0) {
-    return <div className="px-2 py-1.5 text-[12px] text-faint">No pages yet.</div>;
+    return <div className="px-2 py-1.5 text-[12px] text-faint">{t("No pages yet.")}</div>;
   }
   return (
     <>

@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { splitMentions } from "@/lib/mentions";
 import {
   useEffect,
   useMemo,
@@ -30,6 +31,7 @@ import {
   type Inline,
   type TableAlign,
 } from "@/lib/markdown";
+import { useT } from "@/components/i18n-context";
 
 export type PageRefEntry = { id: string; title: string; icon: string | null };
 
@@ -235,6 +237,25 @@ function IssueChip({
   );
 }
 
+// H-COLLAB-10: "@username" shows as a chip.
+function renderMentions(text: string, key: string): ReactNode {
+  const parts = splitMentions(text);
+  if (parts.length === 1 && !parts[0].mention) return text;
+  return parts.map((part, i) =>
+    part.mention ? (
+      <span
+        key={`${key}-m${i}`}
+        data-testid="mention-chip"
+        className="rounded bg-accent/10 px-1 py-px font-medium text-accent"
+      >
+        {part.text}
+      </span>
+    ) : (
+      part.text
+    )
+  );
+}
+
 function renderInline(
   nodes: Inline[],
   keyPrefix: string,
@@ -299,7 +320,7 @@ function renderInline(
       case "issue":
         return <IssueChip key={key} issueId={node.issueId} fallback={node.text} ctx={issues} />;
       default:
-        return node.text;
+        return renderMentions(node.text, key);
     }
   });
 }
@@ -397,6 +418,7 @@ export function MarkdownBlock({
   /** Number of items before this list's first item, for a list drawn one item at a time. */
   listStart?: number;
 }) {
+  const t = useT();
   const inline = (nodes: Inline[], keyPrefix: string) =>
     renderInline(nodes, keyPrefix, pages, issues);
   switch (block.kind) {
@@ -470,7 +492,7 @@ export function MarkdownBlock({
                   type="button"
                   role="checkbox"
                   aria-checked={item.checked}
-                  aria-label={item.checked ? "Mark as not done" : "Mark as done"}
+                  aria-label={item.checked ? t("Mark as not done") : t("Mark as done")}
                   // Without a handler the box is just how the block looks while you edit it.
                   disabled={!onToggleTodo}
                   onClick={(event) => {
@@ -535,7 +557,7 @@ export function MarkdownBlock({
                   storageId={target ? `doc:${target.id}` : undefined}
                 />
               ) : (
-                <p className="text-[12.5px] text-faint">This page is empty.</p>
+                <p className="text-[12.5px] text-faint">{t("This page is empty.")}</p>
               )}
             </div>
           )}
@@ -632,6 +654,7 @@ function TableBlock({
   issues?: IssueContext;
   storageKey?: string;
 }) {
+  const t = useT();
   const cols = block.header.length;
   const [layoutStore] = useState(() => createStore<TableLayout | null>(null));
   const [bottomsStore] = useState(() => createStore<number[]>(EMPTY_BOTTOMS));
@@ -857,8 +880,8 @@ function TableBlock({
             key={`c${i}`}
             role="separator"
             aria-orientation="vertical"
-            aria-label="Drag to resize the column"
-            title="Drag to resize the column"
+            aria-label={t("Drag to resize the column")}
+            title={t("Drag to resize the column")}
             onPointerDown={beginColDrag(i)}
             style={{ left: `${left}%` }}
             className="group absolute top-0 bottom-0 z-10 w-2.5 -translate-x-1/2 cursor-col-resize touch-none select-none"
@@ -878,8 +901,8 @@ function TableBlock({
             key={`r${r}`}
             role="separator"
             aria-orientation="horizontal"
-            aria-label="Drag to resize the row"
-            title="Drag to resize the row"
+            aria-label={t("Drag to resize the row")}
+            title={t("Drag to resize the row")}
             onPointerDown={beginRowDrag(r)}
             style={{ top: bottom - 4 }}
             className="group absolute inset-x-0 z-10 h-2 cursor-row-resize touch-none select-none"

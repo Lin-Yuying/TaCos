@@ -4,6 +4,7 @@ import type { ReactNode } from "react";
 import { Star } from "lucide-react";
 import { ProjectIcon } from "@/components/icons";
 import { Menu } from "@/components/menu";
+import { useT } from "@/components/i18n-context";
 
 export type ProjectTab = "overview" | "issues" | "documents";
 
@@ -51,6 +52,7 @@ export function ProjectHeader({
   // Restores a row the reader folded away; only rendered while one is hidden.
   metaMenu?: ReactNode;
 }) {
+  const t = useT();
   const mark = <ProjectIcon color={project.color} icon={project.icon} size={22} />;
   return (
     <header className="shrink-0 border-b border-border px-4 pb-3 pt-3">
@@ -61,7 +63,7 @@ export function ProjectHeader({
           <Menu
             width={232}
             triggerClassName="shrink-0 rounded-md p-0.5 transition-colors hover:bg-elevated"
-            trigger={<span title="Change icon">{mark}</span>}
+            trigger={<span title={t("Change icon")}>{mark}</span>}
           >
             {(close) => (
               <div className="p-1">
@@ -89,7 +91,7 @@ export function ProjectHeader({
                     }}
                     className="mt-1 w-full rounded px-2 py-1.5 text-left text-[12px] text-muted transition-colors hover:bg-elevated hover:text-text"
                   >
-                    Use the cube instead
+                    {t("Use the cube instead")}
                   </button>
                 )}
               </div>
@@ -103,8 +105,8 @@ export function ProjectHeader({
           type="button"
           onClick={onToggleFavorite}
           aria-pressed={favorite}
-          title={favorite ? "Remove from favorites" : "Add to favorites"}
-          aria-label={favorite ? "Remove from favorites" : "Add to favorites"}
+          title={favorite ? t("Remove from favorites") : t("Add to favorites")}
+          aria-label={favorite ? t("Remove from favorites") : t("Add to favorites")}
           className={`shrink-0 rounded-md p-1 transition-colors hover:bg-elevated ${
             favorite ? "text-[#f5b21a]" : "text-faint hover:text-muted"
           }`}
@@ -127,7 +129,7 @@ export function ProjectHeader({
                   : "border-border text-muted hover:border-border-strong hover:text-text"
               }`}
             >
-              {item.label}
+              {t(item.label)}
               {item.key === "issues" && (
                 <span className={active ? "text-muted" : "text-faint"}>{issueCount}</span>
               )}

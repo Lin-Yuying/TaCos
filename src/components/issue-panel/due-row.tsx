@@ -15,8 +15,11 @@ import {
   todayValue,
 } from "./due-date";
 import type { FlatDetail, IssueUpdate } from "./types";
+import { useLocale, useT } from "@/components/i18n-context";
 
 export function DueRow({ detail, onUpdate }: { detail: FlatDetail; onUpdate: IssueUpdate }) {
+  const t = useT();
+  const locale = useLocale();
   const [dueDraft, setDueDraft] = useState<string | null>(null);
 
   const today = todayValue();
@@ -44,12 +47,12 @@ export function DueRow({ detail, onUpdate }: { detail: FlatDetail; onUpdate: Iss
     <div className="-mx-2 -mt-2 flex flex-wrap items-center gap-x-2 gap-y-1.5 text-[11.5px] text-faint">
       <div className="flex items-center gap-1.5 whitespace-nowrap pl-2">
         <ViaBadge via={detail.createdVia} />
-        <span title={fullTimestamp(detail.createdAt)}>
-          Created {shortDate(detail.createdAt)}
+        <span title={fullTimestamp(detail.createdAt, locale)}>
+          {t("Created {date}", { date: shortDate(detail.createdAt, locale) })}
         </span>
         <span aria-hidden>·</span>
-        <span title={fullTimestamp(detail.updatedAt)}>
-          Updated {shortDate(detail.updatedAt)}
+        <span title={fullTimestamp(detail.updatedAt, locale)}>
+          {t("Updated {date}", { date: shortDate(detail.updatedAt, locale) })}
         </span>
       </div>
 
@@ -66,7 +69,7 @@ export function DueRow({ detail, onUpdate }: { detail: FlatDetail; onUpdate: Iss
                 className={overdue ? "text-danger" : detail.dueDate ? "text-accent" : "text-faint"}
               />
               <span className={overdue ? "text-danger" : ""}>
-                {detail.dueDate ? dueDateLabel(detail.dueDate) : "Due date"}
+                {detail.dueDate ? dueDateLabel(detail.dueDate, locale) : t("Due date")}
               </span>
             </>
           }
@@ -74,7 +77,7 @@ export function DueRow({ detail, onUpdate }: { detail: FlatDetail; onUpdate: Iss
           {() => (
             <div className="flex items-center gap-1.5 p-1">
               <select
-                aria-label="Due year"
+                aria-label={t("Due year")}
                 value={due.year}
                 onChange={(event) => pickDue("year", Number(event.target.value))}
                 className="h-7 flex-1 rounded-md border border-border bg-bg px-1.5 text-[12px] text-text focus:border-border-strong focus:outline-none"
@@ -86,19 +89,19 @@ export function DueRow({ detail, onUpdate }: { detail: FlatDetail; onUpdate: Iss
                 ))}
               </select>
               <select
-                aria-label="Due month"
+                aria-label={t("Due month")}
                 value={due.month}
                 onChange={(event) => pickDue("month", Number(event.target.value))}
                 className="h-7 flex-1 rounded-md border border-border bg-bg px-1.5 text-[12px] text-text focus:border-border-strong focus:outline-none"
               >
                 {MONTH_NAMES.map((name, index) => (
                   <option key={name} value={index + 1}>
-                    {name}
+                    {locale === "zh" ? `${index + 1}月` : name}
                   </option>
                 ))}
               </select>
               <select
-                aria-label="Due day"
+                aria-label={t("Due day")}
                 value={due.day}
                 onChange={(event) => pickDue("day", Number(event.target.value))}
                 className="h-7 w-16 rounded-md border border-border bg-bg px-1.5 text-[12px] text-text focus:border-border-strong focus:outline-none"
@@ -121,8 +124,8 @@ export function DueRow({ detail, onUpdate }: { detail: FlatDetail; onUpdate: Iss
               setDueDraft(null);
               void onUpdate({ dueDate: null });
             }}
-            aria-label="Clear due date"
-            title="Clear due date"
+            aria-label={t("Clear due date")}
+            title={t("Clear due date")}
             className="rounded p-0.5 text-faint transition-colors hover:text-danger"
           >
             <X size={11} />
@@ -137,7 +140,7 @@ export function DueRow({ detail, onUpdate }: { detail: FlatDetail; onUpdate: Iss
           trigger={
             <>
               <Bell size={12} className={detail.reminder ? "text-accent" : "text-faint"} />
-              {detail.reminder ? REMINDER_META[detail.reminder].label : "Remind me"}
+              {detail.reminder ? t(REMINDER_META[detail.reminder].label) : t("Remind me")}
             </>
           }
         >
@@ -150,7 +153,7 @@ export function DueRow({ detail, onUpdate }: { detail: FlatDetail; onUpdate: Iss
                   void onUpdate({ reminder: null });
                 }}
               >
-                No reminder
+                {t("No reminder")}
               </MenuItem>
               {REMINDER_PRESETS.map((preset) => (
                 <MenuItem
@@ -161,7 +164,7 @@ export function DueRow({ detail, onUpdate }: { detail: FlatDetail; onUpdate: Iss
                     void onUpdate({ reminder: preset });
                   }}
                 >
-                  {REMINDER_META[preset].label}
+                  {t(REMINDER_META[preset].label)}
                 </MenuItem>
               ))}
             </>

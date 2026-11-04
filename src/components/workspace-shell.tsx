@@ -14,6 +14,7 @@ import {
 import { createPortal } from "react-dom";
 import {
   Activity,
+  Hand,
   BookOpen,
   Bot,
   Boxes,
@@ -33,6 +34,7 @@ import {
   Star,
   Tag,
   Trash2,
+  ShieldCheck,
   User,
   UserRoundX,
   Users,
@@ -40,7 +42,9 @@ import {
 } from "lucide-react";
 import { Menu, MenuItem } from "@/components/menu";
 import { InviteDialog } from "@/components/invite-dialog";
+import { LiveRefresh } from "@/components/live-refresh";
 import { DesktopOpenFiles } from "@/components/desktop-open-files";
+import { DesktopAppUpdateButton } from "@/components/desktop-app-update-button";
 import { leaveWorkspaceAction } from "@/app/auth-actions";
 import { DOCS_DELETED_EVENT } from "@/components/tab-events";
 import type { PageSummary } from "@/lib/pages";
@@ -52,6 +56,8 @@ import { UserMenu, type UserInfo } from "@/components/user-menu";
 import { useUI, NOTIFICATIONS_READ } from "@/components/ui-context";
 import { DEFAULT_PROJECT_COLOR, STATUS_META, STATUS_ORDER } from "@/lib/constants";
 import type { Member, Project } from "@/lib/issues";
+import { useT } from "@/components/i18n-context";
+import type { Translate } from "@/lib/i18n";
 
 type WorkspaceInfo = {
   id: string;
@@ -76,6 +82,8 @@ function NavItem({
   icon,
   badge,
   tag,
+  disabled,
+  title,
   children,
 }: {
   href: string;
@@ -83,15 +91,21 @@ function NavItem({
   icon: ReactNode;
   badge?: number | null;
   tag?: ReactNode;
+  disabled?: boolean;
+  title?: string;
   children: ReactNode;
 }) {
   return (
     <Link
       href={href}
+      title={title}
+      aria-disabled={disabled || undefined}
       className={`flex items-center gap-2 rounded-md px-2 py-1 transition-colors ${
-        active
-          ? "bg-elevated font-medium text-text"
-          : "text-muted hover:bg-elevated/60 hover:text-text"
+        disabled
+          ? "cursor-not-allowed text-faint opacity-60"
+          : active
+            ? "bg-elevated font-medium text-text"
+            : "text-muted hover:bg-elevated/60 hover:text-text"
       }`}
     >
       <span className="flex w-4 shrink-0 items-center justify-center text-faint">{icon}</span>
@@ -172,6 +186,7 @@ function SidebarNav({
   onToggleSection: (key: string) => void;
   onInvite: () => void;
 }) {
+  const t = useT();
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const { setProjectComposerOpen } = useUI();
@@ -237,7 +252,7 @@ function SidebarNav({
           icon={<Inbox size={14} />}
           badge={unread}
         >
-          Inbox
+          {t("Inbox")}
         </NavItem>
       </div>
       {/* The two places a working day starts: your own tasks, then the docs library.
@@ -248,20 +263,23 @@ function SidebarNav({
           active={active({ view: "all", assignee: "me" })}
           icon={<User size={14} />}
         >
-          My Tasks
+          {t("My Tasks")}
+        </NavItem>
+        <NavItem href={link({ view: "open" })} active={active({ view: "open" })} icon={<Hand size={14} />}>
+          {t("Open Tasks")}
         </NavItem>
         <NavItem
           href={`/${workspaceId}/docs`}
           active={pathname.startsWith(`/${workspaceId}/docs`)}
           icon={<BookOpen size={14} />}
         >
-          Documents
+          {t("Documents")}
         </NavItem>
       </div>
       {favorites.length > 0 && (
         <div className="pb-1">
           <SectionHeader
-            label="Favorites"
+            label={t("Favorites")}
             icon={<Star size={11} />}
             open={open("favorites")}
             onToggle={() => toggleSection("favorites")}
@@ -285,7 +303,7 @@ function SidebarNav({
       {!hidden.includes("workspace") && (
         <>
           <SectionHeader
-            label="Workspace"
+            label={t("Workspace")}
             icon={<LayoutList size={11} />}
             open={open("workspace")}
             onToggle={() => toggleSection("workspace")}
@@ -293,21 +311,21 @@ function SidebarNav({
           {open("workspace") && (
             <div className="space-y-0.5">
               <NavItem href={link({ view: "all" })} active={active({ view: "all" })} icon={<List size={14} />}>
-                All Tasks
+                {t("All Tasks")}
               </NavItem>
               <NavItem
                 href={link({ view: "active" })}
                 active={active({ view: "active" })}
                 icon={<Activity size={14} />}
               >
-                Active
+                {t("Active")}
               </NavItem>
               <NavItem
                 href={link({ view: "all", assignee: "none" })}
                 active={active({ view: "all", assignee: "none" })}
                 icon={<UserRoundX size={14} />}
               >
-                Unassigned
+                {t("Unassigned")}
               </NavItem>
             </div>
           )}
@@ -316,7 +334,7 @@ function SidebarNav({
 
       <div className="mt-2">
         <SectionHeader
-          label="Projects"
+          label={t("Projects")}
           icon={<Boxes size={11} />}
           open={open("projects")}
           onToggle={() => toggleSection("projects")}
@@ -324,8 +342,8 @@ function SidebarNav({
             <button
               type="button"
               onClick={() => setProjectComposerOpen(true)}
-              title="New project"
-              aria-label="New project"
+              title={t("New project")}
+              aria-label={t("New project")}
               className="rounded p-1 text-faint transition-colors hover:bg-elevated hover:text-text"
             >
               <Plus size={13} />
@@ -343,7 +361,7 @@ function SidebarNav({
                 <span className="flex w-4 shrink-0 items-center justify-center text-faint">
                   <Plus size={14} />
                 </span>
-                No projects yet — create one
+                {t("No projects yet — create one")}
               </button>
             )}
             {projects.map((project) => (
@@ -362,7 +380,7 @@ function SidebarNav({
 
       <div className="mt-2">
         <SectionHeader
-          label="Your team"
+          label={t("Your team")}
           icon={<Users size={11} />}
           open={open("team")}
           onToggle={() => toggleSection("team")}
@@ -370,8 +388,8 @@ function SidebarNav({
             <button
               type="button"
               onClick={onInvite}
-              title="Invite teammates"
-              aria-label="Invite teammates"
+              title={t("Invite teammates")}
+              aria-label={t("Invite teammates")}
               className="rounded p-1 text-faint transition-colors hover:bg-elevated hover:text-text"
             >
               <Plus size={13} />
@@ -391,7 +409,7 @@ function SidebarNav({
                 icon={
                   <AssigneeAvatar displayName={member.displayName} avatar={member.avatar} size={16} />
                 }
-                tag={member.id === workspace.createdBy ? "Owner" : undefined}
+                tag={member.id === workspace.createdBy ? t("Owner") : undefined}
               >
                 {member.displayName}
               </NavItem>
@@ -400,7 +418,7 @@ function SidebarNav({
         )}
       </div>
 
-      {/* Same idea as Notion's "Customize sidebar": sections that are useful to some
+      {/* Same idea as Notion's t("Customize sidebar"): sections that are useful to some
           people but clutter for everyone else can be taken out and put back here. */}
       <div className="px-1 pt-3">
         <Menu
@@ -414,7 +432,7 @@ function SidebarNav({
               <span className="flex w-4 shrink-0 items-center justify-center">
                 <SlidersHorizontal size={12} />
               </span>
-              <span className="truncate">Customize sidebar</span>
+              <span className="truncate">{t("Customize sidebar")}</span>
             </>
           }
         >
@@ -424,12 +442,12 @@ function SidebarNav({
             return (
               <>
                 <div className="px-2 pb-1 pt-1 text-[11px] uppercase tracking-wide text-faint">
-                  In sidebar
+                  {t("In sidebar")}
                 </div>
                 {shown.map((section) => (
                   <MenuItem key={section.key} onSelect={() => onToggleSection(section.key)}>
                     <section.icon size={13} className="text-faint" />
-                    <span className="flex-1 truncate">{section.label}</span>
+                    <span className="flex-1 truncate">{t(section.label)}</span>
                     <Minus size={12} className="text-faint" />
                   </MenuItem>
                 ))}
@@ -437,12 +455,12 @@ function SidebarNav({
                   <>
                     <div className="my-1 border-t border-border" />
                     <div className="px-2 pb-1 pt-1 text-[11px] uppercase tracking-wide text-faint">
-                      Available
+                      {t("Available")}
                     </div>
                     {available.map((section) => (
                       <MenuItem key={section.key} onSelect={() => onToggleSection(section.key)}>
                         <section.icon size={13} className="text-faint" />
-                        <span className="flex-1 truncate">{section.label}</span>
+                        <span className="flex-1 truncate">{t(section.label)}</span>
                         <Plus size={12} className="text-faint" />
                       </MenuItem>
                     ))}
@@ -504,13 +522,16 @@ function WorkspaceSwitcher({
   workspaces: WorkspaceInfo[];
   compact?: boolean;
 }) {
+  const t = useT();
   const [leaving, setLeaving] = useState(false);
   const [leaveError, setLeaveError] = useState<string | null>(null);
 
   async function leaveWorkspace() {
     if (
       !window.confirm(
-        `Leave "${workspace.name}"? A workspace admin has to invite you back with a join code.`
+        t('Leave "{name}"? A workspace admin has to invite you back with a join code.', {
+          name: workspace.name,
+        })
       )
     )
       return;
@@ -570,11 +591,11 @@ function WorkspaceSwitcher({
               <MenuItem danger onSelect={() => { if (!leaving) void leaveWorkspace(); }}>
                 <span className="flex items-center gap-2">
                   <LogOut size={12} />
-                  {leaving ? "Leaving…" : "Leave workspace"}
+                  {leaving ? t("Leaving…") : t("Leave workspace")}
                 </span>
               </MenuItem>
               {leaveError && (
-                <div className="px-2 pb-1 text-[11px] leading-snug text-danger">{leaveError}</div>
+                <div className="px-2 pb-1 text-[11px] leading-snug text-danger">{t(leaveError)}</div>
               )}
             </>
           )}
@@ -585,7 +606,7 @@ function WorkspaceSwitcher({
               window.location.href = "/onboarding?add=1";
             }}
           >
-            <span className="text-accent">+</span> New / join workspace
+            <span className="text-accent">+</span> {t("New / join workspace")}
           </MenuItem>
         </>
       )}
@@ -600,6 +621,7 @@ function RailLink({
   icon,
   dot,
   labeled,
+  disabled,
 }: {
   href: string;
   active: boolean;
@@ -607,18 +629,25 @@ function RailLink({
   icon: ReactNode;
   dot?: boolean;
   labeled?: boolean;
+  disabled?: boolean;
 }) {
-  const activeLook = active
-    ? "bg-elevated text-text"
-    : "text-muted hover:bg-elevated/60 hover:text-text";
+  const activeLook = disabled
+    ? "cursor-not-allowed text-faint opacity-60"
+    : active
+      ? "bg-elevated text-text"
+      : "text-muted hover:bg-elevated/60 hover:text-text";
+  const title = disabled
+    ? "Agent is disabled. Enable a ready harness in Settings."
+    : label;
   // Past the label threshold the rail stops being a rail and reads as a compact
   // sidebar, so the name sits next to the icon instead of hiding in a tooltip.
   if (labeled) {
     return (
       <Link
         href={href}
-        title={label}
+        title={title}
         aria-label={label}
+        aria-disabled={disabled || undefined}
         className={`relative flex h-8 items-center gap-2 rounded-md px-2 text-[13px] font-medium transition-colors ${activeLook}`}
       >
         <span className="flex w-4 shrink-0 items-center justify-center">{icon}</span>
@@ -630,8 +659,9 @@ function RailLink({
   return (
     <Link
       href={href}
-      title={label}
+      title={title}
       aria-label={label}
+      aria-disabled={disabled || undefined}
       className={`relative flex h-8 w-8 items-center justify-center rounded-md transition-colors ${activeLook}`}
     >
       {icon}
@@ -815,6 +845,7 @@ function SidebarRail({
   members,
   viewerId,
   width,
+  agentAllowed,
 }: {
   workspace: WorkspaceInfo;
   workspaces: WorkspaceInfo[];
@@ -825,7 +856,9 @@ function SidebarRail({
   members: Member[];
   viewerId: string;
   width: number;
+  agentAllowed: boolean;
 }) {
+  const t = useT();
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const workspaceId = workspace.id;
@@ -853,9 +886,10 @@ function SidebarRail({
   return (
     <>
       <div
-        className={`flex h-12 shrink-0 items-center ${labeled ? "px-2" : "justify-center"}`}
+        className={`flex h-12 shrink-0 items-center gap-0.5 ${labeled ? "px-2" : "justify-center"}`}
       >
         <WorkspaceSwitcher workspace={workspace} workspaces={workspaces} compact={!named} />
+        <DesktopAppUpdateButton compact={!named} />
       </div>
       <nav
         className={
@@ -867,7 +901,7 @@ function SidebarRail({
         <RailLink
           href={`/${workspaceId}/notifications`}
           active={pathname.endsWith("/notifications")}
-          label="Inbox"
+          label={t("Inbox")}
           icon={<Inbox size={16} />}
           dot={(unread ?? 0) > 0}
           labeled={labeled}
@@ -875,14 +909,14 @@ function SidebarRail({
         <RailLink
           href={`/${workspaceId}/?view=all&assignee=me`}
           active={mine}
-          label="My Tasks"
+          label={t("My Tasks")}
           icon={<User size={16} />}
           labeled={labeled}
         />
         <RailLink
           href={`/${workspaceId}/docs`}
           active={pathname.startsWith(`/${workspaceId}/docs`)}
-          label="Documents"
+          label={t("Documents")}
           icon={<BookOpen size={16} />}
           labeled={labeled}
         />
@@ -890,7 +924,7 @@ function SidebarRail({
             flyout with the group's names, leaving the column's width alone. */}
         {(favorites.length > 0 || projects.length > 0 || teamShown) && divider}
         {favorites.length > 0 && (
-          <RailFlyout label="Favorites" icon={<Star size={15} />} labeled={labeled}>
+          <RailFlyout label={t("Favorites")} icon={<Star size={15} />} labeled={labeled}>
             {(close) =>
               favorites.map((project) => (
                 <RailFlyoutLink
@@ -907,7 +941,7 @@ function SidebarRail({
           </RailFlyout>
         )}
         {projects.length > 0 && (
-          <RailFlyout label="Projects" icon={<Boxes size={15} />} labeled={labeled}>
+          <RailFlyout label={t("Projects")} icon={<Boxes size={15} />} labeled={labeled}>
             {(close) =>
               projects.map((project) => (
                 <RailFlyoutLink
@@ -924,7 +958,7 @@ function SidebarRail({
           </RailFlyout>
         )}
         {teamShown && (
-          <RailFlyout label="Your team" icon={<Users size={15} />} labeled={labeled}>
+          <RailFlyout label={t("Your team")} icon={<Users size={15} />} labeled={labeled}>
             {(close) =>
               team.map((member) => (
                 <RailFlyoutLink
@@ -938,7 +972,7 @@ function SidebarRail({
                       size={16}
                     />
                   }
-                  tag={member.id === workspace.createdBy ? "Owner" : undefined}
+                  tag={member.id === workspace.createdBy ? t("Owner") : undefined}
                   onSelect={close}
                 >
                   {member.displayName}
@@ -958,15 +992,16 @@ function SidebarRail({
         <RailLink
           href={`/${workspaceId}/agent`}
           active={pathname.endsWith("/agent")}
-          label="Agent"
+          label={t("Agent")}
           icon={<Bot size={16} />}
           labeled={labeled}
+          disabled={!agentAllowed}
         />
         {!hidden.includes("help") && (
           <RailLink
             href={`/${workspaceId}/help`}
             active={pathname.endsWith("/help")}
-            label="Help"
+            label={t("Help")}
             icon={<CircleHelp size={16} />}
             labeled={labeled}
           />
@@ -975,22 +1010,29 @@ function SidebarRail({
           <RailLink
             href={`/${workspaceId}/labels`}
             active={pathname.endsWith("/labels")}
-            label="Labels"
+            label={t("Labels")}
             icon={<Tag size={16} />}
             labeled={labeled}
           />
         )}
         <RailLink
+          href={`/${workspaceId}/review`}
+          active={pathname.endsWith("/review")}
+          label={t("Review")}
+          icon={<ShieldCheck size={16} />}
+          labeled={labeled}
+        />
+        <RailLink
           href={`/${workspaceId}/trash`}
           active={pathname.endsWith("/trash")}
-          label="Trash"
+          label={t("Trash")}
           icon={<Trash2 size={16} />}
           labeled={labeled}
         />
         <RailLink
           href={`/${workspaceId}/settings`}
           active={pathname.endsWith("/settings")}
-          label="Settings"
+          label={t("Settings")}
           icon={<Settings size={16} />}
           labeled={labeled}
         />
@@ -1028,7 +1070,7 @@ const SIDEBAR_MAX = 420;
 const SIDEBAR_RAIL = 48;
 const SIDEBAR_RAIL_MIN = 44;
 const SIDEBAR_RAIL_MAX = SIDEBAR_MIN - 1;
-// 128 fits the longest label ("Documents") plus the icon, the gap and both paddings,
+// 128 fits the longest label (t("Documents")) plus the icon, the gap and both paddings,
 // so a label never arrives already cut off with an ellipsis.
 const SIDEBAR_RAIL_LABEL_MIN = 128;
 const SIDEBAR_RAIL_NAME_MIN = 176;
@@ -1134,6 +1176,7 @@ function SidebarResizer({
   onWidth: (next: number) => void;
   onDone: (next: number) => void;
 }) {
+  const t = useT();
   const [dragging, setDragging] = useState(false);
   const origin = useRef({ x: 0, width: 0 });
   // The width the pointer last produced: releasing decides what to remember, and a
@@ -1167,8 +1210,8 @@ function SidebarResizer({
     <div
       role="separator"
       aria-orientation="vertical"
-      aria-label="Resize sidebar"
-      title="Drag to resize, double-click to reset"
+      aria-label={t("Resize sidebar")}
+      title={t("Drag to resize, double-click to reset")}
       onPointerDown={(e) => {
         e.preventDefault();
         origin.current = { x: e.clientX, width };
@@ -1198,16 +1241,17 @@ function tabMeta(
   workspace: WorkspaceInfo,
   projects: Project[],
   members: Member[],
-  pages: PageSummary[]
+  pages: PageSummary[],
+  t: Translate
 ) {
   const [pathname, query = ""] = key.split("?");
   const params = new URLSearchParams(query);
   const view = params.get("view") ?? "all";
   if (pathname === `/${workspace.id}`) {
     const assignee = params.get("assignee");
-    if (view === "all" && assignee === "me") return { label: "My Tasks", icon: <User size={13} /> };
+    if (view === "all" && assignee === "me") return { label: t("My Tasks"), icon: <User size={13} /> };
     if (view === "all" && assignee === "none")
-      return { label: "Unassigned", icon: <UserRoundX size={13} /> };
+      return { label: t("Unassigned"), icon: <UserRoundX size={13} /> };
     if (view === "all" && assignee) {
       const member = members.find((m) => m.id === assignee);
       if (member)
@@ -1227,9 +1271,10 @@ function tabMeta(
     }
     const status = STATUS_ORDER.find((s) => s === view);
     if (status)
-      return { label: STATUS_META[status].label, icon: <StatusIcon status={status} size={13} /> };
-    if (view === "active") return { label: "Active", icon: <Activity size={13} /> };
-    return { label: "All Tasks", icon: <List size={13} /> };
+      return { label: t(STATUS_META[status].label), icon: <StatusIcon status={status} size={13} /> };
+    if (view === "active") return { label: t("Active"), icon: <Activity size={13} /> };
+    if (view === "open") return { label: t("Open Tasks"), icon: <Hand size={13} /> };
+    return { label: t("All Tasks"), icon: <List size={13} /> };
   }
   const personPage = pathname.match(new RegExp(`^/${workspace.id}/people/([^/]+)$`));
   if (personPage) {
@@ -1241,31 +1286,32 @@ function tabMeta(
             <AssigneeAvatar displayName={member.displayName} avatar={member.avatar} size={16} />
           ),
         }
-      : { label: "Person", icon: <User size={13} /> };
+      : { label: t("Person"), icon: <User size={13} /> };
   }
   const projectPage = pathname.match(new RegExp(`^/${workspace.id}/projects/([^/]+)(?:/issues)?$`));
   if (projectPage) {
     const project = projects.find((p) => p.id === projectPage[1]);
     if (project)
       return { label: project.name, icon: <ProjectIcon color={project.color} icon={project.icon} size={13} /> };
-    return { label: "Project", icon: <ProjectIcon color={DEFAULT_PROJECT_COLOR} size={13} /> };
+    return { label: t("Project"), icon: <ProjectIcon color={DEFAULT_PROJECT_COLOR} size={13} /> };
   }
-  if (pathname.endsWith("/settings")) return { label: "Settings", icon: <Settings size={13} /> };
-  if (pathname.endsWith("/agent")) return { label: "Agent", icon: <Bot size={13} /> };
-  if (pathname.endsWith("/labels")) return { label: "Labels", icon: <Tag size={13} /> };
-  if (pathname.endsWith("/trash")) return { label: "Trash", icon: <Trash2 size={13} /> };
-  if (pathname.endsWith("/help")) return { label: "Help", icon: <CircleHelp size={13} /> };
+  if (pathname.endsWith("/settings")) return { label: t("Settings"), icon: <Settings size={13} /> };
+  if (pathname.endsWith("/agent")) return { label: t("Agent"), icon: <Bot size={13} /> };
+  if (pathname.endsWith("/labels")) return { label: t("Labels"), icon: <Tag size={13} /> };
+  if (pathname.endsWith("/trash")) return { label: t("Trash"), icon: <Trash2 size={13} /> };
+  if (pathname.endsWith("/review")) return { label: t("Review"), icon: <ShieldCheck size={13} /> };
+  if (pathname.endsWith("/help")) return { label: t("Help"), icon: <CircleHelp size={13} /> };
   if (pathname.endsWith("/notifications"))
-    return { label: "Inbox", icon: <Inbox size={13} /> };
+    return { label: t("Inbox"), icon: <Inbox size={13} /> };
   const docPage = pathname.match(new RegExp(`^/${workspace.id}/docs/([^/]+)$`));
   if (docPage) {
     const page = pages.find((candidate) => candidate.id === docPage[1]);
     return page
       ? { label: page.title, icon: <span>{page.icon ?? <FileText size={13} />}</span> }
-      : { label: "Doc", icon: <FileText size={13} /> };
+      : { label: t("Doc"), icon: <FileText size={13} /> };
   }
-  if (pathname === `/${workspace.id}/docs`) return { label: "Documents", icon: <BookOpen size={13} /> };
-  return { label: "Tasks", icon: <List size={13} /> };
+  if (pathname === `/${workspace.id}/docs`) return { label: t("Documents"), icon: <BookOpen size={13} /> };
+  return { label: t("Tasks"), icon: <List size={13} /> };
 }
 
 function TabBar({
@@ -1287,6 +1333,7 @@ function TabBar({
   sidebarWidth: number;
   onToggleRail: () => void;
 }) {
+  const t = useT();
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
@@ -1314,8 +1361,8 @@ function TabBar({
   // Different URLs can show the same page (a project's Overview and Issues, or
   // `?view=all` vs none); tabs are unique by what they display, not by URL.
   const sameTab = (a: string, b: string) =>
-    tabMeta(a, workspace, projects, members, pages).label ===
-    tabMeta(b, workspace, projects, members, pages).label;
+    tabMeta(a, workspace, projects, members, pages, t).label ===
+    tabMeta(b, workspace, projects, members, pages, t).label;
 
   useEffect(() => {
     try {
@@ -1434,8 +1481,8 @@ function TabBar({
         <button
           type="button"
           onClick={onToggleRail}
-          title={rail ? "Expand sidebar" : "Collapse to icons"}
-          aria-label={rail ? "Expand sidebar" : "Collapse to icons"}
+          title={rail ? t("Expand sidebar") : t("Collapse to icons")}
+          aria-label={rail ? t("Expand sidebar") : t("Collapse to icons")}
           className="shrink-0 rounded-md p-1.5 text-muted transition-colors hover:bg-elevated hover:text-text"
         >
           {rail ? <PanelLeftOpen size={16} /> : <PanelLeftClose size={16} />}
@@ -1444,7 +1491,7 @@ function TabBar({
 
       <div className="app-tabstrip flex min-w-0 flex-1 items-center gap-1.5 overflow-hidden pl-1.5">
         {visible.map((key) => {
-          const { label, icon } = tabMeta(key, workspace, projects, members, pages);
+          const { label, icon } = tabMeta(key, workspace, projects, members, pages, t);
           const isActive = key === current;
           return (
             <div
@@ -1467,7 +1514,7 @@ function TabBar({
               <button
                 type="button"
                 onClick={() => closeTab(key)}
-                aria-label={`Close ${label}`}
+                aria-label={t("Close {label}", { label })}
                 className={`shrink-0 rounded p-0.5 text-faint transition-opacity hover:bg-elevated hover:text-text ${
                   isActive ? "opacity-70" : "opacity-0 group-hover:opacity-70"
                 }`}
@@ -1482,8 +1529,8 @@ function TabBar({
       <button
         type="button"
         onClick={() => setPaletteOpen(true)}
-        title="Open something (⌘K)"
-        aria-label="Open something"
+        title={t("Open something (⌘K)")}
+        aria-label={t("Open something")}
         className="ml-1.5 shrink-0 rounded-md p-1.5 text-muted transition-colors hover:bg-elevated hover:text-text"
       >
         <Plus size={16} />
@@ -1514,6 +1561,7 @@ export function WorkspaceShell({
   members,
   pages,
   joinCode,
+  agentAllowed,
   children,
 }: {
   workspace: WorkspaceInfo;
@@ -1524,8 +1572,10 @@ export function WorkspaceShell({
   members: Member[];
   pages: PageSummary[];
   joinCode: string | null;
+  agentAllowed: boolean;
   children: ReactNode;
 }) {
+  const t = useT();
   const pathname = usePathname();
   const { panelExpanded } = useUI();
   // One width, two looks, like ChatGPT: under SIDEBAR_MIN the column is the icon rail.
@@ -1614,11 +1664,13 @@ export function WorkspaceShell({
               members={members}
               viewerId={user.id}
               width={sidebarWidth}
+              agentAllowed={agentAllowed}
             />
           ) : (
             <>
               <div className="flex h-12 shrink-0 items-center px-3">
                 <WorkspaceSwitcher workspace={workspace} workspaces={workspaces} />
+                <DesktopAppUpdateButton />
               </div>
 
               <Suspense fallback={<nav className="flex-1 px-2 py-3" />}>
@@ -1641,8 +1693,14 @@ export function WorkspaceShell({
                   href={`/${workspace.id}/agent`}
                   active={pathname.endsWith("/agent")}
                   icon={<Bot size={14} />}
+                  disabled={!agentAllowed}
+                  title={
+                    agentAllowed
+                      ? undefined
+                      : "Agent is disabled. Enable a ready harness in Settings."
+                  }
                 >
-                  Agent
+                  {t("Agent")}
                 </NavItem>
                 {!hiddenSections.includes("help") && (
                   <NavItem
@@ -1650,7 +1708,7 @@ export function WorkspaceShell({
                     active={pathname.endsWith("/help")}
                     icon={<CircleHelp size={14} />}
                   >
-                    Help
+                    {t("Help")}
                   </NavItem>
                 )}
                 {!hiddenSections.includes("labels") && (
@@ -1659,22 +1717,29 @@ export function WorkspaceShell({
                     active={pathname.endsWith("/labels")}
                     icon={<Tag size={14} />}
                   >
-                    Labels
+                    {t("Labels")}
                   </NavItem>
                 )}
+                <NavItem
+                  href={`/${workspace.id}/review`}
+                  active={pathname.endsWith("/review")}
+                  icon={<ShieldCheck size={14} />}
+                >
+                  {t("Review")}
+                </NavItem>
                 <NavItem
                   href={`/${workspace.id}/trash`}
                   active={pathname.endsWith("/trash")}
                   icon={<Trash2 size={14} />}
                 >
-                  Trash
+                  {t("Trash")}
                 </NavItem>
                 <NavItem
                   href={`/${workspace.id}/settings`}
                   active={pathname.endsWith("/settings")}
                   icon={<Settings size={14} />}
                 >
-                  Settings
+                  {t("Settings")}
                 </NavItem>
               </div>
             </>
@@ -1711,9 +1776,12 @@ export function WorkspaceShell({
         </main>
       </div>
 
+      <LiveRefresh workspaceId={workspace.id} />
       {inviteOpen && (
         <InviteDialog
+          workspaceId={workspace.id}
           workspaceName={workspace.name}
+          isAdmin={workspace.role === "admin"}
           joinCode={joinCode}
           onClose={() => setInviteOpen(false)}
         />

@@ -1,68 +1,30 @@
 // Shared with client components: no database or node-only imports here.
-export type AiProviderId = "openai" | "deepseek" | "qwen" | "moonshot" | "custom";
-
-export type AiPreset = {
-  id: AiProviderId;
+export type ModelEndpointView = {
+  id: string;
   label: string;
   baseUrl: string;
-  model: string;
-  hint: string;
+  models: string[];
+  // Last few characters only: the full key never leaves the server.
+  keyHint: string;
 };
 
-export const AI_PRESETS: AiPreset[] = [
-  {
-    id: "deepseek",
-    label: "DeepSeek",
-    baseUrl: "https://api.deepseek.com/v1",
-    model: "deepseek-chat",
-    hint: "Cheap and strong in Chinese; supports streaming.",
-  },
-  {
-    id: "openai",
-    label: "OpenAI",
-    baseUrl: "https://api.openai.com/v1",
-    model: "gpt-4o-mini",
-    hint: "Official OpenAI API.",
-  },
-  {
-    id: "qwen",
-    label: "Qwen (DashScope)",
-    baseUrl: "https://dashscope.aliyuncs.com/compatible-mode/v1",
-    model: "qwen-plus",
-    hint: "Alibaba Cloud DashScope's OpenAI-compatible endpoint.",
-  },
-  {
-    id: "moonshot",
-    label: "Moonshot",
-    baseUrl: "https://api.moonshot.cn/v1",
-    model: "moonshot-v1-8k",
-    hint: "Kimi's OpenAI-compatible endpoint.",
-  },
-  {
-    id: "custom",
-    label: "Custom",
-    baseUrl: "",
-    model: "",
-    hint: "Any endpoint that accepts POST {baseUrl}/chat/completions.",
-  },
-];
-
-export function presetFor(baseUrl: string): AiProviderId {
-  const normalized = baseUrl.replace(/\/+$/, "").toLowerCase();
-  const preset = AI_PRESETS.find(
-    (entry) => entry.id !== "custom" && entry.baseUrl.replace(/\/+$/, "").toLowerCase() === normalized
-  );
-  return preset?.id ?? "custom";
-}
+export type ModelKeysView = {
+  endpoints: ModelEndpointView[];
+  editProvider: string | null;
+  editModel: string;
+};
 
 // One inline rewrite has to fit in a single answer, so anything past this length is the
 // Agent's job instead. Shared with the panel so it can say so before the request.
 export const AI_EDIT_CHAR_LIMIT = 8_000;
 
-// "api" calls an OpenAI-compatible endpoint with a stored key; the CLI engines
+// "api" calls an OpenAI-compatible endpoint with the viewer's own key; the CLI engines
 // borrow the ChatGPT / Pi login that already exists on this machine.
 export type AiEngine = "api" | "codex" | "pi";
 export type CliEngine = "codex" | "pi";
+/** Agent composer harness id (no API-as-agent). */
+export type AgentHarnessId = "codex" | "pi" | "opencode" | "dsh" | "codebuddy";
+export const AGENT_HARNESS_IDS: AgentHarnessId[] = ["codex", "pi", "opencode", "dsh", "codebuddy"];
 
 // The Agent tab reopens on whichever engine the user chose last. It lives in a cookie so
 // the server can resolve the default and the chip never hydrates to a stale value.
@@ -83,13 +45,6 @@ export type CliEngineStatus = {
 };
 
 export type AiSettingsView = {
-  configured: boolean;
-  enabled: boolean;
-  provider: AiProviderId;
-  baseUrl: string;
-  model: string;
-  // Last few characters only — the full key never leaves the server.
-  keyHint: string | null;
   updatedAt: string | null;
   engine: AiEngine;
   proxy: string;
@@ -126,6 +81,15 @@ export type AgentEngineOption = {
   hint: string | null;
 };
 
+/** Composer harness picker row (H-P3-17). */
+export type AgentHarnessOption = {
+  id: AgentHarnessId;
+  label: string;
+  detail: string | null;
+  available: boolean;
+  hint: string | null;
+};
+
 // One entry of the Codex model catalogue on this machine.
 export type CodexModel = {
   slug: string;
@@ -153,7 +117,7 @@ export type AgentSkill = {
 export const AGENT_APPROVALS = [
   { id: "ask", label: "Ask for approval", detail: "Every TaCos write waits for a card." },
   { id: "auto", label: "Approve for me", detail: "Writes go through; risky ones still ask." },
-  { id: "full", label: "Full access", detail: "No cards, and the agent may touch the machine." },
+  { id: "full", label: "Full access", detail: "The agent may touch the machine. Delete actions still ask." },
 ] as const;
 
 export const AI_EDIT_ACTIONS: { id: AiEditAction; label: string }[] = [

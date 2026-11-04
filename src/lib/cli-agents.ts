@@ -173,7 +173,9 @@ export function listCliStatuses(): CliEngineStatus[] {
 
 // Codex ships its model list next to its config; reading that file is the only way to
 // offer exactly the models this machine can actually run.
-const EFFORT_LABELS: Record<string, string> = {
+export const EFFORT_LABELS: Record<string, string> = {
+  none: "None",
+  off: "Off",
   minimal: "Minimal",
   low: "Low",
   medium: "Medium",
@@ -420,6 +422,12 @@ function systemProxy(): string {
   return value;
 }
 
+/** The proxy for a request this server makes on a harness's behalf: same order as cliEnv. */
+export function upstreamProxy(proxy: string): string {
+  const inherited = PROXY_KEYS.map((key) => (process.env[key] ?? "").trim()).find(Boolean);
+  return proxy.trim() || inherited || systemProxy();
+}
+
 // The Codex and Pi CLIs need the proxy that the desktop app itself may not use,
 // because they talk to their provider directly.
 function cliEnv(proxy: string): NodeJS.ProcessEnv {
@@ -492,7 +500,7 @@ export type CliPrompt = { system: string; body: string };
 
 export type AgentStepEvent = {
   key: string;
-  kind: "command" | "file" | "tool" | "info";
+  kind: "command" | "file" | "tool" | "info" | "thinking";
   title: string;
   detail?: string;
   status: "running" | "done" | "error" | "denied";
@@ -510,7 +518,6 @@ export type AgentApprovalRequest = {
 // in, whether it may change things, the TaCos MCP server it can call, and the two
 // callbacks that carry the trajectory and permission cards back to the browser.
 export type AgentRun = {
-  mode: "chat" | "work";
   cwd: string;
   // Empty means "leave Codex on whatever its config says".
   model?: string;
@@ -521,6 +528,8 @@ export type AgentRun = {
   mcp?: { command: string; args: string[]; env: Record<string, string> };
   // Read-only tools the agent may use without a card; every write is still asked.
   autoApprove?: string[];
+  // Delete tools always wait for a card, even when approval is Full (H-P3-19).
+  neverAutoApprove?: string[];
   // True once the person chose "Allow for this turn" on an earlier card.
   isTurnApproved?: () => boolean;
   onStep?: (step: AgentStepEvent) => void;
@@ -645,7 +654,7 @@ function stderrTail(stderr: string, fallback: string): string {
 // nothing about why.
 function connectionHint(message: string): string {
   if (!/Reconnecting|disconnected|reset by peer|timed out/i.test(message)) return message;
-  return `${message} — Codex could not reach its provider from this server. Check the network, or set a proxy under Settings → AI assistant.`;
+  return `${message} — Codex could not reach its provider from this server. Check the network, or set a proxy under Settings → Harness.`;
 }
 
 // Work turns legitimately run longer than a question: a tool loop with several writes
@@ -658,7 +667,7 @@ function codexStream(binary: string, prompt: CliPrompt, options: RunOptions): Re
   let stop = () => {};
 
   const agent = options.agent;
-  const work = agent?.mode === "work";
+  const work = true; // Unified Agent always mounts TaCos tools (H-P1-06).
   const cwd = agent?.cwd ?? agentCwd();
   fs.mkdirSync(cwd, { recursive: true });
 
@@ -750,7 +759,10 @@ function codexStream(binary: string, prompt: CliPrompt, options: RunOptions): Re
         }
         const message = String(params.message ?? "Allow this tool call?");
         const toolName = message.match(/run tool "([^"]+)"/)?.[1] ?? "call";
-        if (agent.autoApprove?.includes(toolName) || agent.isTurnApproved?.()) {
+        if (
+          !agent.neverAutoApprove?.includes(toolName) &&
+          (agent.autoApprove?.includes(toolName) || agent.isTurnApproved?.())
+        ) {
           send({ jsonrpc: "2.0", id, result: { action: "accept", content: {} } });
           return;
         }
@@ -861,10 +873,9 @@ function codexStream(binary: string, prompt: CliPrompt, options: RunOptions): Re
             method: "thread/start",
             params: {
               cwd,
-              // "Full access" is Codex's own posture: no sandbox around the folder and no
-              // approvals at all. Anything less keeps the turn inside the project.
+              // Full opens the machine sandbox. MCP still uses on-request so delete tools can ask (H-P3-19).
               sandbox: work && agent?.approval === "full" ? "danger-full-access" : work ? "workspace-write" : "read-only",
-              approvalPolicy: work && agent?.approval !== "full" ? "on-request" : "never",
+              approvalPolicy: work ? "on-request" : "never",
               ephemeral: true,
               baseInstructions: prompt.system,
             },
@@ -966,8 +977,7 @@ function piStream(binary: string, prompt: CliPrompt, options: RunOptions): Reada
             "--print",
             "--mode",
             "json",
-            "--no-tools",
-            "--no-mcp",
+            // H-P1-07: do not hard-gate Pi tools/MCP. H-P4-21 wires TaCos MCP + cards.
             "--no-session",
             "--system-prompt",
             prompt.system,

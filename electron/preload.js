@@ -23,4 +23,16 @@ contextBridge.exposeInMainWorld("tacosDesktop", {
     ipcRenderer.on("tacos:open-files-queued", listener);
     return () => ipcRenderer.removeListener("tacos:open-files-queued", listener);
   },
+  // H-DESKTOP-UPDATE-01: desktop app binary update (not Settings › Harness CLI update).
+  appUpdate: {
+    getStatus: () => ipcRenderer.invoke("tacos:app-update:status"),
+    check: () => ipcRenderer.invoke("tacos:app-update:check"),
+    download: () => ipcRenderer.invoke("tacos:app-update:download"),
+    install: () => ipcRenderer.invoke("tacos:app-update:install"),
+    onStatus: (handler) => {
+      const listener = (_event, status) => handler(status);
+      ipcRenderer.on("tacos:app-update:status-changed", listener);
+      return () => ipcRenderer.removeListener("tacos:app-update:status-changed", listener);
+    },
+  },
 });

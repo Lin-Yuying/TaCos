@@ -4,6 +4,8 @@ import { redirect } from "next/navigation";
 import { getSessionUser, landingWorkspaceId, listUserWorkspaces } from "@/lib/auth";
 import { listDeletedWorkspaces, listWorkspaceDeletionNotices } from "@/lib/issues";
 import { OnboardingForm } from "@/components/onboarding-form";
+import { I18nProvider } from "@/components/i18n-context";
+import { resolveLocale } from "@/lib/locale";
 
 export default function OnboardingPage({
   searchParams,
@@ -31,20 +33,23 @@ async function OnboardingView({
   if (!adding && landing) redirect(`/${landing}`);
   // The owner lands here right after deleting their last workspace — the recycle
   // bin has to be reachable from this screen or the 30 days are useless.
-  const [deletedWorkspaces, deletionNotices] = await Promise.all([
+  const [deletedWorkspaces, deletionNotices, locale] = await Promise.all([
     listDeletedWorkspaces(user.id),
     listWorkspaceDeletionNotices(user.id),
+    resolveLocale(user),
   ]);
   return (
-    <OnboardingForm
-      displayName={user.displayName}
-      hasWorkspaces={workspaces.length > 0}
-      siteAdmin={user.siteRole === "admin"}
-      homeUrl={user.siteRole === "admin" ? "/admin" : landing ? `/${landing}` : undefined}
-      workspaceUrl={landing ? `/${landing}` : undefined}
-      user={user}
-      deletedWorkspaces={deletedWorkspaces}
-      deletionNotices={deletionNotices}
-    />
+    <I18nProvider locale={locale}>
+      <OnboardingForm
+        displayName={user.displayName}
+        hasWorkspaces={workspaces.length > 0}
+        siteAdmin={user.siteRole === "admin"}
+        homeUrl={user.siteRole === "admin" ? "/admin" : landing ? `/${landing}` : undefined}
+        workspaceUrl={landing ? `/${landing}` : undefined}
+        user={user}
+        deletedWorkspaces={deletedWorkspaces}
+        deletionNotices={deletionNotices}
+      />
+    </I18nProvider>
   );
 }

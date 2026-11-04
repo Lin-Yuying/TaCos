@@ -4,8 +4,12 @@ import { useState } from "react";
 import Link from "next/link";
 import { loginAction, registerAction } from "@/app/auth-actions";
 import { OtterMark } from "@/components/icons";
+import { useT } from "@/components/i18n-context";
 
-export function AuthForm({ mode }: { mode: "login" | "register" }) {
+// invite: H-COLLAB-12 join code from an invite link; after sign-in the user goes back
+// to /join/<code>.
+export function AuthForm({ mode, invite }: { mode: "login" | "register"; invite?: string }) {
+  const t = useT();
   const [username, setUsername] = useState("");
   const [displayName, setDisplayName] = useState("");
   const [password, setPassword] = useState("");
@@ -22,11 +26,11 @@ export function AuthForm({ mode }: { mode: "login" | "register" }) {
         : await registerAction({ username, displayName, password });
     setBusy(false);
     if (!result.ok) {
-      setError(result.error);
+      setError(t(result.error));
       return;
     }
     // Server-picked: the account's own last workspace, never the previous account's.
-    window.location.href = result.data.next;
+    window.location.href = invite ? `/join/${encodeURIComponent(invite)}` : result.data.next;
   }
 
   return (
@@ -38,12 +42,12 @@ export function AuthForm({ mode }: { mode: "login" | "register" }) {
           <span className="text-[15px] font-semibold tracking-tight">TaCos</span>
         </div>
         <h1 className="text-[22px] font-semibold tracking-tight">
-          {mode === "login" ? "Sign in" : "Create your account"}
+          {mode === "login" ? t("Sign in") : t("Create your account")}
         </h1>
         <p className="mb-6 mt-1 text-[13px] text-muted">
           {mode === "login"
-            ? "Welcome back — your team's issues await."
-            : "Open registration. Join an existing workspace with a code, or create your own."}
+            ? t("Welcome back — your team's issues await.")
+            : t("Open registration. Join an existing workspace with a code, or create your own.")}
         </p>
 
         <form
@@ -54,63 +58,63 @@ export function AuthForm({ mode }: { mode: "login" | "register" }) {
           }}
         >
           <label className="block">
-            <span className="mb-1 block text-[12px] font-medium text-muted">Username</span>
+            <span className="mb-1 block text-[12px] font-medium text-muted">{t("Username")}</span>
             <input
               autoFocus
               value={username}
               onChange={(e) => setUsername(e.target.value)}
               autoComplete="username"
               className="w-full rounded-md border border-border bg-elevated/50 px-2.5 py-2 text-[13px] placeholder:text-faint focus:border-border-strong"
-              placeholder="e.g. alex"
+              placeholder={t("e.g. alex")}
             />
           </label>
           {mode === "register" && (
             <label className="block">
-              <span className="mb-1 block text-[12px] font-medium text-muted">Display name</span>
+              <span className="mb-1 block text-[12px] font-medium text-muted">{t("Display name")}</span>
               <input
                 value={displayName}
                 onChange={(e) => setDisplayName(e.target.value)}
                 className="w-full rounded-md border border-border bg-elevated/50 px-2.5 py-2 text-[13px] placeholder:text-faint focus:border-border-strong"
-                placeholder="e.g. Alex Chen"
+                placeholder={t("e.g. Alex Chen")}
               />
             </label>
           )}
           <label className="block">
-            <span className="mb-1 block text-[12px] font-medium text-muted">Password</span>
+            <span className="mb-1 block text-[12px] font-medium text-muted">{t("Password")}</span>
             <input
               type="password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               autoComplete={mode === "login" ? "current-password" : "new-password"}
               className="w-full rounded-md border border-border bg-elevated/50 px-2.5 py-2 text-[13px] placeholder:text-faint focus:border-border-strong"
-              placeholder={mode === "register" ? "At least 8 characters" : ""}
+              placeholder={mode === "register" ? t("At least 8 characters") : ""}
             />
           </label>
 
-          {error && <div className="text-[12px] text-danger">{error}</div>}
+          {error && <div className="text-[12px] text-danger">{t(error)}</div>}
 
           <button
             type="submit"
             disabled={busy || !username.trim() || !password}
             className="w-full rounded-md bg-accent px-3 py-2 text-[13px] font-medium text-white transition-colors hover:bg-accent-hover disabled:opacity-40"
           >
-            {mode === "login" ? "Sign in" : "Create account"}
+            {mode === "login" ? t("Sign in") : t("Create account")}
           </button>
         </form>
 
         <div className="mt-4 text-center text-[13px] text-muted">
           {mode === "login" ? (
             <>
-              No account yet?{" "}
-              <Link href="/register" className="text-accent hover:underline">
-                Register
+              {t("No account yet?")}{" "}
+              <Link href={invite ? `/register?invite=${encodeURIComponent(invite)}` : "/register"} className="text-accent hover:underline">
+                {t("Register")}
               </Link>
             </>
           ) : (
             <>
-              Already registered?{" "}
-              <Link href="/login" className="text-accent hover:underline">
-                Sign in
+              {t("Already registered?")}{" "}
+              <Link href={invite ? `/login?invite=${encodeURIComponent(invite)}` : "/login"} className="text-accent hover:underline">
+                {t("Sign in")}
               </Link>
             </>
           )}

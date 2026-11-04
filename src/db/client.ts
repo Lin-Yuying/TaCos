@@ -179,6 +179,13 @@ CREATE TABLE IF NOT EXISTS issues (
   reminder TEXT,
   deleted_at TEXT,
   position REAL NOT NULL DEFAULT 0,
+  claimed_by TEXT,
+  claimed_at TEXT,
+  source_thread_id TEXT,
+  published_by TEXT,
+  review_status TEXT NOT NULL DEFAULT 'approved',
+  reviewed_by TEXT,
+  reviewed_at TEXT,
   created_at TEXT NOT NULL,
   updated_at TEXT NOT NULL
 );
@@ -256,14 +263,13 @@ CREATE TABLE IF NOT EXISTS api_keys (
 CREATE INDEX IF NOT EXISTS api_keys_workspace_idx ON api_keys (workspace_id);
 
 -- Agent conversations live beside the workspace they belong to: each one is bound to a
--- project, the way a Codex thread is bound to a folder. Messages and the work trajectory
--- (commands, file changes, tool calls) are kept so a thread can be reopened later.
+-- project, the way a Codex thread is bound to a folder. Messages and trajectory steps
+-- are kept so a thread can be reopened later.
 CREATE TABLE IF NOT EXISTS agent_threads (
   id TEXT PRIMARY KEY,
   workspace_id TEXT NOT NULL,
   project_id TEXT NOT NULL,
   title TEXT NOT NULL DEFAULT '',
-  mode TEXT NOT NULL DEFAULT 'chat',
   engine TEXT NOT NULL DEFAULT 'codex',
   visibility TEXT NOT NULL DEFAULT 'private',
   created_by TEXT NOT NULL,
@@ -314,7 +320,20 @@ CREATE TABLE IF NOT EXISTS ai_settings (
   enabled INTEGER NOT NULL DEFAULT 1,
   updated_at TEXT NOT NULL,
   engine TEXT NOT NULL DEFAULT 'api',
-  proxy TEXT NOT NULL DEFAULT ''
+  proxy TEXT NOT NULL DEFAULT '',
+  harness_enabled TEXT NOT NULL DEFAULT '{}'
+);
+CREATE TABLE IF NOT EXISTS user_model_keys (
+  user_id TEXT NOT NULL,
+  provider TEXT NOT NULL,
+  api_key TEXT NOT NULL,
+  edit_model TEXT NOT NULL DEFAULT '',
+  for_edits INTEGER NOT NULL DEFAULT 0,
+  label TEXT NOT NULL DEFAULT '',
+  base_url TEXT NOT NULL DEFAULT '',
+  models TEXT NOT NULL DEFAULT '',
+  updated_at TEXT NOT NULL,
+  PRIMARY KEY (user_id, provider)
 );
 `;
 
@@ -582,6 +601,17 @@ function addColumnIfMissing(
   return true;
 }
 
+function dropColumnIfPresent(sqlite: Database.Database, table: string, column: string): boolean {
+  if (!hasColumn(sqlite, table, column)) return false;
+  try {
+    sqlite.exec(`ALTER TABLE ${table} DROP COLUMN ${column}`);
+    return true;
+  } catch {
+    // Older SQLite builds reject DROP COLUMN. The app no longer reads this field.
+    return false;
+  }
+}
+
 export const BUILT_IN_ADMIN = "admin";
 
 // Guarantees the superuser exists so a fresh install is never locked out.
@@ -640,6 +670,7 @@ function bootstrap(sqlite: Database.Database) {
   addColumnIfMissing(sqlite, "users", "avatar", "TEXT");
   addColumnIfMissing(sqlite, "users", "role", "TEXT NOT NULL DEFAULT 'member'");
   addColumnIfMissing(sqlite, "users", "last_workspace_id", "TEXT");
+  addColumnIfMissing(sqlite, "users", "locale", "TEXT");
   addColumnIfMissing(sqlite, "workspaces", "icon", "TEXT");
   addColumnIfMissing(sqlite, "workspaces", "created_by", "TEXT");
   addColumnIfMissing(sqlite, "workspaces", "deleted_at", "TEXT");
@@ -659,19 +690,34 @@ function bootstrap(sqlite: Database.Database) {
   addColumnIfMissing(sqlite, "issues", "position", "REAL NOT NULL DEFAULT 0");
   addColumnIfMissing(sqlite, "issues", "due_date", "TEXT");
   addColumnIfMissing(sqlite, "issues", "reminder", "TEXT");
+  // H-COLLAB-01: claim, source chat, publisher and review gate.
+  addColumnIfMissing(sqlite, "issues", "claimed_by", "TEXT");
+  addColumnIfMissing(sqlite, "issues", "claimed_at", "TEXT");
+  addColumnIfMissing(sqlite, "issues", "source_thread_id", "TEXT");
+  addColumnIfMissing(sqlite, "agent_threads", "focus_issue_id", "TEXT");
+  addColumnIfMissing(sqlite, "agent_messages", "author_id", "TEXT");
+  addColumnIfMissing(sqlite, "issues", "published_by", "TEXT");
+  addColumnIfMissing(sqlite, "issues", "review_status", "TEXT NOT NULL DEFAULT 'approved'");
+  addColumnIfMissing(sqlite, "issues", "reviewed_by", "TEXT");
+  addColumnIfMissing(sqlite, "issues", "reviewed_at", "TEXT");
+  sqlite.exec("CREATE INDEX IF NOT EXISTS issues_claimed_idx ON issues (claimed_by)");
   // Inline comments quote the passage they belong to instead of storing offsets, which
   // would drift as soon as the overview is edited.
   addColumnIfMissing(sqlite, "ai_settings", "engine", "TEXT NOT NULL DEFAULT 'api'");
   addColumnIfMissing(sqlite, "ai_settings", "proxy", "TEXT NOT NULL DEFAULT ''");
+  addColumnIfMissing(sqlite, "ai_settings", "harness_enabled", "TEXT NOT NULL DEFAULT '{}'");
   addColumnIfMissing(sqlite, "overview_comments", "quote", "TEXT");
   addColumnIfMissing(sqlite, "overview_comments", "occurrence", "INTEGER NOT NULL DEFAULT 1");
   // A conversation remembers which Codex model, reasoning effort and approval mode it runs on.
   addColumnIfMissing(sqlite, "agent_threads", "model", "TEXT NOT NULL DEFAULT ''");
   addColumnIfMissing(sqlite, "agent_threads", "effort", "TEXT NOT NULL DEFAULT ''");
   addColumnIfMissing(sqlite, "agent_threads", "approval", "TEXT NOT NULL DEFAULT 'ask'");
+  // H-P1-08: Chat/Work mode is gone from the product. Drop the legacy column when SQLite allows it.
+  dropColumnIfPresent(sqlite, "agent_threads", "mode");
   if (addColumnIfMissing(sqlite, "pages", "project_id", "TEXT")) {
     sqlite.exec("CREATE INDEX IF NOT EXISTS pages_project_idx ON pages (project_id)");
   }
+  addColumnIfMissing(sqlite, "issues", "reminder_sent_for", "TEXT");
   const addedIssueCreator = addColumnIfMissing(sqlite, "issues", "created_by", "TEXT");
   if (!hadIssueAssignees && hasColumn(sqlite, "issues", "assignee_id")) {
     // Old boards held exactly one assignee per issue; carry it into the join table.

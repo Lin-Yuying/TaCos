@@ -5,6 +5,8 @@ import { BUILT_IN_ADMIN } from "@/db/client";
 import { listSiteMembers } from "@/lib/admin";
 import { getSessionUser, landingWorkspaceId, listUserWorkspaces } from "@/lib/auth";
 import { AdminConsole } from "@/components/admin-console";
+import { I18nProvider } from "@/components/i18n-context";
+import { resolveLocale } from "@/lib/locale";
 
 // The gate has to run before any HTML is sent, so members get a real redirect.
 export const instant = false;
@@ -34,11 +36,13 @@ async function AdminView() {
   if (user.siteRole !== "admin") redirect(homeUrl);
 
   return (
-    <AdminConsole
-      currentUser={{ id: user.id, username: user.username, displayName: user.displayName }}
-      members={await listSiteMembers()}
-      homeUrl={homeUrl}
-      builtInAdminUsername={BUILT_IN_ADMIN}
-    />
+    <I18nProvider locale={await resolveLocale(user)}>
+      <AdminConsole
+        currentUser={{ id: user.id, username: user.username, displayName: user.displayName }}
+        members={await listSiteMembers()}
+        homeUrl={homeUrl}
+        builtInAdminUsername={BUILT_IN_ADMIN}
+      />
+    </I18nProvider>
   );
 }

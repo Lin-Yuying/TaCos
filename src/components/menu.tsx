@@ -9,6 +9,7 @@ export function Menu({
   width = 200,
   offset = 0,
   triggerClassName,
+  className,
 }: {
   // A function form lets a trigger react to the open state — the sidebar workspace
   // switcher uses it to sink the button and turn its chevron the way section headers do.
@@ -20,6 +21,8 @@ export function Menu({
   // column instead of the trigger (the sidebar's Customize menu spans the whole sidebar).
   offset?: number;
   triggerClassName?: string | ((open: boolean) => string);
+  // Lets a row of menus decide which one gives up width first.
+  className?: string;
 }) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
@@ -109,7 +112,7 @@ export function Menu({
   }, [open]);
 
   return (
-    <div className="relative" ref={ref}>
+    <div className={`relative ${className ?? ""}`} ref={ref}>
       <button
         type="button"
         ref={triggerRef}

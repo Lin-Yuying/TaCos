@@ -9,7 +9,7 @@ import {
   deleteAgentThread,
   renameAgentThread,
   setAgentThreadApproval,
-  setAgentThreadMode,
+  setAgentThreadEngine,
   setAgentThreadModel,
   setAgentThreadPinned,
   setAgentThreadProject,
@@ -17,9 +17,13 @@ import {
   setAgentThreadVisibility,
   startAgentThread,
   type AgentApproval,
-  type AgentMode,
   type AgentThread,
   type AgentVisibility,
+  getSourceThread,
+  listThreadTasks,
+  startTaskChat,
+  type SourceThread,
+  type ThreadTask,
 } from "@/lib/agent-threads";
 import type { ActionResult } from "./actions";
 
@@ -39,7 +43,6 @@ export async function startAgentThreadAction(
   workspaceId: string,
   input: {
     projectId: string;
-    mode: AgentMode;
     visibility: AgentVisibility;
     engine: string;
     model?: string;
@@ -81,18 +84,6 @@ export async function setAgentThreadVisibilityAction(
   });
 }
 
-export async function setAgentThreadModeAction(
-  workspaceId: string,
-  threadId: string,
-  mode: AgentMode
-): Promise<ActionResult<AgentThread>> {
-  return run(async () => {
-    const { user } = await requireWorkspace(workspaceId);
-    const thread = await setAgentThreadMode(workspaceId, user.id, threadId, mode);
-    refresh(workspaceId);
-    return thread;
-  });
-}
 
 export async function setAgentThreadProjectAction(
   workspaceId: string,
@@ -102,6 +93,20 @@ export async function setAgentThreadProjectAction(
   return run(async () => {
     const { user } = await requireWorkspace(workspaceId);
     const thread = await setAgentThreadProject(workspaceId, user.id, threadId, projectId);
+    refresh(workspaceId);
+    return thread;
+  });
+}
+
+
+export async function setAgentThreadEngineAction(
+  workspaceId: string,
+  threadId: string,
+  engine: string
+): Promise<ActionResult<AgentThread>> {
+  return run(async () => {
+    const { user } = await requireWorkspace(workspaceId);
+    const thread = await setAgentThreadEngine(workspaceId, user.id, threadId, engine);
     refresh(workspaceId);
     return thread;
   });
@@ -204,5 +209,36 @@ export async function deleteAgentSkillAction(
     clearSkillCache();
     refresh(workspaceId);
     return removed;
+  });
+}
+
+// H-COLLAB-07: the task panel names its source chat; the chat lists the tasks it published.
+export async function getSourceThreadAction(
+  workspaceId: string,
+  threadId: string
+): Promise<ActionResult<SourceThread | null>> {
+  return run(async () => {
+    const { user } = await requireWorkspace(workspaceId);
+    return getSourceThread(workspaceId, threadId, user.id);
+  });
+}
+
+export async function listThreadTasksAction(
+  workspaceId: string,
+  threadId: string
+): Promise<ActionResult<ThreadTask[]>> {
+  return run(async () => {
+    const { user } = await requireWorkspace(workspaceId);
+    return listThreadTasks(workspaceId, threadId, user.id);
+  });
+}
+
+// H-COLLAB-08: "用 Agent 推进" from the task panel.
+export async function startTaskChatAction(workspaceId: string, issueId: string): Promise<ActionResult<AgentThread>> {
+  return run(async () => {
+    const { user } = await requireWorkspace(workspaceId);
+    const thread = await startTaskChat(workspaceId, issueId, user.id);
+    refresh(workspaceId);
+    return thread;
   });
 }

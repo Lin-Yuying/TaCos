@@ -7,6 +7,7 @@ import { FileText, Lock, Plus, Users } from "lucide-react";
 import { createPageAction } from "@/app/pages-actions";
 import { timeAgo } from "@/lib/format";
 import type { PageSummary } from "@/lib/pages";
+import { useLocale, useT } from "@/components/i18n-context";
 
 export function ProjectDocuments({
   workspaceId,
@@ -17,6 +18,8 @@ export function ProjectDocuments({
   projectId: string;
   pages: PageSummary[];
 }) {
+  const t = useT();
+  const locale = useLocale();
   const router = useRouter();
   const [error, setError] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
@@ -37,10 +40,9 @@ export function ProjectDocuments({
       <div className="w-full px-10 pb-8 pt-6 lg:px-20 xl:px-32">
         <div className="flex items-center justify-between gap-3">
           <div>
-            <h2 className="text-[15px] font-semibold tracking-tight">Documents</h2>
+            <h2 className="text-[15px] font-semibold tracking-tight">{t("Documents")}</h2>
             <p className="mt-0.5 text-[12.5px] text-muted">
-              Pages created here belong to this project. They stay private until you share
-              them with the workspace.
+              {t("Pages created here belong to this project. They stay private until you share them with the workspace.")}
             </p>
           </div>
           <button
@@ -49,16 +51,15 @@ export function ProjectDocuments({
             disabled={creating}
             className="flex shrink-0 items-center gap-1 rounded-md border border-border px-2.5 py-1.5 text-[12.5px] font-medium text-muted transition-colors hover:border-border-strong hover:text-text disabled:opacity-50"
           >
-            <Plus size={13} /> New page
+            <Plus size={13} /> {t("New page")}
           </button>
         </div>
 
-        {error && <div className="mt-3 text-[12px] text-danger">{error}</div>}
+        {error && <div className="mt-3 text-[12px] text-danger">{t(error)}</div>}
 
         {pages.length === 0 ? (
           <p className="mt-8 text-[13px] text-faint">
-            No documents in this project yet — create one to keep notes, specs or links
-            next to the tasks.
+            {t("No documents in this project yet — create one to keep notes, specs or links next to the tasks.")}
           </p>
         ) : (
           <div className="mt-5 space-y-0.5">
@@ -74,10 +75,10 @@ export function ProjectDocuments({
                 </span>
                 <span className="truncate">{page.title}</span>
                 <span className="ml-auto flex shrink-0 items-center gap-2 text-[11px] text-faint">
-                  <span>{timeAgo(page.updatedAt)}</span>
+                  <span>{timeAgo(page.updatedAt, locale)}</span>
                   <span className="flex items-center gap-1">
                     {page.shared ? <Users size={11} /> : <Lock size={11} />}
-                    {page.shared ? "Shared" : "Private"}
+                    {page.shared ? t("Shared") : t("Private")}
                   </span>
                 </span>
               </Link>

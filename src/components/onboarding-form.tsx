@@ -9,6 +9,7 @@ import { WorkspaceTrashList } from "@/components/workspace-trash-list";
 import { createWorkspaceAction, joinWorkspaceAction } from "@/app/auth-actions";
 import { markWorkspaceNoticeReadAction } from "@/app/workspace-misc-actions";
 import type { DeletedWorkspace, WorkspaceDeletionNotice } from "@/lib/issues";
+import { useT } from "@/components/i18n-context";
 
 export function OnboardingForm({
   displayName,
@@ -29,6 +30,7 @@ export function OnboardingForm({
   deletedWorkspaces?: DeletedWorkspace[];
   deletionNotices?: WorkspaceDeletionNotice[];
 }) {
+  const t = useT();
   const router = useRouter();
   const [notices, setNotices] = useState(deletionNotices);
   const [tab, setTab] = useState<"create" | "join">("create");
@@ -45,7 +47,7 @@ export function OnboardingForm({
     const result = await createWorkspaceAction({ name: wsName, key: wsKey });
     setBusy(false);
     if (!result.ok) {
-      setError(result.error);
+      setError(t(result.error));
       return;
     }
     router.push(`/${result.data.id}`);
@@ -59,7 +61,7 @@ export function OnboardingForm({
     const result = await joinWorkspaceAction({ code: joinCode });
     setBusy(false);
     if (!result.ok) {
-      setError(result.error);
+      setError(t(result.error));
       return;
     }
     router.push(`/${result.data.id}`);
@@ -80,24 +82,24 @@ export function OnboardingForm({
       <div className="w-[400px] max-w-[92vw]">
         <div className="mb-5 flex items-center gap-3 text-[12px]">
           <span className="text-faint">
-            Wrong account? Switch back from the avatar menu at the top right.
+            {t("Wrong account? Switch back from the avatar menu at the top right.")}
           </span>
           {siteAdmin && homeUrl !== "/admin" && (
             <Link
               href="/admin"
               className="ml-auto inline-flex items-center gap-1 text-muted transition-colors hover:text-text"
             >
-              <ShieldCheck size={13} /> Admin console
+              <ShieldCheck size={13} /> {t("Admin console")}
             </Link>
           )}
         </div>
         <h1 className="text-[22px] font-semibold tracking-tight">
-          {hasWorkspaces ? "Add a workspace" : `Welcome, ${displayName}`}
+          {hasWorkspaces ? t("Add a workspace") : t("Welcome, {name}", { name: displayName })}
         </h1>
         <p className="mb-6 mt-1 text-[13px] text-muted">
           {hasWorkspaces
-            ? "Create another workspace, or join a teammate's with a code."
-            : "Create a workspace for your team, or join an existing one with a code from a teammate."}
+            ? t("Create another workspace, or join a teammate's with a code.")
+            : t("Create a workspace for your team, or join an existing one with a code from a teammate.")}
         </p>
 
         {notices.length > 0 && (
@@ -113,7 +115,7 @@ export function OnboardingForm({
                   onClick={() => dismissNotice(notice.id)}
                   className="shrink-0 text-[11px] text-faint transition-colors hover:text-text"
                 >
-                  Dismiss
+                  {t("Dismiss")}
                 </button>
               </div>
             ))}
@@ -133,7 +135,7 @@ export function OnboardingForm({
                 tab === option ? "bg-elevated text-text" : "text-muted hover:text-text"
               }`}
             >
-              {option === "create" ? "Create workspace" : "Join with code"}
+              {option === "create" ? t("Create workspace") : t("Join with code")}
             </button>
           ))}
         </div>
@@ -147,36 +149,36 @@ export function OnboardingForm({
             }}
           >
             <label className="block">
-              <span className="mb-1 block text-[12px] font-medium text-muted">Workspace name</span>
+              <span className="mb-1 block text-[12px] font-medium text-muted">{t("Workspace name")}</span>
               <input
                 autoFocus
                 value={wsName}
                 onChange={(e) => setWsName(e.target.value)}
                 className="w-full rounded-md border border-border bg-elevated/50 px-2.5 py-2 text-[13px] placeholder:text-faint focus:border-border-strong"
-                placeholder="e.g. Acme Inc"
+                placeholder={t("e.g. Acme Inc")}
               />
             </label>
             <label className="block">
               <span className="mb-1 block text-[12px] font-medium text-muted">
-                Workspace key (issue prefix)
+                {t("Workspace key (issue prefix)")}
               </span>
               <input
                 value={wsKey}
                 onChange={(e) => setWsKey(e.target.value.toUpperCase())}
                 className="w-full rounded-md border border-border bg-elevated/50 px-2.5 py-2 font-mono text-[13px] placeholder:text-faint focus:border-border-strong"
-                placeholder="e.g. ACME"
+                placeholder={t("e.g. ACME")}
               />
               <span className="mt-1 block text-[11px] text-faint">
                 2-10 letters/digits. Projects get their own prefixes; this reserves the workspace default.
               </span>
             </label>
-            {error && <div className="text-[12px] text-danger">{error}</div>}
+            {error && <div className="text-[12px] text-danger">{t(error)}</div>}
             <button
               type="submit"
               disabled={busy || !wsName.trim() || !wsKey.trim()}
               className="w-full rounded-md bg-accent px-3 py-2 text-[13px] font-medium text-white transition-colors hover:bg-accent-hover disabled:opacity-40"
             >
-              Create workspace
+              {t("Create workspace")}
             </button>
           </form>
         ) : (
@@ -188,7 +190,7 @@ export function OnboardingForm({
             }}
           >
             <label className="block">
-              <span className="mb-1 block text-[12px] font-medium text-muted">Join code</span>
+              <span className="mb-1 block text-[12px] font-medium text-muted">{t("Join code")}</span>
               <input
                 autoFocus
                 value={joinCode}
@@ -197,16 +199,16 @@ export function OnboardingForm({
                 placeholder="TACOS-XXXXXXXX"
               />
               <span className="mt-1 block text-[11px] text-faint">
-                Any workspace admin can find the code in Settings → Members.
+                {t("Any workspace admin can find the code in Settings → Members.")}
               </span>
             </label>
-            {error && <div className="text-[12px] text-danger">{error}</div>}
+            {error && <div className="text-[12px] text-danger">{t(error)}</div>}
             <button
               type="submit"
               disabled={busy || !joinCode.trim()}
               className="w-full rounded-md bg-accent px-3 py-2 text-[13px] font-medium text-white transition-colors hover:bg-accent-hover disabled:opacity-40"
             >
-              Join workspace
+              {t("Join workspace")}
             </button>
           </form>
         )}
@@ -217,7 +219,7 @@ export function OnboardingForm({
             onClick={() => router.back()}
             className="mt-4 w-full rounded-md px-3 py-2 text-[13px] text-muted transition-colors hover:bg-elevated hover:text-text"
           >
-            Back
+            {t("Back")}
           </button>
         )}
 

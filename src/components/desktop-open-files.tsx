@@ -4,6 +4,8 @@ import { useRouter } from "next/navigation";
 import { useEffect, useRef } from "react";
 import { importMarkdownAction } from "@/app/pages-actions";
 import { useUI } from "@/components/ui-context";
+import { useT } from "@/components/i18n-context";
+import type { AppUpdateApi } from "./desktop-app-update-button";
 
 // Preload is the only writer of this object, so the shape lives next to its consumer
 // instead of in a global declaration file.
@@ -11,6 +13,7 @@ type OpenFilePayload = { name: string; content?: string; error?: string };
 type DesktopBridge = {
   takeOpenFiles?: () => Promise<OpenFilePayload[]>;
   onOpenFiles?: (handler: () => void) => () => void;
+  appUpdate?: AppUpdateApi;
 };
 
 declare global {
@@ -27,6 +30,7 @@ declare global {
  * before login) are still queued and get picked up here on mount.
  */
 export function DesktopOpenFiles({ workspaceId }: { workspaceId: string }) {
+  const t = useT();
   const router = useRouter();
   const { toast } = useUI();
   const pullState = useRef({ workspaceId, active: true, busy: false });
@@ -63,8 +67,8 @@ export function DesktopOpenFiles({ workspaceId }: { workspaceId: string }) {
           lastPage = result.data.id;
           toast(
             result.data.created
-              ? `Imported “${result.data.title}”`
-              : `Opened “${result.data.title}” — it was already in Docs`
+              ? t("Imported “{title}”", { title: result.data.title })
+              : t("Opened “{title}” — it was already in Docs", { title: result.data.title })
           );
         }
         // A strict-mode remount tears this effect down/re-arms it in the same tick, while
@@ -84,7 +88,7 @@ export function DesktopOpenFiles({ workspaceId }: { workspaceId: string }) {
       state.active = false;
       unsubscribe();
     };
-  }, [workspaceId, router, toast]);
+  }, [workspaceId, router, toast, t]);
 
   return null;
 }

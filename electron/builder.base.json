@@ -1,7 +1,27 @@
 {
   "appId": "app.tacos.desktop",
   "productName": "TaCos",
-  "files": ["electron/**/*", "package.json", "!node_modules/**"],
+  "files": [
+    "electron/**/*",
+    "package.json",
+    "!node_modules/**",
+    "node_modules/electron-updater/**/*",
+    "node_modules/builder-util-runtime/**/*",
+    "node_modules/fs-extra/**/*",
+    "node_modules/js-yaml/**/*",
+    "node_modules/lazy-val/**/*",
+    "node_modules/lodash.escaperegexp/**/*",
+    "node_modules/lodash.isequal/**/*",
+    "node_modules/semver/**/*",
+    "node_modules/tiny-typed-emitter/**/*",
+    "node_modules/argparse/**/*",
+    "node_modules/debug/**/*",
+    "node_modules/graceful-fs/**/*",
+    "node_modules/jsonfile/**/*",
+    "node_modules/ms/**/*",
+    "node_modules/sax/**/*",
+    "node_modules/universalify/**/*"
+  ],
   "extraResources": [
     {
       "from": "docs/markdown-guide.html",
@@ -12,7 +32,12 @@
   "afterPack": "./electron/after-pack.js",
   "fileAssociations": [
     {
-      "ext": ["md", "markdown", "mdx", "txt"],
+      "ext": [
+        "md",
+        "markdown",
+        "mdx",
+        "txt"
+      ],
       "name": "Markdown Document",
       "description": "Markdown document",
       "mimeType": "text/markdown",
@@ -27,23 +52,65 @@
   "mac": {
     "category": "public.app-category.developer-tools",
     "icon": "electron/assets/icon.icns",
-    "target": [{ "target": "dmg", "arch": ["arm64"] }]
+    "target": [
+      {
+        "target": "dmg",
+        "arch": [
+          "arm64"
+        ]
+      },
+      {
+        "target": "zip",
+        "arch": [
+          "arm64"
+        ]
+      }
+    ]
   },
   "dmg": {
     "title": "TaCos",
-    "window": { "width": 560, "height": 320 },
+    "window": {
+      "width": 560,
+      "height": 320
+    },
     "contents": [
-      { "x": 140, "y": 150 },
-      { "x": 420, "y": 150, "type": "link", "path": "/Applications" }
+      {
+        "x": 140,
+        "y": 150
+      },
+      {
+        "x": 420,
+        "y": 150,
+        "type": "link",
+        "path": "/Applications"
+      }
     ]
   },
   "win": {
     "icon": "electron/assets/icon.ico",
-    "target": [{ "target": "nsis", "arch": ["x64"] }]
+    "target": [
+      {
+        "target": "nsis",
+        "arch": [
+          "x64"
+        ]
+      }
+    ],
+    "requestedExecutionLevel": "asInvoker"
   },
   "nsis": {
     "oneClick": false,
     "allowToChangeInstallationDirectory": true,
-    "artifactName": "${productName}-Setup-${version}.${ext}"
-  }
+    "artifactName": "${productName}-Setup-${version}.${ext}",
+    "perMachine": false,
+    "allowElevation": true
+  },
+  "publish": [
+    {
+      "provider": "github",
+      "owner": "Lin-Yuying",
+      "repo": "TaCos",
+      "releaseType": "release"
+    }
+  ]
 }

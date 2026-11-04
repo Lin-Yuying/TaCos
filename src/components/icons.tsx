@@ -1,3 +1,4 @@
+import { useT } from "@/components/i18n-context";
 import { PRIORITY_META, STATUS_META, type Priority, type Status } from "@/lib/constants";
 
 export { PRIORITY_META, STATUS_META };
@@ -160,9 +161,10 @@ export function LabelPill({
 }
 
 export function ViaBadge({ via }: { via: "web" | "api" | "mcp" }) {
+  const t = useT();
   if (via === "web") return null;
   const color = via === "mcp" ? "#7c3aed" : "#4f46e5";
-  const label = via === "mcp" ? "Created by MCP agent" : "Created via API agent";
+  const label = via === "mcp" ? t("Created by MCP agent") : t("Created via API agent");
   return (
     <span
       title={label}

@@ -1,16 +1,21 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { useLiveTick } from "@/components/live-refresh";
 import { ISSUE_DELETED, useUI, type DeletedIssue } from "@/components/ui-context";
 import { addCommentAction, deleteIssueAction, updateIssueDetailAction } from "@/app/actions";
 import type { Label, Member } from "@/lib/issues";
 import { PanelHeader } from "./header";
 import { PropertiesRow } from "./properties";
 import { DueRow } from "./due-row";
+import { ClaimRow } from "./claim-row";
+import { SourceChatRow } from "./source-chat-row";
+import { AdvanceButton } from "./advance-button";
 import { DescriptionSection } from "./description";
 import { ChangelogSection } from "./changelog";
 import { CommentsSection } from "./comments";
 import type { FlatDetail, IssuePatch } from "./types";
+import { useT } from "@/components/i18n-context";
 
 export function IssuePanelHost({
   workspaceId,
@@ -59,6 +64,7 @@ function IssuePanel({
   expanded: boolean;
   onToggleExpanded: () => void;
 }) {
+  const t = useT();
   const [detail, setDetail] = useState<FlatDetail | null>(null);
   const [notFound, setNotFound] = useState(false);
   const [allLabels, setAllLabels] = useState<Label[]>([]);
@@ -68,15 +74,17 @@ function IssuePanel({
   const [error, setError] = useState<string | null>(null);
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const { toast } = useUI();
+  // H-COLLAB-13: reload the task when another member changes something.
+  const live = useLiveTick();
 
   // A task that vanished underneath the panel (deleted here, on another device, or from
   // the Inbox) has nothing left to show — close the pane and say so instead of leaving
   // an empty "not found" card sitting in the split view.
   useEffect(() => {
     if (!notFound) return;
-    toast("Task deleted — it is in Trash");
+    toast(t("Task deleted — it is in Trash"));
     onClose();
-  }, [notFound, toast, onClose]);
+  }, [notFound, toast, onClose, t]);
 
   const scrollToComposer = () => {
     const el = scrollRef.current;
@@ -85,6 +93,26 @@ function IssuePanel({
   };
 
   // The panel is remounted per issue id, so loading state starts clean without resets here.
+  useEffect(() => {
+    if (live === 0) return;
+    let cancelled = false;
+    fetch(`/api/internal/${workspaceId}/issues/${encodeURIComponent(id)}`)
+      .then(async (res) => {
+        if (res.status === 404) {
+          if (!cancelled) setNotFound(true);
+          return null;
+        }
+        return res.ok ? res.json() : null;
+      })
+      .then((data) => {
+        if (!cancelled && data) setDetail(data as FlatDetail);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [live, id, workspaceId]);
+
   useEffect(() => {
     let cancelled = false;
     fetch(`/api/internal/${workspaceId}/issues/${encodeURIComponent(id)}`)
@@ -155,16 +183,16 @@ function IssuePanel({
         detail: { id: result.data, identifier: detail.identifier, title: detail.title },
       })
     );
-    toast("Task deleted — it is in Trash");
+    toast(t("Task deleted — it is in Trash"));
     onClose();
   }
 
   if (notFound) {
-    return <div className="flex-1 p-5 text-[13px] text-muted">Loading…</div>;
+    return <div className="flex-1 p-5 text-[13px] text-muted">{t("Loading…")}</div>;
   }
 
   if (!detail) {
-    return <div className="flex-1 p-5 text-[13px] text-muted">Loading…</div>;
+    return <div className="flex-1 p-5 text-[13px] text-muted">{t("Loading…")}</div>;
   }
 
   const comments = [...detail.comments].sort((a, b) =>
@@ -196,7 +224,7 @@ function IssuePanel({
         <input
           key={`${detail.id}-title`}
           defaultValue={detail.title}
-          placeholder="Task title"
+          placeholder={t("Task title")}
           onBlur={(e) => {
             const title = e.target.value.trim();
             if (title && title !== detail.title) void update({ title });
@@ -217,6 +245,25 @@ function IssuePanel({
           onUpdate={update}
         />
 
+        <ClaimRow
+          workspaceId={workspaceId}
+          detail={detail}
+          members={members}
+          currentUserId={currentUserId}
+          onDetail={(next) => setDetail({ ...next.issue, comments: next.comments, events: next.events })}
+          onError={setError}
+        />
+
+        <AdvanceButton
+          workspaceId={workspaceId}
+          detail={detail}
+          currentUserId={currentUserId}
+          onClaimed={() => setDetail({ ...detail, claimedBy: currentUserId })}
+          onError={setError}
+        />
+
+        <SourceChatRow workspaceId={workspaceId} threadId={detail.sourceThreadId} />
+
         <DueRow detail={detail} onUpdate={update} />
 
         <DescriptionSection
@@ -229,6 +276,7 @@ function IssuePanel({
         <div className="shrink-0 space-y-2 border-t border-border pt-4">
           <ChangelogSection events={changelog} />
           <CommentsSection
+            members={members}
             comments={comments}
             comment={comment}
             busy={busy}
@@ -237,7 +285,7 @@ function IssuePanel({
           />
         </div>
 
-        {error && <div className="text-[12px] text-danger">{error}</div>}
+        {error && <div className="text-[12px] text-danger">{t(error)}</div>}
       </div>
     </div>
   );

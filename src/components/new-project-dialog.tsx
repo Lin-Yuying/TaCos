@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { X } from "lucide-react";
 import { createProjectAction } from "@/app/actions";
 import { useUI } from "@/components/ui-context";
+import { useT } from "@/components/i18n-context";
 
 export function NewProjectDialog({
   workspaceId,
@@ -13,6 +14,7 @@ export function NewProjectDialog({
   workspaceId: string;
   workspaceName: string;
 }) {
+  const t = useT();
   const { projectComposerOpen, setProjectComposerOpen, projectComposerOnCreated } = useUI();
   const router = useRouter();
   const [name, setName] = useState("");
@@ -52,7 +54,7 @@ export function NewProjectDialog({
     });
     setBusy(false);
     if (!result.ok) {
-      setError(result.error);
+      setError(t(result.error));
       return;
     }
     setProjectComposerOpen(false);
@@ -82,12 +84,12 @@ export function NewProjectDialog({
           <div className="flex items-center justify-between border-b border-border px-4 py-2 text-[12px] text-faint">
             <span>
               {workspaceName} <span className="mx-1">›</span>
-              <span className="text-muted">New project</span>
+              <span className="text-muted">{t("New project")}</span>
             </span>
             <button
               type="button"
               onClick={() => setProjectComposerOpen(false)}
-              aria-label="Close"
+              aria-label={t("Close")}
               className="rounded p-1 transition-colors hover:bg-elevated hover:text-text"
             >
               <X size={13} />
@@ -99,29 +101,29 @@ export function NewProjectDialog({
               autoFocus
               value={name}
               onChange={(e) => setName(e.target.value)}
-              placeholder="Project name"
+              placeholder={t("Project name")}
               className="w-full bg-transparent text-[18px] font-semibold placeholder:text-faint focus:outline-none"
             />
             <textarea
               value={description}
               onChange={(e) => setDescription(e.target.value)}
               rows={2}
-              placeholder="Add a short summary…"
+              placeholder={t("Add a short summary…")}
               className="mt-1 w-full resize-none bg-transparent text-[13px] leading-relaxed text-muted placeholder:text-faint focus:outline-none"
             />
             <p className="mt-2 text-[12px] text-faint">
-              An icon colour is chosen for you — change it later from the project overview.
+              {t("An icon colour is chosen for you — change it later from the project overview.")}
             </p>
           </div>
 
           <div className="flex items-center justify-end gap-2 border-t border-border px-4 py-2.5">
-            {error && <span className="mr-auto text-[12px] text-danger">{error}</span>}
+            {error && <span className="mr-auto text-[12px] text-danger">{t(error)}</span>}
             <button
               type="button"
               onClick={() => setProjectComposerOpen(false)}
               className="rounded-md px-2.5 py-1.5 text-[13px] text-muted transition-colors hover:text-text"
             >
-              Cancel
+              {t("Cancel")}
             </button>
             <button
               type="button"
@@ -129,7 +131,7 @@ export function NewProjectDialog({
               disabled={!name.trim() || busy}
               className="rounded-md bg-accent px-3 py-1.5 text-[13px] font-medium text-white transition-colors hover:bg-accent-hover disabled:opacity-40"
             >
-              Create project
+              {t("Create project")}
               <span className="ml-2 text-[11px] opacity-75">⌘↵</span>
             </button>
           </div>

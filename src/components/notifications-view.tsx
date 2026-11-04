@@ -12,6 +12,7 @@ import {
 } from "@/app/workspace-misc-actions";
 import type { NotificationRow } from "@/lib/issues";
 import { issueRef, timeAgo } from "@/lib/format";
+import { useLocale, useT } from "@/components/i18n-context";
 
 export function NotificationsView({
   workspaceId,
@@ -20,6 +21,8 @@ export function NotificationsView({
   workspaceId: string;
   items: NotificationRow[];
 }) {
+  const t = useT();
+  const locale = useLocale();
   const router = useRouter();
   const { openIssue } = useUI();
   const [marking, setMarking] = useState(false);
@@ -72,7 +75,7 @@ export function NotificationsView({
     if (visible.length === 0) return;
     if (
       !window.confirm(
-        `Delete all ${visible.length} inbox notifications? This cannot be undone.`
+        t("Delete all {count} inbox notifications? This cannot be undone.", { count: visible.length })
       )
     ) {
       return;
@@ -91,9 +94,9 @@ export function NotificationsView({
   return (
     <div className="flex-1 overflow-y-auto">
       <header className="flex h-12 shrink-0 items-center gap-3 border-b border-border px-4">
-        <h1 className="text-[14px] font-semibold">Inbox</h1>
+        <h1 className="text-[14px] font-semibold">{t("Inbox")}</h1>
         <span className="rounded-full bg-elevated px-2 py-0.5 text-[11px] text-muted">
-          {unread} unread
+          {t("{count} unread", { count: unread })}
         </span>
         <div className="ml-auto flex items-center gap-2">
           <button
@@ -102,7 +105,7 @@ export function NotificationsView({
             disabled={marking}
             className="rounded-md border border-border px-2.5 py-1 text-[12px] text-muted transition-colors hover:text-text"
           >
-            Mark all read
+            {t("Mark all read")}
           </button>
           {visible.length > 0 && (
             <button
@@ -111,7 +114,7 @@ export function NotificationsView({
               disabled={clearing}
               className="rounded-md border border-border px-2.5 py-1 text-[12px] text-muted transition-colors hover:border-danger/40 hover:text-danger"
             >
-              Clear all
+              {t("Clear all")}
             </button>
           )}
         </div>
@@ -119,7 +122,7 @@ export function NotificationsView({
       <div className="divide-y divide-border px-10 pb-8 lg:px-20 xl:px-32">
         {visible.length === 0 && (
           <div className="p-6 text-[13px] text-faint">
-            Nothing yet — you&apos;ll see mentions, assignments, and comments here.
+            {t("Nothing yet — you'll see mentions, assignments, and comments here.")}
           </div>
         )}
         {visible.map((item) => (
@@ -139,10 +142,10 @@ export function NotificationsView({
                 style={{ background: isUnread(item) ? "var(--color-accent)" : "transparent" }}
               />
               <span className="min-w-0 flex-1">
-                <span className="block truncate text-[13px] text-text">{item.body}</span>
+                <span className="block truncate text-[13px] text-text">{noticeText(item.type, item.body, t)}</span>
                 <span className="block text-[11px] text-faint">
                   {item.type === "workspace_deleted"
-                    ? "Workspace deleted"
+                    ? t("Workspace deleted")
                     : `${issueRef({
                         projectName: item.issueProjectName,
                         number: item.issueNumber,
@@ -152,11 +155,11 @@ export function NotificationsView({
               </span>
             </button>
             <span suppressHydrationWarning className="shrink-0 text-[11px] text-faint">
-              {timeAgo(item.createdAt)}
+              {timeAgo(item.createdAt, locale)}
             </span>
             <button
               type="button"
-              aria-label="Delete notification"
+              aria-label={t("Delete notification")}
               onClick={() => void remove(item)}
               className="shrink-0 rounded p-1 text-faint opacity-0 transition-opacity hover:bg-elevated hover:text-danger focus-visible:opacity-100 group-hover:opacity-100"
             >
@@ -167,4 +170,14 @@ export function NotificationsView({
       </div>
     </div>
   );
+}
+
+// Claim notices store only the actor's name, so the sentence follows the reader's language.
+function noticeText(type: string, body: string, t: ReturnType<typeof useT>): string {
+  if (type === "claimed") return t("{name} claimed a task you follow", { name: body });
+  if (type === "released") return t("{name} released a task you follow", { name: body });
+  if (type === "due_soon") return t("Due {date}: reminder", { date: body });
+  if (type === "mentioned") return t("{name} mentioned you", { name: body });
+  if (type === "claim_transferred") return t("{name} handed a task to you", { name: body });
+  return body;
 }

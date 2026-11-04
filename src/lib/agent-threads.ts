@@ -1,15 +1,13 @@
 import crypto from "node:crypto";
 import { and, asc, desc, eq, inArray, isNull, or } from "drizzle-orm";
 import { getDb } from "@/db/client";
-import { agentMessages, agentSteps, agentThreadFlags, agentThreads, projects, users } from "@/db/schema";
-import { TacosError } from "./issues";
+import { agentMessages, agentSteps, agentThreadFlags, agentThreads, issues, projects, users } from "@/db/schema";
+import { claimIssue, listIssues, TacosError, type Status } from "./issues";
 
 // Agent conversations are TaCos records, not browser state: a thread is bound to a
-// project, carries its chat history and the work trajectory, and can be reopened from
-// the Agent tab. Private threads stay with their author; shared ones are readable by
-// every member of the workspace.
+// project, carries its history and trajectory, and can be reopened from the Agent tab.
+// Private threads stay with their author; shared ones are readable by every member.
 
-export type AgentMode = "chat" | "work";
 export type AgentVisibility = "private" | "shared";
 // ask: every write waits for a card; auto: only risky ones ask; full: nothing asks.
 export type AgentApproval = "ask" | "auto" | "full";
@@ -22,7 +20,6 @@ export type AgentThread = {
   projectKey: string;
   projectColor: string;
   title: string;
-  mode: AgentMode;
   engine: string;
   model: string;
   effort: string;
@@ -41,7 +38,7 @@ export type AgentThread = {
 
 export type AgentStepRecord = {
   id: string;
-  kind: "command" | "file" | "tool" | "info";
+  kind: "command" | "file" | "tool" | "info" | "thinking";
   title: string;
   detail: string | null;
   status: "running" | "done" | "error" | "denied";
@@ -53,6 +50,11 @@ export type AgentMessageRecord = {
   role: "user" | "assistant";
   content: string;
   createdAt: string;
+  // H-COLLAB-09: the author of a user message in a shared chat.
+  authorId: string | null;
+  authorName: string | null;
+  // True when the viewer wrote this user message.
+  fromViewer: boolean;
   steps: AgentStepRecord[];
 };
 
@@ -60,9 +62,6 @@ export type AgentThreadDetail = AgentThread & { messages: AgentMessageRecord[] }
 
 const MAX_TITLE = 80;
 
-function asMode(value: unknown): AgentMode {
-  return value === "work" ? "work" : "chat";
-}
 
 function asVisibility(value: unknown): AgentVisibility {
   return value === "shared" ? "shared" : "private";
@@ -73,7 +72,7 @@ function asApproval(value: unknown): AgentApproval {
 }
 
 function asStepKind(value: string): AgentStepRecord["kind"] {
-  return value === "command" || value === "file" || value === "tool" ? value : "info";
+  return value === "command" || value === "file" || value === "tool" || value === "thinking" ? value : "info";
 }
 
 function asStepStatus(value: string): AgentStepRecord["status"] {
@@ -89,10 +88,12 @@ function visibleTo(userId: string) {
   return or(eq(agentThreads.visibility, "shared"), eq(agentThreads.createdBy, userId));
 }
 
+// A session is the agent_threads row and its messages. The id is the session identity.
+// engine / model / effort / approval are last-used turn prefs for the composer restore.
+// A change to those prefs keeps the same session. New chat calls this and gets a new id.
 export async function startAgentThread(input: {
   workspaceId: string;
   projectId: string;
-  mode: AgentMode;
   visibility: AgentVisibility;
   engine: string;
   // Empty means "use whatever the CLI is configured with" — the honest default when the
@@ -103,8 +104,7 @@ export async function startAgentThread(input: {
   userId: string;
 }): Promise<AgentThread> {
   const db = getDb();
-  // An empty project id means "no project": a plain conversation over the whole
-  // workspace. Work mode still needs a project, because every TaCos write has one.
+  // An empty project id means "no project": a plain conversation over the whole workspace.
   const projectId = input.projectId.trim();
   if (projectId) {
     const [project] = await db
@@ -113,8 +113,6 @@ export async function startAgentThread(input: {
       .where(and(eq(projects.id, projectId), eq(projects.workspaceId, input.workspaceId)))
       .limit(1);
     if (!project) throw new TacosError("Project not found", 404);
-  } else if (asMode(input.mode) === "work") {
-    throw new TacosError("Work needs a project", 400, "Pick a project, or start in Chat mode.");
   }
 
   const id = crypto.randomUUID();
@@ -124,7 +122,6 @@ export async function startAgentThread(input: {
     workspaceId: input.workspaceId,
     projectId,
     title: "",
-    mode: asMode(input.mode),
     engine: input.engine || "codex",
     model: (input.model ?? "").trim(),
     effort: (input.effort ?? "").trim(),
@@ -211,7 +208,6 @@ function threadRow(
     projectKey: meta.projectKey ?? "",
     projectColor: meta.projectColor ?? "",
     title: thread.title,
-    mode: asMode(thread.mode),
     engine: thread.engine,
     model: thread.model,
     effort: thread.effort,
@@ -285,6 +281,16 @@ async function requireThreadRow(
     });
     stepsByMessage.set(step.messageId, list);
   }
+  const authorIds = [...new Set(messages.map((m) => m.authorId).filter((v): v is string => Boolean(v)))];
+  const authors = new Map<string, string>();
+  if (authorIds.length) {
+    for (const u of await db
+      .select({ id: users.id, name: users.displayName })
+      .from(users)
+      .where(inArray(users.id, authorIds))) {
+      authors.set(u.id, u.name);
+    }
+  }
   return {
     thread: threadRow(row.thread, row, userId, messages.length),
     messages: messages.map((message) => ({
@@ -292,6 +298,9 @@ async function requireThreadRow(
       role: message.role === "assistant" ? "assistant" : "user",
       content: message.content,
       createdAt: message.createdAt,
+      authorId: message.authorId ?? null,
+      authorName: message.authorId ? (authors.get(message.authorId) ?? null) : null,
+      fromViewer: (message.authorId ?? row.thread.createdBy) === userId,
       steps: stepsByMessage.get(message.id) ?? [],
     })),
   };
@@ -338,26 +347,10 @@ export async function setAgentThreadVisibility(
   return threadOnly(await getAgentThread(workspaceId, userId, threadId));
 }
 
-export async function setAgentThreadMode(
-  workspaceId: string,
-  userId: string,
-  threadId: string,
-  mode: AgentMode
-): Promise<AgentThread> {
-  const { thread } = await requireThreadRow(workspaceId, userId, threadId);
-  if (!thread.mine) throw new TacosError("Only the author can change this conversation", 403);
-  if (asMode(mode) === "work" && !thread.projectId) {
-    throw new TacosError("Work needs a project", 400, "This conversation is not bound to one.");
-  }
-  await getDb()
-    .update(agentThreads)
-    .set({ mode: asMode(mode), updatedAt: new Date().toISOString() })
-    .where(eq(agentThreads.id, threadId));
-  return threadOnly(await getAgentThread(workspaceId, userId, threadId));
-}
 
-const MAX_MODEL = 80;
+const MAX_MODEL = 200;
 
+// Last-used model/effort for reopen UI. Does not create a session and does not lock the thread.
 export async function setAgentThreadModel(
   workspaceId: string,
   userId: string,
@@ -418,8 +411,6 @@ export async function setAgentThreadProject(
     .update(agentThreads)
     .set({
       projectId: next,
-      // "Don't work in a project" is a Chat-only conversation: Work has nothing to edit.
-      ...(next || thread.mode !== "work" ? {} : { mode: "chat" as const }),
       updatedAt: new Date().toISOString(),
     })
     .where(eq(agentThreads.id, threadId));
@@ -485,17 +476,17 @@ export type TurnThread = {
   projectId: string;
   projectName: string;
   projectKey: string;
-  mode: AgentMode;
   engine: string;
   model: string;
   effort: string;
   approval: AgentApproval;
   createdBy: string;
+  focusIssueId: string | null;
   messages: { role: "user" | "assistant"; content: string }[];
 };
 
-// What /api/ai/chat needs to run a turn: the binding, the mode, and the history as it
-// was stored — the browser does not get to rewrite its own past.
+// What /api/ai/chat needs to run a turn: the binding and the history as it was stored.
+// The browser does not get to rewrite its own past.
 export async function loadThreadForTurn(
   workspaceId: string,
   userId: string,
@@ -503,22 +494,31 @@ export async function loadThreadForTurn(
   historyLimit = 30
 ): Promise<TurnThread> {
   const { thread, messages } = await requireThreadRow(workspaceId, userId, threadId);
+  // H-COLLAB-09: in a chat with more than one writer, the model sees who wrote each message.
+  const multi = messages.some((m) => m.authorId && m.authorId !== thread.createdBy);
   const history = messages
     .filter((message) => message.content.trim())
     .slice(-historyLimit)
-    .map((message) => ({ role: message.role, content: message.content }));
+    .map((message) => ({
+      role: message.role,
+      content:
+        multi && message.role === "user" && message.authorName
+          ? `${message.authorName}: ${message.content}`
+          : message.content,
+    }));
   return {
     id: thread.id,
     workspaceId: thread.workspaceId,
     projectId: thread.projectId,
     projectName: thread.projectName,
     projectKey: thread.projectKey,
-    mode: thread.mode,
     engine: thread.engine,
     model: thread.model,
     effort: thread.effort,
-    approval: thread.approval,
+    // A collaborator does not get the owner's auto or full mode. Every write asks.
+    approval: thread.createdBy === userId ? thread.approval : "ask",
     createdBy: thread.createdBy,
+    focusIssueId: await focusIssueOf(thread.id),
     messages: history,
   };
 }
@@ -527,6 +527,7 @@ export async function appendAgentMessage(input: {
   threadId: string;
   role: "user" | "assistant";
   content: string;
+  authorId?: string;
 }): Promise<string> {
   const id = crypto.randomUUID();
   const now = new Date().toISOString();
@@ -536,6 +537,7 @@ export async function appendAgentMessage(input: {
     threadId: input.threadId,
     role: input.role,
     content: input.content,
+    authorId: input.role === "user" ? (input.authorId ?? null) : null,
     createdAt: now,
   });
   // The first question names the thread; later turns only bump ordering.
@@ -603,9 +605,129 @@ export async function finishAgentStep(
     .where(eq(agentSteps.id, stepId));
 }
 
+// Server turn path: store the harness the composer sent for this turn as last-used.
+// Never refuse a turn when the stored engine differs. Callers already authorize the thread.
 export async function setThreadEngine(threadId: string, engine: string): Promise<void> {
   await getDb()
     .update(agentThreads)
     .set({ engine, updatedAt: new Date().toISOString() })
     .where(eq(agentThreads.id, threadId));
+}
+
+// Composer path: author updates last-used harness without a new session.
+export async function setAgentThreadEngine(
+  workspaceId: string,
+  userId: string,
+  threadId: string,
+  engine: string
+): Promise<AgentThread> {
+  const { thread } = await requireThreadRow(workspaceId, userId, threadId);
+  if (!thread.mine) throw new TacosError("Only the author can change this conversation", 403);
+  const next = engine.trim();
+  if (!next) throw new TacosError("Pick a harness in the composer", 400);
+  // Model ids belong to one harness, so a new harness starts on its own default.
+  const pref = next === thread.engine ? {} : { model: "", effort: "" };
+  await getDb()
+    .update(agentThreads)
+    .set({ engine: next, ...pref, updatedAt: new Date().toISOString() })
+    .where(eq(agentThreads.id, threadId));
+  return threadOnly(await getAgentThread(workspaceId, userId, threadId));
+}
+
+// H-COLLAB-07: a task and the chat that published it link to each other.
+export type SourceThread = { id: string; title: string };
+
+// The source chat of a task, or null when the viewer cannot read it (private, not theirs).
+export async function getSourceThread(
+  workspaceId: string,
+  threadId: string,
+  viewerId: string
+): Promise<SourceThread | null> {
+  const [row] = await getDb()
+    .select({ id: agentThreads.id, title: agentThreads.title })
+    .from(agentThreads)
+    .where(and(eq(agentThreads.workspaceId, workspaceId), eq(agentThreads.id, threadId), visibleTo(viewerId)))
+    .limit(1);
+  return row ?? null;
+}
+
+export type ThreadTask = { id: string; identifier: string; title: string; status: Status };
+
+// Tasks that a chat published. Task visibility rules apply to the viewer.
+export async function listThreadTasks(
+  workspaceId: string,
+  threadId: string,
+  viewerId: string
+): Promise<ThreadTask[]> {
+  const rows = await listIssues(workspaceId, { sourceThreadId: threadId, viewerId, status: "all", limit: 50 });
+  const out = rows.map((r) => ({ id: r.id, identifier: r.identifier, title: r.title, status: r.status }));
+  // H-COLLAB-08: a chat opened for a task also shows that task.
+  const focus = await focusIssueOf(threadId);
+  if (focus && !out.some((r) => r.id === focus)) {
+    const [row] = await getDb()
+      .select({ id: issues.id, identifier: issues.identifier, title: issues.title, status: issues.status })
+      .from(issues)
+      .where(and(eq(issues.workspaceId, workspaceId), eq(issues.id, focus)))
+      .limit(1);
+    if (row) out.unshift({ ...row, status: row.status as Status });
+  }
+  return out;
+}
+
+async function focusIssueOf(threadId: string): Promise<string | null> {
+  const [row] = await getDb()
+    .select({ focus: agentThreads.focusIssueId })
+    .from(agentThreads)
+    .where(eq(agentThreads.id, threadId))
+    .limit(1);
+  return row?.focus ?? null;
+}
+
+// H-COLLAB-08: "用 Agent 推进". Claims the task when nobody has it, then opens the
+// user's chat for this task. A second click reopens the same chat.
+export async function startTaskChat(workspaceId: string, issueId: string, userId: string): Promise<AgentThread> {
+  const db = getDb();
+  const [task] = await db
+    .select()
+    .from(issues)
+    .where(and(eq(issues.workspaceId, workspaceId), or(eq(issues.id, issueId), eq(issues.identifier, issueId))))
+    .limit(1);
+  if (!task) throw new TacosError("Task not found", 404);
+  if (task.reviewStatus !== "approved") throw new TacosError("This task is waiting for review", 409);
+  if (task.claimedBy && task.claimedBy !== userId) {
+    throw new TacosError("Someone else already claimed this task", 409);
+  }
+  if (!task.claimedBy) await claimIssue(workspaceId, task.id, userId);
+
+  const [existing] = await db
+    .select({ id: agentThreads.id })
+    .from(agentThreads)
+    .where(
+      and(
+        eq(agentThreads.workspaceId, workspaceId),
+        eq(agentThreads.focusIssueId, task.id),
+        eq(agentThreads.createdBy, userId)
+      )
+    )
+    .orderBy(desc(agentThreads.updatedAt))
+    .limit(1);
+  if (existing) {
+    const thread = await getAgentThread(workspaceId, userId, existing.id);
+    if (thread) return thread;
+  }
+
+  const thread = await startAgentThread({
+    workspaceId,
+    projectId: task.projectId,
+    visibility: "private",
+    engine: "codex",
+    userId,
+  });
+  await db
+    .update(agentThreads)
+    .set({ focusIssueId: task.id, title: `${task.identifier} ${task.title}`.slice(0, 120) })
+    .where(eq(agentThreads.id, thread.id));
+  const opened = await getAgentThread(workspaceId, userId, thread.id);
+  if (!opened) throw new TacosError("Could not open the conversation", 500);
+  return opened;
 }

@@ -1,4 +1,5 @@
 import crypto from "node:crypto";
+import { parseMentions } from "./mentions";
 import {
   and,
   desc,
@@ -39,6 +40,7 @@ import {
   LABEL_COLORS,
   PROJECT_COLORS,
   DEFAULT_PROJECT_COLOR,
+  REMINDER_META,
   REMINDER_PRESETS,
   STATUS_ORDER,
   type Priority,
@@ -96,12 +98,21 @@ export type Issue = {
   // YYYY-MM-DD, chosen from the calendar in the task panel
   dueDate: string | null;
   reminder: ReminderPreset | null;
-  // null for agent-created issues; the creator and assignees own status changes
+  // the person who opened it, or who ran the agent that published it
   createdBy: string | null;
   createdVia: Via;
+  // H-COLLAB: claim, publisher, source chat and review gate
+  claimedBy: string | null;
+  claimedAt: string | null;
+  publishedBy: string | null;
+  sourceThreadId: string | null;
+  reviewStatus: ReviewStatus;
+  reviewedBy: string | null;
+  reviewedAt: string | null;
   createdAt: string;
   updatedAt: string;
 };
+export type ReviewStatus = "approved" | "pending" | "rejected";
 export type IssueWithLabels = Issue & { labels: Label[] };
 export type Comment = {
   id: string;
@@ -270,6 +281,44 @@ export async function joinWorkspace(input: {
   });
   const [ws] = await db.select().from(workspaces).where(eq(workspaces.id, row.workspaceId)).limit(1);
   return { id: ws.id, name: ws.name, key: ws.key };
+}
+
+// H-COLLAB-12: the invite link is /join/<active join code>. Null when the code is
+// unknown, revoked, or its workspace is deleted.
+export async function describeInvite(code: string): Promise<{ id: string; name: string } | null> {
+  const [row] = await getDb()
+    .select({ id: workspaces.id, name: workspaces.name, revokedAt: joinCodes.revokedAt, deletedAt: workspaces.deletedAt })
+    .from(joinCodes)
+    .innerJoin(workspaces, eq(workspaces.id, joinCodes.workspaceId))
+    .where(eq(joinCodes.code, code.trim().toUpperCase()))
+    .limit(1);
+  if (!row || row.revokedAt || row.deletedAt) return null;
+  return { id: row.id, name: row.name };
+}
+
+// H-COLLAB-12: an admin adds an existing account by user name ("@name" also works).
+// The caller checks the admin role.
+export async function inviteMember(
+  workspaceId: string,
+  who: string
+): Promise<{ id: string; username: string; displayName: string }> {
+  const username = who.trim().replace(/^@/, "").toLowerCase();
+  if (!username) throw new TacosError("Enter a user name");
+  const db = getDb();
+  const [user] = await db
+    .select({ id: users.id, username: users.username, displayName: users.displayName })
+    .from(users)
+    .where(sql`lower(${users.username}) = ${username}`)
+    .limit(1);
+  if (!user) throw new TacosError("No account with that user name", 404);
+  const existing = await db
+    .select({ userId: workspaceMembers.userId })
+    .from(workspaceMembers)
+    .where(and(eq(workspaceMembers.workspaceId, workspaceId), eq(workspaceMembers.userId, user.id)))
+    .limit(1);
+  if (existing.length > 0) throw new TacosError("That person is already a member", 409);
+  await db.insert(workspaceMembers).values({ workspaceId, userId: user.id, role: "member", createdAt: nowIso() });
+  return user;
 }
 
 // null resets the workspace to the built-in otter mark.
@@ -1742,6 +1791,13 @@ async function toIssueRows(workspaceId: string, rows: IssueRow[]): Promise<Issue
       reminder: (row.reminder as ReminderPreset | null) ?? null,
       createdBy: row.createdBy,
       createdVia: row.createdVia as Via,
+      claimedBy: row.claimedBy ?? null,
+      claimedAt: row.claimedAt ?? null,
+      publishedBy: row.publishedBy ?? null,
+      sourceThreadId: row.sourceThreadId ?? null,
+      reviewStatus: row.reviewStatus as ReviewStatus,
+      reviewedBy: row.reviewedBy ?? null,
+      reviewedAt: row.reviewedAt ?? null,
       createdAt: row.createdAt,
       updatedAt: row.updatedAt,
       labels: (byIssue.get(row.id) ?? []).sort((a, b) => a.name.localeCompare(b.name)),
@@ -1750,7 +1806,7 @@ async function toIssueRows(workspaceId: string, rows: IssueRow[]): Promise<Issue
 }
 
 export type ListFilters = {
-  status?: Status | "active" | "all";
+  status?: Status | "active" | "open" | "all";
   priority?: Priority;
   projectId?: string;
   assigneeId?: string | null; // null = unassigned
@@ -1761,6 +1817,8 @@ export type ListFilters = {
   // The signed-in user. Omitted by agents, which are unrestricted; when present it
   // applies the workspace's task-visibility setting.
   viewerId?: string;
+  // Tasks that one agent chat published (H-COLLAB-07).
+  sourceThreadId?: string;
 };
 
 // Totals for a project's Overview page; grouped in SQL so the count stays right
@@ -1801,14 +1859,23 @@ export async function listIssues(
   const conditions = [
     eq(issues.workspaceId, workspaceId),
     isNull(issues.deletedAt),
+    ne(issues.reviewStatus, "rejected"),
     sql`EXISTS (SELECT 1 FROM projects WHERE projects.id = ${issues.projectId} AND projects.deleted_at IS NULL)`,
   ];
   if (filters.viewerId && !(await seesAllTasks(workspaceId, filters.viewerId))) {
     conditions.push(ownIssueProjectCondition(filters.viewerId));
   }
 
+  if (filters.sourceThreadId) {
+    conditions.push(eq(issues.sourceThreadId, filters.sourceThreadId));
+  }
   if (filters.status === "active") {
     conditions.push(inArray(issues.status, ["todo", "in_progress"]));
+  } else if (filters.status === "open") {
+    // Open tasks: approved, not claimed, and not done or canceled. Anyone can claim them.
+    conditions.push(inArray(issues.status, ["todo", "in_progress"]));
+    conditions.push(eq(issues.reviewStatus, "approved"));
+    conditions.push(isNull(issues.claimedBy));
   } else if (filters.status && filters.status !== "all") {
     conditions.push(eq(issues.status, filters.status));
   }
@@ -1958,7 +2025,7 @@ async function notify(input: {
   workspaceId: string;
   userId: string;
   issueId: string;
-  type: "assigned" | "commented";
+  type: "assigned" | "commented" | "mentioned" | "due_soon" | ClaimNotice;
   body: string;
 }) {
   await getDb().insert(notifications).values({
@@ -1974,7 +2041,8 @@ async function notify(input: {
 
 type MutationActor =
   | { kind: "user"; userId: string; displayName: string }
-  | { kind: "agent"; label: string; via: Via };
+  // publishedBy is the person who ran the agent. An agent task waits for human review.
+  | { kind: "agent"; label: string; via: Via; publishedBy?: string; sourceThreadId?: string };
 
 function actorFields(actor: MutationActor) {
   return actor.kind === "user"
@@ -2079,6 +2147,9 @@ export async function createIssue(
   const id = crypto.randomUUID();
   const now = nowIso();
   const actorUserId = actor.kind === "user" ? actor.userId : null;
+  const publisherId = actor.kind === "user" ? actor.userId : actor.publishedBy ?? null;
+  const reviewStatus: ReviewStatus = actor.kind === "agent" ? "pending" : "approved";
+  const sourceThreadId = actor.kind === "agent" ? actor.sourceThreadId ?? null : null;
 
   const assigneeIds = [...new Set(input.assigneeIds ?? [])];
   if (assigneeIds.length > 0) {
@@ -2092,11 +2163,12 @@ export async function createIssue(
 
   const db = getDb();
   await db.run(sql`INSERT INTO issues
-    (id, workspace_id, project_id, number, identifier, title, description, status, priority, due_date, reminder, created_by, created_via, created_at, updated_at, position)
+    (id, workspace_id, project_id, number, identifier, title, description, status, priority, due_date, reminder, created_by, published_by, review_status, source_thread_id, created_via, created_at, updated_at, position)
     VALUES (${id}, ${workspaceId}, ${project.id},
       (SELECT COALESCE(MAX(number), 0) + 1 FROM issues WHERE project_id = ${project.id}),
       'pending', ${title}, ${description}, ${status}, ${priority}, ${dueDate}, ${reminder},
-      ${actorUserId}, ${actor.kind === "agent" ? actor.via : "web"}, ${now}, ${now},
+      ${publisherId}, ${publisherId}, ${reviewStatus}, ${sourceThreadId},
+      ${actor.kind === "agent" ? actor.via : "web"}, ${now}, ${now},
       (SELECT COALESCE(MAX(position), 0) + 1 FROM issues WHERE workspace_id = ${workspaceId}))`);
   await db.run(
     sql`UPDATE issues SET identifier = ${project.key} || '-' || number WHERE id = ${id}`
@@ -2110,6 +2182,7 @@ export async function createIssue(
     await db.insert(issueAssignees).values({ issueId: id, userId: assigneeId, createdAt: now });
   }
   await recordEvent(id, "created", { title }, actor);
+  if (description) await notifyMentions(workspaceId, id, description, actor);
 
   for (const assigneeId of assigneeIds) {
     if (assigneeId !== actorUserId) {
@@ -2281,6 +2354,12 @@ export async function updateIssue(
     for (const change of changes) {
       await recordEvent(row.id, change.type, change.data, actor);
     }
+    if (typeof sets.description === "string") {
+      // Only members that the old text did not mention get a notice.
+      const before = new Set(parseMentions(row.description ?? ""));
+      const added = parseMentions(sets.description).filter((name) => !before.has(name));
+      if (added.length) await notifyMentions(workspaceId, row.id, added.map((n) => `@${n}`).join(" "), actor);
+    }
     const assigneeChange = changes.find((c) => c.type === "assignee_changed");
     if (assigneeChange) {
       const actorUserId = actor.kind === "user" ? actor.userId : null;
@@ -2370,6 +2449,212 @@ export async function moveIssue(
 
 // Deleting an issue sends it to the Trash rather than erasing it: comments and history
 // stay attached so a restore brings the issue back exactly as it was.
+export type IssueClaim = {
+  id: string;
+  identifier: string;
+  claimedBy: string | null;
+  claimedAt: string | null;
+};
+
+// H-COLLAB-01: claim is one conditional UPDATE, so two parallel claims cannot both win.
+// Assignees stay as they are. Only approved, open tasks can be claimed.
+export async function claimIssue(workspaceId: string, idOrIdentifier: string, userId: string): Promise<IssueClaim> {
+  const row = await findIssueRow(workspaceId, idOrIdentifier);
+  if (!row) throw new TacosError(`Issue "${idOrIdentifier}" not found`, 404);
+  if (row.reviewStatus !== "approved") throw new TacosError("This task is waiting for review", 409);
+  if (row.status === "done" || row.status === "canceled") throw new TacosError("This task is closed", 409);
+  const now = nowIso();
+  const updated = await getDb()
+    .update(issues)
+    .set({ claimedBy: userId, claimedAt: now, updatedAt: now })
+    .where(
+      and(
+        eq(issues.workspaceId, workspaceId),
+        eq(issues.id, row.id),
+        isNull(issues.claimedBy),
+        eq(issues.reviewStatus, "approved")
+      )
+    )
+    .returning({ id: issues.id });
+  if (updated.length === 0) throw new TacosError("Someone else already claimed this task", 409);
+  await recordEvent(row.id, "claimed", {}, await userActor(userId));
+  await notifyClaimWatchers(workspaceId, row.id, "claimed", userId);
+  return { id: row.id, identifier: row.identifier, claimedBy: userId, claimedAt: now };
+}
+
+// Only the current claimer can release. Reassign comes in a later id with notifications.
+export async function releaseIssue(workspaceId: string, idOrIdentifier: string, userId: string): Promise<IssueClaim> {
+  const row = await findIssueRow(workspaceId, idOrIdentifier);
+  if (!row) throw new TacosError(`Issue "${idOrIdentifier}" not found`, 404);
+  const updated = await getDb()
+    .update(issues)
+    .set({ claimedBy: null, claimedAt: null, updatedAt: nowIso() })
+    .where(and(eq(issues.workspaceId, workspaceId), eq(issues.id, row.id), eq(issues.claimedBy, userId)))
+    .returning({ id: issues.id });
+  if (updated.length === 0) throw new TacosError("Only the person who claimed this task can release it", 403);
+  await recordEvent(row.id, "released", {}, await userActor(userId));
+  await notifyClaimWatchers(workspaceId, row.id, "released", userId);
+  return { id: row.id, identifier: row.identifier, claimedBy: null, claimedAt: null };
+}
+
+// The claimer hands the task to another workspace member. The new claimer gets a notification.
+export async function transferClaim(
+  workspaceId: string,
+  idOrIdentifier: string,
+  fromUserId: string,
+  toUserId: string
+): Promise<IssueClaim> {
+  const row = await findIssueRow(workspaceId, idOrIdentifier);
+  if (!row) throw new TacosError(`Issue "${idOrIdentifier}" not found`, 404);
+  const [member] = await getDb()
+    .select({ userId: workspaceMembers.userId })
+    .from(workspaceMembers)
+    .where(and(eq(workspaceMembers.workspaceId, workspaceId), eq(workspaceMembers.userId, toUserId)));
+  if (!member) throw new TacosError("That person is not a member of this workspace", 400);
+  const now = nowIso();
+  const updated = await getDb()
+    .update(issues)
+    .set({ claimedBy: toUserId, claimedAt: now, updatedAt: now })
+    .where(and(eq(issues.workspaceId, workspaceId), eq(issues.id, row.id), eq(issues.claimedBy, fromUserId)))
+    .returning({ id: issues.id });
+  if (updated.length === 0) throw new TacosError("Only the person who claimed this task can hand it over", 403);
+  const actor = await userActor(fromUserId);
+  await recordEvent(row.id, "claim_transferred", { to: toUserId }, actor);
+  if (toUserId !== fromUserId) {
+    await notify({ workspaceId, userId: toUserId, issueId: row.id, type: "claim_transferred", body: actor.displayName });
+  }
+  return { id: row.id, identifier: row.identifier, claimedBy: toUserId, claimedAt: now };
+}
+
+// Claim notices store the actor's name in body. The inbox builds the localized sentence from it.
+export type ClaimNotice = "claimed" | "released" | "claim_transferred";
+
+async function userActor(userId: string): Promise<MutationActor & { kind: "user" }> {
+  const [user] = await getDb().select({ displayName: users.displayName }).from(users).where(eq(users.id, userId));
+  return { kind: "user", userId, displayName: user?.displayName ?? "" };
+}
+
+// The creator and the assignees follow a task. The person who acts gets no notice.
+// H-COLLAB-10: notify each workspace member that the text mentions, except the actor and
+// the ids in `skip`. Returns the ids that got a notice.
+async function notifyMentions(
+  workspaceId: string,
+  issueId: string,
+  text: string,
+  actor: MutationActor,
+  skip: Set<string> = new Set()
+): Promise<Set<string>> {
+  const names = parseMentions(text);
+  const sent = new Set<string>();
+  if (names.length === 0) return sent;
+  const actorUserId = actor.kind === "user" ? actor.userId : null;
+  const who = actor.kind === "user" ? actor.displayName : `Agent (${actor.label})`;
+  for (const member of await listMembers(workspaceId)) {
+    if (!names.includes(member.username.toLowerCase())) continue;
+    if (member.id === actorUserId || skip.has(member.id)) continue;
+    await notify({ workspaceId, userId: member.id, issueId, type: "mentioned", body: who });
+    sent.add(member.id);
+  }
+  return sent;
+}
+
+async function notifyClaimWatchers(workspaceId: string, issueId: string, type: ClaimNotice, actorId: string) {
+  const db = getDb();
+  const [issue] = await db.select({ createdBy: issues.createdBy }).from(issues).where(eq(issues.id, issueId));
+  const assignees = await db
+    .select({ userId: issueAssignees.userId })
+    .from(issueAssignees)
+    .where(eq(issueAssignees.issueId, issueId));
+  const watchers = new Set<string>(assignees.map((a) => a.userId));
+  if (issue?.createdBy) watchers.add(issue.createdBy);
+  watchers.delete(actorId);
+  const actor = await userActor(actorId);
+  for (const userId of watchers) {
+    await notify({ workspaceId, userId, issueId, type, body: actor.displayName });
+  }
+}
+
+export type PendingReviewIssue = {
+  id: string;
+  identifier: string;
+  number: number;
+  title: string;
+  description: string;
+  status: Status;
+  projectName: string;
+  projectColor: string;
+  publishedBy: string | null;
+  publisherName: string | null;
+  createdVia: Via;
+  createdAt: string;
+};
+
+// Agent-published tasks that wait for a person to approve or reject them (H-COLLAB-03).
+export async function listPendingReview(workspaceId: string): Promise<PendingReviewIssue[]> {
+  const rows = await getDb()
+    .select({
+      id: issues.id,
+      identifier: issues.identifier,
+      number: issues.number,
+      title: issues.title,
+      description: issues.description,
+      status: issues.status,
+      projectName: projects.name,
+      projectColor: projects.color,
+      publishedBy: issues.publishedBy,
+      publisherName: users.displayName,
+      createdVia: issues.createdVia,
+      createdAt: issues.createdAt,
+    })
+    .from(issues)
+    .leftJoin(projects, eq(projects.id, issues.projectId))
+    .leftJoin(users, eq(users.id, issues.publishedBy))
+    .where(
+      and(
+        eq(issues.workspaceId, workspaceId),
+        isNull(issues.deletedAt),
+        isNull(projects.deletedAt),
+        eq(issues.reviewStatus, "pending")
+      )
+    )
+    .orderBy(sql`${issues.createdAt} ASC`);
+  return rows.map((row) => ({
+    ...row,
+    status: row.status as Status,
+    projectName: row.projectName ?? "(no project)",
+    projectColor: row.projectColor ?? DEFAULT_PROJECT_COLOR,
+    createdVia: row.createdVia as Via,
+  }));
+}
+
+export type ReviewDecision = "approve" | "reject";
+
+// Only a person reviews, never an agent. One conditional UPDATE so two reviewers cannot both decide.
+export async function reviewIssue(
+  workspaceId: string,
+  idOrIdentifier: string,
+  reviewerId: string,
+  decision: ReviewDecision
+): Promise<{ id: string; reviewStatus: ReviewStatus; reviewedBy: string; reviewedAt: string }> {
+  if (decision !== "approve" && decision !== "reject") throw new TacosError("Unknown review decision", 400);
+  const row = await findIssueRow(workspaceId, idOrIdentifier);
+  if (!row) throw new TacosError(`Issue "${idOrIdentifier}" not found`, 404);
+  const now = nowIso();
+  const reviewStatus: ReviewStatus = decision === "approve" ? "approved" : "rejected";
+  const updated = await getDb()
+    .update(issues)
+    .set({ reviewStatus, reviewedBy: reviewerId, reviewedAt: now, updatedAt: now })
+    .where(and(eq(issues.workspaceId, workspaceId), eq(issues.id, row.id), eq(issues.reviewStatus, "pending")))
+    .returning({ id: issues.id });
+  if (updated.length === 0) throw new TacosError("This task is not waiting for review", 409);
+  await recordEvent(row.id, decision === "approve" ? "review_approved" : "review_rejected", {}, {
+    kind: "user",
+    userId: reviewerId,
+    displayName: "",
+  });
+  return { id: row.id, reviewStatus, reviewedBy: reviewerId, reviewedAt: now };
+}
+
 export async function deleteIssue(workspaceId: string, idOrIdentifier: string): Promise<Issue> {
   const row = await findIssueRow(workspaceId, idOrIdentifier);
   if (!row) throw new TacosError(`Issue "${idOrIdentifier}" not found`, 404);
@@ -2393,6 +2678,13 @@ export async function deleteIssue(workspaceId: string, idOrIdentifier: string): 
     reminder: (row.reminder as ReminderPreset | null) ?? null,
     createdBy: row.createdBy,
     createdVia: row.createdVia as Via,
+    claimedBy: row.claimedBy ?? null,
+    claimedAt: row.claimedAt ?? null,
+    publishedBy: row.publishedBy ?? null,
+    sourceThreadId: row.sourceThreadId ?? null,
+    reviewStatus: row.reviewStatus as ReviewStatus,
+    reviewedBy: row.reviewedBy ?? null,
+    reviewedAt: row.reviewedAt ?? null,
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
   };
@@ -2523,7 +2815,10 @@ export async function addComment(
     targets.add(row.createdBy);
   }
   const who = actor.kind === "user" ? actor.displayName : `Agent (${actor.label})`;
+  // A mentioned member gets one "mentioned" notice instead of the "commented" one.
+  const mentioned = await notifyMentions(workspaceId, row.id, text, actor);
   for (const userId of targets) {
+    if (mentioned.has(userId)) continue;
     await notify({
       workspaceId,
       userId,
@@ -2763,4 +3058,94 @@ export async function revokeApiKey(workspaceId: string, id: string) {
     .update(apiKeys)
     .set({ revokedAt: nowIso() })
     .where(and(eq(apiKeys.id, id), eq(apiKeys.workspaceId, workspaceId)));
+}
+
+// H-COLLAB-11: the due moment is the end of the due day in server local time.
+function reminderFireAt(dueDate: string, preset: ReminderPreset): Date {
+  const [y, m, d] = dueDate.split("-").map(Number);
+  const end = new Date(y, m - 1, d, 23, 59, 59);
+  return new Date(end.getTime() - REMINDER_META[preset].hours * 3600_000);
+}
+
+// Sends one "due_soon" notice per task when now reaches dueDate minus the preset.
+// The creator, the claimer and the assignees get it. Returns the number of tasks.
+export async function sendDueReminders(now: Date = new Date()): Promise<number> {
+  const db = getDb();
+  const rows = await db
+    .select({
+      id: issues.id,
+      workspaceId: issues.workspaceId,
+      dueDate: issues.dueDate,
+      reminder: issues.reminder,
+      sentFor: issues.reminderSentFor,
+      createdBy: issues.createdBy,
+      claimedBy: issues.claimedBy,
+    })
+    .from(issues)
+    .where(
+      and(
+        isNotNull(issues.dueDate),
+        isNotNull(issues.reminder),
+        isNull(issues.deletedAt),
+        notInArray(issues.status, ["done", "canceled"])
+      )
+    );
+  let sent = 0;
+  for (const row of rows) {
+    const preset = row.reminder as ReminderPreset;
+    if (!row.dueDate || !REMINDER_META[preset]) continue;
+    const key = `${row.dueDate}|${preset}`;
+    if (row.sentFor === key || reminderFireAt(row.dueDate, preset) > now) continue;
+    // Claim the key first so two overlapping runs cannot both send.
+    const claimed = await db
+      .update(issues)
+      .set({ reminderSentFor: key })
+      .where(and(eq(issues.id, row.id), or(isNull(issues.reminderSentFor), ne(issues.reminderSentFor, key))))
+      .returning({ id: issues.id });
+    if (claimed.length === 0) continue;
+    const people = new Set<string>();
+    if (row.createdBy) people.add(row.createdBy);
+    if (row.claimedBy) people.add(row.claimedBy);
+    const assigned = await db
+      .select({ userId: issueAssignees.userId })
+      .from(issueAssignees)
+      .where(eq(issueAssignees.issueId, row.id));
+    for (const a of assigned) people.add(a.userId);
+    for (const userId of people) {
+      await notify({ workspaceId: row.workspaceId, userId, issueId: row.id, type: "due_soon", body: row.dueDate });
+    }
+    sent++;
+  }
+  return sent;
+}
+
+let reminderTimer: ReturnType<typeof setInterval> | null = null;
+// Starts the reminder scheduler once per server process (every minute).
+export function startDueReminderScheduler(intervalMs = 60_000) {
+  if (reminderTimer) return;
+  const tick = () => void sendDueReminders().catch((err) => console.error("due reminders:", err));
+  tick();
+  reminderTimer = setInterval(tick, intervalMs);
+  reminderTimer.unref?.();
+}
+
+// H-COLLAB-13: a short fingerprint of what other members can change in a workspace:
+// tasks (edits, claims, deletes), activity, comments, agent messages, and this user's
+// notices. A window polls it and refreshes when it changes.
+export async function workspacePulse(workspaceId: string, userId: string): Promise<string> {
+  const db = getDb();
+  const [row] = await db.all<Record<string, string | number | null>>(sql`
+    SELECT
+      (SELECT count(*) || ':' || coalesce(max(updated_at), '') || ':' || coalesce(max(claimed_at), '') || ':' || coalesce(max(deleted_at), '') || ':' || coalesce(sum(claimed_by IS NULL), 0)
+         FROM issues WHERE workspace_id = ${workspaceId}) AS t,
+      (SELECT count(*) || ':' || coalesce(max(e.created_at), '')
+         FROM events e JOIN issues i ON i.id = e.issue_id WHERE i.workspace_id = ${workspaceId}) AS e,
+      (SELECT count(*) || ':' || coalesce(max(c.created_at), '')
+         FROM comments c JOIN issues i ON i.id = c.issue_id WHERE i.workspace_id = ${workspaceId}) AS c,
+      (SELECT count(*) || ':' || coalesce(max(m.created_at), '')
+         FROM agent_messages m JOIN agent_threads th ON th.id = m.thread_id WHERE th.workspace_id = ${workspaceId}) AS m,
+      (SELECT count(*) || ':' || coalesce(sum(read_at IS NULL), 0)
+         FROM notifications WHERE workspace_id = ${workspaceId} AND user_id = ${userId}) AS n
+  `);
+  return crypto.createHash("sha1").update(JSON.stringify(row ?? {})).digest("hex").slice(0, 16);
 }

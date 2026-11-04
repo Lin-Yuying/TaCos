@@ -10,7 +10,7 @@ import {
   flattenMessages,
   openChatStream,
 } from "@/lib/ai";
-import { AI_EDIT_ACTIONS, type AiChatAction, type AiEngine } from "@/lib/ai-constants";
+import { AGENT_HARNESS_IDS, AI_EDIT_ACTIONS, type AgentHarnessId, type AiChatAction, type AiEngine } from "@/lib/ai-constants";
 import { AGENT_TOOLS } from "@/lib/agent-tools";
 import {
   issueAgentToolGrant,
@@ -34,6 +34,10 @@ import {
   skillsInText,
   type AgentStepEvent,
 } from "@/lib/cli-agents";
+import { getHarnessAdapter, resolveTurnModel, turnEventsToSse } from "@/lib/harness";
+import { harnessKeysFor, harnessesWithKeys, modelAccessFor } from "@/lib/model-keys";
+import { readyWithKeys } from "@/lib/harness/gate";
+import type { ApprovalDecision as HarnessApprovalDecision } from "@/lib/harness";
 import { TacosError } from "@/lib/issues";
 
 const EDIT_ACTIONS = new Set<string>([
@@ -50,7 +54,7 @@ const STREAM_HEADERS = {
   "X-Accel-Buffering": "no",
 };
 
-// The stdio MCP shim that gives Work mode its TaCos tools. It ships beside the server so
+// The stdio MCP shim that gives Agent turns their TaCos tools. It ships beside the server so
 // a standalone build can spawn it without a checkout on disk.
 function shimPath(): string {
   const candidates = [
@@ -187,22 +191,30 @@ export async function POST(request: Request) {
     const context = typeof body.context === "string" ? body.context : undefined;
 
     const runtime = await agentRuntime(workspaceId);
-    const engine: AiEngine =
-      body.engine === "codex" || body.engine === "pi" || body.engine === "api"
-        ? body.engine
+    const requested = typeof body.engine === "string" ? body.engine : "";
+    const harnessRequested = (AGENT_HARNESS_IDS as readonly string[]).includes(requested);
+    const engine: AiEngine | AgentHarnessId =
+      requested === "api" || harnessRequested
+        ? (requested as AiEngine | AgentHarnessId)
         : runtime.engine;
 
     if (engine !== "api") {
-      if (!runtime.enabled) {
-        throw new TacosError(
-          "AI is turned off for this workspace",
-          400,
-          "An admin can enable it in Settings."
-        );
+      // A harness needs its own subscription, signed in under the OS account that runs this
+      // server, or the viewer's own API.
+      const keyed = await harnessesWithKeys(access.user.id);
+      if (engine === "codex") {
+        if (!keyed.includes("codex")) requireCli(engine);
+      } else {
+        const adapter = getHarnessAdapter(engine);
+        const detect = adapter && readyWithKeys(adapter.detect(), keyed);
+        if (!adapter || !detect?.ready) {
+          throw new TacosError(
+            `${adapter?.label ?? engine} is not ready on this server`,
+            400,
+            detect?.hint ?? "Install or enable the harness in Settings → Harness."
+          );
+        }
       }
-      // Codex and Pi sign in under the OS account that runs this server, so the login
-      // belongs to the machine rather than to one TaCos user: every member may spend it.
-      requireCli(engine);
     }
 
     if (action === "agent") {
@@ -210,28 +222,32 @@ export async function POST(request: Request) {
       if (!threadId) {
         throw new TacosError("Pick a project and open a conversation first", 400);
       }
+      if (engine === "api") {
+        throw new TacosError(
+          "Agent turns need a local CLI harness",
+          400,
+          "Pick a harness in the composer. API keys stay under Settings for inline edits."
+        );
+      }
       // History comes from the thread, not from the browser: whatever scrolled past in
       // this conversation is what the model gets, including turns from other sessions.
+      // Harness on the request is a turn pref. A mismatch updates last-used and keeps the session.
       const thread = await loadThreadForTurn(workspaceId, access.user.id, threadId);
-      const work = thread.mode === "work";
-      if (work && engine !== "codex") {
-        throw new TacosError("Work mode needs the Codex engine", 400, "Switch the engine in Settings → AI assistant.");
-      }
       if (thread.engine !== engine) await setThreadEngine(threadId, engine);
 
       const message = text.trim();
-      await appendAgentMessage({ threadId, role: "user", content: message });
+      await appendAgentMessage({ threadId, role: "user", content: message, authorId: access.user.id });
       const assistantId = await appendAgentMessage({ threadId, role: "assistant", content: "" });
 
       const messages = agentMessages({
         message,
         history: thread.messages,
-        mode: thread.mode,
         context: await agentContext({
           workspaceId,
           userId: access.user.id,
           workspaceName: access.workspace.name,
           userName: access.user.displayName,
+          focusIssueId: thread.focusIssueId,
           // A conversation started with "Don't work in a project" gets the whole
           // workspace instead of one project's slice.
           ...(thread.projectId
@@ -241,35 +257,60 @@ export async function POST(request: Request) {
       });
 
       const turn = { threadId, messageId: assistantId };
-      if (engine === "api") {
-        const stream = await openChatStream(workspaceId, messages, request.signal);
-        return new Response(recordTurn(stream, turn), { headers: STREAM_HEADERS });
-      }
 
-      const grant = work
-        ? issueAgentToolGrant({
-            threadId,
-            workspaceId,
-            projectId: thread.projectId,
-            projectKey: thread.projectKey,
-            userId: access.user.id,
-          })
-        : null;
+      const grant = issueAgentToolGrant({
+        threadId,
+        workspaceId,
+        projectId: thread.projectId,
+        projectKey: thread.projectKey,
+        userId: access.user.id,
+        approval: thread.approval,
+        autoApproveTools: AGENT_TOOLS.filter((tool) => !tool.write).map((tool) => tool.name),
+        neverAutoApproveTools: AGENT_TOOLS.filter((tool) => tool.delete).map((tool) => tool.name),
+      });
       // Only Codex has skills; "@name" tokens are matched against the skills this machine
       // really has, so ordinary prose containing an @ sign is left alone.
       const skills =
         engine === "codex" && message.includes("@") ? skillsInText(message, await listCodexSkills()) : [];
       const origin = new URL(request.url).origin;
-      const stream = openCliStream(engine, flattenMessages(messages), {
-        proxy: runtime.proxy,
-        signal: request.signal,
-        agent: {
-          mode: thread.mode,
-          ...(skills.length > 0 ? { skills } : {}),
-          cwd: path.join(DATA_DIR, "agent", workspaceId, thread.projectId || "general"),
-          // A thread that never picked a model follows the machine's Codex config.
-          ...(engine === "codex" ? { ...codexDefaults(), ...(thread.model ? { model: thread.model } : {}), ...(thread.effort ? { effort: thread.effort } : {}) } : {}),
+      const cwd = path.join(DATA_DIR, "agent", workspaceId, thread.projectId || "general");
+      // A missing cwd makes spawn report ENOENT for the binary, on every harness's first turn here.
+      fs.mkdirSync(cwd, { recursive: true });
+      const prompt = flattenMessages(messages);
+      const isTurnApproved = () =>
+        Boolean(grant && (grant.autoApproveTurn || thread.approval !== "ask"));
+
+      // The viewer's own APIs, for this turn only.
+      const keys = await harnessKeysFor(access.user.id, engine);
+      const turnModel = await resolveTurnModel(engine, thread.model, thread.effort, await modelAccessFor(access.user.id));
+
+      // Codex Agent turns go through the harness adapter (chat + MCP + elicitation keys).
+      if (engine === "codex") {
+        const defaults = codexDefaults();
+        const adapter = getHarnessAdapter("codex");
+        if (!adapter) {
+          throw new TacosError("Codex harness is not registered", 500);
+        }
+        const mapDecision = (value: "accept" | "decline"): HarnessApprovalDecision =>
+          value === "accept" ? "allow" : "deny";
+        const events = adapter.openTurn({
+          sessionId: threadId,
+          cwd,
+          prompt,
+          model: turnModel.model || defaults.model || null,
+          effort: turnModel.effort || defaults.effort || null,
           approval: thread.approval,
+          skills: skills.length > 0 ? skills : undefined,
+          autoApproveTools: AGENT_TOOLS.filter((tool) => !tool.write).map((tool) => tool.name),
+          neverAutoApproveTools: AGENT_TOOLS.filter((tool) => tool.delete).map((tool) => tool.name),
+          isTurnApproved,
+          waitForApproval: async (approvalRequest) =>
+            mapDecision(
+              await waitForAgentApproval(approvalRequest.requestId, { signal: request.signal })
+            ),
+          signal: request.signal,
+          proxy: runtime.proxy,
+          keys,
           ...(grant
             ? {
                 mcp: {
@@ -278,26 +319,211 @@ export async function POST(request: Request) {
                   env: {
                     TACOS_AGENT_URL: origin,
                     TACOS_AGENT_TOKEN: grant.token,
-                    // In the desktop app the server runs inside Electron; a plain node
-                    // child would otherwise try to open a window.
                     ...(process.versions.electron ? { ELECTRON_RUN_AS_NODE: "1" } : {}),
                   },
                 },
-                autoApprove: AGENT_TOOLS.filter((tool) => !tool.write).map((tool) => tool.name),
-                // The card's "Allow for this turn" flips this flag, so later writes in
-                // the same turn run without asking again. "Approve for me" and "Full
-                // access" start every turn in that state.
-                isTurnApproved: () => grant.autoApproveTurn || thread.approval !== "ask",
               }
-            : {}),
-          // The permission card was already streamed; this waits for the answer that
-          // arrives on /api/ai/chat/approval.
-          onApproval: (approval) => waitForAgentApproval(approval.requestId, { signal: request.signal }),
-        },
-      });
-      return new Response(
-        recordTurn(stream, { ...turn, onEnd: grant ? () => revokeAgentToolGrant(grant.token) : undefined }),
-        { headers: STREAM_HEADERS }
+            : { mcp: null }),
+        });
+        const stream = turnEventsToSse(events);
+        return new Response(
+          recordTurn(stream, { ...turn, onEnd: grant ? () => revokeAgentToolGrant(grant.token) : undefined }),
+          { headers: STREAM_HEADERS }
+        );
+      }
+
+      // Pi Agent turns go through the harness adapter (MCP + TaCos-mediated cards).
+      if (engine === "pi") {
+        const adapter = getHarnessAdapter("pi");
+        if (!adapter) {
+          throw new TacosError("Pi harness is not registered", 500);
+        }
+        const mapDecision = (value: "accept" | "decline"): HarnessApprovalDecision =>
+          value === "accept" ? "allow" : "deny";
+        const events = adapter.openTurn({
+          sessionId: threadId,
+          cwd,
+          prompt,
+          model: turnModel.model,
+          effort: turnModel.effort,
+          approval: thread.approval,
+          skills: skills.length > 0 ? skills : undefined,
+          autoApproveTools: AGENT_TOOLS.filter((tool) => !tool.write).map((tool) => tool.name),
+          neverAutoApproveTools: AGENT_TOOLS.filter((tool) => tool.delete).map((tool) => tool.name),
+          isTurnApproved,
+          waitForApproval: async (approvalRequest) =>
+            mapDecision(
+              await waitForAgentApproval(approvalRequest.requestId, { signal: request.signal })
+            ),
+          signal: request.signal,
+          proxy: runtime.proxy,
+          keys,
+          ...(grant
+            ? {
+                mcp: {
+                  command: process.execPath,
+                  args: [shimPath()],
+                  env: {
+                    TACOS_AGENT_URL: origin,
+                    TACOS_AGENT_TOKEN: grant.token,
+                    ...(process.versions.electron ? { ELECTRON_RUN_AS_NODE: "1" } : {}),
+                  },
+                },
+              }
+            : { mcp: null }),
+        });
+        const stream = turnEventsToSse(events);
+        return new Response(
+          recordTurn(stream, { ...turn, onEnd: grant ? () => revokeAgentToolGrant(grant.token) : undefined }),
+          { headers: STREAM_HEADERS }
+        );
+      }
+
+      // OpenCode Agent turns go through the harness adapter (MCP + TaCos-mediated cards).
+      if (engine === "opencode") {
+        const adapter = getHarnessAdapter("opencode");
+        if (!adapter) {
+          throw new TacosError("OpenCode harness is not registered", 500);
+        }
+        const mapDecision = (value: "accept" | "decline"): HarnessApprovalDecision =>
+          value === "accept" ? "allow" : "deny";
+        const events = adapter.openTurn({
+          sessionId: threadId,
+          cwd,
+          prompt,
+          model: turnModel.model,
+          effort: turnModel.effort,
+          approval: thread.approval,
+          skills: skills.length > 0 ? skills : undefined,
+          autoApproveTools: AGENT_TOOLS.filter((tool) => !tool.write).map((tool) => tool.name),
+          neverAutoApproveTools: AGENT_TOOLS.filter((tool) => tool.delete).map((tool) => tool.name),
+          isTurnApproved,
+          waitForApproval: async (approvalRequest) =>
+            mapDecision(
+              await waitForAgentApproval(approvalRequest.requestId, { signal: request.signal })
+            ),
+          signal: request.signal,
+          proxy: runtime.proxy,
+          keys,
+          ...(grant
+            ? {
+                mcp: {
+                  command: process.execPath,
+                  args: [shimPath()],
+                  env: {
+                    TACOS_AGENT_URL: origin,
+                    TACOS_AGENT_TOKEN: grant.token,
+                    ...(process.versions.electron ? { ELECTRON_RUN_AS_NODE: "1" } : {}),
+                  },
+                },
+              }
+            : { mcp: null }),
+        });
+        const stream = turnEventsToSse(events);
+        return new Response(
+          recordTurn(stream, { ...turn, onEnd: grant ? () => revokeAgentToolGrant(grant.token) : undefined }),
+          { headers: STREAM_HEADERS }
+        );
+      }
+
+      // WorkBuddy / codebuddy Agent turns (MCP + TaCos-mediated cards).
+      if (engine === "codebuddy") {
+        const adapter = getHarnessAdapter("codebuddy");
+        if (!adapter) {
+          throw new TacosError("WorkBuddy harness is not registered", 500);
+        }
+        const mapDecision = (value: "accept" | "decline"): HarnessApprovalDecision =>
+          value === "accept" ? "allow" : "deny";
+        const events = adapter.openTurn({
+          sessionId: threadId,
+          cwd,
+          prompt,
+          model: turnModel.model,
+          effort: turnModel.effort,
+          approval: thread.approval,
+          skills: skills.length > 0 ? skills : undefined,
+          autoApproveTools: AGENT_TOOLS.filter((tool) => !tool.write).map((tool) => tool.name),
+          neverAutoApproveTools: AGENT_TOOLS.filter((tool) => tool.delete).map((tool) => tool.name),
+          isTurnApproved,
+          waitForApproval: async (approvalRequest) =>
+            mapDecision(
+              await waitForAgentApproval(approvalRequest.requestId, { signal: request.signal })
+            ),
+          signal: request.signal,
+          proxy: runtime.proxy,
+          keys,
+          ...(grant
+            ? {
+                mcp: {
+                  command: process.execPath,
+                  args: [shimPath()],
+                  env: {
+                    TACOS_AGENT_URL: origin,
+                    TACOS_AGENT_TOKEN: grant.token,
+                    ...(process.versions.electron ? { ELECTRON_RUN_AS_NODE: "1" } : {}),
+                  },
+                },
+              }
+            : { mcp: null }),
+        });
+        const stream = turnEventsToSse(events);
+        return new Response(
+          recordTurn(stream, { ...turn, onEnd: grant ? () => revokeAgentToolGrant(grant.token) : undefined }),
+          { headers: STREAM_HEADERS }
+        );
+      }
+
+      // DeepSeek Harness (dsh) Agent turns (MCP + TaCos-mediated cards).
+      if (engine === "dsh") {
+        const adapter = getHarnessAdapter("dsh");
+        if (!adapter) {
+          throw new TacosError("DeepSeek Harness is not registered", 500);
+        }
+        const mapDecision = (value: "accept" | "decline"): HarnessApprovalDecision =>
+          value === "accept" ? "allow" : "deny";
+        const events = adapter.openTurn({
+          sessionId: threadId,
+          cwd,
+          prompt,
+          model: turnModel.model,
+          effort: turnModel.effort,
+          approval: thread.approval,
+          skills: skills.length > 0 ? skills : undefined,
+          autoApproveTools: AGENT_TOOLS.filter((tool) => !tool.write).map((tool) => tool.name),
+          neverAutoApproveTools: AGENT_TOOLS.filter((tool) => tool.delete).map((tool) => tool.name),
+          isTurnApproved,
+          waitForApproval: async (approvalRequest) =>
+            mapDecision(
+              await waitForAgentApproval(approvalRequest.requestId, { signal: request.signal })
+            ),
+          signal: request.signal,
+          proxy: runtime.proxy,
+          keys,
+          ...(grant
+            ? {
+                mcp: {
+                  command: process.execPath,
+                  args: [shimPath()],
+                  env: {
+                    TACOS_AGENT_URL: origin,
+                    TACOS_AGENT_TOKEN: grant.token,
+                    ...(process.versions.electron ? { ELECTRON_RUN_AS_NODE: "1" } : {}),
+                  },
+                },
+              }
+            : { mcp: null }),
+        });
+        const stream = turnEventsToSse(events);
+        return new Response(
+          recordTurn(stream, { ...turn, onEnd: grant ? () => revokeAgentToolGrant(grant.token) : undefined }),
+          { headers: STREAM_HEADERS }
+        );
+      }
+
+      throw new TacosError(
+        `Agent turns for ${engine} are not wired yet`,
+        400,
+        "Pick a wired harness in the composer until the remaining adapters land."
       );
     }
 
@@ -314,11 +540,18 @@ export async function POST(request: Request) {
       context,
     });
     if (engine === "api") {
-      const stream = await openChatStream(workspaceId, messages, request.signal);
+      const stream = await openChatStream(workspaceId, access.user.id, messages, request.signal);
       return new Response(stream, { headers: STREAM_HEADERS });
     }
-    // The inline editor can borrow the CLI login too: no tools, no thread, one prompt
+    // The inline editor can borrow the Codex/Pi login: no tools, no thread, one prompt
     // out and the replacement text back.
+    if (engine !== "codex" && engine !== "pi") {
+      throw new TacosError(
+        "Inline edits need Codex, Pi, or an API key",
+        400,
+        "Other harnesses are Agent-only for now."
+      );
+    }
     const stream = openCliStream(engine, flattenMessages(messages), {
       proxy: runtime.proxy,
       signal: request.signal,

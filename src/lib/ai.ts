@@ -1,27 +1,20 @@
-import crypto from "node:crypto";
-import fs from "node:fs";
-import path from "node:path";
 import { eq } from "drizzle-orm";
-import { DATA_DIR, getDb } from "@/db/client";
+import { getDb } from "@/db/client";
 import { aiSettings } from "@/db/schema";
 import { listIssues, listProjects, TacosError } from "./issues";
 import { PRIORITY_META, STATUS_META } from "./constants";
 import {
   AI_EDIT_CHAR_LIMIT,
-  presetFor,
   type AgentEngineOption,
+  type AgentHarnessOption,
   type AiEditAction,
   type AiEngine,
   type AiSettingsView,
   type AiTaskDraft,
 } from "./ai-constants";
 import { listCliStatuses, normalizeProxy } from "./cli-agents";
+import { harnessesWithKeys, resolveEditConfig } from "./model-keys";
 
-const SECRET_FILE = path.join(DATA_DIR, "ai.key");
-const SECRET_LABEL = "tacos-ai-v1";
-const MAX_BASE_URL = 500;
-const MAX_MODEL = 120;
-const MAX_KEY = 4_000;
 const MAX_PROMPT = AI_EDIT_CHAR_LIMIT;
 
 type ChatRole = "system" | "user" | "assistant";
@@ -31,87 +24,9 @@ type ResolvedConfig = {
   baseUrl: string;
   model: string;
   apiKey: string;
-  enabled: boolean;
 };
 
-// --- credential encryption -------------------------------------------------
-
-let cachedSecret: Buffer | null = null;
-
-function secret(): Buffer {
-  if (cachedSecret) return cachedSecret;
-  let raw = process.env.TACOS_AI_SECRET?.trim() ?? "";
-  if (!raw) {
-    try {
-      raw = fs.readFileSync(SECRET_FILE, "utf8").trim();
-    } catch {
-      // First AI save on this machine: create the secret next to the database.
-      raw = crypto.randomBytes(32).toString("hex");
-      fs.mkdirSync(DATA_DIR, { recursive: true });
-      fs.writeFileSync(SECRET_FILE, `${raw}\n`, { mode: 0o600 });
-      try {
-        fs.chmodSync(SECRET_FILE, 0o600);
-      } catch {
-        /* best effort on filesystems without POSIX modes */
-      }
-    }
-  }
-  if (!raw) throw new TacosError("The AI credential store is unavailable on this server");
-  cachedSecret = crypto.scryptSync(raw, SECRET_LABEL, 32);
-  return cachedSecret;
-}
-
-function encryptKey(plain: string): string {
-  const iv = crypto.randomBytes(12);
-  const cipher = crypto.createCipheriv("aes-256-gcm", secret(), iv);
-  const body = Buffer.concat([cipher.update(plain, "utf8"), cipher.final()]);
-  const tag = cipher.getAuthTag();
-  return `v1:${iv.toString("base64url")}:${tag.toString("base64url")}:${body.toString("base64url")}`;
-}
-
-function decryptKey(stored: string): string | null {
-  try {
-    const [version, iv, tag, body] = stored.split(":");
-    if (version !== "v1" || !iv || !tag || !body) return null;
-    const decipher = crypto.createDecipheriv(
-      "aes-256-gcm",
-      secret(),
-      Buffer.from(iv, "base64url")
-    );
-    decipher.setAuthTag(Buffer.from(tag, "base64url"));
-    return Buffer.concat([
-      decipher.update(Buffer.from(body, "base64url")),
-      decipher.final(),
-    ]).toString("utf8");
-  } catch {
-    return null;
-  }
-}
-
 // --- settings --------------------------------------------------------------
-
-function normalizeBaseUrl(value: string): string {
-  const trimmed = value.trim().replace(/\/+$/, "");
-  if (!trimmed) throw new TacosError("Base URL is required");
-  if (trimmed.length > MAX_BASE_URL) throw new TacosError("Base URL is too long");
-  let parsed: URL;
-  try {
-    parsed = new URL(trimmed);
-  } catch {
-    throw new TacosError("Base URL must be a full URL, for example https://api.deepseek.com/v1");
-  }
-  if (parsed.protocol !== "https:" && parsed.protocol !== "http:") {
-    throw new TacosError("Base URL must use http or https");
-  }
-  return trimmed;
-}
-
-function normalizeModel(value: string): string {
-  const trimmed = value.trim();
-  if (!trimmed) throw new TacosError("Model name is required");
-  if (trimmed.length > MAX_MODEL) throw new TacosError("Model name is too long");
-  return trimmed;
-}
 
 async function readStored(workspaceId: string) {
   const [row] = await getDb()
@@ -124,35 +39,11 @@ async function readStored(workspaceId: string) {
 
 export async function getAiSettingsView(workspaceId: string): Promise<AiSettingsView> {
   const row = await readStored(workspaceId);
-  const cli = listCliStatuses();
-  if (!row) {
-    return {
-      configured: false,
-      // A workspace that never saved AI settings has not opted out — a CLI that is
-      // already signed in on this server should just work.
-      enabled: true,
-      provider: "deepseek",
-      baseUrl: "",
-      model: "",
-      keyHint: null,
-      updatedAt: null,
-      engine: "api",
-      proxy: "",
-      cli,
-    };
-  }
-  const key = decryptKey(row.apiKey);
   return {
-    configured: Boolean(key),
-    enabled: row.enabled === 1,
-    provider: presetFor(row.baseUrl),
-    baseUrl: row.baseUrl,
-    model: row.model,
-    keyHint: key ? `••••${key.slice(-4)}` : null,
-    updatedAt: row.updatedAt,
-    engine: asEngine(row.engine),
-    proxy: row.proxy ?? "",
-    cli,
+    updatedAt: row?.updatedAt ?? null,
+    engine: asEngine(row?.engine),
+    proxy: row?.proxy ?? "",
+    cli: listCliStatuses(),
   };
 }
 
@@ -163,149 +54,84 @@ function asEngine(value: string | null | undefined): AiEngine {
 // Shared by the Agent tab and the inline editor: the model menu has to agree on which
 // engines this viewer may actually run. A CLI signs in on the machine that hosts this
 // server, so that machine's subscription serves everyone in the workspace.
-export async function aiEngineOptions(workspaceId: string): Promise<AgentEngineOption[]> {
+export async function aiEngineOptions(workspaceId: string, userId: string): Promise<AgentEngineOption[]> {
   const ai = await getAiSettingsView(workspaceId);
+  const edit = await resolveEditConfig(userId);
   return [
     {
       id: "api",
-      label: ai.model || "API key",
-      detail: ai.keyHint,
-      available: ai.enabled && ai.configured,
-      hint: "Add a provider and API key in Settings → AI assistant.",
+      label: edit?.model || "API key",
+      detail: edit ? `••••${edit.apiKey.slice(-4)}` : null,
+      available: Boolean(edit),
+      hint: "Add your API key in Settings → Model API.",
     },
     ...ai.cli.map((status) => ({
       id: status.engine,
       label: status.label,
       detail: status.signedIn ? (status.model ?? status.account) : null,
-      available: ai.enabled && status.installed && status.signedIn,
+      available: status.installed && status.signedIn,
       hint: status.hint,
     })),
   ];
 }
 
-// Cheap check used by pages that only need to know whether the sparkle buttons
-// should be offered at all.
-export async function aiReady(workspaceId: string): Promise<boolean> {
-  const row = await readStored(workspaceId);
-  return Boolean(row && row.enabled === 1 && decryptKey(row.apiKey));
+/** Agent page engines: local CLI harnesses only. The API key is not an Agent engine. */
+export async function agentCliEngineOptions(workspaceId: string, userId: string): Promise<AgentEngineOption[]> {
+  const all = await aiEngineOptions(workspaceId, userId);
+  return all.filter((option) => option.id === "codex" || option.id === "pi");
 }
 
-// What the Agent tab should run a turn with, and whether an API key exists for the
-// inline editor even when the agent itself is pointed at a local CLI.
+/** Enabled+ready harness options for the Agent composer (H-P3-17). */
+export async function listAgentHarnessOptions(workspaceId: string, userId: string): Promise<AgentHarnessOption[]> {
+  const { getWorkspaceHarnessGate } = await import("@/lib/harness");
+  const gate = await getWorkspaceHarnessGate(workspaceId, await harnessesWithKeys(userId));
+  return gate.enabledReady.map((row) => ({
+    id: row.id,
+    label: row.label,
+    detail: row.version,
+    available: true,
+    hint: null,
+  }));
+}
+
+// Cheap check used by pages that only need to know whether the sparkle buttons
+// should be offered at all. A viewer without a key of their own gets none.
+export async function aiReady(workspaceId: string, userId: string): Promise<boolean> {
+  return Boolean(await resolveEditConfig(userId));
+}
+
+// What the Agent tab should run a turn with.
 export async function agentRuntime(workspaceId: string): Promise<{
   engine: AiEngine;
   proxy: string;
-  enabled: boolean;
-  apiReady: boolean;
 }> {
   const row = await readStored(workspaceId);
   return {
     engine: asEngine(row?.engine),
     proxy: row?.proxy ?? "",
-    enabled: row ? row.enabled === 1 : true,
-    apiReady: Boolean(row && decryptKey(row.apiKey)),
   };
 }
 
-export async function saveAiSettings(
+/** The switches an admin sets for everyone. Keys are personal and live in user_model_keys. */
+export async function saveAgentRuntime(
   workspaceId: string,
-  input: {
-    engine?: AiEngine;
-    proxy?: string;
-    baseUrl?: string;
-    model?: string;
-    apiKey?: string;
-    enabled: boolean;
-  }
+  input: { proxy?: string }
 ): Promise<AiSettingsView> {
-  const engine = asEngine(input.engine);
   const proxy = normalizeProxy(input.proxy ?? "");
-  const existing = await readStored(workspaceId);
-  const now = new Date().toISOString();
-
-  if (engine !== "api") {
-    // The CLI brings its own login; keep whatever API key is already stored so the
-    // inline editor keeps working while the Agent tab uses Codex or Pi.
-    await getDb()
-      .insert(aiSettings)
-      .values({
-        workspaceId,
-        baseUrl: existing?.baseUrl ?? "",
-        model: existing?.model ?? "",
-        apiKey: existing?.apiKey ?? "",
-        enabled: input.enabled ? 1 : 0,
-        updatedAt: now,
-        engine,
-        proxy,
-      })
-      .onConflictDoUpdate({
-        target: aiSettings.workspaceId,
-        set: { engine, proxy, enabled: input.enabled ? 1 : 0, updatedAt: now },
-      });
-    return getAiSettingsView(workspaceId);
-  }
-
-  const baseUrl = normalizeBaseUrl(input.baseUrl ?? "");
-  const model = normalizeModel(input.model ?? "");
-  const typedKey = input.apiKey?.trim() ?? "";
-  if (typedKey.length > MAX_KEY) throw new TacosError("API key is too long");
-
-  const existingKey = existing ? decryptKey(existing.apiKey) : null;
-  const apiKey = typedKey || existingKey;
-  if (!apiKey) throw new TacosError("API key is required");
-
-  const encrypted = typedKey ? encryptKey(typedKey) : (existing?.apiKey ?? encryptKey(apiKey));
+  const updatedAt = new Date().toISOString();
   await getDb()
     .insert(aiSettings)
-    .values({
-      workspaceId,
-      baseUrl,
-      model,
-      apiKey: encrypted,
-      enabled: input.enabled ? 1 : 0,
-      updatedAt: now,
-      engine,
-      proxy,
-    })
-    .onConflictDoUpdate({
-      target: aiSettings.workspaceId,
-      set: {
-        baseUrl,
-        model,
-        apiKey: encrypted,
-        enabled: input.enabled ? 1 : 0,
-        updatedAt: now,
-        engine,
-        proxy,
-      },
-    });
+    .values({ workspaceId, baseUrl: "", model: "", apiKey: "", enabled: 1, updatedAt, proxy })
+    .onConflictDoUpdate({ target: aiSettings.workspaceId, set: { proxy, updatedAt } });
   return getAiSettingsView(workspaceId);
 }
 
-async function resolveConfig(
-  workspaceId: string,
-  override?: { baseUrl?: string; model?: string; apiKey?: string }
-): Promise<ResolvedConfig> {
-  const row = await readStored(workspaceId);
-  const storedKey = row ? decryptKey(row.apiKey) : null;
-  if (!row && !override) {
-    throw new TacosError(
-      "AI is not configured yet",
-      400,
-      "Add an API key in Settings → AI assistant."
-    );
+async function resolveConfig(userId: string): Promise<ResolvedConfig> {
+  const config = await resolveEditConfig(userId);
+  if (!config) {
+    throw new TacosError("AI is not configured yet", 400, "Add your API key in Settings → Model API.");
   }
-  const baseUrl = normalizeBaseUrl(override?.baseUrl ?? row?.baseUrl ?? "");
-  const model = normalizeModel(override?.model ?? row?.model ?? "");
-  const apiKey = override?.apiKey?.trim() || storedKey;
-  if (!apiKey) {
-    throw new TacosError(
-      "AI is not configured yet",
-      400,
-      "Add an API key in Settings → AI assistant."
-    );
-  }
-  return { baseUrl, model, apiKey, enabled: row?.enabled !== 0 };
+  return config;
 }
 
 // --- provider calls --------------------------------------------------------
@@ -412,13 +238,11 @@ function withTimeout(signal: AbortSignal | undefined, ms: number): AbortSignal {
 
 export async function completeChat(
   workspaceId: string,
+  userId: string,
   messages: ChatMessage[],
   opts: { maxTokens?: number; temperature?: number; json?: boolean } = {}
 ): Promise<string> {
-  const config = await resolveConfig(workspaceId);
-  if (!config.enabled) {
-    throw new TacosError("AI is turned off for this workspace", 400, "An admin can enable it in Settings.");
-  }
+  const config = await resolveConfig(userId);
   const response = await sendChat(config, messages, {
     stream: false,
     maxTokens: opts.maxTokens ?? 1_500,
@@ -447,45 +271,13 @@ export async function completeChat(
   throw new TacosError("The AI provider returned an empty response", 502);
 }
 
-export async function testAiConnection(
-  workspaceId: string,
-  override?: { baseUrl?: string; model?: string; apiKey?: string }
-): Promise<{ model: string; sample: string }> {
-  const config = await resolveConfig(workspaceId, override);
-  const response = await sendChat(
-    config,
-    [
-      {
-        role: "user",
-        content: "This is a connection test. Reply with exactly: ok",
-      },
-    ],
-    {
-      stream: false,
-      maxTokens: 16,
-      temperature: 0,
-      signal: withTimeout(undefined, 45_000),
-    }
-  );
-  const payload = (await response.json()) as {
-    choices?: { message?: { content?: unknown } }[];
-  };
-  const content =
-    typeof payload.choices?.[0]?.message?.content === "string"
-      ? (payload.choices[0].message.content as string).trim()
-      : "";
-  return { model: config.model, sample: content.slice(0, 80) };
-}
-
 export async function openChatStream(
   workspaceId: string,
+  userId: string,
   messages: ChatMessage[],
   signal?: AbortSignal
 ): Promise<ReadableStream<Uint8Array>> {
-  const config = await resolveConfig(workspaceId);
-  if (!config.enabled) {
-    throw new TacosError("AI is turned off for this workspace", 400, "An admin can enable it in Settings.");
-  }
+  const config = await resolveConfig(userId);
   const response = await sendChat(config, messages, {
     stream: true,
     maxTokens: 2_500,
@@ -571,11 +363,8 @@ const AGENT_SYSTEM = `You are the Agent inside TaCos, a team task tracker.
 - Everything you know about the workspace is in the context block below. Never invent projects, people, task ids or numbers — say so when the context does not cover it.
 - If the request is unclear, ask one short clarifying question instead of guessing.`;
 
-const CHAT_RULES = `- You cannot create, edit or delete anything yourself; this conversation is in Chat mode, which is read-only.
-- When the user asks you to create or change tasks, docs or the overview, say that this needs Work mode and tell them to flip the Chat / Work toggle in the composer to Work (their message stays in this conversation, so they can repeat the request there). Do not send them to ⌘N or to the AI panel while Work exists — Work does it for them, with one Allow per change.
-- Still give the full plan (titles, descriptions, assignees, priorities) so the Work turn can run straight away.`;
 
-const WORK_RULES = `- You can use TaCos tools for the project this conversation is bound to: list_tasks, get_task, get_overview, create_task, update_task, add_comment, update_overview, create_doc, get_doc, update_doc.
+const WORK_RULES = `- You can use TaCos tools for the project this conversation is bound to: list_tasks, get_task, get_overview, create_task, update_task, add_comment, claim_task, update_overview, create_doc, get_doc, update_doc.
 - Documents that are too long for the inline editor are yours to rewrite: read the whole page with get_doc, then send the complete new markdown with update_doc. Documents belong to the workspace library rather than one project, so a page whose projectId is null or names another project is still fair game when the user points you at it.
 - Read before you write, then make the change the user asked for. Each write pauses for the user's Allow/Deny card in the Agent tab, so do not ask them to confirm twice in chat.
 - Only touch the bound project's tasks and comments. Report what you created or changed with task identifiers.
@@ -588,14 +377,13 @@ export function agentMessages(input: {
   history?: ChatMessage[];
   message: string;
   context?: string;
-  mode?: "chat" | "work";
 }): ChatMessage[] {
   const message = input.message.trim();
   if (!message) throw new TacosError("Write something for the agent first");
   if (message.length > MAX_PROMPT) {
     throw new TacosError("That message is too long for the agent", 400, "Split it into shorter turns.");
   }
-  const parts = [AGENT_SYSTEM, input.mode === "work" ? WORK_RULES : CHAT_RULES];
+  const parts = [AGENT_SYSTEM, WORK_RULES];
   if (input.context?.trim()) {
     parts.push(`Workspace context:\n"""\n${input.context.slice(0, 8_000)}\n"""`);
   }
@@ -645,6 +433,8 @@ export async function agentContext(input: {
   userName: string;
   // A conversation is bound to one project; the context leads with it and lists its tasks.
   project?: { id: string; name: string; key: string };
+  // H-COLLAB-08: the task that this chat works on.
+  focusIssueId?: string | null;
 }): Promise<string> {
   const [allProjects, allIssues] = await Promise.all([
     listProjects(input.workspaceId, input.userId),
@@ -686,6 +476,16 @@ export async function agentContext(input: {
   }
   if (open.length > MAX_AGENT_TASKS) {
     lines.push(`- …and ${open.length - MAX_AGENT_TASKS} more open tasks`);
+  }
+  const focus = input.focusIssueId ? allIssues.find((issue) => issue.id === input.focusIssueId) : undefined;
+  if (focus) {
+    lines.push(
+      "",
+      `Focus task: ${focus.identifier} ${focus.title} [${STATUS_META[focus.status].label}]`,
+      "The user opened this chat to move this task forward. Work on it first.",
+      "Description:",
+      focus.description?.trim() || "(empty)"
+    );
   }
   return lines.join("\n");
 }
@@ -786,11 +586,12 @@ export function parseTaskJson(raw: string): AiTaskDraft[] {
 
 export async function generateTasks(input: {
   workspaceId: string;
+  userId: string;
   prompt: string;
   context?: string;
   project?: string;
 }): Promise<AiTaskDraft[]> {
-  const raw = await completeChat(input.workspaceId, taskMessages(input), {
+  const raw = await completeChat(input.workspaceId, input.userId, taskMessages(input), {
     maxTokens: 1_800,
     temperature: 0.3,
     json: true,
@@ -800,12 +601,14 @@ export async function generateTasks(input: {
 
 export async function draftTask(input: {
   workspaceId: string;
+  userId: string;
   prompt: string;
   project?: string;
   context?: string;
 }): Promise<AiTaskDraft> {
   const raw = await completeChat(
     input.workspaceId,
+    input.userId,
     taskMessages({ ...input, prompt: `${input.prompt}\n\nReturn exactly one task.` }),
     { maxTokens: 1_200, temperature: 0.3, json: true }
   );

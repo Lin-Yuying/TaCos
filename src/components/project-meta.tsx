@@ -34,6 +34,7 @@ import type {
   OverviewGrant,
   ProjectMember,
 } from "@/lib/issues";
+import { useT } from "@/components/i18n-context";
 
 type OverviewRole = "view" | "comment" | "edit";
 const OVERVIEW_LEVELS = [
@@ -84,12 +85,13 @@ export function useMetaRows() {
 // The section label doubles as its fold: the twisty sits inside the label's column so
 // the chips to the right never move while the row is open.
 function MetaLabel({ label, onHide }: { label: string; onHide: () => void }) {
+  const t = useT();
   return (
     <button
       type="button"
       onClick={onHide}
-      aria-label={`Hide ${label.toLowerCase()}`}
-      title={`Hide ${label.toLowerCase()}`}
+      aria-label={t("Hide {section}", { section: label.toLowerCase() })}
+      title={t("Hide {section}", { section: label.toLowerCase() })}
       className="flex w-20 shrink-0 items-center gap-1 rounded text-left text-[12.5px] leading-[22px] text-faint transition-colors hover:text-muted"
     >
       <ChevronDown size={11} className="shrink-0" />
@@ -107,6 +109,7 @@ export function MetaRowsMenu({
   hidden: MetaRowKey[];
   onToggle: (key: MetaRowKey) => void;
 }) {
+  const t = useT();
   if (hidden.length === 0) return null;
   return (
     <Menu
@@ -115,7 +118,7 @@ export function MetaRowsMenu({
       triggerClassName="flex h-6 w-6 items-center justify-center rounded-md text-faint transition-colors hover:bg-elevated hover:text-text"
       trigger={
         <>
-          <span className="sr-only">Show project details</span>
+          <span className="sr-only">{t("Show project details")}</span>
           <MoreHorizontal size={14} />
         </>
       }
@@ -124,7 +127,7 @@ export function MetaRowsMenu({
         <>
           {META_ROWS.map(({ key, label }) => (
             <MenuItem key={key} active={!hidden.includes(key)} onSelect={() => onToggle(key)}>
-              {label}
+              {t(label)}
             </MenuItem>
           ))}
         </>
@@ -159,6 +162,7 @@ export function ProjectMeta({
   grants: OverviewGrant[];
   rows: ReturnType<typeof useMetaRows>;
 }) {
+  const t = useT();
   const router = useRouter();
   const { openPage } = useUI();
   // Resources are read with the page, then kept locally so adding one lands in the row
@@ -302,12 +306,12 @@ export function ProjectMeta({
     <div className="mt-3 flex min-w-0 flex-col gap-2 text-[13px]">
       {showProperties && (
         <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5">
-          <MetaLabel label="Properties" onHide={() => rows.toggle("properties")} />
+          <MetaLabel label={t("Properties")} onHide={() => rows.toggle("properties")} />
           <div className="flex min-w-0 flex-1 flex-wrap items-center gap-x-3 gap-y-1.5">
             {lead && (
               <span
                 className="flex h-6 shrink-0 items-center gap-1.5 rounded-full border border-border bg-elevated/40 py-0.5 pl-0.5 pr-2 text-[12px] text-text"
-                title="Project lead"
+                title={t("Project lead")}
               >
                 <AssigneeAvatar displayName={lead.displayName} avatar={lead.avatar} size={18} />
                 {lead.displayName}
@@ -356,7 +360,7 @@ export function ProjectMeta({
                             void changeGrant(entry.id, level);
                           }}
                         >
-                          {label}
+                          {t(label)}
                         </MenuItem>
                       ))}
                       {(isMember || role) && (
@@ -369,7 +373,7 @@ export function ProjectMeta({
                               void removePerson(entry.id);
                             }}
                           >
-                            Remove
+                            {t("Remove")}
                           </MenuItem>
                         </>
                       )}
@@ -378,10 +382,10 @@ export function ProjectMeta({
                 </Menu>
               );
             })}
-            <span className="flex shrink-0 items-center text-faint" title="Overview access">
+            <span className="flex shrink-0 items-center text-faint" title={t("Overview access")}>
               <Lock size={11} />
             </span>
-            {grants.length === 0 && <span className="text-[12px] text-faint">Owner only</span>}
+            {grants.length === 0 && <span className="text-[12px] text-faint">{t("Owner only")}</span>}
             {access.manage && (
               <Menu
                 width={280}
@@ -391,7 +395,7 @@ export function ProjectMeta({
                 triggerClassName="flex h-[22px] shrink-0 items-center gap-1 rounded-full border border-dashed border-border px-2 text-[12px] text-muted transition-colors hover:border-border-strong hover:text-text"
                 trigger={
                   <>
-                    <span className="sr-only">Add person</span>
+                    <span className="sr-only">{t("Add person")}</span>
                     <Plus size={12} />
                   </>
                 }
@@ -419,14 +423,14 @@ export function ProjectMeta({
                             }}
                             className="rounded border border-border px-1.5 py-0.5 text-[11px] text-muted hover:border-border-strong hover:text-text"
                           >
-                            {label}
+                            {t(label)}
                           </button>
                         ))}
                       </div>
                     ))}
                     {candidates.length === 0 && (
                       <div className="px-2 py-1.5 text-[12px] text-faint">
-                        Everyone in the workspace is already here.
+                        {t("Everyone in the workspace is already here.")}
                       </div>
                     )}
                   </>
@@ -438,7 +442,7 @@ export function ProjectMeta({
       )}
       {showResources && (
         <div className="flex flex-wrap items-start gap-x-3 gap-y-2">
-          <MetaLabel label="Resources" onHide={() => rows.toggle("resources")} />
+          <MetaLabel label={t("Resources")} onHide={() => rows.toggle("resources")} />
           <div className="flex min-w-0 flex-1 flex-wrap items-center gap-1.5">
             {resources.map((resource) => {
               const icon =
@@ -481,8 +485,8 @@ export function ProjectMeta({
                   {access.canEdit && (
                     <button
                       type="button"
-                      aria-label={`Remove ${resource.title}`}
-                      title="Remove"
+                      aria-label={t("Remove {name}", { name: resource.title })}
+                      title={t("Remove")}
                       onClick={() => void removeResource(resource.id)}
                       className="mr-1 rounded-full p-0.5 text-faint transition-colors hover:bg-elevated hover:text-danger"
                     >
@@ -501,7 +505,7 @@ export function ProjectMeta({
                 triggerClassName="flex h-[22px] shrink-0 items-center gap-1 rounded-full border border-dashed border-border px-2 text-[12px] text-muted transition-colors hover:border-border-strong hover:text-text"
                 trigger={
                   <>
-                    <span className="sr-only">Add resource</span>
+                    <span className="sr-only">{t("Add resource")}</span>
                     <Plus size={12} />
                   </>
                 }
@@ -516,7 +520,7 @@ export function ProjectMeta({
                       }}
                     >
                       <Link2 size={13} className="text-muted" />
-                      Link
+                      {t("Link")}
                     </MenuItem>
                     <MenuItem
                       onSelect={() => {
@@ -525,13 +529,13 @@ export function ProjectMeta({
                       }}
                     >
                       <FileText size={13} className="text-muted" />
-                      New document
+                      {t("New document")}
                     </MenuItem>
                     {attachableDocs.length > 0 && (
                       <>
                         <div className="my-1 border-t border-border" />
                         <div className="px-2 py-1 text-[11px] font-medium text-faint">
-                          Project documents
+                          {t("Project documents")}
                         </div>
                         {attachableDocs.map((page) => (
                           <MenuItem
@@ -547,7 +551,7 @@ export function ProjectMeta({
                               <FileText size={13} className="text-muted" />
                             )}
                             <span className="min-w-0 flex-1 truncate">
-                              {page.title || "Untitled"}
+                              {page.title || t("Untitled")}
                             </span>
                           </MenuItem>
                         ))}
@@ -558,11 +562,11 @@ export function ProjectMeta({
               </Menu>
             )}
             {resources.length === 0 && !access.canEdit && (
-              <span className="text-[12px] text-faint">None yet</span>
+              <span className="text-[12px] text-faint">{t("None yet")}</span>
             )}
           </div>
           {resourceError && (
-            <span className="w-full pl-[5.75rem] text-[11.5px] text-danger">{resourceError}</span>
+            <span className="w-full pl-[5.75rem] text-[11.5px] text-danger">{t(resourceError)}</span>
           )}
           {linkOpen && access.canEdit && (
             <form
@@ -573,13 +577,13 @@ export function ProjectMeta({
                 autoFocus
                 value={linkUrl}
                 onChange={(event) => setLinkUrl(event.target.value)}
-                placeholder="Paste a link"
+                placeholder={t("Paste a link")}
                 className="w-full rounded-md border border-border bg-bg px-2.5 py-1.5 text-[13px] text-text placeholder:text-faint focus:border-border-strong focus:outline-none"
               />
               <input
                 value={linkTitle}
                 onChange={(event) => setLinkTitle(event.target.value)}
-                placeholder="Title (optional)"
+                placeholder={t("Title (optional)")}
                 className="w-full rounded-md border border-border bg-bg px-2.5 py-1.5 text-[13px] text-text placeholder:text-faint focus:border-border-strong focus:outline-none"
               />
               <div className="flex items-center justify-end gap-2">
@@ -593,21 +597,21 @@ export function ProjectMeta({
                   }}
                   className="rounded-md px-2 py-1 text-[12px] text-muted transition-colors hover:bg-elevated hover:text-text"
                 >
-                  Cancel
+                  {t("Cancel")}
                 </button>
                 <button
                   type="submit"
                   disabled={!linkUrl.trim() || resourceBusy}
                   className="rounded-md bg-accent px-2.5 py-1 text-[12px] font-medium text-white transition-opacity hover:opacity-90 disabled:opacity-40"
                 >
-                  {resourceBusy ? "Adding…" : "Add link"}
+                  {resourceBusy ? t("Adding…") : t("Add link")}
                 </button>
               </div>
             </form>
           )}
         </div>
       )}
-      {error && <span className="pl-[5.75rem] text-[11.5px] text-danger">{error}</span>}
+      {error && <span className="pl-[5.75rem] text-[11.5px] text-danger">{t(error)}</span>}
     </div>
   );
 }

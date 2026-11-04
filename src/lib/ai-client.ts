@@ -1,18 +1,39 @@
 "use client";
 
-import { ENGINE_COOKIE, type AiChatAction, type AiEngine } from "./ai-constants";
+import {
+  AGENT_HARNESS_IDS,
+  ENGINE_COOKIE,
+  type AgentHarnessId,
+  type AiChatAction,
+  type AiEngine,
+} from "./ai-constants";
 
-// Every model menu in the app (Agent tab, inline editor) reads and writes the same
-// preference, so picking a model in one place carries over to the other.
-export function readEngineCookie(): AiEngine | null {
+function readRawEngineCookie(): string | null {
   const entry = document.cookie
     .split("; ")
     .find((cookie) => cookie.startsWith(`${ENGINE_COOKIE}=`));
-  const value = entry?.slice(ENGINE_COOKIE.length + 1);
+  return entry?.slice(ENGINE_COOKIE.length + 1) || null;
+}
+
+// Inline editor / API assist: api | codex | pi only.
+export function readEngineCookie(): AiEngine | null {
+  const value = readRawEngineCookie();
   return value === "api" || value === "codex" || value === "pi" ? value : null;
 }
 
 export function rememberEngine(engine: AiEngine) {
+  document.cookie = `${ENGINE_COOKIE}=${engine}; path=/; max-age=31536000; samesite=lax`;
+}
+
+// Agent composer harness preference (H-P3-17).
+export function readHarnessCookie(): AgentHarnessId | null {
+  const value = readRawEngineCookie();
+  return (AGENT_HARNESS_IDS as readonly string[]).includes(value ?? "")
+    ? (value as AgentHarnessId)
+    : null;
+}
+
+export function rememberHarness(engine: AgentHarnessId | string) {
   document.cookie = `${ENGINE_COOKIE}=${engine}; path=/; max-age=31536000; samesite=lax`;
 }
 
@@ -22,7 +43,7 @@ export type AiChatTurn = { role: "user" | "assistant"; content: string };
 // permission card it is waiting on.
 export type AgentStepFrame = {
   key: string;
-  kind: "command" | "file" | "tool" | "info";
+  kind: "command" | "file" | "tool" | "info" | "thinking";
   title: string;
   detail?: string;
   status: "running" | "done" | "error" | "denied";
@@ -49,7 +70,7 @@ export type AiEditRequest = {
   instruction?: string;
   context?: string;
   history?: AiChatTurn[];
-  engine?: AiEngine;
+  engine?: AiEngine | AgentHarnessId | string;
 };
 
 // Reads the OpenAI-compatible SSE stream from /api/ai/chat. The route sends the

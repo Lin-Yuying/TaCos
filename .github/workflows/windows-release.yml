@@ -20,6 +20,7 @@ jobs:
     env:
       # Secrets cannot be used in step `if` conditions; expose it here and test the env var.
       SIGNPATH_API_TOKEN: ${{ secrets.SIGNPATH_API_TOKEN }}
+      SIGNPATH_APP_ARTIFACT_CONFIGURATION_SLUG: ${{ vars.SIGNPATH_APP_ARTIFACT_CONFIGURATION_SLUG }}
     steps:
       - name: Check out the repository
         uses: actions/checkout@v7
@@ -33,8 +34,51 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Build the local (embedded server) installer
-        run: npm run desktop:standalone:win
+      # H-DESKTOP-UPDATE-08: two-stage SignPath when configured (exe then installer).
+      # Per-user NSIS (perMachine=false) + asInvoker keeps silent updates from needing UAC.
+      - name: Build Next.js and the embedded server
+        run: |
+          npm run build
+          npm run server:bundle -- --target=win32-x64
+
+      - name: Package Windows app directory
+        run: npx electron-builder --win --x64 --dir --publish never --config electron/builder.standalone.json
+
+      - name: Upload unpacked app executable for signing
+        id: upload-app
+        if: env.SIGNPATH_API_TOKEN != '' && env.SIGNPATH_APP_ARTIFACT_CONFIGURATION_SLUG != ''
+        uses: actions/upload-artifact@v7
+        with:
+          name: tacos-windows-x64-app-unsigned
+          path: release-standalone/win-unpacked/TaCos.exe
+          if-no-files-found: error
+          retention-days: 7
+
+      - name: Sign app executable with SignPath
+        if: env.SIGNPATH_API_TOKEN != '' && env.SIGNPATH_APP_ARTIFACT_CONFIGURATION_SLUG != ''
+        uses: signpath/github-action-submit-signing-request@v3
+        with:
+          api-token: ${{ secrets.SIGNPATH_API_TOKEN }}
+          organization-id: ${{ vars.SIGNPATH_ORGANIZATION_ID }}
+          project-slug: ${{ vars.SIGNPATH_PROJECT_SLUG }}
+          signing-policy-slug: ${{ vars.SIGNPATH_SIGNING_POLICY_SLUG }}
+          artifact-configuration-slug: ${{ vars.SIGNPATH_APP_ARTIFACT_CONFIGURATION_SLUG }}
+          github-artifact-id: ${{ steps.upload-app.outputs.artifact-id }}
+          wait-for-completion: true
+          output-artifact-directory: signed-app
+
+      - name: Replace unpacked executable with the signed build
+        if: env.SIGNPATH_API_TOKEN != '' && env.SIGNPATH_APP_ARTIFACT_CONFIGURATION_SLUG != ''
+        shell: bash
+        run: |
+          set -euo pipefail
+          signed=$(find signed-app -name 'TaCos.exe' -print -quit)
+          test -n "$signed"
+          cp "$signed" release-standalone/win-unpacked/TaCos.exe
+          ls -l release-standalone/win-unpacked/TaCos.exe
+
+      - name: Build NSIS installer from the packaged directory
+        run: npx electron-builder --win --x64 --prepackaged release-standalone/win-unpacked --publish never --config electron/builder.standalone.json
 
       - name: Upload unsigned installer
         id: upload
@@ -70,11 +114,20 @@ jobs:
           cp "$file" out/
           ls -l out
 
+      - name: Write Windows updater metadata
+        shell: bash
+        run: |
+          set -euo pipefail
+          exe=$(find out -maxdepth 1 -name '*.exe' -print -quit)
+          npx tsx scripts/write-desktop-updater-metadata.ts --platform win --file "$exe" --out out
+
       - name: Upload Windows installer
         uses: actions/upload-artifact@v7
         with:
           name: tacos-windows-x64
-          path: out/*.exe
+          path: |
+            out/*.exe
+            out/latest.yml
           if-no-files-found: error
           retention-days: 7
 
@@ -86,8 +139,10 @@ jobs:
               echo "### Signed installer"
               echo "SignPath signed the following files:"
               echo '```'
-              find signed -name '*.exe' -print
+              find signed-app signed -name '*.exe' -print 2>/dev/null || find signed -name '*.exe' -print
               echo '```'
+              echo
+              echo "NSIS is per-user by default (\`perMachine: false\`) with \`asInvoker\`, so silent app updates should not raise an extra UAC prompt."
             } >> "$GITHUB_STEP_SUMMARY"
           else
             {
@@ -118,11 +173,26 @@ jobs:
       - name: Build the local (embedded server) DMG
         run: npm run desktop:standalone:mac
 
+      - name: Write macOS updater metadata
+        shell: bash
+        run: |
+          set -euo pipefail
+          zip=$(find release-standalone -maxdepth 1 -name '*-mac.zip' -print -quit)
+          if [ -z "$zip" ]; then
+            zip=$(find release-standalone -maxdepth 1 -name '*.zip' -print -quit)
+          fi
+          test -n "$zip"
+          npx tsx scripts/write-desktop-updater-metadata.ts --platform mac --file "$zip" --out release-standalone
+          ls -l release-standalone/*.zip release-standalone/latest-mac.yml
+
       - name: Upload macOS disk image
         uses: actions/upload-artifact@v7
         with:
           name: tacos-macos-arm64
-          path: release-standalone/TaCos-Local-*.dmg
+          path: |
+            release-standalone/TaCos-Local-*.dmg
+            release-standalone/*.zip
+            release-standalone/latest-mac.yml
           if-no-files-found: error
           retention-days: 7
 
@@ -153,7 +223,11 @@ jobs:
         run: |
           set -euo pipefail
           tag="$GITHUB_REF_NAME"
-          mapfile -t assets < <(ls dist/windows/*.exe dist/macos/*.dmg)
+          mapfile -t assets < <(ls dist/windows/*.exe dist/windows/latest.yml dist/macos/*.dmg dist/macos/*.zip dist/macos/latest-mac.yml 2>/dev/null)
+          # Fail if required updater metadata is missing.
+          test -f dist/windows/latest.yml
+          test -f dist/macos/latest-mac.yml
+          ls dist/macos/*.zip >/dev/null
           printf 'Releasing %s with:\n' "$tag"
           printf '  %s\n' "${assets[@]}"
 
@@ -175,7 +249,10 @@ jobs:
           | Platform | File |
           | --- | --- |
           | Windows x64 | `TaCos-Local-Setup-*.exe` |
+          | Windows updater feed | `latest.yml` |
           | macOS (Apple silicon) | `TaCos-Local-*-arm64.dmg` |
+          | macOS updater zip | `*-mac.zip` |
+          | macOS updater feed | `latest-mac.yml` |
 
           Both installers run TaCos with its own local server and SQLite database, so no account or cloud service is involved.
 

@@ -11,6 +11,8 @@ export const users = sqliteTable("users", {
   role: text("role").notNull().default("member"),
   // last workspace this account opened; where a fresh session lands when it is still theirs
   lastWorkspaceId: text("last_workspace_id"),
+  // interface language; null follows the browser's Accept-Language
+  locale: text("locale"),
   createdAt: text("created_at").notNull(),
 });
 
@@ -256,6 +258,9 @@ export const issues = sqliteTable(
     dueDate: text("due_date"),
     // how long before dueDate to remind: 12h | 1d | 3d | 5d | 7d
     reminder: text("reminder"),
+    // H-COLLAB-11: "<dueDate>|<preset>" of the reminder already sent. A new due date or
+    // preset gives a new key, so the reminder fires again; the same key never fires twice.
+    reminderSentFor: text("reminder_sent_for"),
     // web | api | mcp — who created it (app vs agent)
     createdVia: text("created_via").notNull().default("web"),
     // set when the issue was sent to Trash; restore clears it
@@ -263,10 +268,24 @@ export const issues = sqliteTable(
     // manual order; higher sits further up in a column. Fractional so a drop can be
     // placed between two neighbours without renumbering the rest of the board.
     position: real("position").notNull().default(0),
+    // H-COLLAB-01: one person may claim a task to push it forward. The claim does not
+    // replace the assignees. Null when nobody holds the claim.
+    claimedBy: text("claimed_by"),
+    claimedAt: text("claimed_at"),
+    // agent thread that produced this task, if any
+    sourceThreadId: text("source_thread_id"),
+    // the person who published the task (for agent tasks: the user who ran the agent)
+    publishedBy: text("published_by"),
+    // approved | pending | rejected. Agent-published tasks start as pending and need a
+    // human reviewer before anyone can claim them.
+    reviewStatus: text("review_status").notNull().default("approved"),
+    reviewedBy: text("reviewed_by"),
+    reviewedAt: text("reviewed_at"),
     createdAt: text("created_at").notNull(),
     updatedAt: text("updated_at").notNull(),
   },
   (t) => [
+    index("issues_claimed_idx").on(t.claimedBy),
     index("issues_workspace_idx").on(t.workspaceId),
     index("issues_project_idx").on(t.projectId),
     index("issues_status_idx").on(t.status),
@@ -374,8 +393,7 @@ export const apiKeys = sqliteTable(
 );
 
 // An Agent conversation is bound to one project, the way a Codex thread is bound to a
-// folder. Chat threads can only read; Work threads may change TaCos data, one
-// user-approved action at a time.
+// folder. Writes go through MCP tools with per-turn approval.
 export const agentThreads = sqliteTable(
   "agent_threads",
   {
@@ -383,9 +401,7 @@ export const agentThreads = sqliteTable(
     workspaceId: text("workspace_id").notNull(),
     projectId: text("project_id").notNull(),
     title: text("title").notNull().default(""),
-    // chat | work
-    mode: text("mode").notNull().default("chat"),
-    // codex | pi | api — recorded so a reopened thread shows what answered it
+    // codex | pi | … — recorded so a reopened thread shows what answered it
     engine: text("engine").notNull().default("codex"),
     // Codex model slug and reasoning effort; empty means "whatever the CLI is set to"
     model: text("model").notNull().default(""),
@@ -394,6 +410,8 @@ export const agentThreads = sqliteTable(
     approval: text("approval").notNull().default("ask"),
     // private: only the author; shared: every workspace member can read and follow along
     visibility: text("visibility").notNull().default("private"),
+    // H-COLLAB-08: the task that "用 Agent 推进" opened this chat for, or null.
+    focusIssueId: text("focus_issue_id"),
     createdBy: text("created_by").notNull(),
     createdAt: text("created_at").notNull(),
     updatedAt: text("updated_at").notNull(),
@@ -421,6 +439,8 @@ export const agentMessages = sqliteTable(
     threadId: text("thread_id").notNull(),
     // user | assistant
     role: text("role").notNull(),
+    // H-COLLAB-09: who wrote a user message. Null for assistant replies and old rows.
+    authorId: text("author_id"),
     content: text("content").notNull().default(""),
     createdAt: text("created_at").notNull(),
   },
@@ -451,6 +471,23 @@ export const agentSteps = sqliteTable(
 
 // The workspace's AI provider. `apiKey` is encrypted with a key stored next to the
 // SQLite file, so a copied database alone does not expose the provider credential.
+// One person's model API. The same user sees the same APIs in every workspace.
+export const userModelKeys = sqliteTable(
+  "user_model_keys",
+  {
+    userId: text("user_id").notNull(),
+    provider: text("provider").notNull(),
+    apiKey: text("api_key").notNull(),
+    editModel: text("edit_model").notNull().default(""),
+    forEdits: integer("for_edits").notNull().default(0),
+    label: text("label").notNull().default(""),
+    baseUrl: text("base_url").notNull().default(""),
+    models: text("models").notNull().default(""),
+    updatedAt: text("updated_at").notNull(),
+  },
+  (table) => [primaryKey({ columns: [table.userId, table.provider] })]
+);
+
 export const aiSettings = sqliteTable("ai_settings", {
   workspaceId: text("workspace_id").primaryKey(),
   baseUrl: text("base_url").notNull(),
@@ -460,4 +497,6 @@ export const aiSettings = sqliteTable("ai_settings", {
   updatedAt: text("updated_at").notNull(),
   engine: text("engine").notNull().default("api"),
   proxy: text("proxy").notNull().default(""),
+  // JSON map of HarnessId -> enabled. Empty object means every harness is enabled.
+  harnessEnabled: text("harness_enabled").notNull().default("{}"),
 });

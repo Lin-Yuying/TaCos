@@ -1,9 +1,15 @@
 import { AGENT_TOOLS, executeAgentTool } from "@/lib/agent-tools";
-import { resolveAgentToolGrant } from "@/lib/agent-sessions";
+import { decideToolApproval } from "@/lib/agent-tool-policy";
+import {
+  publishToolApproval,
+  resolveAgentToolGrant,
+  waitForAgentApproval,
+} from "@/lib/agent-sessions";
 
-// The Codex MCP shim calls this from a child process, not from a browser: the bearer
+// The Codex/Pi MCP shim calls this from a child process, not from a browser: the bearer
 // token is issued per Agent turn and pins the call to one thread, project and person.
 // Nothing here trusts the caller's idea of which workspace it is talking to.
+// H-P4-21: write/delete tools wait for a browser card when the harness has no elicitation.
 
 function grantFor(request: Request) {
   const header = request.headers.get("authorization") ?? "";
@@ -13,6 +19,13 @@ function grantFor(request: Request) {
 
 function unauthorized() {
   return Response.json({ error: "Agent tool session expired" }, { status: 401 });
+}
+
+function denied(message: string) {
+  return Response.json({
+    content: [{ type: "text", text: message }],
+    isError: true,
+  });
 }
 
 export async function GET(request: Request) {
@@ -38,6 +51,28 @@ export async function POST(request: Request) {
   }
   const name = typeof body.name === "string" ? body.name : "";
   if (!name) return Response.json({ error: "Tool name is required" }, { status: 400 });
+  const spec = AGENT_TOOLS.find((tool) => tool.name === name);
+  if (!spec) {
+    return denied(`Unknown tool "${name}"`);
+  }
+
+  // TaCos mediates approval for every harness. Delete always confirms (H-P5-26).
+  if (decideToolApproval(spec, grant) === "confirm") {
+    const requestId = `approval-${grant.threadId}-${name}-${Date.now()}`;
+    const card = {
+      requestId,
+      tool: `tacos.${name}`,
+      message: `Allow tool "${name}"?`,
+      description: spec.description,
+      params: body.arguments,
+    };
+    publishToolApproval(grant.threadId, card);
+    const decision = await waitForAgentApproval(requestId);
+    if (decision !== "accept") {
+      return denied(`The person denied tool "${name}".`);
+    }
+  }
+
   try {
     const result = await executeAgentTool(
       {
@@ -45,6 +80,7 @@ export async function POST(request: Request) {
         projectId: grant.projectId,
         projectKey: grant.projectKey,
         userId: grant.userId,
+        threadId: grant.threadId,
       },
       name,
       body.arguments

@@ -70,9 +70,10 @@ already-signed executable:
    → `release-standalone/TaCos-Local-Setup-<version>.exe`.
 4. Submit the installer to SignPath with `SIGNPATH_ARTIFACT_CONFIGURATION_SLUG`.
 
-The workflow currently submits only the NSIS installer (step 4) — the single-stage path is
-kept so unsigned builds keep working before SignPath approves the project. Steps 1–3 must be
-wired in before the signed build can pass Smart App Control.
+When `SIGNPATH_API_TOKEN` and `SIGNPATH_APP_ARTIFACT_CONFIGURATION_SLUG` are set, the
+Desktop installers workflow runs this two-stage path automatically (sign `TaCos.exe`, then
+build and sign the NSIS installer). If the app artifact slug is missing, the workflow still
+signs only the installer so unsigned local experiments keep working.
 
 ## Verify a signed build
 
@@ -98,3 +99,16 @@ Trusted Root program.
 - **Azure Trusted Signing**: not available to organizations outside the US/Canada.
 
 macOS Developer ID signing and notarization are separate and not covered by this workflow.
+
+## App updates and UAC (H-DESKTOP-UPDATE-08)
+
+The NSIS installer uses a per-user default (`perMachine: false`) and the app requests
+`asInvoker`. A normal install lands under the user profile, so `electron-updater`
+`quitAndInstall` can run the silent NSIS helper without an extra UAC prompt.
+
+Users who change the install directory into a machine-wide folder (for example
+`Program Files`) may still see elevation once. Prefer the default per-user path for
+seamless desktop updates.
+
+Two-stage SignPath signing (app executable, then installer) keeps Smart App Control from
+blocking the updated `TaCos.exe` after an in-app update.

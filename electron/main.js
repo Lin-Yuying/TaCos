@@ -13,6 +13,7 @@ const path = require("node:path");
 const fs = require("node:fs");
 const nodeNet = require("node:net");
 const { spawn, spawnSync } = require("node:child_process");
+const { initAppUpdater, getAppUpdateMenuItem } = require("./updater");
 
 const DEFAULT_SERVER = "http://localhost:3000";
 const isMac = process.platform === "darwin";
@@ -655,6 +656,8 @@ function buildMenu() {
       label: "Help",
       role: "help",
       submenu: [
+        getAppUpdateMenuItem(),
+        { type: "separator" },
         {
           label: "Markdown Syntax",
           click: () => void openMarkdownGuide(),
@@ -836,6 +839,8 @@ if (!app.requestSingleInstanceLock()) {
     nativeTheme.themeSource = "light";
     Menu.setApplicationMenu(buildMenu());
     logLine(`app ready ${app.getVersion()} on ${process.platform}-${process.arch}`);
+    // Packaged builds only. Dev stays idle. No UI / timers in H-DESKTOP-UPDATE-01.
+    initAppUpdater({ log: logLine });
     // Windows and Linux pass the opened file on the command line instead of sending
     // open-file; both end up in the same queue.
     for (const arg of process.argv.slice(1)) queueOpenFile(arg);

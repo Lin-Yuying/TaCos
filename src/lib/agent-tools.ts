@@ -1,6 +1,8 @@
 import {
   addComment,
+  claimIssue,
   createIssue,
+  deleteIssue,
   getIssueDetail,
   getProject,
   listIssues,
@@ -16,16 +18,17 @@ import {
 import { createPage, listPages, updatePage } from "./pages";
 import { PRIORITY_NAMES, STATUS_META } from "./constants";
 
-// Tools the Agent can call in Work mode. Every call is already approved by the person
-// in the Agent tab before Codex reaches this module, and each one is scoped to the
-// project the conversation is bound to: an agent that was asked about project A cannot
-// quietly edit project B.
+// Tools the Agent can call through the TaCos MCP bridge. Delete tools always wait for
+// a card, even when approval is Full (H-P3-19). Each call is scoped to the project the
+// conversation is bound to.
 
 export type AgentToolContext = {
   workspaceId: string;
   projectId: string;
   projectKey: string;
   userId: string;
+  // conversation that runs the tool; stored as the source chat of new tasks
+  threadId?: string;
 };
 
 export type AgentToolSpec = {
@@ -38,6 +41,8 @@ export type AgentToolSpec = {
   };
   // Reads are cheap and harmless; writes show up in TaCos and need the permission card.
   write: boolean;
+  // Delete tools always wait for a card, even when approval is Full (H-P3-19).
+  delete?: boolean;
 };
 
 const PRIORITY_LIST = Object.values(PRIORITY_NAMES).join(", ");
@@ -53,7 +58,10 @@ export const AGENT_TOOLS: AgentToolSpec[] = [
     inputSchema: {
       type: "object",
       properties: {
-        status: { type: "string", description: 'todo, in_progress, done, canceled, "active" or "all"' },
+        status: {
+          type: "string",
+          description: 'todo, in_progress, done, canceled, "active", "open" (approved and unclaimed) or "all"',
+        },
         q: { type: "string", description: "Free-text search across title, description and identifier" },
         limit: { type: "number", description: "Max results (default 30, max 100)" },
       },
@@ -193,6 +201,17 @@ export const AGENT_TOOLS: AgentToolSpec[] = [
     },
   },
   {
+    name: "claim_task",
+    description:
+      "Claim an approved, open task for the current user so they push it forward. A task that waits for review cannot be claimed.",
+    write: true,
+    inputSchema: {
+      type: "object",
+      properties: { id: { type: "string", description: "Task identifier or id" } },
+      required: ["id"],
+    },
+  },
+  {
     name: "update_overview",
     description:
       "Replace this project's Overview document with the full markdown you pass. Read it with get_overview first.",
@@ -243,9 +262,29 @@ export const AGENT_TOOLS: AgentToolSpec[] = [
       required: ["id", "markdown"],
     },
   },
+  {
+    name: "delete_task",
+    description:
+      "Move a task to Trash. Always asks for a confirmation card, even when approval is Full.",
+    write: true,
+    delete: true,
+    inputSchema: {
+      type: "object",
+      properties: {
+        id: { type: "string", description: "Task id or identifier (for example PROJ-12)" },
+      },
+      required: ["id"],
+    },
+  },
 ];
 
 const READ_TOOLS = new Set(AGENT_TOOLS.filter((tool) => !tool.write).map((tool) => tool.name));
+const DELETE_TOOLS = new Set(AGENT_TOOLS.filter((tool) => tool.delete).map((tool) => tool.name));
+
+export function isDeleteTool(name: string): boolean {
+  return DELETE_TOOLS.has(name);
+}
+
 
 function asRecord(value: unknown): Record<string, unknown> {
   return value && typeof value === "object" ? (value as Record<string, unknown>) : {};
@@ -304,6 +343,11 @@ function taskSummary(issue: {
 
 const AGENT_ACTOR = { kind: "agent" as const, label: "codex", via: "mcp" as const };
 
+// Tasks that an agent publishes name the person who ran it and wait for review (H-COLLAB-02).
+function publishingActor(ctx: AgentToolContext) {
+  return { ...AGENT_ACTOR, publishedBy: ctx.userId, sourceThreadId: ctx.threadId };
+}
+
 // One approval covers a whole batch, so a batch is capped rather than trusted.
 const BATCH_LIMIT = 20;
 
@@ -353,7 +397,7 @@ async function createOne(ctx: AgentToolContext, args: ToolArgs): Promise<string>
         : [],
       project: ctx.projectKey,
     },
-    AGENT_ACTOR
+    publishingActor(ctx)
   );
   return `Created ${detail.issue.identifier} — ${detail.issue.title}`;
 }
@@ -388,7 +432,7 @@ export async function executeAgentTool(
       const issues = await listIssues(ctx.workspaceId, {
         projectId: ctx.projectId,
         viewerId: ctx.userId,
-        status: status === "active" || status === "all" ? status : asStatus(status) ?? "all",
+        status: status === "active" || status === "open" || status === "all" ? status : asStatus(status) ?? "all",
         q: str(args.q) || undefined,
         limit: Math.min(100, Math.max(1, Number(args.limit) || 30)),
       });
@@ -423,6 +467,12 @@ export async function executeAgentTool(
           2
         ),
       };
+    }
+    case "claim_task": {
+      // The agent claims for the person who runs it; the claim is theirs, not the agent's.
+      const { issue } = await requireProjectTask(ctx, str(args.id));
+      await claimIssue(ctx.workspaceId, issue.id, ctx.userId);
+      return { text: `Claimed ${issue.identifier} — ${issue.title} for you` };
     }
     case "get_overview": {
       const project = await getProject(ctx.workspaceId, ctx.projectId);
@@ -546,6 +596,11 @@ export async function executeAgentTool(
       // updatePage applies the person's own page permissions to the agent's write.
       const page = await updatePage(ctx.workspaceId, id, ctx.userId, { doc: markdown });
       return { text: `Replaced document "${page.title}" (${markdown.length} characters)` };
+    }
+    case "delete_task": {
+      const { issue } = await requireProjectTask(ctx, str(args.id));
+      await deleteIssue(ctx.workspaceId, issue.identifier);
+      return { text: `Moved ${issue.identifier} to Trash — ${issue.title}` };
     }
     default:
       throw new TacosError(`Unknown tool "${name}"`, 400);
