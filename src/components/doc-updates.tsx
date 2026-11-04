@@ -8,6 +8,7 @@ import {
   getPageVersionChangeAction,
   listPageVersionsAction,
   restorePageVersionAction,
+  undoAgentEditAction,
 } from "@/app/pages-actions";
 import { docDiffRows } from "@/lib/doc-diff";
 import { timeAgo } from "@/lib/format";
@@ -49,6 +50,7 @@ function versionLabel(version: PageVersion, t: ReturnType<typeof useT>): string 
   const name = version.actor?.displayName || t("Someone");
   if (version.reason === "earlier") return t("Earlier version");
   if (version.reason === "unsaved") return t("Unsaved text from {name}", { name });
+  if (version.reason === "undo") return `${name} · ${t("Undid version {n}", { n: version.restoredFrom ?? 0 })}`;
   if (version.reason === "restore") return `${name} · ${t("Restored version {n}", { n: version.restoredFrom ?? 0 })}`;
   return name;
 }
@@ -104,9 +106,9 @@ export function DocUpdatesPanel({
     else setError(result.error);
   }
 
-  async function restore(id: string) {
+  async function restore(id: string, action = restorePageVersionAction) {
     await beforeRestore();
-    const result = await restorePageVersionAction(workspaceId, pageId, id);
+    const result = await action(workspaceId, pageId, id);
     if (!result.ok) {
       setError(result.error);
       return;
@@ -172,6 +174,16 @@ export function DocUpdatesPanel({
                 <div className="mt-2 flex items-center gap-2 text-[11.5px] text-faint">
                   {t("Version {n}", { n: version.seq })}
                   {version.id === current && <span>· {t("Current")}</span>}
+                  {canEdit && version.id === current && version.via === "mcp" && version.reason === "edit" && (
+                    <button
+                      type="button"
+                      data-doc-undo-agent
+                      onClick={() => void restore(version.id, undoAgentEditAction)}
+                      className="ml-auto rounded-md border border-border px-2 py-1 text-[12px] font-medium text-muted hover:border-border-strong hover:text-text"
+                    >
+                      {t("Undo this Agent edit")}
+                    </button>
+                  )}
                   {canEdit && version.id !== current && (
                     <button
                       type="button"

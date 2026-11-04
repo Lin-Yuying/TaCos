@@ -17,6 +17,7 @@ import {
   purgePage,
   restorePage,
   restorePageVersion,
+  undoAgentEdit,
   setPageMemberLevel,
   setPageShareLevel,
   setPageShared,
@@ -138,6 +139,19 @@ export async function getPageVersionChangeAction(
   return run(async () => {
     const { user } = await requireWorkspace(workspaceId);
     return getPageVersionChange(workspaceId, pageId, user.id, versionId);
+  });
+}
+
+export async function undoAgentEditAction(
+  workspaceId: string,
+  pageId: string,
+  versionId: string
+): Promise<ActionResult<DocPage>> {
+  return run(async () => {
+    const { user } = await requireWorkspace(workspaceId);
+    const page = await undoAgentEdit(workspaceId, pageId, user.id, { versionId });
+    refresh(workspaceId);
+    return page;
   });
 }
 

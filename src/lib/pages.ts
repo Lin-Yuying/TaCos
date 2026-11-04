@@ -515,7 +515,7 @@ type VersionWrite = {
   doc: string;
   actorId: string;
   via: string;
-  reason: "edit" | "restore" | "unsaved";
+  reason: "edit" | "restore" | "undo" | "unsaved";
   restoredFrom?: number;
 };
 
@@ -727,7 +727,7 @@ export async function getPageVersionChange(
   const [before] = await db
     .select({ title: pageVersions.title, doc: pageVersions.doc, reason: pageVersions.reason })
     .from(pageVersions)
-    .where(and(eq(pageVersions.pageId, pageId), lt(pageVersions.seq, version.seq), inArray(pageVersions.reason, ["edit", "restore", "earlier"])))
+    .where(and(eq(pageVersions.pageId, pageId), lt(pageVersions.seq, version.seq), inArray(pageVersions.reason, PAGE_TEXT_REASONS)))
     .orderBy(desc(pageVersions.seq))
     .limit(1);
   return {
@@ -755,23 +755,7 @@ export async function restorePageVersion(
     .where(and(eq(pageVersions.pageId, pageId), eq(pageVersions.id, versionId)))
     .limit(1);
   if (!version) throw new TacosError("Version not found", 404);
-  const written = await getDb()
-    .update(pages)
-    .set({
-      title: version.title,
-      doc: version.doc,
-      revision: page.revision + 1,
-      updatedAt: nowIso(),
-    })
-    .where(
-      and(
-        eq(pages.workspaceId, workspaceId),
-        eq(pages.id, pageId),
-        eq(pages.revision, page.revision)
-      )
-    );
-  if (written.changes === 0) throw new TacosError(PAGE_CONFLICT, 409);
-  await recordVersion(page, {
+  return writeBack(page, {
     title: version.title,
     doc: version.doc,
     actorId: viewerId,
@@ -779,9 +763,61 @@ export async function restorePageVersion(
     reason: "restore",
     restoredFrom: version.seq,
   });
-  const updated = await findPage(workspaceId, pageId);
+}
+
+async function writeBack(page: DocPage, write: VersionWrite): Promise<DocPage> {
+  const written = await getDb()
+    .update(pages)
+    .set({ title: write.title, doc: write.doc, revision: page.revision + 1, updatedAt: nowIso() })
+    .where(and(eq(pages.workspaceId, page.workspaceId), eq(pages.id, page.id), eq(pages.revision, page.revision)));
+  if (written.changes === 0) throw new TacosError(PAGE_CONFLICT, 409);
+  await recordVersion(page, write);
+  const updated = await findPage(page.workspaceId, page.id);
   if (!updated) throw new TacosError("Page not found", 404);
   return updated;
+}
+
+// Versions that were the page's text at some point; kept unsaved text never was.
+const PAGE_TEXT_REASONS = ["edit", "restore", "undo", "earlier"];
+
+/**
+ * Take back an Agent's edit. Only the page's newest text can be undone this way, because going
+ * back further would also drop what came after it: that is what restoring a version is for.
+ * Without versionId, the newest version must be an Agent edit by this person.
+ */
+export async function undoAgentEdit(
+  workspaceId: string,
+  pageId: string,
+  viewerId: string,
+  options: { versionId?: string; via?: string } = {}
+): Promise<DocPage> {
+  const page = await getPage(workspaceId, pageId, viewerId);
+  if (!page) throw new TacosError("Page not found", 404);
+  await requirePageLevel(page, viewerId, "edit");
+  const db = getDb();
+  const [latest, before] = await db
+    .select()
+    .from(pageVersions)
+    .where(and(eq(pageVersions.pageId, pageId), inArray(pageVersions.reason, PAGE_TEXT_REASONS)))
+    .orderBy(desc(pageVersions.seq))
+    .limit(2);
+  if (options.versionId && options.versionId !== latest?.id) {
+    throw new TacosError("This document changed after that edit; restore a version instead", 409);
+  }
+  if (!latest || latest.via !== "mcp" || latest.reason !== "edit") {
+    throw new TacosError("The newest change to this document is not an Agent edit", 409);
+  }
+  if (!options.versionId && latest.actorId !== viewerId) {
+    throw new TacosError("The newest change to this document was made by someone else's Agent", 409);
+  }
+  return writeBack(page, {
+    title: before?.title ?? page.title,
+    doc: before?.doc ?? "",
+    actorId: viewerId,
+    via: options.via ?? "you",
+    reason: "undo",
+    restoredFrom: latest.seq,
+  });
 }
 
 /** For the conflict prompt: the page as it is now and who last changed it. */

@@ -31,7 +31,7 @@ Item-level checks stay cheap (types, check scripts). End-to-end tests and screen
 | 8 | Sidebar shared and private tree, multi-level breadcrumb, document favorites | done | Check script for move rules; screenshots in item 15 |
 | 9 | Cover, image and attachment upload with size limit | done | Check script: over-limit upload refused; resumed upload completes |
 | 10 | Database on tasks: custom fields, table, board, calendar views, filter, sort | done | Check script for field and filter logic; screenshots in item 15 |
-| 11 | Agent partial edit and undo, shown in updates panel | todo | Check script: partial edit leaves other text unchanged; undo restores |
+| 11 | Agent partial edit and undo, shown in updates panel | done | Check script: partial edit leaves other text unchanged; undo restores |
 | 12 | Agent workspace-level read and search, cross-workspace read; writes name a target | todo | Check script: write without target refused; no read outside joined workspaces |
 | 13 | Hand a task to own Agent, queue while computer is off, write back comment and notify | todo | Check script: queued turn runs when runner returns; write asks for approval by default |
 | 14 | Realtime co-editing, presence avatars, cursors | todo | Two clients converge in a check script; if unstable, `blocked` and 2.2 ships without it |
@@ -73,3 +73,8 @@ Levels are view, comment and edit (`src/lib/page-level.ts`). A shared page has o
 - A view's filter and sort are saved per browser in localStorage. Saved shared views are not built.
 - The calendar is a month view. Dragging a task to another day changes its due date. Tasks with no due date are counted above the calendar.
 - TanStack Table 9 and FullCalendar 7 are the current major versions. FullCalendar 7 replaces `@fullcalendar/core`, `daygrid` and `interaction` with subpaths of `@fullcalendar/react` and needs `temporal-polyfill`.
+
+### Item 11: Agent partial edit and undo
+
+- `edit_doc` matches exact text, and each match must be unique, so an edit cannot land in the wrong place. If any edit in a call fails, the document does not change.
+- Undo only takes back the newest text. Once anyone has edited after the Agent, undo refuses and the person restores a version instead, because undo would drop their text.

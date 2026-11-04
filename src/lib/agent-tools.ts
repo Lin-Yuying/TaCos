@@ -15,7 +15,8 @@ import {
   type Priority,
   type Status,
 } from "./issues";
-import { createPage, listPages, updatePage } from "./pages";
+import { applyDocEdits } from "./doc-edits";
+import { createPage, getPage, listPages, undoAgentEdit, updatePage } from "./pages";
 import { PRIORITY_NAMES, STATUS_META } from "./constants";
 
 // Tools the Agent can call through the TaCos MCP bridge. Delete tools always wait for
@@ -249,9 +250,47 @@ export const AGENT_TOOLS: AgentToolSpec[] = [
     },
   },
   {
+    name: "edit_doc",
+    description:
+      "Change passages of a document and leave the rest exactly as it is. Prefer this to update_doc. Read it with get_doc first. Each find must match exactly one place in the current markdown; if any edit fails, nothing changes. An empty replace deletes the passage.",
+    write: true,
+    inputSchema: {
+      type: "object",
+      properties: {
+        id: { type: "string", description: "Document id from get_doc" },
+        edits: {
+          type: "array",
+          description: "Applied in order",
+          items: {
+            type: "object",
+            properties: {
+              find: { type: "string", description: "Exact text to replace, long enough to match one place" },
+              replace: { type: "string", description: "Text to put there" },
+            },
+            required: ["find", "replace"],
+          },
+        },
+      },
+      required: ["id", "edits"],
+    },
+  },
+  {
+    name: "undo_doc_edit",
+    description:
+      "Take back your latest change to a document, when nobody has changed the document since. Everything is kept in its version history.",
+    write: true,
+    inputSchema: {
+      type: "object",
+      properties: {
+        id: { type: "string", description: "Document id" },
+      },
+      required: ["id"],
+    },
+  },
+  {
     name: "update_doc",
     description:
-      "Replace a document's complete markdown. Read it with get_doc first and send the whole new body; this overwrites what is there.",
+      "Replace a document's complete markdown, for rewriting most of it; use edit_doc for smaller changes. Read it with get_doc first and send the whole new body; this overwrites what is there.",
     write: true,
     inputSchema: {
       type: "object",
@@ -587,6 +626,29 @@ export async function executeAgentTool(
         await updatePage(ctx.workspaceId, page.id, ctx.userId, { doc: markdown }, { via: "mcp" });
       }
       return { text: `Created document "${page.title}" in ${ctx.projectKey}` };
+    }
+    case "edit_doc": {
+      const id = str(args.id);
+      if (!id) throw new TacosError("Document id is required — call get_doc first");
+      const page = await getPage(ctx.workspaceId, id, ctx.userId);
+      if (!page) throw new TacosError(`Document "${id}" not found`, 404);
+      const edits = (Array.isArray(args.edits) ? args.edits : []).map((raw) => {
+        const edit = asRecord(raw);
+        return {
+          find: typeof edit.find === "string" ? edit.find : "",
+          replace: typeof edit.replace === "string" ? edit.replace : "",
+        };
+      });
+      const doc = applyDocEdits(page.doc, edits);
+      // baseRevision refuses the write when someone saved after the edits were matched.
+      await updatePage(ctx.workspaceId, id, ctx.userId, { doc, baseRevision: page.revision }, { via: "mcp" });
+      return { text: `Edited "${page.title}": ${edits.length} passage(s) changed; the rest is as it was` };
+    }
+    case "undo_doc_edit": {
+      const id = str(args.id);
+      if (!id) throw new TacosError("Document id is required");
+      const page = await undoAgentEdit(ctx.workspaceId, id, ctx.userId, { via: "mcp" });
+      return { text: `Took back the latest edit to "${page.title}"` };
     }
     case "update_doc": {
       const id = str(args.id);
