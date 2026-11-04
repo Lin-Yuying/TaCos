@@ -68,7 +68,7 @@ fs.appendFileSync(${JSON.stringify(piLog)}, JSON.stringify({ pid: process.pid, c
     const answer = await fetch(process.env.TACOS_AGENT_URL + "/api/agent/tools", {
       method: "POST",
       headers: { "Content-Type": "application/json", Authorization: "Bearer " + process.env.TACOS_AGENT_TOKEN },
-      body: JSON.stringify({ name: process.env.CHECK_TOOL_NAME, arguments: {} }),
+      body: JSON.stringify({ name: process.env.CHECK_TOOL_NAME, arguments: { workspace: "w1" } }),
     }).then((r) => r.json());
     fs.appendFileSync(${JSON.stringify(piLog)}, JSON.stringify({ tool: answer }) + "\\n");
   }

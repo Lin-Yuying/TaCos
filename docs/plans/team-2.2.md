@@ -32,7 +32,7 @@ Item-level checks stay cheap (types, check scripts). End-to-end tests and screen
 | 9 | Cover, image and attachment upload with size limit | done | Check script: over-limit upload refused; resumed upload completes |
 | 10 | Database on tasks: custom fields, table, board, calendar views, filter, sort | done | Check script for field and filter logic; screenshots in item 15 |
 | 11 | Agent partial edit and undo, shown in updates panel | done | Check script: partial edit leaves other text unchanged; undo restores |
-| 12 | Agent workspace-level read and search, cross-workspace read; writes name a target | todo | Check script: write without target refused; no read outside joined workspaces |
+| 12 | Agent workspace-level read and search, cross-workspace read; writes name a target | done | Check script: write without target refused; no read outside joined workspaces |
 | 13 | Hand a task to own Agent, queue while computer is off, write back comment and notify | todo | Check script: queued turn runs when runner returns; write asks for approval by default |
 | 14 | Realtime co-editing, presence avatars, cursors | todo | Two clients converge in a check script; if unstable, `blocked` and 2.2 ships without it |
 | 15 | Batch E2E and screenshots with real models and new data dirs; fresh-context review; fix findings | todo | Report lists tested and untested |
@@ -78,3 +78,10 @@ Levels are view, comment and edit (`src/lib/page-level.ts`). A shared page has o
 
 - `edit_doc` matches exact text, and each match must be unique, so an edit cannot land in the wrong place. If any edit in a call fails, the document does not change.
 - Undo only takes back the newest text. Once anyone has edited after the Agent, undo refuses and the person restores a version instead, because undo would drop their text.
+
+### Item 12: Agent reach across workspaces
+
+- Reads default to this conversation's project. `list_tasks`, `get_task`, `get_overview`, `get_doc`, `list_projects` and `search_workspace` take a workspace, and some take a project. `get_task` now reads any task the person can see in the workspace.
+- Every write tool requires `workspace`. A write without it is refused before any approval card appears. A write to another workspace also needs `project`, except document edits, and always shows a card, whatever the approval level.
+- The refusal for an unjoined workspace reads the same as for one that does not exist.
+- The Agent can read custom fields through `get_task`. It cannot write them.

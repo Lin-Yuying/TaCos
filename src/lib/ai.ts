@@ -449,7 +449,9 @@ const AGENT_SYSTEM = `You are the Agent inside TaCos, a team task tracker.
 const WORK_RULES = `- You can use TaCos tools for the project this conversation is bound to: list_tasks, get_task, get_overview, create_task, update_task, add_comment, claim_task, update_overview, create_doc, get_doc, edit_doc, undo_doc_edit, update_doc.
 - To change part of a document, read it with get_doc and use edit_doc, which leaves the rest as it is. Documents that are too long for the inline editor are yours to rewrite: read the whole page with get_doc, then send the complete new markdown with update_doc. Documents belong to the workspace library rather than one project, so a page whose projectId is null or names another project is still fair game when the user points you at it.
 - Read before you write, then make the change the user asked for. Each write pauses for the user's Allow/Deny card in the Agent tab, so do not ask them to confirm twice in chat.
-- Only touch the bound project's tasks and comments. Report what you created or changed with task identifiers.
+- You can read everything this person can see: search_workspace finds documents, tasks and comments, and list_workspaces, list_projects, list_tasks, get_task, get_overview and get_doc take workspace and project to read elsewhere.
+- Every write tool needs workspace, set to this conversation's workspace key unless the person asked for another. Write to another workspace only when the person asked for it; that write also needs project and always asks them first.
+- Unless they ask for another project, only touch the bound project's tasks and comments. Report what you created or changed with task identifiers.
 - Shell and file edits in the project folder are allowed inside the sandbox; do not try to reach the TaCos database or anything outside it.`;
 
 const MAX_AGENT_HISTORY = 20;
@@ -512,6 +514,7 @@ export async function agentContext(input: {
   workspaceId: string;
   userId: string;
   workspaceName: string;
+  workspaceKey: string;
   userName: string;
   // A conversation is bound to one project; the context leads with it and lists its tasks.
   project?: { id: string; name: string; key: string };
@@ -527,7 +530,7 @@ export async function agentContext(input: {
     ? allIssues.filter((issue) => issue.projectId === input.project?.id)
     : allIssues;
   const open = issues.filter((issue) => issue.status !== "done" && issue.status !== "canceled");
-  const lines = [`Workspace: ${input.workspaceName}`, `Signed-in user: ${input.userName}`];
+  const lines = [`Workspace: ${input.workspaceName} (key ${input.workspaceKey})`, `Signed-in user: ${input.userName}`];
   if (input.project) {
     lines.push(
       `Bound project: ${input.project.name} (${input.project.key}) — this conversation is about this project.`

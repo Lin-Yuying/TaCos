@@ -19,7 +19,7 @@ async function main() {
   const [user] = await db.select().from(users).limit(1);
   assert(project && user, "seed data required");
   const ctx = { workspaceId: project.workspaceId, projectId: project.id, projectKey: project.key, userId: user.id, threadId: "thread-test" };
-  const out = (await executeAgentTool(ctx, "create_task", { title: "Agent published task" })).text;
+  const out = (await executeAgentTool(ctx, "create_task", { workspace: ctx.workspaceId, title: "Agent published task" })).text;
   const identifier = /Created (\S+)/.exec(out)?.[1];
   assert(identifier, `agent create failed: ${out}`);
   const row = (await findIssueRow(project.workspaceId, identifier)) as Record<string, unknown> | null;

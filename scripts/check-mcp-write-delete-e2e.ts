@@ -84,7 +84,7 @@ async function main() {
     new Request("http://local/api/agent/tools", {
       method: "POST",
       headers: { authorization: `Bearer ${grant.token}`, "content-type": "application/json" },
-      body: JSON.stringify({ name: spec.name, arguments: { key: "P-1" } }),
+      body: JSON.stringify({ name: spec.name, arguments: { key: "P-1", workspace: "w" } }),
     })
   );
   unsubscribe();

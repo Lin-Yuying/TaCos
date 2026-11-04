@@ -22,14 +22,14 @@ async function main() {
   const [user] = await db.select().from(users).limit(1);
   const ctx = { workspaceId: project.workspaceId, projectId: project.id, projectKey: project.key, userId: user.id };
   const human = await createIssue(project.workspaceId, { title: "Claim me", project: project.key }, { kind: "user", userId: user.id, displayName: user.displayName });
-  const out = (await executeAgentTool(ctx, "claim_task", { id: human.issue.identifier })).text;
+  const out = (await executeAgentTool(ctx, "claim_task", { workspace: ctx.workspaceId, id: human.issue.identifier })).text;
   const row = await findIssueRow(project.workspaceId, human.issue.identifier);
   assert(row?.claimedBy === user.id, `claim_task must claim for the user: ${out}`);
 
-  const agentOut = (await executeAgentTool(ctx, "create_task", { title: "Pending one" })).text;
+  const agentOut = (await executeAgentTool(ctx, "create_task", { workspace: ctx.workspaceId, title: "Pending one" })).text;
   const pendingId = /Created (\S+)/.exec(agentOut)?.[1];
   let refused = false;
-  try { await executeAgentTool(ctx, "claim_task", { id: pendingId }); } catch { refused = true; }
+  try { await executeAgentTool(ctx, "claim_task", { workspace: ctx.workspaceId, id: pendingId }); } catch { refused = true; }
   assert(refused, "claim_task must refuse a task that waits for review");
 
   const open = JSON.parse((await executeAgentTool(ctx, "list_tasks", { status: "open" })).text) as { tasks: { identifier: string }[] };

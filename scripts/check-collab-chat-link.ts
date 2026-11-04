@@ -25,7 +25,7 @@ async function main() {
   const thread = (await threads.startAgentThread({ workspaceId: ws, projectId: project.id, visibility: "private", engine: "codex", userId: owner.id })) as { id: string };
   await threads.renameAgentThread(ws, owner.id, thread.id, "Plan the sprint");
   const ctx = { workspaceId: ws, projectId: project.id, projectKey: project.key, userId: owner.id, threadId: thread.id };
-  const out = (await executeAgentTool(ctx, "create_task", { title: "From chat" })).text;
+  const out = (await executeAgentTool(ctx, "create_task", { workspace: ctx.workspaceId, title: "From chat" })).text;
   const identifier = /Created (\S+)/.exec(out)?.[1];
 
   const tasks = (await threads.listThreadTasks(ws, thread.id, owner.id)) as { identifier: string }[];
