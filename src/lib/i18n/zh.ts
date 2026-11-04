@@ -891,6 +891,9 @@ const zh: Record<string, string> = {
   "Add your own API in Settings → Model API.": "请在 设置 → 模型 API 中添加自己的 API。",
   "Install Pi (npm i -g @earendil-works/pi-coding-agent).": "安装 Pi（npm i -g @earendil-works/pi-coding-agent）。",
   "WorkBuddy is not signed in on this machine. Sign in to WorkBuddy, or add your own API in Settings → Model API.": "这台机器上的 WorkBuddy 未登录。请先登录 WorkBuddy，或在 设置 → 模型 API 中添加自己的 API。",
+  "Write something, or type / for commands…": "写点什么，或者输入 / 选择命令…",
+  "Rows and columns": "行和列",
+  Table: "表格",
 };
 
 export default zh;

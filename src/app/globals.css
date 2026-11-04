@@ -210,3 +210,40 @@ html[data-desktop] .app-auth-titlebar {
 html[data-desktop] .app-auth-menu {
   -webkit-app-region: no-drag;
 }
+
+/* The document editor reads the same as the rendered document. */
+.document-editor .ProseMirror {
+  min-height: 160px;
+  outline: none;
+  font-size: 13.5px;
+  line-height: 1.625;
+  white-space: pre-wrap;
+}
+.document-editor .ProseMirror > * + * { margin-top: 6px; }
+.document-editor .ProseMirror h1 { font-size: 20px; font-weight: 600; letter-spacing: -0.015em; margin-top: 20px; }
+.document-editor .ProseMirror h2 { font-size: 17px; font-weight: 600; letter-spacing: -0.015em; margin-top: 20px; }
+.document-editor .ProseMirror h3 { font-size: 15px; font-weight: 600; letter-spacing: -0.015em; margin-top: 20px; }
+.document-editor .ProseMirror h4,
+.document-editor .ProseMirror h5,
+.document-editor .ProseMirror h6 { font-size: 14px; font-weight: 600; margin-top: 20px; }
+.document-editor .ProseMirror ul { list-style: disc; padding-left: 20px; }
+.document-editor .ProseMirror ol { list-style: decimal; padding-left: 20px; }
+.document-editor .ProseMirror ul[data-type="taskList"] { list-style: none; padding-left: 0; }
+.document-editor .ProseMirror li[data-checked] { display: flex; align-items: flex-start; gap: 8px; }
+.document-editor .ProseMirror li[data-checked] > label { flex-shrink: 0; padding-top: 2px; }
+.document-editor .ProseMirror li[data-checked] > div { flex: 1; min-width: 0; }
+.document-editor .ProseMirror li[data-checked="true"] > div { color: var(--color-faint); text-decoration: line-through; }
+.document-editor .ProseMirror blockquote { border-left: 2px solid var(--color-border-strong); padding-left: 12px; color: var(--color-muted); }
+.document-editor .ProseMirror pre { border: 1px solid var(--color-border); border-radius: 8px; background: var(--color-surface); padding: 12px; font-family: var(--font-mono); font-size: 12.5px; }
+.document-editor .ProseMirror :not(pre) > code { border-radius: 4px; background: var(--color-elevated); padding: 2px 4px; font-family: var(--font-mono); font-size: 12px; }
+.document-editor .ProseMirror a { color: var(--color-accent); text-decoration: underline; text-underline-offset: 2px; }
+.document-editor .ProseMirror a[data-page-ref],
+.document-editor .ProseMirror a[data-issue-ref] { cursor: pointer; }
+.document-editor .ProseMirror div[data-page-embed] { cursor: pointer; border: 1px solid var(--color-border); border-radius: 8px; background: var(--color-surface); padding: 8px 12px; font-size: 13px; color: var(--color-muted); }
+.document-editor .ProseMirror hr { margin: 16px 0; border-color: var(--color-border); }
+.document-editor .ProseMirror img { max-height: 520px; max-width: 100%; border-radius: 8px; border: 1px solid var(--color-border); }
+.document-editor .ProseMirror table { width: 100%; border-collapse: collapse; font-size: 12.5px; table-layout: fixed; }
+.document-editor .ProseMirror th,
+.document-editor .ProseMirror td { border: 1px solid var(--color-border); padding: 4px 8px; text-align: left; vertical-align: top; }
+.document-editor .ProseMirror th { background: var(--color-elevated); font-weight: 600; }
+.document-editor .ProseMirror p.is-editor-empty:first-child::before { content: attr(data-placeholder); float: left; height: 0; pointer-events: none; color: var(--color-faint); }

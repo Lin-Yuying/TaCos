@@ -16,7 +16,7 @@ import {
 } from "lucide-react";
 import { Menu, MenuItem } from "@/components/menu";
 import { Markdown, type PageContext, type PageRefEntry } from "@/components/markdown";
-import { MarkdownEditor } from "@/components/markdown-editor";
+import { DocumentEditor } from "@/components/document-editor";
 import { AssigneeAvatar } from "@/components/issue-table";
 import { AiEditPanel } from "@/components/ai-assist";
 import { useUI } from "@/components/ui-context";
@@ -437,10 +437,11 @@ export function DocPageView({
                 read/edit toggle to switch out of, so the caret is where you click. */}
             {canEdit ? (
               <>
-                <MarkdownEditor
+                <DocumentEditor
                   value={doc}
                   onChange={editDoc}
-                  placeholder={t("Write something, or press '-' for a list…")}
+                  pages={pageCtx}
+                  placeholder={t("Write something, or type / for commands…")}
                 />
                 <div className="mt-4 flex items-center gap-2">
                   <Menu
