@@ -1,0 +1,19 @@
+<!DOCTYPE html>
+<html lang="zh-CN"><head><meta charset="utf-8"/><title>H-DESKTOP-UPDATE-03 sidebar</title>
+<style>
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; background:#f6f6f6; padding:32px; color:#111; }
+  h1 { font-size:16px; margin:0 0 16px; }
+  .row { display:flex; align-items:center; gap:8px; background:#fff; border:1px solid #e5e5e5; border-radius:12px; padding:12px 16px; margin-bottom:12px; width:360px; }
+  .mark { width:20px; height:20px; border-radius:6px; background:#111; color:#fff; font-size:10px; display:flex; align-items:center; justify-content:center; }
+  .name { font-weight:600; font-size:13px; max-width:110px; }
+  .btn { display:inline-flex; align-items:center; gap:4px; border-radius:999px; border:1px solid #e5e5e5; background:#f3f3f3; padding:4px 8px; font-size:11px; font-weight:500; color:#666; }
+  .btn.ready { border-color:#7c9cff; background:#eef2ff; color:#3b5bdb; }
+  .label { font-size:11px; color:#888; width:120px; }
+</style></head><body>
+<h1>H-DESKTOP-UPDATE-03 · 侧边栏应用更新按钮（中文）</h1>
+<div class="row"><span class="label">idle</span><span class="mark">T</span><span class="name">Demo</span><span class="btn">⬇ 检查应用更新</span></div>
+<div class="row"><span class="label">checking</span><span class="mark">T</span><span class="name">Demo</span><span class="btn">↻ 正在检查…</span></div>
+<div class="row"><span class="label">downloading</span><span class="mark">T</span><span class="name">Demo</span><span class="btn">↻ 正在下载… 42%</span></div>
+<div class="row"><span class="label">downloaded</span><span class="mark">T</span><span class="name">Demo</span><span class="btn ready">↺ 重启以安装更新</span></div>
+<p style="font-size:12px;color:#666;max-width:420px">Web 端不渲染此按钮（无 window.tacosDesktop.appUpdate）。文案固定中文，与设置里 Harness「检查更新」分离。</p>
+</body></html>

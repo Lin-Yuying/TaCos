@@ -44,6 +44,7 @@ import { Menu, MenuItem } from "@/components/menu";
 import { InviteDialog } from "@/components/invite-dialog";
 import { LiveRefresh } from "@/components/live-refresh";
 import { DesktopOpenFiles } from "@/components/desktop-open-files";
+import { DesktopAppUpdateButton } from "@/components/desktop-app-update-button";
 import { leaveWorkspaceAction } from "@/app/auth-actions";
 import { DOCS_DELETED_EVENT } from "@/components/tab-events";
 import type { PageSummary } from "@/lib/pages";
@@ -885,9 +886,10 @@ function SidebarRail({
   return (
     <>
       <div
-        className={`flex h-12 shrink-0 items-center ${labeled ? "px-2" : "justify-center"}`}
+        className={`flex h-12 shrink-0 items-center gap-0.5 ${labeled ? "px-2" : "justify-center"}`}
       >
         <WorkspaceSwitcher workspace={workspace} workspaces={workspaces} compact={!named} />
+        <DesktopAppUpdateButton compact={!named} />
       </div>
       <nav
         className={
@@ -1668,6 +1670,7 @@ export function WorkspaceShell({
             <>
               <div className="flex h-12 shrink-0 items-center px-3">
                 <WorkspaceSwitcher workspace={workspace} workspaces={workspaces} />
+                <DesktopAppUpdateButton />
               </div>
 
               <Suspense fallback={<nav className="flex-1 px-2 py-3" />}>
