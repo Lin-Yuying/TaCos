@@ -229,6 +229,8 @@ export const pages = sqliteTable(
     shared: integer("shared").notNull().default(0),
     // Goes up with every change to the body; a save names the one it started from.
     revision: integer("revision").notNull().default(0),
+    // A finished attachment shown across the top of the page.
+    cover: text("cover"),
     // Order among siblings; older rows stay 0 and fall back to createdAt.
     position: integer("position").notNull().default(0),
     // What every member may do once it is shared: view | comment | edit
@@ -268,6 +270,22 @@ export const pageVersions = sqliteTable(
     updatedAt: text("updated_at").notNull(),
   },
   (t) => [uniqueIndex("page_versions_page_seq_idx").on(t.pageId, t.seq)]
+);
+
+// A file sent to a page. The bytes live under <data>/uploads/<id>.
+export const attachments = sqliteTable(
+  "attachments",
+  {
+    id: text("id").primaryKey(),
+    workspaceId: text("workspace_id").notNull(),
+    pageId: text("page_id").notNull(),
+    uploaderId: text("uploader_id").notNull(),
+    name: text("name").notNull(),
+    size: integer("size").notNull(),
+    complete: integer("complete").notNull().default(0),
+    createdAt: text("created_at").notNull(),
+  },
+  (t) => [index("attachments_page_idx").on(t.pageId), index("attachments_workspace_idx").on(t.workspaceId)]
 );
 
 export const pageFavorites = sqliteTable(

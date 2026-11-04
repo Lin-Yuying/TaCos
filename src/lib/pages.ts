@@ -2,6 +2,7 @@ import crypto from "node:crypto";
 import { and, desc, eq, inArray, isNotNull, isNull, lt, or } from "drizzle-orm";
 import { getDb } from "../db/client";
 import { notifications, pageAccess, pageComments, pageFavorites, pageVersions, pages, users } from "../db/schema";
+import { attachmentImageType, getAttachment, removePageAttachments } from "./attachments";
 import { isPageLevel, levelAllows, type PageLevel } from "./page-level";
 import { TacosError, getProject, nowIso } from "./issues";
 
@@ -16,6 +17,7 @@ export type DocPage = {
   createdBy: string;
   shared: boolean;
   revision: number;
+  cover: string | null;
   position: number;
   shareLevel: string;
   createdAt: string;
@@ -23,7 +25,7 @@ export type DocPage = {
 };
 
 // What the sidebar and the child-page list need; the body is left in the database.
-export type PageSummary = Omit<DocPage, "doc" | "workspaceId" | "revision" | "shareLevel" | "position"> & { depth: number };
+export type PageSummary = Omit<DocPage, "doc" | "workspaceId" | "revision" | "shareLevel" | "position" | "cover"> & { depth: number };
 
 export type PageRef = { id: string; title: string; icon: string | null };
 
@@ -302,6 +304,23 @@ export async function importMarkdownPage(
 }
 
 const POSITION_STEP = 1000;
+
+export async function setPageCover(
+  workspaceId: string,
+  pageId: string,
+  viewerId: string,
+  attachmentId: string | null
+): Promise<void> {
+  const page = await getPage(workspaceId, pageId, viewerId);
+  if (!page) throw new TacosError("Page not found", 404);
+  await requirePageLevel(page, viewerId, "edit");
+  if (attachmentId) {
+    const row = await getAttachment(attachmentId);
+    if (!row || !row.complete || row.pageId !== pageId) throw new TacosError("File not found", 404);
+    if (!attachmentImageType(attachmentId)) throw new TacosError("A cover has to be an image", 400);
+  }
+  await getDb().update(pages).set({ cover: attachmentId }).where(eq(pages.id, pageId));
+}
 
 function siblingsOf(parentId: string | null) {
   return parentId ? eq(pages.parentId, parentId) : isNull(pages.parentId);
@@ -918,6 +937,7 @@ export async function purgePage(
   await db.delete(pageComments).where(inArray(pageComments.pageId, ids));
   await db.delete(pageAccess).where(inArray(pageAccess.pageId, ids));
   await db.delete(pageFavorites).where(inArray(pageFavorites.pageId, ids));
+  await removePageAttachments(ids);
   await db.delete(notifications).where(inArray(notifications.pageId, ids));
   await db.delete(pages).where(inArray(pages.id, ids));
 }

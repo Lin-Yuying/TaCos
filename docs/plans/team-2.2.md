@@ -29,7 +29,7 @@ Item-level checks stay cheap (types, check scripts). End-to-end tests and screen
 | 6 | Document permissions: visible to all; view, comment or edit per person | done | Check script: each level allows and refuses the right actions |
 | 7 | Global search over documents, tasks, comments | done | Check script: 3+ character and 2-character Chinese queries both hit; private documents of others do not |
 | 8 | Sidebar shared and private tree, multi-level breadcrumb, document favorites | done | Check script for move rules; screenshots in item 15 |
-| 9 | Cover, image and attachment upload with size limit | todo | Check script: over-limit upload refused; resumed upload completes |
+| 9 | Cover, image and attachment upload with size limit | done | Check script: over-limit upload refused; resumed upload completes |
 | 10 | Database on tasks: custom fields, table, board, calendar views, filter, sort | todo | Check script for field and filter logic; screenshots in item 15 |
 | 11 | Agent partial edit and undo, shown in updates panel | todo | Check script: partial edit leaves other text unchanged; undo restores |
 | 12 | Agent workspace-level read and search, cross-workspace read; writes name a target | todo | Check script: write without target refused; no read outside joined workspaces |
@@ -61,3 +61,7 @@ Levels are view, comment and edit (`src/lib/page-level.ts`). A shared page has o
 ### Item 8: sidebar tree, breadcrumb, favorites
 
 `src/components/doc-tree.tsx` shows Shared and Private sections and moves pages with Pragmatic drag and drop plus its tree-item hitbox. `movePage` takes a new parent and a `beforeId`; a page under a parent has the parent's sharing, and a move that changes who can see a page needs its owner. Dropping on a section's heading moves the page to that section's top level. Favorites of documents use `page_favorites` next to the project favorites.
+
+### Item 9: uploads
+
+`@tus/server` with `@tus/file-store` handles `/api/uploads`, and `@uppy/core` with `@uppy/tus` sends files in 5 MB chunks, below the 10 MB that Next's middleware buffers per request. Limits: 25 MB per file (`TACOS_UPLOAD_MAX_MB`), 5 GB per workspace (`TACOS_WORKSPACE_QUOTA_MB`). Starting an upload needs edit on the page, and only the starter may continue it. `/api/files/<id>` checks the reader's access to the page and shows a file inline only when its first bytes are PNG, JPEG, GIF or WebP, so SVG and HTML always download. Files are removed with a purge; unfinished uploads after a day.

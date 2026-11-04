@@ -1,4 +1,5 @@
 import { TacosError } from "./tacos-error";
+import { removeWorkspaceAttachments } from "./attachments";
 import crypto from "node:crypto";
 import { parseMentions } from "./mentions";
 import {
@@ -428,6 +429,7 @@ async function purgeWorkspaceData(db: ReturnType<typeof getDb>, workspaceId: str
   const workspacePages = db.select({ id: pages.id }).from(pages).where(eq(pages.workspaceId, workspaceId));
   await db.delete(pageAccess).where(inArray(pageAccess.pageId, workspacePages));
   await db.delete(pageFavorites).where(inArray(pageFavorites.pageId, workspacePages));
+  await removeWorkspaceAttachments(workspaceId);
   await db.delete(pageVersions).where(eq(pageVersions.workspaceId, workspaceId));
   await db.delete(pageComments).where(eq(pageComments.workspaceId, workspaceId));
   await db.delete(pages).where(eq(pages.workspaceId, workspaceId));

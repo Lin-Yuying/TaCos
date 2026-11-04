@@ -15,6 +15,7 @@ import {
   Sparkles,
   Trash2,
   Users,
+  Image as ImageIcon,
   Star,
 } from "lucide-react";
 import { Menu, MenuItem } from "@/components/menu";
@@ -34,6 +35,7 @@ import {
   removePageCommentAction,
   savePageDocAction,
   setPageCommentResolvedAction,
+  setPageCoverAction,
   setPageSharedAction,
   togglePageFavoriteAction,
   updatePageAction,
@@ -106,6 +108,9 @@ export function DocPageView({
   const router = useRouter();
   const { aiReady } = useUI();
   const [favorite, setFavorite] = useState(initialFavorite);
+  const [cover, setCover] = useState(page.cover);
+  const [uploading, setUploading] = useState(0);
+  const coverInput = useRef<HTMLInputElement>(null);
   const canEdit = level === "edit";
   const canComment = levelAllows(level, "comment");
   const [title, setTitle] = useState(page.title);
@@ -280,6 +285,30 @@ export function DocPageView({
     const result = await updatePageAction(workspaceId, page.id, { icon: next });
     if (!result.ok) setError(result.error);
     else router.refresh();
+  }
+
+  async function uploadFile(file: File): Promise<string | null> {
+    setUploading((count) => count + 1);
+    try {
+      const { uploadPageFile } = await import("@/lib/upload-client");
+      return (await uploadPageFile(workspaceId, page.id, file)).url;
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Upload failed");
+      return null;
+    } finally {
+      setUploading((count) => count - 1);
+    }
+  }
+
+  async function pickCover(file: File) {
+    const url = await uploadFile(file);
+    if (url) await saveCover(url.split("/").pop() ?? null);
+  }
+
+  async function saveCover(next: string | null) {
+    const result = await setPageCoverAction(workspaceId, page.id, next);
+    if (result.ok) setCover(next);
+    else setError(result.error);
   }
 
   async function toggleFavorite() {
@@ -548,6 +577,57 @@ export function DocPageView({
             onClose ? "px-5" : "px-10 lg:px-20 xl:px-32"
           }`}
         >
+          <input
+            ref={coverInput}
+            type="file"
+            accept="image/png,image/jpeg,image/gif,image/webp"
+            hidden
+            data-doc-cover-input
+            onChange={(event) => {
+              const file = event.target.files?.[0];
+              event.target.value = "";
+              if (file) void pickCover(file);
+            }}
+          />
+          {cover && (
+            <div data-doc-cover className="group relative mb-4 h-40 overflow-hidden rounded-lg">
+              {/* eslint-disable-next-line @next/next/no-img-element -- served by our own route, with its session check */}
+              <img src={`/api/files/${cover}`} alt="" className="h-full w-full object-cover" />
+              {canEdit && (
+                <div className="absolute right-2 top-2 flex gap-1 opacity-0 transition-opacity focus-within:opacity-100 group-hover:opacity-100">
+                  <button
+                    type="button"
+                    onClick={() => coverInput.current?.click()}
+                    className="rounded border border-border bg-bg px-2 py-0.5 text-[12px] text-muted hover:text-text"
+                  >
+                    {t("Change cover")}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => void saveCover(null)}
+                    className="rounded border border-border bg-bg px-2 py-0.5 text-[12px] text-muted hover:text-text"
+                  >
+                    {t("Remove cover")}
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
+          {(uploading > 0 || (canEdit && !cover)) && (
+            <div className="mb-2 flex items-center gap-3 text-[12px] text-faint">
+              {canEdit && !cover && (
+                <button
+                  type="button"
+                  data-doc-add-cover
+                  onClick={() => coverInput.current?.click()}
+                  className="flex items-center gap-1 rounded px-1 py-0.5 hover:bg-elevated hover:text-text"
+                >
+                  <ImageIcon size={12} /> {t("Add cover")}
+                </button>
+              )}
+              {uploading > 0 && <span data-doc-uploading>{t("Uploading…")}</span>}
+            </div>
+          )}
           <div className="flex items-start gap-3">
             <Menu
               width={196}
@@ -695,6 +775,7 @@ export function DocPageView({
                   setSide("comments");
                 }}
                 onAnchorsLocated={setLocated}
+                onUpload={uploadFile}
               />
             )}
             {canEdit && (

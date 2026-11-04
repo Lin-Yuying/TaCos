@@ -10,6 +10,7 @@ import {
   keepUnsavedText,
   listPageAccess,
   movePage,
+  setPageCover,
   togglePageFavorite,
   listPageVersions,
   pageConflictView,
@@ -300,5 +301,17 @@ export async function togglePageFavoriteAction(workspaceId: string, pageId: stri
     const favorite = await togglePageFavorite(workspaceId, pageId, user.id);
     refresh(workspaceId);
     return favorite;
+  });
+}
+
+export async function setPageCoverAction(
+  workspaceId: string,
+  pageId: string,
+  attachmentId: string | null
+): Promise<ActionResult<void>> {
+  return run(async () => {
+    const { user } = await requireWorkspace(workspaceId);
+    await setPageCover(workspaceId, pageId, user.id, attachmentId);
+    refresh(workspaceId);
   });
 }

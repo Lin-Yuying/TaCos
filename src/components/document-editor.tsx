@@ -16,6 +16,7 @@ import {
   Heading1,
   Heading2,
   Heading3,
+  Image as ImageIcon,
   Italic,
   List,
   ListOrdered,
@@ -41,6 +42,8 @@ type SlashCommand = {
   run: (editor: Editor, range: Range) => void;
 };
 
+const PICK_FILE_EVENT = "tacos:pick-file";
+
 const COMMANDS: SlashCommand[] = [
   { label: "Text", hint: "Plain paragraph", keywords: "plain body p", icon: Type, run: (e, r) => e.chain().focus().deleteRange(r).setParagraph().run() },
   { label: "Heading 1", hint: "Large section title", keywords: "h1 title", icon: Heading1, run: (e, r) => e.chain().focus().deleteRange(r).setHeading({ level: 1 }).run() },
@@ -52,6 +55,10 @@ const COMMANDS: SlashCommand[] = [
   { label: "Quote", hint: "Set text apart", keywords: "blockquote citation", icon: Quote, run: (e, r) => e.chain().focus().deleteRange(r).toggleBlockquote().run() },
   { label: "Code", hint: "Fenced block", keywords: "code block pre", icon: Code, run: (e, r) => e.chain().focus().deleteRange(r).toggleCodeBlock().run() },
   { label: "Table", hint: "Rows and columns", keywords: "table grid", icon: TableIcon, run: (e, r) => e.chain().focus().deleteRange(r).insertTable({ rows: 3, cols: 3, withHeaderRow: true }).run() },
+  { label: "Image or file", hint: "Upload to this document", keywords: "image picture photo attachment upload file", icon: ImageIcon, run: (e, r) => {
+    e.chain().focus().deleteRange(r).run();
+    e.view.dom.dispatchEvent(new CustomEvent(PICK_FILE_EVENT));
+  } },
   { label: "Divider", hint: "Visual break", keywords: "hr line rule separator", icon: Minus, run: (e, r) => e.chain().focus().deleteRange(r).setHorizontalRule().run() },
 ];
 
@@ -132,6 +139,7 @@ export function DocumentEditor({
   onComment,
   onAnchorClick,
   onAnchorsLocated,
+  onUpload,
 }: {
   value: string;
   onChange: (next: string) => void;
@@ -144,6 +152,8 @@ export function DocumentEditor({
   onComment?: (anchor: DocAnchor) => void;
   onAnchorClick?: (id: string) => void;
   onAnchorsLocated?: (ids: Set<string>) => void;
+  // Sends a pasted, dropped or picked file and returns its address, or null when it failed.
+  onUpload?: (file: File) => Promise<string | null>;
 }) {
   const t = useT();
   const router = useRouter();
@@ -156,6 +166,8 @@ export function DocumentEditor({
   const [anchorStore] = useState(() => new AnchorStore());
   const locatedRef = useRef(onAnchorsLocated);
   const anchorClickRef = useRef(onAnchorClick);
+  const uploadRef = useRef(onUpload);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     onChangeRef.current = onChange;
@@ -217,12 +229,25 @@ export function DocumentEditor({
     []
   );
 
+  const insertRef = useRef<(files: File[], at?: number) => void>(() => {});
+  const dropFiles = (files: FileList | undefined | null, at?: number) => {
+    if (!files?.length || !uploadRef.current) return false;
+    insertRef.current([...files], at);
+    return true;
+  };
+
   const editor = useEditor({
     immediatelyRender: false,
     extensions: [...documentExtensions(), Placeholder.configure({ placeholder: placeholder ?? "" }), slash, CommentAnchors.configure({ store: anchorStore })],
     content: markdownToDocument(markdown, value),
     editable,
     editorProps: {
+      handlePaste: (_view, event) => dropFiles(event.clipboardData?.files),
+      handleDrop: (view, event) =>
+        dropFiles(
+          (event as DragEvent).dataTransfer?.files,
+          view.posAtCoords({ left: (event as DragEvent).clientX, top: (event as DragEvent).clientY })?.pos
+        ),
       handleClickOn: (_view, _pos, node) => {
         if (node.type.name !== "pageRef" && node.type.name !== "pageEmbed") return false;
         const ctx = pagesRef.current;
@@ -240,6 +265,34 @@ export function DocumentEditor({
       onChangeRef.current(next);
     },
   });
+
+  useEffect(() => {
+    uploadRef.current = onUpload;
+    insertRef.current = (files, at) => {
+      if (!editor) return;
+      void (async () => {
+        let pos = at;
+        for (const file of files) {
+          const url = await onUpload?.(file);
+          if (!url) continue;
+          const chain = editor.chain().focus();
+          if (pos !== undefined) chain.setTextSelection(pos);
+          if (file.type.startsWith("image/")) chain.setImage({ src: url, alt: file.name });
+          else chain.insertContent({ type: "text", text: file.name, marks: [{ type: "link", attrs: { href: url } }] });
+          chain.run();
+          pos = undefined;
+        }
+      })();
+    };
+  });
+
+  useEffect(() => {
+    const dom = editor?.view.dom;
+    if (!dom) return;
+    const pick = () => fileInputRef.current?.click();
+    dom.addEventListener(PICK_FILE_EVENT, pick);
+    return () => dom.removeEventListener(PICK_FILE_EVENT, pick);
+  }, [editor]);
 
   // A change from outside the editor (a linked page, an accepted AI edit) replaces the text.
   // Typing never lands here because `emitted` already holds it.
@@ -313,6 +366,18 @@ export function DocumentEditor({
           )}
         </BubbleMenu>
       )}
+      <input
+        ref={fileInputRef}
+        type="file"
+        multiple
+        hidden
+        data-doc-file-input
+        onChange={(event) => {
+          const files = [...(event.target.files ?? [])];
+          event.target.value = "";
+          if (files.length) insertRef.current(files);
+        }}
+      />
       <EditorContent editor={editor} />
       {menu && menu.items.length > 0 && (
         <div
