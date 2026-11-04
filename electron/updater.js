@@ -1,6 +1,7 @@
-const { app, ipcMain, BrowserWindow, dialog } = require("electron");
+const { app, ipcMain, BrowserWindow, dialog, shell } = require("electron");
 const fs = require("node:fs");
 const path = require("node:path");
+const { execFileSync } = require("node:child_process");
 
 // H-DESKTOP-UPDATE-01/04: desktop app binary updates via electron-updater.
 // This is not the Settings › Harness CLI update path.
@@ -37,6 +38,15 @@ const INSTALL_DIALOG_MESSAGE =
 const INSTALL_DIALOG_DETAIL_PREFIX = "Version ";
 const INSTALL_CONFIRM = "Restart and Install";
 const INSTALL_CANCEL = "Later";
+const DOWNLOAD_PAGE_URL = "https://github.com/Lin-Yuying/TaCos/releases/latest";
+const UNSIGNED_DIALOG_TITLE = "Download App Update";
+const UNSIGNED_DIALOG_MESSAGE =
+  "This build is not Developer ID signed, so TaCos opens the GitHub download page instead of installing silently.";
+const UNSIGNED_DIALOG_CONFIRM = "Open Download Page";
+const UNSIGNED_DIALOG_CANCEL = "Cancel";
+
+/** Override for tests: null = probe, true/false = forced. */
+let trustedSignatureOverride = null;
 
 function snapshot() {
   return {
@@ -145,6 +155,63 @@ function stopSchedule() {
 }
 
 
+
+function setTrustedSignatureForTests(value) {
+  trustedSignatureOverride = value;
+}
+
+/**
+ * True only for Apple Developer ID Application signatures (macOS) or
+ * a trusted Authenticode signature (Windows). Ad-hoc and unsigned builds return false.
+ */
+function hasTrustedAppSignature() {
+  if (trustedSignatureOverride != null) return Boolean(trustedSignatureOverride);
+  try {
+    if (process.platform === "darwin") {
+      const appPath = app.getPath("exe");
+      // exe is …/TaCos.app/Contents/MacOS/TaCos → climb to the .app bundle.
+      let bundle = appPath;
+      const idx = bundle.indexOf(".app/");
+      if (idx >= 0) bundle = bundle.slice(0, idx + 4);
+      else bundle = app.getAppPath();
+      const out = execFileSync("/usr/bin/codesign", ["-dv", "--verbose=4", bundle], {
+        encoding: "utf8",
+        stderr: "pipe",
+      });
+      // codesign prints details on stderr; execFileSync may put them in exception or stdout.
+      const text = `${out}`;
+      return /Authority=Developer ID Application/i.test(text);
+    }
+    if (process.platform === "win32") {
+      const exe = process.execPath.replace(/'/g, "''");
+      const ps = `Get-AuthenticodeSignature -FilePath '${exe}' | Select-Object -ExpandProperty Status`;
+      const out = execFileSync(
+        "powershell.exe",
+        ["-NoProfile", "-NonInteractive", "-Command", ps],
+        { encoding: "utf8", timeout: 15000 },
+      );
+      return /\bValid\b/i.test(String(out).trim());
+    }
+  } catch (err) {
+    // codesign writes to stderr and often exits non-zero while still printing Authority lines.
+    const msg = `${err && err.stderr ? err.stderr : ""}${err && err.stdout ? err.stdout : ""}${err && err.message ? err.message : err}`;
+    if (process.platform === "darwin" && /Authority=Developer ID Application/i.test(msg)) {
+      return true;
+    }
+    if (process.platform === "darwin" && /Signature=adhoc|flags=0x2\(adhoc\)/i.test(msg)) {
+      return false;
+    }
+    log(`signature probe failed: ${err && err.message ? err.message : err}`);
+  }
+  // Fail closed: unknown signature → open the download page.
+  return false;
+}
+
+async function openGithubDownloadPage() {
+  await shell.openExternal(DOWNLOAD_PAGE_URL);
+  log(`opened app update download page ${DOWNLOAD_PAGE_URL}`);
+}
+
 function focusedWindow() {
   try {
     if (typeof BrowserWindow.getFocusedWindow === "function") {
@@ -195,6 +262,7 @@ async function confirmAndInstall(options = {}) {
     };
   }
   const version = status.availableVersion || "";
+  const trusted = hasTrustedAppSignature();
   if (!silent) {
     if (installPromptInFlight) {
       return { ok: false, confirmed: false, error: "Install prompt already open.", status: snapshot() };
@@ -214,6 +282,32 @@ async function confirmAndInstall(options = {}) {
         return { ok: false, confirmed: false, error: "No dialog API.", status: snapshot() };
       }
       const parent = focusedWindow();
+      if (!trusted) {
+        // H-DESKTOP-UPDATE-07: unsigned / ad-hoc → GitHub download page.
+        const detail = version
+          ? `${INSTALL_DIALOG_DETAIL_PREFIX}${version}`
+          : undefined;
+        const boxOpts = {
+          type: "info",
+          buttons: [UNSIGNED_DIALOG_CONFIRM, UNSIGNED_DIALOG_CANCEL],
+          defaultId: 0,
+          cancelId: 1,
+          title: UNSIGNED_DIALOG_TITLE,
+          message: UNSIGNED_DIALOG_MESSAGE,
+          detail,
+          noLink: true,
+        };
+        const result = parent
+          ? await dialog.showMessageBox(parent, boxOpts)
+          : await dialog.showMessageBox(boxOpts);
+        promptedInstallVersion = version || "unknown";
+        if (result.response !== 0) {
+          log("app update download page deferred by user");
+          return { ok: true, confirmed: false, degraded: true, status: snapshot() };
+        }
+        await openGithubDownloadPage();
+        return { ok: true, confirmed: true, degraded: true, status: snapshot() };
+      }
       const detail = version
         ? `${INSTALL_DIALOG_DETAIL_PREFIX}${version}`
         : undefined;
@@ -238,6 +332,9 @@ async function confirmAndInstall(options = {}) {
     } finally {
       installPromptInFlight = false;
     }
+  } else if (!trusted) {
+    await openGithubDownloadPage();
+    return { ok: true, confirmed: true, degraded: true, status: snapshot() };
   }
   log("app update install confirmed");
   runQuitAndInstall();
@@ -465,8 +562,12 @@ module.exports = {
   getAppUpdateMenuItem,
   checkForAppUpdatesFromMenu,
   confirmAndInstall,
+  hasTrustedAppSignature,
+  setTrustedSignatureForTests,
   stopSchedule,
   MENU_CHECK_LABEL,
   INSTALL_DIALOG_TITLE,
   INSTALL_CONFIRM,
+  DOWNLOAD_PAGE_URL,
+  UNSIGNED_DIALOG_TITLE,
 };

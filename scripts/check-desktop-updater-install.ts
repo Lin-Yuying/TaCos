@@ -96,6 +96,7 @@ async function main() {
           getFocusedWindow: () => null,
         },
         dialog: fakeDialog,
+        shell: { async openExternal() {} },
       };
     }
     if (id === "electron-updater") {
@@ -118,6 +119,7 @@ async function main() {
       stopSchedule: () => void;
       MENU_CHECK_LABEL: string;
       INSTALL_CONFIRM: string;
+      setTrustedSignatureForTests?: (v: boolean | null) => void;
     };
 
     assert(mod.MENU_CHECK_LABEL.includes("App Updates"), "menu label export must mention App Updates");
@@ -125,6 +127,8 @@ async function main() {
 
     const ready = mod.initAppUpdater({ log: () => {} });
     assert(ready.enabled === true, "packaged mock must enable updater");
+    // H-DESKTOP-UPDATE-07: force trusted so this check still covers silent install.
+    mod.setTrustedSignatureForTests?.(true);
 
     // Simulate download-ready → auto confirm path
     dialogResponse = 0;
