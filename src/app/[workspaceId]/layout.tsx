@@ -9,7 +9,7 @@ import {
   setLastWorkspace,
 } from "@/lib/auth";
 import { listFavoriteProjects, listMembers, listProjects, getJoinCode } from "@/lib/issues";
-import { listPageTree } from "@/lib/pages";
+import { listFavoritePages, listPageTree } from "@/lib/pages";
 import { UIProvider } from "@/components/ui-context";
 import { RunnerBridge } from "@/components/runner-bridge";
 import { isServerMode } from "@/lib/server-mode";
@@ -54,10 +54,11 @@ export default async function WorkspaceLayout({
     await setLastWorkspace(user.id, active.id);
   }
   // Server-sourced so router.refresh() after create/delete updates the sidebar list.
-  const [projects, members, favorites, pages, aiEnabled, joinCode, harnessGate, locale] = await Promise.all([
+  const [projects, members, favorites, favoritePages, pages, aiEnabled, joinCode, harnessGate, locale] = await Promise.all([
     listProjects(workspaceId, user.id),
     listMembers(workspaceId),
     listFavoriteProjects(workspaceId, user.id),
+    listFavoritePages(workspaceId, user.id),
     listPageTree(workspaceId, user.id),
     aiReady(workspaceId, user.id),
     getJoinCode(workspaceId),
@@ -81,6 +82,7 @@ export default async function WorkspaceLayout({
           workspaces={workspaces}
           projects={projects}
           favorites={favorites}
+          favoritePages={favoritePages}
           members={members}
           pages={pages}
           joinCode={joinCode}

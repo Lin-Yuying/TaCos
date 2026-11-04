@@ -28,7 +28,7 @@ Item-level checks stay cheap (types, check scripts). End-to-end tests and screen
 | 5 | Document and paragraph comments, count, @ notify | done | Check script: anchor survives an edit before it; mention creates a notification |
 | 6 | Document permissions: visible to all; view, comment or edit per person | done | Check script: each level allows and refuses the right actions |
 | 7 | Global search over documents, tasks, comments | done | Check script: 3+ character and 2-character Chinese queries both hit; private documents of others do not |
-| 8 | Sidebar shared and private tree, multi-level breadcrumb, document favorites | todo | Check script for move rules; screenshots in item 15 |
+| 8 | Sidebar shared and private tree, multi-level breadcrumb, document favorites | done | Check script for move rules; screenshots in item 15 |
 | 9 | Cover, image and attachment upload with size limit | todo | Check script: over-limit upload refused; resumed upload completes |
 | 10 | Database on tasks: custom fields, table, board, calendar views, filter, sort | todo | Check script for field and filter logic; screenshots in item 15 |
 | 11 | Agent partial edit and undo, shown in updates panel | todo | Check script: partial edit leaves other text unchanged; undo restores |
@@ -57,3 +57,7 @@ Levels are view, comment and edit (`src/lib/page-level.ts`). A shared page has o
 ### Item 7: global search
 
 `search_fts` (FTS5 trigram) is kept in step by SQL triggers and filled once when an older database opens. Terms of 3+ characters use the index; a query with a shorter term scans with LIKE. `src/lib/search.ts` filters hits by what the person may read: the workspace's project visibility, shared or own documents, nothing deleted. The palette (`cmdk`, Cmd+K) shows documents, tasks and comments, and each comment opens its parent.
+
+### Item 8: sidebar tree, breadcrumb, favorites
+
+`src/components/doc-tree.tsx` shows Shared and Private sections and moves pages with Pragmatic drag and drop plus its tree-item hitbox. `movePage` takes a new parent and a `beforeId`; a page under a parent has the parent's sharing, and a move that changes who can see a page needs its owner. Dropping on a section's heading moves the page to that section's top level. Favorites of documents use `page_favorites` next to the project favorites.

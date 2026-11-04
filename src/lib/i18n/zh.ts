@@ -926,6 +926,8 @@ const zh: Record<string, string> = {
   "Title: {before} → {after}": "标题：{before} → {after}",
   "{count} unchanged lines": "{count} 行没变",
   "Someone": "有人",
+  Collapse: "收起",
+  "A page cannot move inside itself": "文档不能移到它自己里面",
   "Can view": "可以查看",
   "Can comment": "可以评论",
   "Can edit": "可以编辑",

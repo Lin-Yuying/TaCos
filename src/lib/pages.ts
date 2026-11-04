@@ -1,7 +1,7 @@
 import crypto from "node:crypto";
 import { and, desc, eq, inArray, isNotNull, isNull, lt, or } from "drizzle-orm";
 import { getDb } from "../db/client";
-import { notifications, pageAccess, pageComments, pageVersions, pages, users } from "../db/schema";
+import { notifications, pageAccess, pageComments, pageFavorites, pageVersions, pages, users } from "../db/schema";
 import { isPageLevel, levelAllows, type PageLevel } from "./page-level";
 import { TacosError, getProject, nowIso } from "./issues";
 
@@ -16,13 +16,14 @@ export type DocPage = {
   createdBy: string;
   shared: boolean;
   revision: number;
+  position: number;
   shareLevel: string;
   createdAt: string;
   updatedAt: string;
 };
 
 // What the sidebar and the child-page list need; the body is left in the database.
-export type PageSummary = Omit<DocPage, "doc" | "workspaceId" | "revision" | "shareLevel"> & { depth: number };
+export type PageSummary = Omit<DocPage, "doc" | "workspaceId" | "revision" | "shareLevel" | "position"> & { depth: number };
 
 export type PageRef = { id: string; title: string; icon: string | null };
 
@@ -61,7 +62,7 @@ export async function listPages(workspaceId: string, viewerId: string): Promise<
         or(eq(pages.shared, 1), eq(pages.createdBy, viewerId))
       )
     )
-    .orderBy(pages.createdAt);
+    .orderBy(pages.position, pages.createdAt);
   return rows.map(toPage);
 }
 
@@ -187,10 +188,17 @@ export async function createPage(
   }
   const id = crypto.randomUUID();
   const at = nowIso();
+  const [last] = await db
+    .select({ position: pages.position })
+    .from(pages)
+    .where(and(eq(pages.workspaceId, workspaceId), siblingsOf(parentId)))
+    .orderBy(desc(pages.position))
+    .limit(1);
   await db.insert(pages).values({
     id,
     workspaceId,
     parentId,
+    position: (last?.position ?? 0) + POSITION_STEP,
     projectId,
     title,
     icon: null,
@@ -291,6 +299,125 @@ export async function importMarkdownPage(
   if (existing) return { id: existing.id, title: existing.title, created: false };
   const page = await createPage(workspaceId, viewerId, { parentId, title, doc });
   return { id: page.id, title: page.title, created: true };
+}
+
+const POSITION_STEP = 1000;
+
+function siblingsOf(parentId: string | null) {
+  return parentId ? eq(pages.parentId, parentId) : isNull(pages.parentId);
+}
+
+/**
+ * Moves a page, with its subtree, under a new parent or to the top level, before beforeId or at
+ * the end. A page under a parent has the parent's sharing, so a move that changes who can see a
+ * page takes its owner; `shared` asks for that at the top level.
+ */
+export async function movePage(
+  workspaceId: string,
+  pageId: string,
+  viewerId: string,
+  target: { parentId: string | null; beforeId?: string | null; shared?: boolean }
+): Promise<void> {
+  const db = getDb();
+  const page = await getPage(workspaceId, pageId, viewerId);
+  if (!page) throw new TacosError("Page not found", 404);
+  await requirePageLevel(page, viewerId, "edit");
+  const subtree = [pageId, ...(await descendantsOf(workspaceId, pageId)).map((p) => p.id)];
+  let parent: DocPage | null = null;
+  if (target.parentId) {
+    if (subtree.includes(target.parentId)) throw new TacosError("A page cannot move inside itself", 400);
+    parent = await getPage(workspaceId, target.parentId, viewerId);
+    if (!parent) throw new TacosError("Parent page not found", 404);
+    await requirePageLevel(parent, viewerId, "edit");
+  }
+  const shared = parent ? parent.shared : target.shared ?? page.shared;
+  if (shared !== page.shared && page.createdBy !== viewerId) {
+    throw new TacosError("Only the page owner can change sharing", 403);
+  }
+
+  const siblings = (
+    await db
+      .select({ id: pages.id })
+      .from(pages)
+      .where(and(eq(pages.workspaceId, workspaceId), siblingsOf(parent?.id ?? null), isNull(pages.deletedAt)))
+      .orderBy(pages.position, pages.createdAt)
+  )
+    .map((row) => row.id)
+    .filter((id) => id !== pageId);
+  const before = target.beforeId ? siblings.indexOf(target.beforeId) : -1;
+  siblings.splice(before >= 0 ? before : siblings.length, 0, pageId);
+  for (const [index, id] of siblings.entries()) {
+    await db.update(pages).set({ position: (index + 1) * POSITION_STEP }).where(eq(pages.id, id));
+  }
+  await db
+    .update(pages)
+    .set({ parentId: parent?.id ?? null, projectId: parent ? parent.projectId : page.projectId })
+    .where(eq(pages.id, pageId));
+  if (shared === page.shared) return;
+  await db
+    .update(pages)
+    .set({ shared: shared ? 1 : 0, ...(parent ? { shareLevel: parent.shareLevel } : {}) })
+    .where(and(eq(pages.workspaceId, workspaceId), inArray(pages.id, subtree)));
+  if (!parent) return;
+  const people = await db.select().from(pageAccess).where(eq(pageAccess.pageId, parent.id));
+  await db.delete(pageAccess).where(inArray(pageAccess.pageId, subtree));
+  if (people.length) {
+    await db
+      .insert(pageAccess)
+      .values(subtree.flatMap((id) => people.map((person) => ({ ...person, pageId: id }))));
+  }
+}
+
+/** The page's parents, top first, as far up as this person may read. */
+export async function pageAncestors(workspaceId: string, page: DocPage, viewerId: string): Promise<PageRef[]> {
+  const out: PageRef[] = [];
+  const seen = new Set([page.id]);
+  let at = page.parentId;
+  while (at && !seen.has(at)) {
+    seen.add(at);
+    const parent = await getPage(workspaceId, at, viewerId);
+    if (!parent) break;
+    out.unshift({ id: parent.id, title: parent.title, icon: parent.icon });
+    at = parent.parentId;
+  }
+  return out;
+}
+
+export async function listFavoritePages(workspaceId: string, viewerId: string): Promise<PageRef[]> {
+  return getDb()
+    .select({ id: pages.id, title: pages.title, icon: pages.icon })
+    .from(pageFavorites)
+    .innerJoin(pages, eq(pages.id, pageFavorites.pageId))
+    .where(
+      and(
+        eq(pageFavorites.userId, viewerId),
+        eq(pages.workspaceId, workspaceId),
+        isNull(pages.deletedAt),
+        or(eq(pages.shared, 1), eq(pages.createdBy, viewerId))
+      )
+    )
+    .orderBy(pageFavorites.createdAt);
+}
+
+export async function isPageFavorite(pageId: string, viewerId: string): Promise<boolean> {
+  const [row] = await getDb()
+    .select({ pageId: pageFavorites.pageId })
+    .from(pageFavorites)
+    .where(and(eq(pageFavorites.userId, viewerId), eq(pageFavorites.pageId, pageId)))
+    .limit(1);
+  return Boolean(row);
+}
+
+export async function togglePageFavorite(workspaceId: string, pageId: string, viewerId: string): Promise<boolean> {
+  const page = await getPage(workspaceId, pageId, viewerId);
+  if (!page) throw new TacosError("Page not found", 404);
+  const db = getDb();
+  if (await isPageFavorite(pageId, viewerId)) {
+    await db.delete(pageFavorites).where(and(eq(pageFavorites.userId, viewerId), eq(pageFavorites.pageId, pageId)));
+    return false;
+  }
+  await db.insert(pageFavorites).values({ userId: viewerId, pageId, createdAt: nowIso() });
+  return true;
 }
 
 /** What this person may do: the author everything, others by the page's sharing. */
@@ -790,6 +917,7 @@ export async function purgePage(
   await db.delete(pageVersions).where(inArray(pageVersions.pageId, ids));
   await db.delete(pageComments).where(inArray(pageComments.pageId, ids));
   await db.delete(pageAccess).where(inArray(pageAccess.pageId, ids));
+  await db.delete(pageFavorites).where(inArray(pageFavorites.pageId, ids));
   await db.delete(notifications).where(inArray(notifications.pageId, ids));
   await db.delete(pages).where(inArray(pages.id, ids));
 }

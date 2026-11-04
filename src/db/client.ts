@@ -159,6 +159,13 @@ CREATE TABLE IF NOT EXISTS pages (
 );
 CREATE INDEX IF NOT EXISTS pages_workspace_idx ON pages (workspace_id);
 
+CREATE TABLE IF NOT EXISTS page_favorites (
+  user_id TEXT NOT NULL,
+  page_id TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  PRIMARY KEY (user_id, page_id)
+);
+
 CREATE TABLE IF NOT EXISTS page_access (
   page_id TEXT NOT NULL,
   user_id TEXT NOT NULL,
@@ -842,6 +849,7 @@ function bootstrap(sqlite: Database.Database) {
   }
   addColumnIfMissing(sqlite, "pages", "revision", "INTEGER NOT NULL DEFAULT 0");
   addColumnIfMissing(sqlite, "notifications", "page_id", "TEXT");
+  addColumnIfMissing(sqlite, "pages", "position", "INTEGER NOT NULL DEFAULT 0");
   addColumnIfMissing(sqlite, "pages", "share_level", "TEXT NOT NULL DEFAULT 'edit'");
   addColumnIfMissing(sqlite, "pages", "deleted_at", "TEXT");
   addColumnIfMissing(sqlite, "pages", "trash_root", "TEXT");

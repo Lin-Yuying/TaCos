@@ -47,7 +47,8 @@ import { DesktopOpenFiles } from "@/components/desktop-open-files";
 import { DesktopAppUpdateButton } from "@/components/desktop-app-update-button";
 import { leaveWorkspaceAction } from "@/app/auth-actions";
 import { DOCS_DELETED_EVENT } from "@/components/tab-events";
-import type { PageSummary } from "@/lib/pages";
+import type { PageRef, PageSummary } from "@/lib/pages";
+import { DocTree } from "@/components/doc-tree";
 import { ProjectIcon, StatusIcon, WorkspaceMark } from "@/components/icons";
 import { AssigneeAvatar } from "@/components/issue-table";
 import { IssuePanelHost } from "@/components/issue-panel";
@@ -165,6 +166,8 @@ function SidebarNav({
   workspace,
   projects,
   favorites,
+  favoritePages,
+  pages,
   members,
   viewerId,
   unread,
@@ -176,6 +179,8 @@ function SidebarNav({
   workspace: WorkspaceInfo;
   projects: Project[];
   favorites: Project[];
+  favoritePages: PageRef[];
+  pages: PageSummary[];
   members: Member[];
   viewerId: string;
   unread: number | null;
@@ -276,7 +281,7 @@ function SidebarNav({
           {t("Documents")}
         </NavItem>
       </div>
-      {favorites.length > 0 && (
+      {(favorites.length > 0 || favoritePages.length > 0) && (
         <div className="pb-1">
           <SectionHeader
             label={t("Favorites")}
@@ -296,10 +301,21 @@ function SidebarNav({
                   {project.name}
                 </NavItem>
               ))}
+              {favoritePages.map((page) => (
+                <NavItem
+                  key={page.id}
+                  href={`/${workspaceId}/docs/${page.id}`}
+                  active={pathname === `/${workspaceId}/docs/${page.id}`}
+                  icon={page.icon ?? <FileText size={13} />}
+                >
+                  {page.title}
+                </NavItem>
+              ))}
             </div>
           )}
         </div>
       )}
+      <DocTree workspaceId={workspaceId} pages={pages} />
       {!hidden.includes("workspace") && (
         <>
           <SectionHeader
@@ -842,6 +858,7 @@ function SidebarRail({
   hidden,
   projects,
   favorites,
+  favoritePages,
   members,
   viewerId,
   width,
@@ -853,6 +870,7 @@ function SidebarRail({
   hidden: string[];
   projects: Project[];
   favorites: Project[];
+  favoritePages: PageRef[];
   members: Member[];
   viewerId: string;
   width: number;
@@ -922,11 +940,11 @@ function SidebarRail({
         />
         {/* Only the groups survive the fold, not their rows: each glyph raises a
             flyout with the group's names, leaving the column's width alone. */}
-        {(favorites.length > 0 || projects.length > 0 || teamShown) && divider}
-        {favorites.length > 0 && (
+        {(favorites.length > 0 || favoritePages.length > 0 || projects.length > 0 || teamShown) && divider}
+        {(favorites.length > 0 || favoritePages.length > 0) && (
           <RailFlyout label={t("Favorites")} icon={<Star size={15} />} labeled={labeled}>
-            {(close) =>
-              favorites.map((project) => (
+            {(close) => [
+              ...favorites.map((project) => (
                 <RailFlyoutLink
                   key={project.id}
                   href={`/${workspaceId}/projects/${project.id}`}
@@ -936,8 +954,19 @@ function SidebarRail({
                 >
                   {project.name}
                 </RailFlyoutLink>
-              ))
-            }
+              )),
+              ...favoritePages.map((page) => (
+                <RailFlyoutLink
+                  key={page.id}
+                  href={`/${workspaceId}/docs/${page.id}`}
+                  active={pathname === `/${workspaceId}/docs/${page.id}`}
+                  icon={page.icon ?? <FileText size={13} />}
+                  onSelect={close}
+                >
+                  {page.title}
+                </RailFlyoutLink>
+              )),
+            ]}
           </RailFlyout>
         )}
         {projects.length > 0 && (
@@ -1558,6 +1587,7 @@ export function WorkspaceShell({
   workspaces,
   projects,
   favorites,
+  favoritePages,
   members,
   pages,
   joinCode,
@@ -1569,6 +1599,7 @@ export function WorkspaceShell({
   workspaces: WorkspaceInfo[];
   projects: Project[];
   favorites: Project[];
+  favoritePages: PageRef[];
   members: Member[];
   pages: PageSummary[];
   joinCode: string | null;
@@ -1661,6 +1692,7 @@ export function WorkspaceShell({
               hidden={hiddenSections}
               projects={projects}
               favorites={favorites}
+              favoritePages={favoritePages}
               members={members}
               viewerId={user.id}
               width={sidebarWidth}
@@ -1678,6 +1710,8 @@ export function WorkspaceShell({
                   workspace={workspace}
                   projects={projects}
                   favorites={favorites}
+                  favoritePages={favoritePages}
+                  pages={pages}
                   members={members}
                   viewerId={user.id}
                   unread={unread}

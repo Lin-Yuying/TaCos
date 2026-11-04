@@ -15,6 +15,7 @@ import {
   Sparkles,
   Trash2,
   Users,
+  Star,
 } from "lucide-react";
 import { Menu, MenuItem } from "@/components/menu";
 import type { PageContext, PageRefEntry } from "@/components/markdown";
@@ -34,6 +35,7 @@ import {
   savePageDocAction,
   setPageCommentResolvedAction,
   setPageSharedAction,
+  togglePageFavoriteAction,
   updatePageAction,
 } from "@/app/pages-actions";
 import { announceDocsDeleted } from "@/components/tab-events";
@@ -41,7 +43,7 @@ import type { DocAnchor } from "@/lib/doc-anchor";
 import { levelAllows, type PageLevel } from "@/lib/page-level";
 import type { Member } from "@/lib/issues";
 import type { PageComment } from "@/lib/page-comments";
-import type { DocPage, PageAuthor, PageSummary } from "@/lib/pages";
+import type { DocPage, PageAuthor, PageRef, PageSummary } from "@/lib/pages";
 import { useT } from "@/components/i18n-context";
 
 const ICONS = ["📄", "📘", "📝", "🗂️", "🧭", "🚀", "🧪", "🌱", "🍅", "✨", "🐙", "🔭"];
@@ -65,6 +67,8 @@ export function DocPageView({
   page,
   author,
   level,
+  ancestors,
+  favorite: initialFavorite,
   isOwner,
   viewerId,
   subpages,
@@ -80,6 +84,8 @@ export function DocPageView({
   page: DocPage;
   author?: PageAuthor | null;
   level: PageLevel;
+  ancestors: PageRef[];
+  favorite: boolean;
   isOwner: boolean;
   viewerId: string;
   subpages: PageSummary[];
@@ -99,6 +105,7 @@ export function DocPageView({
   const t = useT();
   const router = useRouter();
   const { aiReady } = useUI();
+  const [favorite, setFavorite] = useState(initialFavorite);
   const canEdit = level === "edit";
   const canComment = levelAllows(level, "comment");
   const [title, setTitle] = useState(page.title);
@@ -275,6 +282,16 @@ export function DocPageView({
     else router.refresh();
   }
 
+  async function toggleFavorite() {
+    const result = await togglePageFavoriteAction(workspaceId, page.id);
+    if (result.ok) {
+      setFavorite(result.data);
+      router.refresh();
+    } else {
+      setError(result.error);
+    }
+  }
+
   async function toggleShared() {
     const result = await setPageSharedAction(workspaceId, page.id, !shared);
     if (!result.ok) {
@@ -349,7 +366,6 @@ export function DocPageView({
     () => (onOpenPage ? { ...ctx, onOpen: onOpenPage } : ctx),
     [ctx, onOpenPage]
   );
-  const parent = page.parentId ? refs.find((ref) => ref.id === page.parentId) ?? null : null;
   const placed = useMemo(() => placedPageKeys(doc), [doc]);
   const openComments = comments.filter((comment) => !comment.resolvedAt).length;
   const unplaced = subpages.filter(
@@ -368,7 +384,27 @@ export function DocPageView({
         </span>
         {!compact && <span className="text-faint">·</span>}
         <span className="flex min-w-0 flex-1 items-center gap-2">
-          <span className="min-w-0 truncate">{parent ? t("Docs / {title}", { title: parent.title }) : t("Docs")}</span>
+          <nav data-doc-breadcrumb className="flex min-w-0 items-center gap-1 truncate">
+            <Link href={`/${workspaceId}/docs`} className="shrink-0 hover:text-text">
+              {t("Docs")}
+            </Link>
+            {ancestors.map((ancestor) => (
+              <span key={ancestor.id} className="flex min-w-0 items-center gap-1">
+                <span className="text-faint">/</span>
+                <Link
+                  href={`/${workspaceId}/docs/${ancestor.id}`}
+                  onClick={(event) => {
+                    if (!onOpenPage) return;
+                    event.preventDefault();
+                    onOpenPage(ancestor.id);
+                  }}
+                  className="min-w-0 truncate hover:text-text"
+                >
+                  {ancestor.title}
+                </Link>
+              </span>
+            ))}
+          </nav>
           {/* A shared document says whose it is right where it says what it is. */}
           {author && (
             <span data-doc-author className="flex shrink-0 items-center gap-1 text-[12px] text-muted">
@@ -425,6 +461,15 @@ export function DocPageView({
               {!compact && "AI"}
             </button>
           )}
+          <button
+            type="button"
+            data-doc-favorite={favorite ? "on" : "off"}
+            title={favorite ? t("Remove from favorites") : t("Add to favorites")}
+            onClick={() => void toggleFavorite()}
+            className={`rounded p-1 transition-colors hover:bg-elevated hover:text-text ${favorite ? "text-accent" : "text-muted"}`}
+          >
+            <Star size={13} fill={favorite ? "currentColor" : "none"} />
+          </button>
           {isOwner ? (
             <DocShareMenu
               workspaceId={workspaceId}

@@ -7,6 +7,8 @@ import {
   listChildPages,
   listPageRefs,
   pageAuthor,
+  isPageFavorite,
+  pageAncestors,
   pageEmbedSources,
   pageLevel,
   pageLookup,
@@ -39,12 +41,14 @@ async function DocContent({
   const page = await getPage(workspaceId, pageId, user.id);
   if (!page) notFound();
 
-  const [subpages, refs, embeds, author, level] = await Promise.all([
+  const [subpages, refs, embeds, author, level, ancestors, favorite] = await Promise.all([
     listChildPages(workspaceId, page.id, user.id),
     listPageRefs(workspaceId, user.id),
     pageEmbedSources(workspaceId, user.id, page.doc),
     pageAuthor(page.createdBy),
     pageLevel(page, user.id),
+      pageAncestors(workspaceId, page, user.id),
+      isPageFavorite(page.id, user.id),
   ]);
 
   return (
@@ -54,6 +58,8 @@ async function DocContent({
       page={page}
       author={author}
       level={level ?? "view"}
+      ancestors={ancestors}
+      favorite={favorite}
       isOwner={page.createdBy === user.id}
       viewerId={user.id}
       subpages={subpages}

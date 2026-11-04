@@ -9,6 +9,8 @@ import {
   importMarkdownPage,
   keepUnsavedText,
   listPageAccess,
+  movePage,
+  togglePageFavorite,
   listPageVersions,
   pageConflictView,
   purgePage,
@@ -277,5 +279,26 @@ export async function setPageMemberLevelAction(
     const { user } = await requireWorkspace(workspaceId);
     await setPageMemberLevel(workspaceId, pageId, user.id, userId, level);
     refresh(workspaceId);
+  });
+}
+
+export async function movePageAction(
+  workspaceId: string,
+  pageId: string,
+  target: { parentId: string | null; beforeId?: string | null; shared?: boolean }
+): Promise<ActionResult<void>> {
+  return run(async () => {
+    const { user } = await requireWorkspace(workspaceId);
+    await movePage(workspaceId, pageId, user.id, target);
+    refresh(workspaceId);
+  });
+}
+
+export async function togglePageFavoriteAction(workspaceId: string, pageId: string): Promise<ActionResult<boolean>> {
+  return run(async () => {
+    const { user } = await requireWorkspace(workspaceId);
+    const favorite = await togglePageFavorite(workspaceId, pageId, user.id);
+    refresh(workspaceId);
+    return favorite;
   });
 }

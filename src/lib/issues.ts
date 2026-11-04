@@ -38,6 +38,7 @@ import {
   workspaces,
   pageAccess,
   pageComments,
+  pageFavorites,
   pageVersions,
   pages,
 } from "../db/schema";
@@ -426,6 +427,7 @@ const WORKSPACE_TRASH_DAYS = 30;
 async function purgeWorkspaceData(db: ReturnType<typeof getDb>, workspaceId: string) {
   const workspacePages = db.select({ id: pages.id }).from(pages).where(eq(pages.workspaceId, workspaceId));
   await db.delete(pageAccess).where(inArray(pageAccess.pageId, workspacePages));
+  await db.delete(pageFavorites).where(inArray(pageFavorites.pageId, workspacePages));
   await db.delete(pageVersions).where(eq(pageVersions.workspaceId, workspaceId));
   await db.delete(pageComments).where(eq(pageComments.workspaceId, workspaceId));
   await db.delete(pages).where(eq(pages.workspaceId, workspaceId));

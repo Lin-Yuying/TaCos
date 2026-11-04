@@ -29,6 +29,8 @@
     "i18n:check": "node scripts/check-i18n.mjs"
   },
   "dependencies": {
+    "@atlaskit/pragmatic-drag-and-drop": "^4.0.0",
+    "@atlaskit/pragmatic-drag-and-drop-hitbox": "^3.0.0",
     "@floating-ui/dom": "^1.8.0",
     "@modelcontextprotocol/sdk": "^1.32.1",
     "@tiptap/core": "^3.32.2",

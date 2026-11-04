@@ -5,6 +5,8 @@ import {
   listChildPages,
   listPageRefs,
   pageAuthor,
+  isPageFavorite,
+  pageAncestors,
   pageEmbedSources,
   pageLevel,
   pageLookup,
@@ -19,18 +21,22 @@ export async function GET(_req: Request, ctx: Ctx) {
     const page = await getPage(workspaceId, id, user.id);
     if (!page) throw new TacosError("Not found", 404);
 
-    const [subpages, refs, embeds, author, level] = await Promise.all([
+    const [subpages, refs, embeds, author, level, ancestors, favorite] = await Promise.all([
       listChildPages(workspaceId, page.id, user.id),
       listPageRefs(workspaceId, user.id),
       pageEmbedSources(workspaceId, user.id, page.doc),
       pageAuthor(page.createdBy),
       pageLevel(page, user.id),
+      pageAncestors(workspaceId, page, user.id),
+      isPageFavorite(page.id, user.id),
     ]);
 
     return Response.json({
       page,
       author,
       level: level ?? "view",
+      ancestors,
+      favorite,
       isOwner: page.createdBy === user.id,
       viewerId: user.id,
       subpages,
