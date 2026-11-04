@@ -905,6 +905,27 @@ const zh: Record<string, string> = {
   "Your own APIs, for you only. Each member fills in their own. They are saved on this computer, in a file only your account can read, not encrypted, and they never reach the server. Pi and DeepSeek Harness have no subscription, so they need an API, and DeepSeek Harness only runs on a DeepSeek address.":
     "你自己的 API，只有你能用，每位成员各填各的。它们保存在这台电脑上一个只有你的账户能读的文件里，没有加密，不会发到服务器。Pi 和 DeepSeek Harness 没有订阅，所以需要 API，DeepSeek Harness 只能用 DeepSeek 的地址。",
   "Saved, not verified: the API could not be reached from this computer.": "已保存，但未验证：这台电脑连不上这个 API。",
+  Updates: "更新",
+  "Discard your unsaved text?": "放弃你还没保存的文字？",
+  "{name} changed this document while you were editing it": "你编辑时，{name} 改了这篇文档",
+  "This document changed while you were editing it": "你编辑时，这篇文档被改过",
+  "Your text is not saved yet. Keeping it adds a new version; the other text stays in Updates.":
+    "你的文字还没保存。保留你的文字会新增一个版本，对方的文字仍留在「更新」里。",
+  "Keep my text": "保留我的文字",
+  "Use the other text": "用对方的文字",
+  "Version not found": "找不到这个版本",
+  "No updates yet.": "还没有更新。",
+  "Earlier version": "更早的版本",
+  "Restored version {n}": "恢复了版本 {n}",
+  "Unsaved text from {name}": "{name} 没保存的文字",
+  "Version {n}": "版本 {n}",
+  "Restore this version": "恢复这个版本",
+  "Close updates": "关闭更新",
+  "Current": "当前",
+  "No text changed.": "文字没有变化。",
+  "Title: {before} → {after}": "标题：{before} → {after}",
+  "{count} unchanged lines": "{count} 行没变",
+  "Someone": "有人",
 };
 
 export default zh;

@@ -1,7 +1,7 @@
 import crypto from "node:crypto";
-import { and, eq, inArray, or } from "drizzle-orm";
+import { and, desc, eq, inArray, lt, or } from "drizzle-orm";
 import { getDb } from "../db/client";
-import { pages, users } from "../db/schema";
+import { pageVersions, pages, users } from "../db/schema";
 import { TacosError, getProject, nowIso } from "./issues";
 
 export type DocPage = {
@@ -14,12 +14,13 @@ export type DocPage = {
   doc: string;
   createdBy: string;
   shared: boolean;
+  revision: number;
   createdAt: string;
   updatedAt: string;
 };
 
 // What the sidebar and the child-page list need; the body is left in the database.
-export type PageSummary = Omit<DocPage, "doc" | "workspaceId"> & { depth: number };
+export type PageSummary = Omit<DocPage, "doc" | "workspaceId" | "revision"> & { depth: number };
 
 export type PageRef = { id: string; title: string; icon: string | null };
 
@@ -188,6 +189,7 @@ export async function createPage(
     doc: input.doc ?? "",
     createdBy: viewerId,
     shared: 0,
+    revision: 0,
     createdAt: at,
     updatedAt: at,
   });
@@ -280,11 +282,95 @@ export function canEditPage(page: DocPage, viewerId: string): boolean {
   return page.createdBy === viewerId || page.shared;
 }
 
+// Edits by the same person within this window are one version, so typing does not fill
+// the Updates panel. An Agent's edits are never merged: each one can be undone by itself.
+const VERSION_MERGE_MS = 10 * 60 * 1000;
+const MAX_VERSIONS_PER_PAGE = 200;
+
+type VersionWrite = {
+  title: string;
+  doc: string;
+  actorId: string;
+  via: string;
+  reason: "edit" | "restore" | "unsaved";
+  restoredFrom?: number;
+};
+
+async function latestVersion(pageId: string) {
+  const [row] = await getDb()
+    .select()
+    .from(pageVersions)
+    .where(eq(pageVersions.pageId, pageId))
+    .orderBy(desc(pageVersions.seq))
+    .limit(1);
+  return row ?? null;
+}
+
+async function recordVersion(page: DocPage, write: VersionWrite): Promise<void> {
+  const db = getDb();
+  const at = nowIso();
+  let latest = await latestVersion(page.id);
+  if (!latest && page.doc) {
+    // A page written before versions existed, or created with text: keep that text.
+    await db.insert(pageVersions).values({
+      id: crypto.randomUUID(),
+      pageId: page.id,
+      workspaceId: page.workspaceId,
+      seq: 1,
+      title: page.title,
+      doc: page.doc,
+      actorId: page.createdBy,
+      via: "you",
+      reason: "earlier",
+      createdAt: page.updatedAt,
+      updatedAt: page.updatedAt,
+    });
+    latest = await latestVersion(page.id);
+  }
+  if (
+    latest &&
+    write.reason === "edit" &&
+    write.via === "you" &&
+    latest.reason === "edit" &&
+    latest.via === "you" &&
+    latest.actorId === write.actorId &&
+    Date.now() - Date.parse(latest.createdAt) < VERSION_MERGE_MS
+  ) {
+    await db
+      .update(pageVersions)
+      .set({ title: write.title, doc: write.doc, updatedAt: at })
+      .where(eq(pageVersions.id, latest.id));
+    return;
+  }
+  const seq = (latest?.seq ?? 0) + 1;
+  await db.insert(pageVersions).values({
+    id: crypto.randomUUID(),
+    pageId: page.id,
+    workspaceId: page.workspaceId,
+    seq,
+    title: write.title,
+    doc: write.doc,
+    actorId: write.actorId,
+    via: write.via,
+    reason: write.reason,
+    restoredFrom: write.restoredFrom ?? null,
+    createdAt: at,
+    updatedAt: at,
+  });
+  await db
+    .delete(pageVersions)
+    .where(and(eq(pageVersions.pageId, page.id), lt(pageVersions.seq, seq - MAX_VERSIONS_PER_PAGE + 1)));
+}
+
+/** Someone else changed the body after this save's text was loaded. */
+export const PAGE_CONFLICT = "This document changed while you were editing it";
+
 export async function updatePage(
   workspaceId: string,
   pageId: string,
   viewerId: string,
-  patch: { title?: string; doc?: string; icon?: string | null }
+  patch: { title?: string; doc?: string; icon?: string | null; baseRevision?: number },
+  options: { via?: string } = {}
 ): Promise<DocPage> {
   const page = await getPage(workspaceId, pageId, viewerId);
   if (!page) throw new TacosError("Page not found", 404);
@@ -294,11 +380,15 @@ export async function updatePage(
   if (patch.title != null) {
     const title = patch.title.trim().slice(0, 120);
     if (!title) throw new TacosError("Page title is required");
-    next.title = title;
+    if (title !== page.title) next.title = title;
   }
-  if (patch.doc != null) {
+  if (patch.doc != null && patch.doc !== page.doc) {
     assertDocSize(patch.doc);
+    if (patch.baseRevision != null && patch.baseRevision !== page.revision) {
+      throw new TacosError(PAGE_CONFLICT, 409);
+    }
     next.doc = patch.doc;
+    next.revision = page.revision + 1;
   }
   if (patch.icon !== undefined) {
     const icon = patch.icon?.trim() ?? "";
@@ -307,13 +397,181 @@ export async function updatePage(
   }
   if (Object.keys(next).length === 0) return page;
   next.updatedAt = nowIso();
-  await getDb()
+  const written = await getDb()
     .update(pages)
     .set(next)
-    .where(and(eq(pages.workspaceId, workspaceId), eq(pages.id, pageId)));
+    .where(
+      and(
+        eq(pages.workspaceId, workspaceId),
+        eq(pages.id, pageId),
+        eq(pages.revision, page.revision)
+      )
+    );
+  if (written.changes === 0) throw new TacosError(PAGE_CONFLICT, 409);
+  if (next.doc !== undefined || next.title !== undefined) {
+    await recordVersion(page, {
+      title: next.title ?? page.title,
+      doc: next.doc ?? page.doc,
+      actorId: viewerId,
+      via: options.via ?? "you",
+      reason: "edit",
+    });
+  }
   const updated = await findPage(workspaceId, pageId);
   if (!updated) throw new TacosError("Page not found", 404);
   return updated;
+}
+
+/** Refused text its writer can no longer resolve: keep it in Updates, leave the page alone. */
+export async function keepUnsavedText(
+  workspaceId: string,
+  pageId: string,
+  viewerId: string,
+  doc: string
+): Promise<void> {
+  const page = await getPage(workspaceId, pageId, viewerId);
+  if (!page) throw new TacosError("Page not found", 404);
+  if (!canEditPage(page, viewerId)) throw new TacosError("You cannot edit this page", 403);
+  assertDocSize(doc);
+  await recordVersion(page, {
+    title: page.title,
+    doc,
+    actorId: viewerId,
+    via: "you",
+    reason: "unsaved",
+  });
+}
+
+export type PageVersion = {
+  id: string;
+  seq: number;
+  title: string;
+  actor: PageAuthor | null;
+  via: string;
+  reason: string;
+  restoredFrom: number | null;
+  updatedAt: string;
+};
+
+export async function listPageVersions(
+  workspaceId: string,
+  pageId: string,
+  viewerId: string
+): Promise<PageVersion[]> {
+  const page = await getPage(workspaceId, pageId, viewerId);
+  if (!page) throw new TacosError("Page not found", 404);
+  const rows = await getDb()
+    .select({
+      id: pageVersions.id,
+      seq: pageVersions.seq,
+      title: pageVersions.title,
+      via: pageVersions.via,
+      reason: pageVersions.reason,
+      restoredFrom: pageVersions.restoredFrom,
+      updatedAt: pageVersions.updatedAt,
+      actorId: users.id,
+      displayName: users.displayName,
+      avatar: users.avatar,
+    })
+    .from(pageVersions)
+    .leftJoin(users, eq(users.id, pageVersions.actorId))
+    .where(eq(pageVersions.pageId, pageId))
+    .orderBy(desc(pageVersions.seq));
+  return rows.map(({ actorId, displayName, avatar, ...row }) => ({
+    ...row,
+    actor: actorId ? { id: actorId, displayName: displayName ?? "", avatar } : null,
+  }));
+}
+
+export type PageVersionChange = { title: string; doc: string; beforeTitle: string; beforeDoc: string };
+
+/** One version with the text it replaced. Kept unsaved text never counts as the page's past. */
+export async function getPageVersionChange(
+  workspaceId: string,
+  pageId: string,
+  viewerId: string,
+  versionId: string
+): Promise<PageVersionChange> {
+  const page = await getPage(workspaceId, pageId, viewerId);
+  if (!page) throw new TacosError("Page not found", 404);
+  const db = getDb();
+  const [version] = await db
+    .select()
+    .from(pageVersions)
+    .where(and(eq(pageVersions.pageId, pageId), eq(pageVersions.id, versionId)))
+    .limit(1);
+  if (!version) throw new TacosError("Version not found", 404);
+  const [before] = await db
+    .select({ title: pageVersions.title, doc: pageVersions.doc, reason: pageVersions.reason })
+    .from(pageVersions)
+    .where(and(eq(pageVersions.pageId, pageId), lt(pageVersions.seq, version.seq), inArray(pageVersions.reason, ["edit", "restore", "earlier"])))
+    .orderBy(desc(pageVersions.seq))
+    .limit(1);
+  return {
+    title: version.title,
+    doc: version.doc,
+    beforeTitle: before?.title ?? version.title,
+    beforeDoc: before?.doc ?? "",
+  };
+}
+
+/** A restore adds a new version on top; nothing in the history is removed. */
+export async function restorePageVersion(
+  workspaceId: string,
+  pageId: string,
+  viewerId: string,
+  versionId: string,
+  options: { via?: string } = {}
+): Promise<DocPage> {
+  const page = await getPage(workspaceId, pageId, viewerId);
+  if (!page) throw new TacosError("Page not found", 404);
+  if (!canEditPage(page, viewerId)) throw new TacosError("You cannot edit this page", 403);
+  const [version] = await getDb()
+    .select()
+    .from(pageVersions)
+    .where(and(eq(pageVersions.pageId, pageId), eq(pageVersions.id, versionId)))
+    .limit(1);
+  if (!version) throw new TacosError("Version not found", 404);
+  const written = await getDb()
+    .update(pages)
+    .set({
+      title: version.title,
+      doc: version.doc,
+      revision: page.revision + 1,
+      updatedAt: nowIso(),
+    })
+    .where(
+      and(
+        eq(pages.workspaceId, workspaceId),
+        eq(pages.id, pageId),
+        eq(pages.revision, page.revision)
+      )
+    );
+  if (written.changes === 0) throw new TacosError(PAGE_CONFLICT, 409);
+  await recordVersion(page, {
+    title: version.title,
+    doc: version.doc,
+    actorId: viewerId,
+    via: options.via ?? "you",
+    reason: "restore",
+    restoredFrom: version.seq,
+  });
+  const updated = await findPage(workspaceId, pageId);
+  if (!updated) throw new TacosError("Page not found", 404);
+  return updated;
+}
+
+/** For the conflict prompt: the page as it is now and who last changed it. */
+export async function pageConflictView(
+  workspaceId: string,
+  pageId: string,
+  viewerId: string
+): Promise<{ doc: string; revision: number; by: string | null }> {
+  const page = await getPage(workspaceId, pageId, viewerId);
+  if (!page) throw new TacosError("Page not found", 404);
+  const latest = await latestVersion(pageId);
+  const author = latest ? await pageAuthor(latest.actorId) : null;
+  return { doc: page.doc, revision: page.revision, by: author?.displayName ?? null };
 }
 
 export async function descendantsOf(workspaceId: string, pageId: string): Promise<DocPage[]> {
@@ -367,6 +625,7 @@ export async function deletePage(
   await getDb()
     .delete(pages)
     .where(and(eq(pages.workspaceId, workspaceId), inArray(pages.id, ids)));
+  await getDb().delete(pageVersions).where(inArray(pageVersions.pageId, ids));
   return ids;
 }
 

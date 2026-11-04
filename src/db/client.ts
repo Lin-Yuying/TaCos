@@ -158,6 +158,22 @@ CREATE TABLE IF NOT EXISTS pages (
   updated_at TEXT NOT NULL
 );
 CREATE INDEX IF NOT EXISTS pages_workspace_idx ON pages (workspace_id);
+
+CREATE TABLE IF NOT EXISTS page_versions (
+  id TEXT PRIMARY KEY,
+  page_id TEXT NOT NULL,
+  workspace_id TEXT NOT NULL,
+  seq INTEGER NOT NULL,
+  title TEXT NOT NULL,
+  doc TEXT NOT NULL,
+  actor_id TEXT NOT NULL,
+  via TEXT NOT NULL,
+  reason TEXT NOT NULL,
+  restored_from INTEGER,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
+CREATE UNIQUE INDEX IF NOT EXISTS page_versions_page_seq_idx ON page_versions (page_id, seq);
 CREATE INDEX IF NOT EXISTS pages_parent_idx ON pages (parent_id);
 
 CREATE TABLE IF NOT EXISTS issues (
@@ -737,6 +753,7 @@ function bootstrap(sqlite: Database.Database) {
   if (addColumnIfMissing(sqlite, "pages", "project_id", "TEXT")) {
     sqlite.exec("CREATE INDEX IF NOT EXISTS pages_project_idx ON pages (project_id)");
   }
+  addColumnIfMissing(sqlite, "pages", "revision", "INTEGER NOT NULL DEFAULT 0");
   addColumnIfMissing(sqlite, "issues", "reminder_sent_for", "TEXT");
   const addedIssueCreator = addColumnIfMissing(sqlite, "issues", "created_by", "TEXT");
   if (!hadIssueAssignees && hasColumn(sqlite, "issues", "assignee_id")) {

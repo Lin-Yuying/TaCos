@@ -584,7 +584,7 @@ export async function executeAgentTool(
       });
       const markdown = typeof args.markdown === "string" ? args.markdown : "";
       if (markdown.trim()) {
-        await updatePage(ctx.workspaceId, page.id, ctx.userId, { doc: markdown });
+        await updatePage(ctx.workspaceId, page.id, ctx.userId, { doc: markdown }, { via: "mcp" });
       }
       return { text: `Created document "${page.title}" in ${ctx.projectKey}` };
     }
@@ -594,7 +594,7 @@ export async function executeAgentTool(
       const markdown = typeof args.markdown === "string" ? args.markdown : "";
       if (!markdown.trim()) throw new TacosError("The new document is empty");
       // updatePage applies the person's own page permissions to the agent's write.
-      const page = await updatePage(ctx.workspaceId, id, ctx.userId, { doc: markdown });
+      const page = await updatePage(ctx.workspaceId, id, ctx.userId, { doc: markdown }, { via: "mcp" });
       return { text: `Replaced document "${page.title}" (${markdown.length} characters)` };
     }
     case "delete_task": {

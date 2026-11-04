@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
+  History,
   Link2,
   Lock,
   Maximize2,
@@ -19,10 +20,12 @@ import { Markdown, type PageContext, type PageRefEntry } from "@/components/mark
 import { DocumentEditor } from "@/components/document-editor";
 import { AssigneeAvatar } from "@/components/issue-table";
 import { AiEditPanel } from "@/components/ai-assist";
+import { DiffLines, DocUpdatesPanel } from "@/components/doc-updates";
 import { useUI } from "@/components/ui-context";
 import {
   createPageAction,
   deletePageAction,
+  savePageDocAction,
   setPageSharedAction,
   updatePageAction,
 } from "@/app/pages-actions";
@@ -90,20 +93,56 @@ export function DocPageView({
   const [saved, setSaved] = useState(false);
   const [aiPanel, setAiPanel] = useState<{ x: number; y: number } | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [updatesOpen, setUpdatesOpen] = useState(false);
+  const [conflict, setConflict] = useState<{ doc: string; revision: number; by: string | null } | null>(null);
   const pending = useRef<string | null>(null);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Saves run one at a time: each one names the revision the one before it produced.
+  const revision = useRef(page.revision);
+  const saves = useRef<Promise<void>>(Promise.resolve());
+  const conflicted = useRef(false);
 
   function flushDoc() {
     if (timer.current) clearTimeout(timer.current);
     timer.current = null;
+    if (conflicted.current) return;
     const next = pending.current;
     pending.current = null;
     if (next === null) return;
     setSaved(false);
-    void updatePageAction(workspaceId, page.id, { doc: next }).then((result) => {
-      if (!result.ok) setError(result.error);
-      else setSaved(true);
+    saves.current = saves.current.then(async () => {
+      const result = await savePageDocAction(workspaceId, page.id, next, revision.current).catch(() => null);
+      if (!result) setError("Something went wrong");
+      else if (!result.ok) setError(result.error);
+      else if (result.data.kind === "saved") {
+        revision.current = result.data.revision;
+        setSaved(true);
+      } else {
+        // Hold the text: newer typing wins over it, and leaving the page still keeps it.
+        pending.current ??= next;
+        conflicted.current = true;
+        setConflict(result.data);
+      }
     });
+  }
+
+  function keepMine() {
+    if (!conflict) return;
+    revision.current = conflict.revision;
+    conflicted.current = false;
+    setConflict(null);
+    pending.current = doc;
+    flushDoc();
+  }
+
+  function useTheirs() {
+    if (!conflict) return;
+    if (!window.confirm(t("Discard your unsaved text?"))) return;
+    revision.current = conflict.revision;
+    conflicted.current = false;
+    pending.current = null;
+    setDoc(conflict.doc);
+    setConflict(null);
   }
 
   // Typing schedules a write; the unmount path writes whatever is still pending so
@@ -121,10 +160,29 @@ export function DocPageView({
       timer.current = null;
       const next = pending.current;
       pending.current = null;
-      if (next !== null) void updatePageAction(workspaceId, page.id, { doc: next });
+      if (next === null) return;
+      saves.current = saves.current.then(async () => {
+        await savePageDocAction(workspaceId, page.id, next, revision.current, { keepOnConflict: true });
+      });
     },
     [workspaceId, page.id]
   );
+
+  // Text not saved yet belongs in the history before a restore replaces it.
+  async function beforeRestore() {
+    flushDoc();
+    await saves.current;
+  }
+
+  function restored(next: DocPage) {
+    revision.current = next.revision;
+    conflicted.current = false;
+    pending.current = null;
+    setConflict(null);
+    setDoc(next.doc);
+    setTitle(next.title);
+    router.refresh();
+  }
 
   async function saveTitle() {
     const next = title.trim();
@@ -259,6 +317,19 @@ export function DocPageView({
           >
             {t("Saved")}
           </span>
+          <button
+            type="button"
+            onClick={() => setUpdatesOpen((open) => !open)}
+            title={t("Updates")}
+            aria-label={t("Updates")}
+            aria-pressed={updatesOpen}
+            className={`flex items-center gap-1 rounded-md border px-2 py-1 text-[12px] font-medium transition-colors hover:border-border-strong hover:text-text ${
+              updatesOpen ? "border-border-strong text-text" : "border-border text-muted"
+            }`}
+          >
+            <History size={12} />
+            {!compact && t("Updates")}
+          </button>
           {canEdit && aiReady && (
             <button
               type="button"
@@ -335,7 +406,8 @@ export function DocPageView({
         />
       )}
 
-      <div className="flex-1 overflow-y-auto">
+      <div className="relative flex min-h-0 flex-1">
+      <div className="min-w-0 flex-1 overflow-y-auto">
         {/* A pane is measured by its own width, not the window's, so the reading
             margins it would use on a full tab would leave no text at all. */}
         <div
@@ -391,6 +463,38 @@ export function DocPageView({
           </div>
 
           {error && <div className="mt-3 text-[12px] text-danger">{t(error)}</div>}
+
+          {conflict && (
+            <div data-doc-conflict className="mt-3 rounded-lg border border-border-strong bg-surface p-3 text-[13px]">
+              <div className="font-medium text-text">
+                {conflict.by
+                  ? t("{name} changed this document while you were editing it", { name: conflict.by })
+                  : t("This document changed while you were editing it")}
+              </div>
+              <div className="mt-1 text-[12px] text-muted">
+                {t("Your text is not saved yet. Keeping it adds a new version; the other text stays in Updates.")}
+              </div>
+              <div className="mt-2 max-h-48 overflow-y-auto rounded border border-border bg-bg p-2">
+                <DiffLines before={conflict.doc} after={doc} />
+              </div>
+              <div className="mt-2 flex gap-2">
+                <button
+                  type="button"
+                  onClick={keepMine}
+                  className="rounded-md bg-accent px-2 py-1 text-[12px] font-medium text-bg hover:bg-accent-hover"
+                >
+                  {t("Keep my text")}
+                </button>
+                <button
+                  type="button"
+                  onClick={useTheirs}
+                  className="rounded-md border border-border px-2 py-1 text-[12px] font-medium text-muted hover:border-border-strong hover:text-text"
+                >
+                  {t("Use the other text")}
+                </button>
+              </div>
+            </div>
+          )}
 
           <div className="mt-6">
             {unplaced.length > 0 && (
@@ -489,6 +593,18 @@ export function DocPageView({
             </button>
           </div>
         </div>
+      </div>
+      {updatesOpen && (
+        <DocUpdatesPanel
+          workspaceId={workspaceId}
+          pageId={page.id}
+          canEdit={canEdit}
+          compact={compact}
+          beforeRestore={beforeRestore}
+          onRestored={restored}
+          onClose={() => setUpdatesOpen(false)}
+        />
+      )}
       </div>
     </div>
   );

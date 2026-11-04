@@ -1,4 +1,4 @@
-import { index, integer, primaryKey, real, sqliteTable, text } from "drizzle-orm/sqlite-core";
+import { index, integer, primaryKey, real, sqliteTable, text, uniqueIndex } from "drizzle-orm/sqlite-core";
 
 export const users = sqliteTable("users", {
   id: text("id").primaryKey(),
@@ -227,6 +227,8 @@ export const pages = sqliteTable(
     doc: text("doc").notNull().default(""),
     createdBy: text("created_by").notNull(),
     shared: integer("shared").notNull().default(0),
+    // Goes up with every change to the body; a save names the one it started from.
+    revision: integer("revision").notNull().default(0),
     createdAt: text("created_at").notNull(),
     updatedAt: text("updated_at").notNull(),
   },
@@ -235,6 +237,29 @@ export const pages = sqliteTable(
     index("pages_parent_idx").on(t.parentId),
     index("pages_project_idx").on(t.projectId),
   ]
+);
+
+// What a document looked like after each change; the Updates panel reads these.
+export const pageVersions = sqliteTable(
+  "page_versions",
+  {
+    id: text("id").primaryKey(),
+    pageId: text("page_id").notNull(),
+    workspaceId: text("workspace_id").notNull(),
+    seq: integer("seq").notNull(),
+    title: text("title").notNull(),
+    doc: text("doc").notNull(),
+    actorId: text("actor_id").notNull(),
+    // you | mcp
+    via: text("via").notNull(),
+    // edit | restore | earlier (the text before history started) | unsaved (refused text
+    // kept when its writer left the page; never the page's current text)
+    reason: text("reason").notNull(),
+    restoredFrom: integer("restored_from"),
+    createdAt: text("created_at").notNull(),
+    updatedAt: text("updated_at").notNull(),
+  },
+  (t) => [uniqueIndex("page_versions_page_seq_idx").on(t.pageId, t.seq)]
 );
 
 export const issues = sqliteTable(
