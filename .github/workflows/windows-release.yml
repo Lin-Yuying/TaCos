@@ -70,11 +70,20 @@ jobs:
           cp "$file" out/
           ls -l out
 
+      - name: Write Windows updater metadata
+        shell: bash
+        run: |
+          set -euo pipefail
+          exe=$(find out -maxdepth 1 -name '*.exe' -print -quit)
+          npx tsx scripts/write-desktop-updater-metadata.ts --platform win --file "$exe" --out out
+
       - name: Upload Windows installer
         uses: actions/upload-artifact@v7
         with:
           name: tacos-windows-x64
-          path: out/*.exe
+          path: |
+            out/*.exe
+            out/latest.yml
           if-no-files-found: error
           retention-days: 7
 
@@ -118,11 +127,26 @@ jobs:
       - name: Build the local (embedded server) DMG
         run: npm run desktop:standalone:mac
 
+      - name: Write macOS updater metadata
+        shell: bash
+        run: |
+          set -euo pipefail
+          zip=$(find release-standalone -maxdepth 1 -name '*-mac.zip' -print -quit)
+          if [ -z "$zip" ]; then
+            zip=$(find release-standalone -maxdepth 1 -name '*.zip' -print -quit)
+          fi
+          test -n "$zip"
+          npx tsx scripts/write-desktop-updater-metadata.ts --platform mac --file "$zip" --out release-standalone
+          ls -l release-standalone/*.zip release-standalone/latest-mac.yml
+
       - name: Upload macOS disk image
         uses: actions/upload-artifact@v7
         with:
           name: tacos-macos-arm64
-          path: release-standalone/TaCos-Local-*.dmg
+          path: |
+            release-standalone/TaCos-Local-*.dmg
+            release-standalone/*.zip
+            release-standalone/latest-mac.yml
           if-no-files-found: error
           retention-days: 7
 
@@ -153,7 +177,11 @@ jobs:
         run: |
           set -euo pipefail
           tag="$GITHUB_REF_NAME"
-          mapfile -t assets < <(ls dist/windows/*.exe dist/macos/*.dmg)
+          mapfile -t assets < <(ls dist/windows/*.exe dist/windows/latest.yml dist/macos/*.dmg dist/macos/*.zip dist/macos/latest-mac.yml 2>/dev/null)
+          # Fail if required updater metadata is missing.
+          test -f dist/windows/latest.yml
+          test -f dist/macos/latest-mac.yml
+          ls dist/macos/*.zip >/dev/null
           printf 'Releasing %s with:\n' "$tag"
           printf '  %s\n' "${assets[@]}"
 
@@ -175,7 +203,10 @@ jobs:
           | Platform | File |
           | --- | --- |
           | Windows x64 | `TaCos-Local-Setup-*.exe` |
+          | Windows updater feed | `latest.yml` |
           | macOS (Apple silicon) | `TaCos-Local-*-arm64.dmg` |
+          | macOS updater zip | `*-mac.zip` |
+          | macOS updater feed | `latest-mac.yml` |
 
           Both installers run TaCos with its own local server and SQLite database, so no account or cloud service is involved.
 
