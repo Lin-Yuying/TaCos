@@ -26,7 +26,7 @@ Item-level checks stay cheap (types, check scripts). End-to-end tests and screen
 | 3 | Document versions, restore, updates panel with diff, save conflict prompt | done | Check script: stale save is refused; restore creates a new version |
 | 4 | Document trash | done | Check script: delete, restore, purge |
 | 5 | Document and paragraph comments, count, @ notify | done | Check script: anchor survives an edit before it; mention creates a notification |
-| 6 | Document permissions: visible to all; view, comment or edit per person | todo | Check script: each level allows and refuses the right actions |
+| 6 | Document permissions: visible to all; view, comment or edit per person | done | Check script: each level allows and refuses the right actions |
 | 7 | Global search over documents, tasks, comments | todo | Check script: 3+ character and 2-character Chinese queries both hit; private documents of others do not |
 | 8 | Sidebar shared and private tree, multi-level breadcrumb, document favorites | todo | Check script for move rules; screenshots in item 15 |
 | 9 | Cover, image and attachment upload with size limit | todo | Check script: over-limit upload refused; resumed upload completes |
@@ -49,3 +49,7 @@ Item-level checks stay cheap (types, check scripts). End-to-end tests and screen
 - Item 2: `scripts/check-runner.ts` drives the real routes and the built runner with a fake pi and a fake model API on loopback. Real harnesses and models are exercised in item 15. Keys on a member's computer live in `~/.tacos/runner/config.json`, mode 0600, not encrypted, and the settings page says so. Anyone with admin on the server, or anyone whose text an Agent reads, can steer that person's Agent on their own computer: approval levels are the guard.
 - Item 3: uses `diff` 9.0.0 (BSD-3-Clause) for line diffs. Edits by one person within 10 minutes are one version; each Agent edit is its own. A stale save returns a prompt. A writer who leaves the page with refused text gets that text kept as an `unsaved` version; the page does not change. Each page keeps its newest 200 versions. The panel and prompt are exercised in item 15.
 - Item 5: a passage comment stores its quote with 32 characters on each side, in the plain text of the editor document, and finds its place by text. The plan said Yjs relative positions; that would tie comments to item 14, which may be blocked, and text survives the Markdown stored by every other path. A quote that was rewritten leaves the comment in the panel with a note. A reader who cannot edit now gets the read-only editor, so selection and highlights work the same way; embedded pages show as a link card there, as they do for writers.
+
+### Item 6: document permissions
+
+Levels are view, comment and edit (`src/lib/page-level.ts`). A shared page has one level for every member (`pages.share_level`, default edit, as 2.1 behaved), and `page_access` overrides it for one person, up or down. Only the author changes sharing, and a change covers the subtree. A new subpage copies its parent's sharing and people's levels, and creating one needs edit on the parent. Visibility itself stays all or nothing: shared means every member sees it.

@@ -6,12 +6,13 @@ import { useUI } from "@/components/ui-context";
 import { DocPageView } from "@/components/doc-page";
 import type { PageContext, PageRefEntry } from "@/components/markdown";
 import type { DocPage, PageAuthor, PageSummary } from "@/lib/pages";
+import type { PageLevel } from "@/lib/page-level";
 import { useT } from "@/components/i18n-context";
 
 type PageDetail = {
   page: DocPage;
   author: PageAuthor | null;
-  canEdit: boolean;
+  level: PageLevel;
   isOwner: boolean;
   viewerId: string;
   subpages: PageSummary[];
@@ -101,7 +102,7 @@ function DocPanel({
       workspaceId={workspaceId}
       page={detail.page}
       author={detail.author}
-      canEdit={detail.canEdit}
+      level={detail.level}
       isOwner={detail.isOwner}
       viewerId={detail.viewerId}
       subpages={detail.subpages}

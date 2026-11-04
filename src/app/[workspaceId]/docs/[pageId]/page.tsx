@@ -3,12 +3,12 @@ import { connection } from "next/server";
 import { notFound, redirect } from "next/navigation";
 import { getSessionUser, requireWorkspace } from "@/lib/auth";
 import {
-  canEditPage,
   getPage,
   listChildPages,
   listPageRefs,
   pageAuthor,
   pageEmbedSources,
+  pageLevel,
   pageLookup,
 } from "@/lib/pages";
 import { DocPageView } from "@/components/doc-page";
@@ -39,11 +39,12 @@ async function DocContent({
   const page = await getPage(workspaceId, pageId, user.id);
   if (!page) notFound();
 
-  const [subpages, refs, embeds, author] = await Promise.all([
+  const [subpages, refs, embeds, author, level] = await Promise.all([
     listChildPages(workspaceId, page.id, user.id),
     listPageRefs(workspaceId, user.id),
     pageEmbedSources(workspaceId, user.id, page.doc),
     pageAuthor(page.createdBy),
+    pageLevel(page, user.id),
   ]);
 
   return (
@@ -52,7 +53,7 @@ async function DocContent({
       workspaceId={workspaceId}
       page={page}
       author={author}
-      canEdit={canEditPage(page, user.id)}
+      level={level ?? "view"}
       isOwner={page.createdBy === user.id}
       viewerId={user.id}
       subpages={subpages}

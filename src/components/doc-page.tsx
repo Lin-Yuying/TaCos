@@ -20,6 +20,7 @@ import { Menu, MenuItem } from "@/components/menu";
 import type { PageContext, PageRefEntry } from "@/components/markdown";
 import { DocumentEditor, type EditorAnchor } from "@/components/document-editor";
 import { DocCommentsPanel } from "@/components/doc-comments";
+import { DocShareMenu } from "@/components/doc-share";
 import { AssigneeAvatar } from "@/components/issue-table";
 import { AiEditPanel } from "@/components/ai-assist";
 import { DiffLines, DocUpdatesPanel } from "@/components/doc-updates";
@@ -37,6 +38,7 @@ import {
 } from "@/app/pages-actions";
 import { announceDocsDeleted } from "@/components/tab-events";
 import type { DocAnchor } from "@/lib/doc-anchor";
+import { levelAllows, type PageLevel } from "@/lib/page-level";
 import type { Member } from "@/lib/issues";
 import type { PageComment } from "@/lib/page-comments";
 import type { DocPage, PageAuthor, PageSummary } from "@/lib/pages";
@@ -62,7 +64,7 @@ export function DocPageView({
   workspaceId,
   page,
   author,
-  canEdit,
+  level,
   isOwner,
   viewerId,
   subpages,
@@ -77,7 +79,7 @@ export function DocPageView({
   workspaceId: string;
   page: DocPage;
   author?: PageAuthor | null;
-  canEdit: boolean;
+  level: PageLevel;
   isOwner: boolean;
   viewerId: string;
   subpages: PageSummary[];
@@ -97,6 +99,8 @@ export function DocPageView({
   const t = useT();
   const router = useRouter();
   const { aiReady } = useUI();
+  const canEdit = level === "edit";
+  const canComment = levelAllows(level, "comment");
   const [title, setTitle] = useState(page.title);
   const [icon, setIcon] = useState(page.icon);
   const [shared, setShared] = useState(page.shared);
@@ -421,17 +425,22 @@ export function DocPageView({
               {!compact && "AI"}
             </button>
           )}
-          {isOwner && (
-            <button
-              type="button"
-              onClick={() => void toggleShared()}
-              title={shared ? t("Make private") : t("Share with the workspace")}
-              aria-label={shared ? t("Make private") : t("Share with the workspace")}
-              className="flex items-center gap-1 rounded-md border border-border px-2 py-1 text-[12px] font-medium text-muted transition-colors hover:border-border-strong hover:text-text"
-            >
-              {shared ? <Lock size={12} /> : <Users size={12} />}
-              {!compact && (shared ? t("Private") : t("Share"))}
-            </button>
+          {isOwner ? (
+            <DocShareMenu
+              workspaceId={workspaceId}
+              pageId={page.id}
+              ownerId={page.createdBy}
+              shared={shared}
+              compact={compact}
+              members={members}
+              onToggleShared={() => void toggleShared()}
+            />
+          ) : (
+            !canEdit && (
+              <span data-doc-level className="shrink-0 text-[11.5px] text-faint">
+                {t(canComment ? "Can comment" : "Can view")}
+              </span>
+            )
           )}
           {isOwner && (
             <button
@@ -628,10 +637,14 @@ export function DocPageView({
                 placeholder={t("Write something, or type / for commands…")}
                 anchors={anchors}
                 activeAnchor={activeComment}
-                onComment={(anchor) => {
-                  setDraftAnchor(anchor);
-                  setSide("comments");
-                }}
+                onComment={
+                  canComment
+                    ? (anchor) => {
+                        setDraftAnchor(anchor);
+                        setSide("comments");
+                      }
+                    : undefined
+                }
                 onAnchorClick={(id) => {
                   setActiveComment(id);
                   setSide("comments");
@@ -667,15 +680,17 @@ export function DocPageView({
             )}
           </div>
 
-          <div className="mt-10 border-t border-border pt-3">
-            <button
-              type="button"
-              onClick={() => void addSubpage()}
-              className="flex items-center gap-1.5 rounded px-1 py-1 text-[13px] text-muted transition-colors hover:bg-elevated/60 hover:text-text"
-            >
-              <Plus size={13} /> {t("Add a subpage")}
-            </button>
-          </div>
+          {canEdit && (
+            <div className="mt-10 border-t border-border pt-3">
+              <button
+                type="button"
+                onClick={() => void addSubpage()}
+                className="flex items-center gap-1.5 rounded px-1 py-1 text-[13px] text-muted transition-colors hover:bg-elevated/60 hover:text-text"
+              >
+                <Plus size={13} /> {t("Add a subpage")}
+              </button>
+            </div>
+          )}
         </div>
       </div>
       {side === "updates" && (
@@ -695,6 +710,7 @@ export function DocPageView({
           members={members}
           userId={viewerId}
           isOwner={isOwner}
+          canComment={canComment}
           compact={compact}
           located={located}
           draftAnchor={draftAnchor}

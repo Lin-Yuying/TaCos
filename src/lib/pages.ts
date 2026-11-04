@@ -1,7 +1,8 @@
 import crypto from "node:crypto";
 import { and, desc, eq, inArray, isNotNull, isNull, lt, or } from "drizzle-orm";
 import { getDb } from "../db/client";
-import { notifications, pageComments, pageVersions, pages, users } from "../db/schema";
+import { notifications, pageAccess, pageComments, pageVersions, pages, users } from "../db/schema";
+import { isPageLevel, levelAllows, type PageLevel } from "./page-level";
 import { TacosError, getProject, nowIso } from "./issues";
 
 export type DocPage = {
@@ -15,12 +16,13 @@ export type DocPage = {
   createdBy: string;
   shared: boolean;
   revision: number;
+  shareLevel: string;
   createdAt: string;
   updatedAt: string;
 };
 
 // What the sidebar and the child-page list need; the body is left in the database.
-export type PageSummary = Omit<DocPage, "doc" | "workspaceId" | "revision"> & { depth: number };
+export type PageSummary = Omit<DocPage, "doc" | "workspaceId" | "revision" | "shareLevel"> & { depth: number };
 
 export type PageRef = { id: string; title: string; icon: string | null };
 
@@ -159,9 +161,14 @@ export async function createPage(
   const db = getDb();
   const parentId: string | null = input.parentId ?? null;
   let projectId: string | null = input.projectId ?? null;
+  let inherit: DocPage | null = null;
   if (parentId) {
     const parent = await getPage(workspaceId, parentId, viewerId);
     if (!parent) throw new TacosError("Parent page not found", 404);
+    if (!levelAllows(await pageLevel(parent, viewerId), "edit")) {
+      throw new TacosError("You cannot edit this page", 403);
+    }
+    inherit = parent;
     // Subpages live wherever their parent lives; a project doc's children are project docs.
     if (projectId === null) projectId = parent.projectId;
   }
@@ -189,11 +196,19 @@ export async function createPage(
     icon: null,
     doc: input.doc ?? "",
     createdBy: viewerId,
-    shared: 0,
+    // A subpage has its parent's sharing, so a shared tree never hides a branch.
+    shared: inherit?.shared ? 1 : 0,
     revision: 0,
+    shareLevel: inherit?.shareLevel ?? "edit",
     createdAt: at,
     updatedAt: at,
   });
+  if (inherit?.shared) {
+    const people = await db.select().from(pageAccess).where(eq(pageAccess.pageId, inherit.id));
+    if (people.length) {
+      await db.insert(pageAccess).values(people.map((person) => ({ ...person, pageId: id })));
+    }
+  }
   const created = await findPage(workspaceId, id);
   if (!created) throw new TacosError("Page not found", 404);
   return created;
@@ -278,9 +293,70 @@ export async function importMarkdownPage(
   return { id: page.id, title: page.title, created: true };
 }
 
-/** Authors always may edit; a shared page is a small team wiki, so members may too. */
-export function canEditPage(page: DocPage, viewerId: string): boolean {
-  return page.createdBy === viewerId || page.shared;
+/** What this person may do: the author everything, others by the page's sharing. */
+export async function pageLevel(page: DocPage, viewerId: string): Promise<PageLevel | null> {
+  if (page.createdBy === viewerId) return "edit";
+  if (!page.shared) return null;
+  const [row] = await getDb()
+    .select({ level: pageAccess.level })
+    .from(pageAccess)
+    .where(and(eq(pageAccess.pageId, page.id), eq(pageAccess.userId, viewerId)))
+    .limit(1);
+  const level = row?.level ?? page.shareLevel;
+  return isPageLevel(level) ? level : "view";
+}
+
+export async function requirePageLevel(page: DocPage, viewerId: string, needed: PageLevel): Promise<void> {
+  if (levelAllows(await pageLevel(page, viewerId), needed)) return;
+  throw new TacosError(needed === "edit" ? "You cannot edit this page" : "You cannot comment on this page", 403);
+}
+
+async function ownedSubtree(workspaceId: string, pageId: string, viewerId: string): Promise<string[]> {
+  const page = await getPage(workspaceId, pageId, viewerId);
+  if (!page) throw new TacosError("Page not found", 404);
+  if (page.createdBy !== viewerId) throw new TacosError("Only the page owner can change sharing", 403);
+  return [pageId, ...(await descendantsOf(workspaceId, pageId)).map((p) => p.id)];
+}
+
+export async function listPageAccess(
+  workspaceId: string,
+  pageId: string,
+  viewerId: string
+): Promise<{ level: PageLevel; people: Record<string, PageLevel> }> {
+  await ownedSubtree(workspaceId, pageId, viewerId);
+  const page = await getPage(workspaceId, pageId, viewerId);
+  const rows = await getDb().select().from(pageAccess).where(eq(pageAccess.pageId, pageId));
+  const people: Record<string, PageLevel> = {};
+  for (const row of rows) if (isPageLevel(row.level)) people[row.userId] = row.level;
+  return { level: page && isPageLevel(page.shareLevel) ? page.shareLevel : "view", people };
+}
+
+/** Like sharing itself, a level covers the page's whole subtree. */
+export async function setPageShareLevel(
+  workspaceId: string,
+  pageId: string,
+  viewerId: string,
+  level: PageLevel
+): Promise<void> {
+  const ids = await ownedSubtree(workspaceId, pageId, viewerId);
+  await getDb()
+    .update(pages)
+    .set({ shareLevel: level })
+    .where(and(eq(pages.workspaceId, workspaceId), inArray(pages.id, ids)));
+}
+
+/** A null level puts the person back on the page's shareLevel. */
+export async function setPageMemberLevel(
+  workspaceId: string,
+  pageId: string,
+  viewerId: string,
+  userId: string,
+  level: PageLevel | null
+): Promise<void> {
+  const ids = await ownedSubtree(workspaceId, pageId, viewerId);
+  const db = getDb();
+  await db.delete(pageAccess).where(and(inArray(pageAccess.pageId, ids), eq(pageAccess.userId, userId)));
+  if (level) await db.insert(pageAccess).values(ids.map((id) => ({ pageId: id, userId, level })));
 }
 
 // Edits by the same person within this window are one version, so typing does not fill
@@ -375,7 +451,7 @@ export async function updatePage(
 ): Promise<DocPage> {
   const page = await getPage(workspaceId, pageId, viewerId);
   if (!page) throw new TacosError("Page not found", 404);
-  if (!canEditPage(page, viewerId)) throw new TacosError("You cannot edit this page", 403);
+  await requirePageLevel(page, viewerId, "edit");
 
   const next: Partial<typeof pages.$inferInsert> = {};
   if (patch.title != null) {
@@ -432,7 +508,7 @@ export async function keepUnsavedText(
 ): Promise<void> {
   const page = await getPage(workspaceId, pageId, viewerId);
   if (!page) throw new TacosError("Page not found", 404);
-  if (!canEditPage(page, viewerId)) throw new TacosError("You cannot edit this page", 403);
+  await requirePageLevel(page, viewerId, "edit");
   assertDocSize(doc);
   await recordVersion(page, {
     title: page.title,
@@ -526,7 +602,7 @@ export async function restorePageVersion(
 ): Promise<DocPage> {
   const page = await getPage(workspaceId, pageId, viewerId);
   if (!page) throw new TacosError("Page not found", 404);
-  if (!canEditPage(page, viewerId)) throw new TacosError("You cannot edit this page", 403);
+  await requirePageLevel(page, viewerId, "edit");
   const [version] = await getDb()
     .select()
     .from(pageVersions)
@@ -713,6 +789,7 @@ export async function purgePage(
   ).map((page) => page.id);
   await db.delete(pageVersions).where(inArray(pageVersions.pageId, ids));
   await db.delete(pageComments).where(inArray(pageComments.pageId, ids));
+  await db.delete(pageAccess).where(inArray(pageAccess.pageId, ids));
   await db.delete(notifications).where(inArray(notifications.pageId, ids));
   await db.delete(pages).where(inArray(pages.id, ids));
 }

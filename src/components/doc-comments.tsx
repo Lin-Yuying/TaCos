@@ -16,6 +16,7 @@ export function DocCommentsPanel({
   members,
   userId,
   isOwner,
+  canComment,
   compact,
   located,
   draftAnchor,
@@ -32,6 +33,7 @@ export function DocCommentsPanel({
   members: Member[];
   userId: string | null;
   isOwner: boolean;
+  canComment: boolean;
   compact: boolean;
   // Comments whose quote can still be found in the text.
   located: Set<string>;
@@ -76,7 +78,7 @@ export function DocCommentsPanel({
             {timeAgo(comment.createdAt, locale)}
           </span>
           <span className="ml-auto flex shrink-0 items-center gap-0.5 opacity-0 transition-opacity focus-within:opacity-100 group-hover:opacity-100">
-            <button
+            {canComment && <button
               type="button"
               title={comment.resolvedAt ? t("Reopen") : t("Resolve")}
               aria-label={comment.resolvedAt ? t("Reopen") : t("Resolve")}
@@ -87,7 +89,7 @@ export function DocCommentsPanel({
               className="rounded p-1 text-faint hover:bg-elevated hover:text-text"
             >
               {comment.resolvedAt ? <RotateCcw size={12} /> : <Check size={12} />}
-            </button>
+            </button>}
             {canRemove && (
               <button
                 type="button"
@@ -153,7 +155,7 @@ export function DocCommentsPanel({
         )}
         {showResolved && resolved.map(row)}
       </div>
-      <div className="shrink-0 border-t border-border p-2">
+      {canComment && <div className="shrink-0 border-t border-border p-2">
         {draftAnchor && (
           <div className="mb-1.5 flex items-start gap-1">
             <blockquote className="line-clamp-2 min-w-0 flex-1 border-l-2 border-border-strong pl-2 text-[12px] text-muted">
@@ -171,7 +173,7 @@ export function DocCommentsPanel({
           </div>
         )}
         <MentionBox value={body} members={members} busy={busy} onChange={setBody} onSubmit={() => void submit()} />
-      </div>
+      </div>}
     </aside>
   );
 }

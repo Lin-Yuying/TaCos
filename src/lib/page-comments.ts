@@ -5,7 +5,7 @@ import { notifications, pageComments, users } from "../db/schema";
 import type { DocAnchor } from "./doc-anchor";
 import { TacosError, listMembers, nowIso } from "./issues";
 import { parseMentions } from "./mentions";
-import { getPage, pageVisible, type DocPage, type PageAuthor } from "./pages";
+import { getPage, pageVisible, requirePageLevel, type DocPage, type PageAuthor } from "./pages";
 
 export type PageComment = {
   id: string;
@@ -93,6 +93,7 @@ export async function addPageComment(
   options: { via?: string } = {}
 ): Promise<PageComment[]> {
   const page = await readablePage(workspaceId, pageId, viewerId);
+  await requirePageLevel(page, viewerId, "comment");
   const body = input.body.trim();
   if (!body) throw new TacosError("Comment cannot be empty");
   if (body.length > 5_000) throw new TacosError("Comment is too long (5k characters max)");
@@ -130,7 +131,7 @@ export async function setPageCommentResolved(
   commentId: string,
   resolved: boolean
 ): Promise<PageComment[]> {
-  await readablePage(workspaceId, pageId, viewerId);
+  await requirePageLevel(await readablePage(workspaceId, pageId, viewerId), viewerId, "comment");
   await commentOn(pageId, commentId);
   await getDb()
     .update(pageComments)

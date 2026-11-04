@@ -229,6 +229,8 @@ export const pages = sqliteTable(
     shared: integer("shared").notNull().default(0),
     // Goes up with every change to the body; a save names the one it started from.
     revision: integer("revision").notNull().default(0),
+    // What every member may do once it is shared: view | comment | edit
+    shareLevel: text("share_level").notNull().default("edit"),
     // In the Trash when set. trashRoot is the page whose deletion took this one with it,
     // so a restore brings back exactly that subtree.
     deletedAt: text("deleted_at"),
@@ -264,6 +266,17 @@ export const pageVersions = sqliteTable(
     updatedAt: text("updated_at").notNull(),
   },
   (t) => [uniqueIndex("page_versions_page_seq_idx").on(t.pageId, t.seq)]
+);
+
+// One member's level on a shared page, in place of the page's shareLevel.
+export const pageAccess = sqliteTable(
+  "page_access",
+  {
+    pageId: text("page_id").notNull(),
+    userId: text("user_id").notNull(),
+    level: text("level").notNull(),
+  },
+  (t) => [primaryKey({ columns: [t.pageId, t.userId] })]
 );
 
 export const pageComments = sqliteTable(

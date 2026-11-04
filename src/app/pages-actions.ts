@@ -8,11 +8,14 @@ import {
   getPageVersionChange,
   importMarkdownPage,
   keepUnsavedText,
+  listPageAccess,
   listPageVersions,
   pageConflictView,
   purgePage,
   restorePage,
   restorePageVersion,
+  setPageMemberLevel,
+  setPageShareLevel,
   setPageShared,
   updatePage,
   type DocPage,
@@ -29,6 +32,7 @@ import {
   type PageComment,
 } from "@/lib/page-comments";
 import type { DocAnchor } from "@/lib/doc-anchor";
+import type { PageLevel } from "@/lib/page-level";
 import type { ActionResult } from "./actions";
 
 function refresh(workspaceId: string) {
@@ -238,5 +242,40 @@ export async function removePageCommentAction(
   return run(async () => {
     const { user } = await requireWorkspace(workspaceId);
     return removePageComment(workspaceId, pageId, user.id, commentId);
+  });
+}
+
+export async function listPageAccessAction(
+  workspaceId: string,
+  pageId: string
+): Promise<ActionResult<{ level: PageLevel; people: Record<string, PageLevel> }>> {
+  return run(async () => {
+    const { user } = await requireWorkspace(workspaceId);
+    return listPageAccess(workspaceId, pageId, user.id);
+  });
+}
+
+export async function setPageShareLevelAction(
+  workspaceId: string,
+  pageId: string,
+  level: PageLevel
+): Promise<ActionResult<void>> {
+  return run(async () => {
+    const { user } = await requireWorkspace(workspaceId);
+    await setPageShareLevel(workspaceId, pageId, user.id, level);
+    refresh(workspaceId);
+  });
+}
+
+export async function setPageMemberLevelAction(
+  workspaceId: string,
+  pageId: string,
+  userId: string,
+  level: PageLevel | null
+): Promise<ActionResult<void>> {
+  return run(async () => {
+    const { user } = await requireWorkspace(workspaceId);
+    await setPageMemberLevel(workspaceId, pageId, user.id, userId, level);
+    refresh(workspaceId);
   });
 }
