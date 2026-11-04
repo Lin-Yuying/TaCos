@@ -36,7 +36,7 @@ async function main() {
     setFeedURL() {},
     on(ev: string, fn: Function) {
       (this as { _ev?: Record<string, Function> })._ev ||= {};
-      (this as { _ev: Record<string, Function> })._ev[ev] = fn;
+      (this as unknown as { _ev: Record<string, Function> })._ev[ev] = fn;
     },
     async checkForUpdates() {
       const info = { version: "2.0.1" };

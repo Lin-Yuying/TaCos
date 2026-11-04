@@ -5,6 +5,7 @@ import { useEffect, useRef } from "react";
 import { importMarkdownAction } from "@/app/pages-actions";
 import { useUI } from "@/components/ui-context";
 import { useT } from "@/components/i18n-context";
+import type { AppUpdateApi } from "./desktop-app-update-button";
 
 // Preload is the only writer of this object, so the shape lives next to its consumer
 // instead of in a global declaration file.
@@ -12,6 +13,7 @@ type OpenFilePayload = { name: string; content?: string; error?: string };
 type DesktopBridge = {
   takeOpenFiles?: () => Promise<OpenFilePayload[]>;
   onOpenFiles?: (handler: () => void) => () => void;
+  appUpdate?: AppUpdateApi;
 };
 
 declare global {

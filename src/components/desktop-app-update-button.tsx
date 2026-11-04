@@ -18,23 +18,13 @@ type AppUpdateStatus = {
   error: string | null;
 };
 
-type AppUpdateApi = {
+export type AppUpdateApi = {
   getStatus: () => Promise<AppUpdateStatus>;
   check: () => Promise<{ ok: boolean; error?: string; status?: AppUpdateStatus }>;
   download: () => Promise<{ ok: boolean; error?: string; status?: AppUpdateStatus }>;
   install: () => Promise<{ ok: boolean; error?: string; status?: AppUpdateStatus }>;
   onStatus: (handler: (status: AppUpdateStatus) => void) => () => void;
 };
-
-type DesktopBridge = {
-  appUpdate?: AppUpdateApi;
-};
-
-declare global {
-  interface Window {
-    tacosDesktop?: DesktopBridge;
-  }
-}
 
 // Fixed Simplified Chinese labels (backlog: Chinese copy only).
 const COPY = {
