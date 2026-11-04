@@ -26,6 +26,7 @@ import {
   Plus,
   Search,
   Settings2,
+  Sparkles,
   Square,
   Terminal,
   Trash2,
@@ -112,7 +113,88 @@ function stepDetail(step: AgentStepFrame): string {
   }
 }
 
+// Thinking keeps its own rows. Runs of tools and commands fold into one group, open while the
+// turn is on its last run and shut once something follows; a group the user opens stays open.
+function StepList({ steps, live }: { steps: AgentStepFrame[]; live: boolean }) {
+  const t = useT();
+  const runs: AgentStepFrame[][] = [];
+  for (const step of steps) {
+    const last = runs[runs.length - 1];
+    if (step.kind !== "thinking" && last && last[0].kind !== "thinking") last.push(step);
+    else runs.push([step]);
+  }
+  return (
+    <div className="mb-2 space-y-0.5">
+      {runs.map((run, index) => {
+        if (run.length === 1) return <StepLine key={run[0].key} step={run[0]} />;
+        const failed = run.filter((step) => step.status === "error" || step.status === "denied").length;
+        const running = run.some((step) => step.status === "running");
+        return (
+          <details key={run[0].key} className="group/run" open={live && index === runs.length - 1 ? true : undefined}>
+            <summary className="flex cursor-pointer list-none items-center gap-1.5 rounded px-1 py-0.5 text-[12px] text-muted transition-colors hover:bg-elevated hover:text-text">
+              <ChevronRight size={12} className="shrink-0 text-faint transition-transform group-open/run:rotate-90" />
+              <span>{t("{count} steps", { count: String(run.length) })}</span>
+              {running && <Loader2 size={11} className="shrink-0 animate-spin text-faint" />}
+              {failed > 0 && (
+                <span className="shrink-0 text-[10.5px] text-danger">
+                  {t("{count} failed", { count: String(failed) })}
+                </span>
+              )}
+            </summary>
+            <div className="ml-3 space-y-0.5">
+              {run.map((step) => (
+                <StepLine key={step.key} step={step} />
+              ))}
+            </div>
+          </details>
+        );
+      })}
+    </div>
+  );
+}
+
+function TurnStatus() {
+  const t = useT();
+  const [seconds, setSeconds] = useState(0);
+  useEffect(() => {
+    const timer = setInterval(() => setSeconds((value) => value + 1), 1000);
+    return () => clearInterval(timer);
+  }, []);
+  return (
+    <span className="text-faint" data-testid="turn-status">
+      {seconds > 0 ? t("Thinking… {seconds}s", { seconds: String(seconds) }) : t("Thinking…")}
+    </span>
+  );
+}
+
+// Harness errors end with their log path. Splitting it off lets the sentence itself be translated.
+function TurnError({ error }: { error: string }) {
+  const t = useT();
+  const [message, log] = error.split(" Log: ");
+  return (
+    <div className="mb-2 px-1 text-[12px]" data-testid="turn-error">
+      <p className="text-danger">{t(message)}</p>
+      {log && <p className="mt-0.5 break-all text-[11px] text-faint">{t("Log: {path}", { path: log })}</p>}
+    </div>
+  );
+}
+
 function StepLine({ step }: { step: AgentStepFrame }) {
+  const t = useT();
+  if (step.kind === "thinking") {
+    return (
+      <details className="group/step" data-testid="thinking-step">
+        <summary className="flex cursor-pointer list-none items-center gap-1.5 rounded px-1 py-0.5 text-[12px] text-muted transition-colors hover:bg-elevated hover:text-text">
+          <Sparkles size={12} className="shrink-0 text-faint" />
+          <span className="shrink-0">{t("Thinking")}</span>
+          <span className="min-w-0 truncate text-faint">{step.title}</span>
+        </summary>
+        <div className="mb-1 ml-5 mt-1 border-l border-border pl-3 text-[12.5px] text-muted">
+          <Markdown source={step.detail ?? step.title} />
+        </div>
+      </details>
+    );
+  }
   const Icon =
     step.kind === "command" ? Terminal : step.kind === "file" ? FileText : step.kind === "tool" ? Wrench : Info;
   const detail = stepDetail(step);
@@ -126,7 +208,7 @@ function StepLine({ step }: { step: AgentStepFrame }) {
           <Loader2 size={11} className="shrink-0 animate-spin text-faint" />
         ) : failed ? (
           <span className="shrink-0 text-[10.5px] text-danger">
-            {step.status === "denied" ? "denied" : "failed"}
+            {t(step.status === "denied" ? "denied" : "failed")}
           </span>
         ) : (
           <Check size={11} className="shrink-0 text-faint" />
@@ -278,6 +360,21 @@ function SectionLabel({ children }: { children: ReactNode }) {
 // "GPT-6.1-Sol" reads as "GPT-6.1 Sol" in the chip, the way Codex writes it.
 const prettyModel = (label: string) => label.replace(/-(?=[A-Za-z])/g, " ");
 
+type ModelsByEngine = Partial<Record<AgentHarnessId, CodexModel[]>>;
+
+// A model id only means something to the harness that listed it. A saved id that is not on
+// this harness's list (another harness's, or one since removed) gives way to its default.
+function modelPrefFor(
+  models: CodexModel[],
+  fallback: { model: string; effort: string },
+  model: string,
+  effort: string
+): { model: string; effort: string } {
+  const picked = models.find((entry) => entry.slug === model);
+  if (!picked) return fallback;
+  return { model, effort: picked.efforts.some((level) => level.id === effort) ? effort : picked.defaultEffort };
+}
+
 // Codex picks reasoning with a dot slider instead of a list; dragging snaps to a level.
 function EffortSlider({
   levels,
@@ -369,6 +466,7 @@ function HarnessChip({
   if (options.length === 0) return null;
   return (
     <Menu
+      className="shrink-0"
       width={300}
       align="right"
       triggerClassName={`flex items-center gap-1 rounded-full px-2 py-1 text-[12.5px] text-text transition-colors hover:bg-elevated ${
@@ -402,8 +500,11 @@ function HarnessChip({
   );
 }
 
-// Model and effort for the current harness. Only Codex lists models; other harnesses
-// use the model from their own local config.
+// Long lists (OpenCode with a few providers) get a filter; short ones don't need it.
+const MODEL_SEARCH_MIN = 8;
+
+// Model and effort for the current harness. Each harness offers its own list; a harness
+// whose list could not be read runs on its own setting.
 function ModelChip({
   engine,
   models,
@@ -420,31 +521,41 @@ function ModelChip({
   disabled?: boolean;
 }) {
   const t = useT();
+  const [query, setQuery] = useState("");
   const picked = models.find((entry) => entry.slug === model) ?? models[0];
-  const effortLabel = picked?.efforts.find((level) => level.id === effort)?.label ?? effort;
-  if (engine !== "codex" || !picked) {
+  if (!picked) {
     return (
       <span
         data-testid="composer-model"
-        title={t("This harness uses the model from its own local config.")}
+        title={t("Could not read this harness's model list. It runs on its own setting.")}
         className="flex items-center rounded-full px-2 py-1 text-[12.5px] text-muted"
       >
-        {t("Harness default model")}
+        {t("Default model")}
       </span>
     );
   }
+  const modelName = (entry: CodexModel) =>
+    // A slash marks a person's own API, whose model names are theirs to spell.
+    !entry.slug ? t(entry.label) : engine === "codex" && !entry.slug.includes("/") ? prettyModel(entry.label) : entry.label;
+  const efforts = picked.efforts.map((level) => ({ ...level, label: t(level.label) }));
+  const effortLabel = efforts.find((level) => level.id === effort)?.label ?? effort;
+  const needle = query.trim().toLowerCase();
+  const shown = needle
+    ? models.filter((entry) => `${entry.label} ${entry.slug}`.toLowerCase().includes(needle))
+    : models;
   return (
     <Menu
       width={330}
       align="right"
-      triggerClassName={`flex items-center gap-1 rounded-full px-2 py-1 text-[12.5px] text-text transition-colors hover:bg-elevated ${
+      className="min-w-0"
+      triggerClassName={`flex max-w-full items-center gap-1 rounded-full px-2 py-1 text-[12.5px] text-text transition-colors hover:bg-elevated ${
         disabled ? "pointer-events-none opacity-50" : ""
       }`}
       trigger={
-        <span data-testid="composer-model" className="flex items-center gap-1">
+        <span data-testid="composer-model" className="flex min-w-0 items-center gap-1">
           <span className="max-w-[220px] truncate">
-            {prettyModel(picked.label)}
-            {effortLabel && <span className="text-muted"> {effortLabel}</span>}
+            {modelName(picked)}
+            {effort && effortLabel && <span className="text-muted"> {effortLabel}</span>}
           </span>
           <ChevronDown size={11} className="shrink-0 text-muted" />
         </span>
@@ -452,8 +563,20 @@ function ModelChip({
     >
       {() => (
         <>
+          {models.length > MODEL_SEARCH_MIN && (
+            <div className="sticky -top-1 z-10 -mx-1 -mt-1 bg-overlay px-2 pb-1 pt-2">
+              <input
+                autoFocus
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                placeholder={t("Search models")}
+                className="w-full rounded-md border border-border bg-transparent px-2 py-1 text-[12.5px] outline-none placeholder:text-faint focus:border-border-strong"
+              />
+            </div>
+          )}
           <SectionLabel>{t("Model")}</SectionLabel>
-          {models.map((entry) => (
+          {shown.length === 0 && <p className="px-2 py-2 text-[12px] text-faint">{t("No matching models.")}</p>}
+          {shown.map((entry) => (
             <MenuItem
               key={entry.slug}
               active={entry.slug === picked.slug}
@@ -461,28 +584,36 @@ function ModelChip({
               onSelect={() => onModel(entry.slug, entry.efforts.some((level) => level.id === effort) ? effort : entry.defaultEffort)}
             >
               <span className="min-w-0 flex-1 text-left">
-                <span className="block truncate">{prettyModel(entry.label)}</span>
-                <span className="block truncate text-[11px] text-faint">{entry.description}</span>
+                <span className="block truncate">{modelName(entry)}</span>
+                {entry.description && (
+                  <span className="block truncate text-[11px] text-faint">
+                    {entry.slug ? entry.description : t(entry.description)}
+                  </span>
+                )}
               </span>
             </MenuItem>
           ))}
-          <div className="my-1 border-t border-border" />
-          {/* Pinned so effort stays reachable while the model list scrolls. */}
-          <div className="sticky bottom-0 -mx-1 -mb-1 border-t border-border bg-overlay px-1 pb-1">
-            <div className="px-2 pt-2 text-center">
-              <p className="text-[15px] font-semibold leading-5 text-text">{effortLabel || t("Default")}</p>
-              <p className="mt-0.5 text-[11.5px] text-muted">{prettyModel(picked.label)}</p>
-            </div>
-            <EffortSlider
-              levels={picked.efforts}
-              value={effort}
-              onChange={(id) => onModel(picked.slug, id)}
-            />
-            <div className="flex justify-between px-3.5 pb-0.5 text-[10.5px] text-faint">
-              <span>{picked.efforts[0]?.label}</span>
-              <span>{picked.efforts[picked.efforts.length - 1]?.label}</span>
-            </div>
-          </div>
+          {efforts.length > 1 && (
+            <>
+              <div className="my-1 border-t border-border" />
+              {/* Pinned so effort stays reachable while the model list scrolls. */}
+              <div className="sticky -bottom-1 -mx-1 -mb-1 border-t border-border bg-overlay px-1 pb-1">
+                <div className="px-2 pt-2 text-center">
+                  <p className="text-[15px] font-semibold leading-5 text-text">{effortLabel || t("Default")}</p>
+                  <p className="mt-0.5 text-[11.5px] text-muted">{modelName(picked)}</p>
+                </div>
+                <EffortSlider
+                  levels={efforts}
+                  value={effort}
+                  onChange={(id) => onModel(picked.slug, id)}
+                />
+                <div className="flex justify-between px-3.5 pb-0.5 text-[10.5px] text-faint">
+                  <span>{efforts[0]?.label}</span>
+                  <span>{efforts[efforts.length - 1]?.label}</span>
+                </div>
+              </div>
+            </>
+          )}
         </>
       )}
     </Menu>
@@ -503,6 +634,7 @@ function ApprovalChip({
   const current = AGENT_APPROVALS.find((entry) => entry.id === value) ?? AGENT_APPROVALS[0];
   return (
     <Menu
+      className="shrink-0"
       width={300}
       align="right"
       triggerClassName={`flex items-center gap-1 rounded-full px-2 py-1 text-[12.5px] transition-colors hover:bg-elevated ${
@@ -528,7 +660,7 @@ function ApprovalChip({
             >
               <span className="min-w-0 flex-1 text-left">
                 <span className="block">{t(entry.label)}</span>
-                <span className="block text-[11px] text-faint">{t(entry.detail)}</span>
+                <span className="block whitespace-normal break-words text-[11px] text-faint">{t(entry.detail)}</span>
               </span>
             </MenuItem>
           ))}
@@ -772,7 +904,6 @@ function Composer({
   placeholder,
   submitDisabled,
   inputRef,
-  children,
   actions,
   onNew,
   skills,
@@ -788,7 +919,6 @@ function Composer({
   placeholder: string;
   submitDisabled?: boolean;
   inputRef?: { current: HTMLTextAreaElement | null };
-  children?: ReactNode;
   // Right-aligned chips (model, approval) sit next to Send, as in Codex.
   actions?: ReactNode;
   onNew?: () => void;
@@ -964,90 +1094,91 @@ function Composer({
         }}
         className="max-h-[220px] min-h-[30px] w-full resize-none bg-transparent px-2.5 pt-2 text-[14px] leading-relaxed outline-none placeholder:text-faint"
       />
-      {/* The card can be narrow once the app sidebar is open, so the chips wrap
-          instead of pushing the send button out of the composer. */}
-      <div className="mt-1 flex flex-wrap items-center gap-x-0.5 gap-y-1 px-0.5 pb-0.5">
-        {onNew && (
-          <Menu
-            width={260}
-            align="left"
-            triggerClassName="flex h-7 w-7 items-center justify-center rounded-full text-muted transition-colors hover:bg-elevated hover:text-text"
-            trigger={<Plus size={15} />}
-          >
-            {(close) => (
-              <>
-                {/* Machine-level skill folders: keep the entry above the list, which is long
-                    enough to scroll on a short window. */}
-                {onCreateSkill && onDeleteSkill && (
-                  <>
-                    <MenuItem
-                      onSelect={() => {
-                        close();
-                        setManageSkills(true);
-                      }}
-                    >
-                      <Wrench size={13} /> {t("Manage skills…")}
-                    </MenuItem>
-                    <div className="my-1 border-t border-border" />
-                  </>
-                )}
-                {/* The same skills "@" offers, without having to remember a name. */}
-                {visibleSkills.length > 0 ? (
-                  <>
-                    <div className="px-2 pb-1 pt-1 text-[11px] uppercase tracking-wide text-faint">
-                      {t("Skills")}
-                    </div>
-                    {visibleSkills.map((skill) => (
+      {/* One row, the model name truncating first. Only a card too narrow for that wraps, so
+          the send button never leaves it. z-10 keeps open menus above the row under the card. */}
+      <div className="@container relative z-10 mt-1 px-0.5 pb-0.5">
+        <div className="flex flex-wrap items-center gap-x-0.5 gap-y-1 @[340px]:flex-nowrap">
+          {onNew && (
+            <Menu
+              width={260}
+              align="left"
+              triggerClassName="flex h-7 w-7 items-center justify-center rounded-full text-muted transition-colors hover:bg-elevated hover:text-text"
+              trigger={<Plus size={15} />}
+            >
+              {(close) => (
+                <>
+                  {/* Machine-level skill folders: keep the entry above the list, which is long
+                      enough to scroll on a short window. */}
+                  {onCreateSkill && onDeleteSkill && (
+                    <>
                       <MenuItem
-                        key={skill.path}
                         onSelect={() => {
-                          insertSkillFromMenu(skill);
                           close();
+                          setManageSkills(true);
                         }}
                       >
-                        <span className="min-w-0 flex-1">
-                          <span className="block truncate">@{skillToken(skill)}</span>
-                          <span
-                            className="block truncate text-[11px] text-faint"
-                            title={skill.description}
-                          >
-                            {skill.description}
-                          </span>
-                        </span>
+                        <Wrench size={13} /> {t("Manage skills…")}
                       </MenuItem>
-                    ))}
-                  </>
-                ) : (
-                  <div className="px-2 py-1.5 text-[12px] text-faint">
-                    {t("No skills found on this machine.")}
-                  </div>
-                )}
-                <div className="my-1 border-t border-border" />
-                <MenuItem
-                  onSelect={() => {
-                    close();
-                    onNew();
-                  }}
-                >
-                  <Plus size={13} /> {t("New conversation")}
-                </MenuItem>
-              </>
-            )}
-          </Menu>
-        )}
-        {children}
-        <div className="ml-auto flex min-w-0 items-center gap-0.5">
-          {actions}
-          <button
-            type="button"
-            onClick={() => (busy && onStop ? onStop() : onSubmit())}
-            disabled={!busy && (!value.trim() || submitDisabled)}
-            className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[#0d0d0d] text-white transition-opacity hover:opacity-80 disabled:bg-elevated disabled:text-faint disabled:opacity-100"
-            aria-label={t(busy ? "Stop" : "Send")}
-            title={t(busy ? "Stop" : "Send")}
-          >
-            {busy ? <Square size={11} fill="currentColor" /> : <ArrowUp size={15} />}
-          </button>
+                      <div className="my-1 border-t border-border" />
+                    </>
+                  )}
+                  {/* The same skills "@" offers, without having to remember a name. */}
+                  {visibleSkills.length > 0 ? (
+                    <>
+                      <div className="px-2 pb-1 pt-1 text-[11px] uppercase tracking-wide text-faint">
+                        {t("Skills")}
+                      </div>
+                      {visibleSkills.map((skill) => (
+                        <MenuItem
+                          key={skill.path}
+                          onSelect={() => {
+                            insertSkillFromMenu(skill);
+                            close();
+                          }}
+                        >
+                          <span className="min-w-0 flex-1">
+                            <span className="block truncate">@{skillToken(skill)}</span>
+                            <span
+                              className="block truncate text-[11px] text-faint"
+                              title={skill.description}
+                            >
+                              {skill.description}
+                            </span>
+                          </span>
+                        </MenuItem>
+                      ))}
+                    </>
+                  ) : (
+                    <div className="px-2 py-1.5 text-[12px] text-faint">
+                      {t("No skills found on this machine.")}
+                    </div>
+                  )}
+                  <div className="my-1 border-t border-border" />
+                  <MenuItem
+                    onSelect={() => {
+                      close();
+                      onNew();
+                    }}
+                  >
+                    <Plus size={13} /> {t("New conversation")}
+                  </MenuItem>
+                </>
+              )}
+            </Menu>
+          )}
+          <div className="ml-auto flex min-w-0 flex-wrap items-center justify-end gap-0.5 whitespace-nowrap @[340px]:flex-nowrap">
+            {actions}
+            <button
+              type="button"
+              onClick={() => (busy && onStop ? onStop() : onSubmit())}
+              disabled={!busy && (!value.trim() || submitDisabled)}
+              className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[#0d0d0d] text-white transition-opacity hover:opacity-80 disabled:bg-elevated disabled:text-faint disabled:opacity-100"
+              aria-label={t(busy ? "Stop" : "Send")}
+              title={t(busy ? "Stop" : "Send")}
+            >
+              {busy ? <Square size={11} fill="currentColor" /> : <ArrowUp size={15} />}
+            </button>
+          </div>
         </div>
       </div>
       {manageSkills && onCreateSkill && onDeleteSkill && (
@@ -1065,6 +1196,11 @@ function Composer({
       )}
     </div>
   );
+}
+
+// Where this conversation lives, not how a turn runs, so it sits under the card.
+function ComposerContext({ children }: { children: ReactNode }) {
+  return <div className="mt-1.5 flex min-w-0 flex-wrap items-center gap-1 px-1">{children}</div>;
 }
 
 function ThreadRenameInput({
@@ -1664,10 +1800,11 @@ function StartComposer({
                   />
                 </>
               }
-            >
+            />
+            <ComposerContext>
               <ProjectChip projects={projects} value={projectId} onChange={onProject} />
               <VisibilityChip value={visibility} onChange={onVisibility} />
-            </Composer>
+            </ComposerContext>
           </div>
           {error && <div className="mt-2 px-2 text-[12px] text-danger">{t(error)}</div>}
           <div className="mt-3 flex flex-wrap justify-center gap-2">
@@ -1683,7 +1820,9 @@ function StartComposer({
             ))}
           </div>
           <p className="mt-5 text-center text-[11.5px] text-faint">
-            {t("The agent can change this project's tasks, comments and docs. Every change waits for your Allow.")}
+            {approval === "ask"
+              ? t("The agent can change this project's tasks, comments and docs. Every change waits for your Allow.")
+              : t(AGENT_APPROVALS.find((entry) => entry.id === approval)?.detail ?? "")}
           </p>
         </div>
       </div>
@@ -1709,7 +1848,7 @@ export function AgentWorkspace({
   ready,
   engines,
   defaultEngine,
-  models,
+  modelsByEngine,
   skills,
   canManageSkills,
   codexDefault,
@@ -1721,7 +1860,7 @@ export function AgentWorkspace({
   ready: boolean;
   engines: AgentHarnessOption[];
   defaultEngine: AgentHarnessId;
-  models: CodexModel[];
+  modelsByEngine: ModelsByEngine;
   skills: AgentSkill[];
   canManageSkills: boolean;
   codexDefault: { model: string; effort: string };
@@ -1737,8 +1876,15 @@ export function AgentWorkspace({
   const [draftProject, setDraftProject] = useState(projects[0]?.id ?? "");
   const [draftVisibility, setDraftVisibility] = useState<"private" | "shared">("private");
   const [draftEngine, setDraftEngine] = useState<AgentHarnessId>(defaultEngine);
-  const [draftModel, setDraftModel] = useState(codexDefault.model);
-  const [draftEffort, setDraftEffort] = useState(codexDefault.effort);
+  const modelPref = (engine: AgentHarnessId, model = "", effort = "") =>
+    modelPrefFor(
+      modelsByEngine[engine] ?? [],
+      engine === "codex" ? codexDefault : { model: "", effort: "" },
+      model,
+      effort
+    );
+  const [draftModel, setDraftModel] = useState(() => modelPref(defaultEngine).model);
+  const [draftEffort, setDraftEffort] = useState(() => modelPref(defaultEngine).effort);
   const [draftApproval, setDraftApproval] = useState<AgentApproval>("ask");
   const codexReady = engines.some((option) => option.id === "codex" && option.available);
   const options = availableEngines(engines);
@@ -1772,11 +1918,7 @@ export function AgentWorkspace({
     const engine = options.some((entry) => entry.id === saved.engine)
       ? saved.engine!
       : fallback.engine;
-    const model = models.some((entry) => entry.slug === saved.model) ? saved.model! : fallback.model;
-    const picked = models.find((entry) => entry.slug === model);
-    const effort = picked?.efforts.some((level) => level.id === saved.effort)
-      ? saved.effort!
-      : (picked?.defaultEffort ?? fallback.effort);
+    const { model, effort } = modelPref(engine, saved.model ?? "", saved.effort ?? "");
     const approval = AGENT_APPROVALS.some((entry) => entry.id === saved.approval)
       ? saved.approval!
       : fallback.approval;
@@ -1802,9 +1944,13 @@ export function AgentWorkspace({
   }
 
   function chooseEngine(engine: AgentHarnessId) {
+    if (engine === draftEngine) return;
+    const { model, effort } = modelPref(engine);
     setDraftEngine(engine);
+    setDraftModel(model);
+    setDraftEffort(effort);
     rememberHarness(engine);
-    rememberPrefs({ engine });
+    rememberPrefs({ engine, model, effort });
   }
 
 
@@ -1837,8 +1983,8 @@ export function AgentWorkspace({
         visibility: draftVisibility,
         engine: draftEngine,
         approval: draftApproval,
-        // The model list currently describes Codex; other harnesses use their own defaults.
-        ...(draftEngine === "codex" ? { model: draftModel, effort: draftEffort } : {}),
+        model: draftModel,
+        effort: draftEffort,
       });
     } catch {
       // A server action from a page opened before the server restarted rejects here; without
@@ -1939,7 +2085,7 @@ export function AgentWorkspace({
             active={active}
             projects={projects}
             options={options}
-            models={models}
+            modelsByEngine={modelsByEngine}
             skills={skills}
             canManageSkills={canManageSkills}
             onCreateSkill={createSkill}
@@ -1965,7 +2111,7 @@ export function AgentWorkspace({
             <StartComposer
               projects={projects}
               options={options}
-              models={models}
+              models={modelsByEngine[draftEngine] ?? []}
               skills={skills}
               canManageSkills={canManageSkills}
               onCreateSkill={createSkill}
@@ -2012,7 +2158,7 @@ function Conversation({
   active,
   projects,
   options,
-  models,
+  modelsByEngine,
   skills,
   canManageSkills,
   onCreateSkill,
@@ -2027,7 +2173,7 @@ function Conversation({
   active: AgentThreadDetail;
   projects: ProjectOption[];
   options: AgentHarnessOption[];
-  models: CodexModel[];
+  modelsByEngine: ModelsByEngine;
   skills: AgentSkill[];
   canManageSkills: boolean;
   onCreateSkill: (input: SkillDraft) => Promise<SkillCreateResult>;
@@ -2044,12 +2190,15 @@ function Conversation({
   const [input, setInput] = useState("");
   const [busy, setBusy] = useState(false);
   // H-COLLAB-13: a live refresh brings new server messages (another member's turn).
-  // Take them when no turn of ours is running; a running turn owns the list.
-  const serverKey = `${active.id}:${active.messages.length}:${active.messages.at(-1)?.id ?? ""}`;
+  // Take them when no turn of ours is running; a running turn owns the list, and a
+  // snapshot from during that turn is stale for good, so it counts as seen. A reply is
+  // filled in on its existing row, so the key has to change with the row's content.
+  const lastServerMessage = active.messages.at(-1);
+  const serverKey = `${active.id}:${active.messages.length}:${lastServerMessage?.id ?? ""}:${lastServerMessage?.content.length ?? 0}`;
   const [seenKey, setSeenKey] = useState(serverKey);
-  if (serverKey !== seenKey && !busy) {
+  if (serverKey !== seenKey) {
     setSeenKey(serverKey);
-    setMessages(toUi(active));
+    if (!busy) setMessages(toUi(active));
   }
   // Harness is a turn preference on this session. New chat creates a new session.
   const [engine, setEngine] = useState<AgentHarnessId>(() => {
@@ -2057,18 +2206,31 @@ function Conversation({
     if (options.some((option) => option.id === fromThread)) return fromThread as AgentHarnessId;
     return defaultEngine;
   });
-  const [model, setModel] = useState(active.model || codexDefault.model);
-  const [effort, setEffort] = useState(active.effort || codexDefault.effort);
+  const modelPref = (id: AgentHarnessId, savedModel = "", savedEffort = "") =>
+    modelPrefFor(
+      modelsByEngine[id] ?? [],
+      id === "codex" ? codexDefault : { model: "", effort: "" },
+      savedModel,
+      savedEffort
+    );
+  const [model, setModel] = useState(() => modelPref(engine, active.model, active.effort).model);
+  const [effort, setEffort] = useState(() => modelPref(engine, active.model, active.effort).effort);
   const [approvalMode, setApprovalMode] = useState<AgentApproval>(active.approval);
 
   // Harness is a turn pref on this session. Persist last-used. Do not open a new thread.
   async function chooseEngine(next: AgentHarnessId) {
-    const before = engine;
+    if (next === engine) return;
+    const before = { engine, model, effort };
+    const pref = modelPref(next);
     setEngine(next);
+    setModel(pref.model);
+    setEffort(pref.effort);
     rememberHarness(next);
     const result = await setAgentThreadEngineAction(workspaceId, active.id, next);
     if (!result.ok) {
-      setEngine(before);
+      setEngine(before.engine);
+      setModel(before.model);
+      setEffort(before.effort);
       setError(result.error);
     }
   }
@@ -2265,7 +2427,7 @@ function Conversation({
             className="h-1.5 w-1.5 shrink-0 rounded-full"
             style={{ background: active.projectColor || "var(--color-faint)" }}
           />
-          <span className="max-w-[180px] truncate">{active.projectName || "No project"}</span>
+          <span className="max-w-[180px] truncate">{active.projectName || t("No project")}</span>
           {active.visibility === "shared" && <Users size={11} className="shrink-0 text-faint" />}
           {!active.mine && <span className="shrink-0 text-faint">· {active.createdByName}</span>}
         </div>
@@ -2356,17 +2518,11 @@ function Conversation({
               </div>
             ) : (
               <div key={message.id} className="min-w-0 text-[13.5px] leading-relaxed">
-                {message.steps.length > 0 && (
-                  <div className="mb-2 space-y-0.5">
-                    {message.steps.map((step) => (
-                      <StepLine key={step.key} step={step} />
-                    ))}
-                  </div>
-                )}
+                {message.steps.length > 0 && <StepList steps={message.steps} live={busy && index === messages.length - 1} />}
                 {message.content ? (
                   <Markdown source={message.content} />
                 ) : busy && index === messages.length - 1 ? (
-                  <span className="text-faint">{t("Thinking…")}</span>
+                  <TurnStatus />
                 ) : null}
               </div>
             )
@@ -2385,7 +2541,7 @@ function Conversation({
 
       <div className="shrink-0 px-4 pb-4">
         <div className="mx-auto w-full max-w-3xl">
-          {error && <div className="mb-2 px-1 text-[12px] text-danger">{t(error)}</div>}
+          {error && <TurnError error={error} />}
           <Composer
             value={input}
             onChange={setInput}
@@ -2414,7 +2570,7 @@ function Conversation({
                 />
                 <ModelChip
                   engine={engine}
-                  models={models}
+                  models={modelsByEngine[engine] ?? []}
                   model={model}
                   effort={effort}
                   onModel={(nextModel, nextEffort) => void changeModel(nextModel, nextEffort)}
@@ -2422,7 +2578,8 @@ function Conversation({
                 />
               </>
             }
-          >
+          />
+          <ComposerContext>
             {active.mine ? (
               <ProjectChip
                 projects={projects}
@@ -2432,13 +2589,15 @@ function Conversation({
             ) : (
               <span className="flex min-w-0 items-center gap-1.5 px-2 text-[12.5px] text-muted">
                 <Folder size={13} className="shrink-0" />
-                <span className="max-w-[170px] truncate">{active.projectName || "No project"}</span>
+                <span className="max-w-[170px] truncate">{active.projectName || t("No project")}</span>
               </span>
             )}
-          </Composer>
+          </ComposerContext>
           <p className="mt-1.5 text-center text-[11px] text-faint">
             {active.mine
-              ? t("The agent can create and edit tasks, comments, docs and the overview. Every change waits for your Allow.")
+              ? approvalMode === "ask"
+                ? t("The agent can create and edit tasks, comments, docs and the overview. Every change waits for your Allow.")
+                : t(AGENT_APPROVALS.find((entry) => entry.id === approvalMode)?.detail ?? "")
               : t("You are writing in {name}'s shared chat. Every change waits for your Allow.", {
                   name: active.createdByName,
                 })}

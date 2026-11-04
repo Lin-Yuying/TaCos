@@ -5,9 +5,11 @@ import { redirect } from "next/navigation";
 import { getSessionUser, requireWorkspace } from "@/lib/auth";
 import { getAiSettingsView, listAgentHarnessOptions } from "@/lib/ai";
 import { getWorkspaceHarnessGate } from "@/lib/harness";
+import { harnessesWithKeys, modelAccessFor } from "@/lib/model-keys";
 import { listProjects } from "@/lib/issues";
 import { ENGINE_COOKIE, type AgentHarnessId, type AgentHarnessOption } from "@/lib/ai-constants";
-import { codexDefaults, listCodexModels, listCodexSkills } from "@/lib/cli-agents";
+import { codexDefaults, listCodexSkills } from "@/lib/cli-agents";
+import { listComposerModels } from "@/lib/harness/models";
 import {
   getAgentThread,
   listAgentThreads,
@@ -42,9 +44,9 @@ async function AgentContent({
   if (!user) redirect("/login");
   const { role } = await requireWorkspace(workspaceId);
   const ai = await getAiSettingsView(workspaceId);
-  const gate = await getWorkspaceHarnessGate(workspaceId);
+  const gate = await getWorkspaceHarnessGate(workspaceId, await harnessesWithKeys(user.id));
 
-  const engines: AgentHarnessOption[] = await listAgentHarnessOptions(workspaceId);
+  const engines: AgentHarnessOption[] = await listAgentHarnessOptions(workspaceId, user.id);
   // Agent opens only when Settings has at least one enabled+ready harness (H-P3-16).
   const ready = gate.agentAllowed;
   const usable = (id: string | undefined): AgentHarnessId | undefined =>
@@ -58,10 +60,14 @@ async function AgentContent({
 
   const sp = await searchParams;
   const threadId = typeof sp.thread === "string" ? sp.thread : "";
-  const [projects, threads, skills] = await Promise.all([
+  const [projects, threads, skills, modelsByEngine] = await Promise.all([
     listProjects(workspaceId, user.id),
     listAgentThreads(workspaceId, user.id),
     listCodexSkills(),
+    listComposerModels(
+      engines.filter((engine) => engine.available).map((engine) => engine.id),
+      await modelAccessFor(user.id)
+    ),
   ]);
   // A thread the viewer cannot read is treated like a missing one: the Agent tab opens on
   // the start panel instead of leaking whether that id exists.
@@ -76,7 +82,7 @@ async function AgentContent({
       ready={ready}
       engines={engines}
       defaultEngine={defaultEngine}
-      models={listCodexModels()}
+      modelsByEngine={modelsByEngine}
       skills={skills}
       canManageSkills={role === "admin"}
       codexDefault={codexDefaults()}

@@ -7,14 +7,21 @@ import fs from "node:fs";
 import path from "node:path";
 import { subscribeToolApprovals, waitForAgentApproval } from "@/lib/agent-sessions";
 import { findHarnessBinary } from "../detect-bin";
+import { thinkingStep } from "../thinking";
+import { ownEndpoint, type OwnEndpoint } from "../own-endpoint";
 import type { TurnEvent, TurnInput } from "../types";
 import type { TurnLog } from "../turn-log";
 
 const TURN_TIMEOUT_MS = 300_000;
 const PROXY_KEYS = ["HTTPS_PROXY", "https_proxy", "HTTP_PROXY", "http_proxy", "ALL_PROXY", "all_proxy"];
 
-function buildEnv(proxy: string | undefined, agentDir: string, mcpEnv: Record<string, string>): NodeJS.ProcessEnv {
-  const env: NodeJS.ProcessEnv = { ...process.env, PI_CODING_AGENT_DIR: agentDir, ...mcpEnv };
+function buildEnv(
+  proxy: string | undefined,
+  agentDir: string,
+  mcpEnv: Record<string, string>,
+  keys?: Record<string, string>
+): NodeJS.ProcessEnv {
+  const env: NodeJS.ProcessEnv = { ...process.env, ...keys, PI_CODING_AGENT_DIR: agentDir, ...mcpEnv };
   if (proxy) {
     for (const key of PROXY_KEYS) env[key] = proxy;
   }
@@ -40,6 +47,32 @@ function writeMcpConfig(
   fs.writeFileSync(path.join(agentDir, "mcp.json"), `${JSON.stringify(config, null, 2)}\n`);
 }
 
+// A turn runs on its own agent dir so its MCP config stays out of the user's, but Pi reads
+// sign-ins and models from that dir too. It gets only the viewer's own API: this machine's
+// login must not answer and bill instead.
+function writeOwnModels(agentDir: string, own: OwnEndpoint | null): void {
+  const target = path.join(agentDir, "models.json");
+  fs.rmSync(/* turbopackIgnore: true */ path.join(agentDir, "auth.json"), { force: true });
+  fs.rmSync(/* turbopackIgnore: true */ target, { force: true });
+  if (!own) return;
+  // Names the variable, never the key: Pi reads the value from this turn's environment.
+  const provider = {
+    baseUrl: own.endpoint.baseUrl,
+    api: "openai-completions",
+    apiKey: `$${own.endpoint.envVar}`,
+    models: own.endpoint.models.map((id) => ({ id })),
+  };
+  fs.writeFileSync(target, `${JSON.stringify({ providers: { [own.endpoint.id]: provider } }, null, 2)}\n`);
+}
+
+/** The raw text stays in the turn log; it can quote part of the key. */
+export function explainPiError(message: string): string {
+  if (/^401\b|authentication fails|invalid.*api key|api key.*invalid|unauthorized/i.test(message)) {
+    return "The provider rejected the API key for this model. Replace it in Settings → Model API, or pick another model.";
+  }
+  return message;
+}
+
 export async function* openPiTurn(input: TurnInput, log?: TurnLog): AsyncGenerator<TurnEvent> {
   const binary = findHarnessBinary("pi");
   if (!binary) {
@@ -55,6 +88,8 @@ export async function* openPiTurn(input: TurnInput, log?: TurnLog): AsyncGenerat
     fs.mkdirSync(agentDir, { recursive: true });
     fs.writeFileSync(path.join(agentDir, "mcp.json"), `${JSON.stringify({ mcpServers: {} }, null, 2)}\n`);
   }
+  const own = ownEndpoint(input);
+  writeOwnModels(agentDir, own);
 
   const args = [
     "--print",
@@ -66,8 +101,14 @@ export async function* openPiTurn(input: TurnInput, log?: TurnLog): AsyncGenerat
     input.prompt.system,
     input.prompt.body,
   ];
+  // Pi's ids are provider/model, and the model part may itself contain a slash.
   if (input.model) {
-    args.unshift("--model", input.model);
+    const slash = input.model.indexOf("/");
+    if (slash > 0) args.unshift("--provider", input.model.slice(0, slash), "--model", input.model.slice(slash + 1));
+    else args.unshift("--model", input.model);
+  }
+  if (input.effort) {
+    args.unshift("--thinking", input.effort);
   }
 
   const queue: TurnEvent[] = [];
@@ -96,6 +137,8 @@ export async function* openPiTurn(input: TurnInput, log?: TurnLog): AsyncGenerat
   let child: ChildProcess | null = null;
   let finished = false;
   let stderr = "";
+  let turnError: string | null = null;
+  let thinkingCount = 0;
 
   const finish = (error?: string) => {
     if (finished) return;
@@ -110,7 +153,7 @@ export async function* openPiTurn(input: TurnInput, log?: TurnLog): AsyncGenerat
   try {
     child = spawn(binary, args, {
       cwd: input.cwd,
-      env: buildEnv(input.proxy, agentDir, input.mcp?.env ?? {}),
+      env: buildEnv(input.proxy, agentDir, input.mcp?.env ?? {}, own ? { [own.endpoint.envVar]: own.key } : undefined),
       stdio: ["ignore", "pipe", "pipe"],
     });
   } catch (err) {
@@ -163,6 +206,12 @@ export async function* openPiTurn(input: TurnInput, log?: TurnLog): AsyncGenerat
       toolName?: string;
       isError?: boolean;
       aborted?: boolean;
+      message?: {
+        role?: string;
+        stopReason?: string;
+        errorMessage?: string;
+        content?: unknown;
+      };
     };
     try {
       message = JSON.parse(line);
@@ -194,9 +243,25 @@ export async function* openPiTurn(input: TurnInput, log?: TurnLog): AsyncGenerat
       });
       return;
     }
+    if (message.type === "message_end" && message.message?.role === "assistant") {
+      const blocks = Array.isArray(message.message.content) ? message.message.content : [];
+      for (const block of blocks as { type?: string; thinking?: unknown }[]) {
+        if (block.type !== "thinking" || typeof block.thinking !== "string") continue;
+        const step = thinkingStep(`thinking-${++thinkingCount}`, block.thinking);
+        if (step) push(step);
+      }
+      return;
+    }
+    // Pi retries by itself, so only the last turn's outcome counts. It still settles normally
+    // after giving up; without this a dead provider reads as an empty reply.
+    if (message.type === "turn_end") {
+      const ended = message.message;
+      turnError = ended?.stopReason === "error" ? ended.errorMessage || "Pi reported an error." : null;
+      return;
+    }
     if (message.type === "agent_settled") {
       clearTimeout(timer);
-      finish();
+      finish(turnError ? explainPiError(turnError) : undefined);
     }
   }
 

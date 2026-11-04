@@ -17,6 +17,7 @@ import { NewProjectDialog } from "@/components/new-project-dialog";
 import { CommandPalette } from "@/components/command-palette";
 import { aiReady } from "@/lib/ai";
 import { getWorkspaceHarnessGate } from "@/lib/harness";
+import { harnessesWithKeys } from "@/lib/model-keys";
 import { resolveLocale } from "@/lib/locale";
 import { I18nProvider } from "@/components/i18n-context";
 
@@ -56,9 +57,9 @@ export default async function WorkspaceLayout({
     listMembers(workspaceId),
     listFavoriteProjects(workspaceId, user.id),
     listPageTree(workspaceId, user.id),
-    aiReady(workspaceId),
+    aiReady(workspaceId, user.id),
     getJoinCode(workspaceId),
-    getWorkspaceHarnessGate(workspaceId),
+    getWorkspaceHarnessGate(workspaceId, await harnessesWithKeys(user.id)),
     resolveLocale(user),
   ]);
 

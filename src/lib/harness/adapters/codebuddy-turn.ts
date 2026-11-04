@@ -6,17 +6,51 @@
  */
 import { spawn, type ChildProcess } from "node:child_process";
 import fs from "node:fs";
+import os from "node:os";
 import path from "node:path";
 import { subscribeToolApprovals, waitForAgentApproval } from "@/lib/agent-sessions";
 import { findHarnessBinary } from "../detect-bin";
+import { ownEndpoint, type OwnEndpoint } from "../own-endpoint";
+import { thinkingStep } from "../thinking";
 import type { TurnEvent, TurnInput } from "../types";
 import type { TurnLog } from "../turn-log";
 
 const TURN_TIMEOUT_MS = 300_000;
+// The login cannot be read ahead of a turn, so it shows up here: as reply text, on a failed result.
+const SIGNED_OUT = /^Authentication required/;
 const PROXY_KEYS = ["HTTPS_PROXY", "https_proxy", "HTTP_PROXY", "http_proxy", "ALL_PROXY", "all_proxy"];
 
-function buildEnv(proxy: string | undefined, mcpEnv: Record<string, string>): NodeJS.ProcessEnv {
+// WorkBuddy only accepts a model it finds in a models.json. The turn gets its own config dir, so
+// members sharing a project cannot overwrite each other's file and this machine's login stays out.
+function writeOwnConfig(own: OwnEndpoint): string {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "tacos-codebuddy-"));
+  const model = {
+    id: own.model,
+    name: own.model,
+    vendor: own.endpoint.label,
+    // Names the variable, never the key: WorkBuddy reads the value from this turn's environment.
+    apiKey: `\${${own.endpoint.envVar}}`,
+    url: `${own.endpoint.baseUrl}/chat/completions`,
+    supportsToolCall: true,
+  };
+  fs.writeFileSync(path.join(dir, "models.json"), `${JSON.stringify({ models: [model], availableModels: [own.model] }, null, 2)}\n`);
+  return dir;
+}
+
+function buildEnv(
+  proxy: string | undefined,
+  mcpEnv: Record<string, string>,
+  own: OwnEndpoint | null,
+  configDir: string | null
+): NodeJS.ProcessEnv {
   const env: NodeJS.ProcessEnv = { ...process.env, ...mcpEnv };
+  if (own && configDir) {
+    // Either of these would win over the models.json key.
+    delete env.CODEBUDDY_AUTH_TOKEN;
+    delete env.CODEBUDDY_API_KEY;
+    env.CODEBUDDY_CONFIG_DIR = configDir;
+    env[own.endpoint.envVar] = own.key;
+  }
   if (proxy) {
     for (const key of PROXY_KEYS) env[key] = proxy;
   }
@@ -78,8 +112,13 @@ export async function* openCodebuddyTurn(input: TurnInput, log?: TurnLog): Async
   if (mcpFile) {
     args.push("--mcp-config", mcpFile, "--strict-mcp-config");
   }
+  const own = ownEndpoint(input);
+  const configDir = own && writeOwnConfig(own);
   if (input.model) {
-    args.push("--model", input.model);
+    args.push("--model", own?.model ?? input.model);
+  }
+  if (input.effort) {
+    args.push("--effort", input.effort);
   }
   if (input.prompt.system?.trim()) {
     args.push("--system-prompt", input.prompt.system.trim());
@@ -111,6 +150,14 @@ export async function* openCodebuddyTurn(input: TurnInput, log?: TurnLog): Async
   let child: ChildProcess | null = null;
   let finished = false;
   let stderr = "";
+  let streamedText = false;
+  let thinkingText = "";
+  let thinkingCount = 0;
+
+  // After the process exits: it keeps writing logs to this dir until then.
+  const removeConfig = () => {
+    if (configDir) fs.rmSync(/* turbopackIgnore: true */ configDir, { recursive: true, force: true });
+  };
 
   const finish = (error?: string) => {
     if (finished) return;
@@ -125,12 +172,14 @@ export async function* openCodebuddyTurn(input: TurnInput, log?: TurnLog): Async
   try {
     child = spawn(binary, args, {
       cwd: input.cwd,
-      env: buildEnv(input.proxy, input.mcp?.env ?? {}),
+      env: buildEnv(input.proxy, input.mcp?.env ?? {}, own, configDir),
       stdio: ["ignore", "pipe", "pipe"],
     });
   } catch (err) {
+    removeConfig();
     finish(err instanceof Error ? err.message : "Could not start WorkBuddy.");
   }
+  child?.once("close", removeConfig);
 
   const timer = setTimeout(() => finish("WorkBuddy took longer than five minutes."), TURN_TIMEOUT_MS);
 
@@ -183,26 +232,50 @@ export async function* openCodebuddyTurn(input: TurnInput, log?: TurnLog): Async
     if (type === "stream_event" || type === "content_block_delta") {
       const event = (message.event as Record<string, unknown> | undefined) ?? message;
       const delta = event.delta as Record<string, unknown> | undefined;
+      // A thinking block becomes one row when it ends, ahead of the reply it led to.
+      if (delta?.type === "thinking_delta") {
+        if (typeof delta.thinking === "string") thinkingText += delta.thinking;
+        return;
+      }
+      if (event.type === "content_block_stop" && thinkingText) {
+        const step = thinkingStep(`thinking-${++thinkingCount}`, thinkingText);
+        thinkingText = "";
+        if (step) push(step);
+        return;
+      }
       const text =
         (typeof delta?.text === "string" && delta.text) ||
         (typeof (event as { text?: string }).text === "string" && (event as { text?: string }).text) ||
         "";
-      if (text) push({ type: "delta", text });
+      if (text) {
+        streamedText = true;
+        push({ type: "delta", text });
+      }
       return;
     }
 
     if (type === "assistant") {
       const msg = message.message as { content?: unknown } | undefined;
       const content = msg?.content;
+      // The finished message repeats text the partial deltas already streamed.
       if (typeof content === "string" && content) {
-        push({ type: "delta", text: content });
+        if (!streamedText) push({ type: "delta", text: content });
         return;
       }
       if (Array.isArray(content)) {
         for (const part of content) {
           if (!part || typeof part !== "object") continue;
-          const block = part as { type?: string; text?: string; name?: string; id?: string };
-          if (block.type === "text" && typeof block.text === "string" && block.text) {
+          const block = part as { type?: string; text?: string; thinking?: string; name?: string; id?: string };
+          // Without partial messages the finished message is the only place thinking shows up.
+          if (block.type === "thinking" && thinkingCount === 0 && typeof block.thinking === "string") {
+            const step = thinkingStep(`thinking-${++thinkingCount}`, block.thinking);
+            if (step) push(step);
+          }
+          if (!own && block.type === "text" && SIGNED_OUT.test(block.text ?? "")) {
+            finish("WorkBuddy is not signed in on this machine. Sign in to WorkBuddy, or add your own API in Settings → Model API.");
+            return;
+          }
+          if (!streamedText && block.type === "text" && typeof block.text === "string" && block.text) {
             push({ type: "delta", text: block.text });
           }
           if (block.type === "tool_use") {

@@ -2,15 +2,20 @@ import os from "node:os";
 import path from "node:path";
 import { findHarnessBinary, readHarnessVersion, readJsonFile } from "../detect-bin";
 import type { DetectResult, HarnessAdapter, ModelOption, TurnInput } from "../types";
-import { openDshTurn } from "./dsh-turn";
+import { dshKeyMissing, openDshTurn } from "./dsh-turn";
 import { loggedTurn } from "../turn-log";
+import { listHarnessModels } from "../models";
 import { installHarnessRecipe, upgradeHarnessRecipe } from "../install-recipes";
 
 const LABEL = "DeepSeek Harness";
 const INSTALL_HINT = "Install dsh (npm i -g @deepseek-ai/dsh). Requires Node ^22.19 or >=24.";
 
 function isReady(_binary: string): { ok: boolean; error: string | null; hint: string | null } {
-  // Binary + version is ready. dsh owns its DeepSeek key; a missing key shows as a turn error.
+  // Only a turn can tell whether dsh has a working key: ready until one says no. The viewer's own
+  // key overrules this in readyWithKeys.
+  if (dshKeyMissing()) {
+    return { ok: false, error: "no_api_key", hint: "Add your DeepSeek key in Settings → Model API." };
+  }
   return { ok: true, error: null, hint: null };
 }
 
@@ -57,8 +62,8 @@ export const dshAdapter: HarnessAdapter = {
       hint: ready.ok ? null : ready.hint,
     };
   },
-  listModels(): ModelOption[] {
-    return [];
+  listModels(): Promise<ModelOption[]> {
+    return listHarnessModels("dsh");
   },
   openTurn(input: TurnInput) {
     return loggedTurn("dsh", input, (log) => openDshTurn(input, log));

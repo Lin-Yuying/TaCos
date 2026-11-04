@@ -66,7 +66,7 @@ export const codexAdapter: HarnessAdapter = {
       hint: ready.ok ? null : ready.hint,
     };
   },
-  listModels(): ModelOption[] {
+  async listModels(): Promise<ModelOption[]> {
     return listCodexModels().map((model) => ({
       id: model.slug,
       label: model.label,

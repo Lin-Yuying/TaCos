@@ -4,6 +4,7 @@ import { findHarnessBinary, readHarnessVersion, readJsonFile } from "../detect-b
 import type { DetectResult, HarnessAdapter, ModelOption, TurnInput } from "../types";
 import { openCodebuddyTurn } from "./codebuddy-turn";
 import { loggedTurn } from "../turn-log";
+import { listHarnessModels } from "../models";
 import { installHarnessRecipe, upgradeHarnessRecipe } from "../install-recipes";
 
 const LABEL = "WorkBuddy";
@@ -57,8 +58,8 @@ export const codebuddyAdapter: HarnessAdapter = {
       hint: ready.ok ? null : ready.hint,
     };
   },
-  listModels(): ModelOption[] {
-    return [];
+  listModels(): Promise<ModelOption[]> {
+    return listHarnessModels("codebuddy");
   },
   openTurn(input: TurnInput) {
     return loggedTurn("codebuddy", input, (log) => openCodebuddyTurn(input, log));

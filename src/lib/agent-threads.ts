@@ -38,7 +38,7 @@ export type AgentThread = {
 
 export type AgentStepRecord = {
   id: string;
-  kind: "command" | "file" | "tool" | "info";
+  kind: "command" | "file" | "tool" | "info" | "thinking";
   title: string;
   detail: string | null;
   status: "running" | "done" | "error" | "denied";
@@ -72,7 +72,7 @@ function asApproval(value: unknown): AgentApproval {
 }
 
 function asStepKind(value: string): AgentStepRecord["kind"] {
-  return value === "command" || value === "file" || value === "tool" ? value : "info";
+  return value === "command" || value === "file" || value === "tool" || value === "thinking" ? value : "info";
 }
 
 function asStepStatus(value: string): AgentStepRecord["status"] {
@@ -348,7 +348,7 @@ export async function setAgentThreadVisibility(
 }
 
 
-const MAX_MODEL = 80;
+const MAX_MODEL = 200;
 
 // Last-used model/effort for reopen UI. Does not create a session and does not lock the thread.
 export async function setAgentThreadModel(
@@ -625,9 +625,11 @@ export async function setAgentThreadEngine(
   if (!thread.mine) throw new TacosError("Only the author can change this conversation", 403);
   const next = engine.trim();
   if (!next) throw new TacosError("Pick a harness in the composer", 400);
+  // Model ids belong to one harness, so a new harness starts on its own default.
+  const pref = next === thread.engine ? {} : { model: "", effort: "" };
   await getDb()
     .update(agentThreads)
-    .set({ engine: next, updatedAt: new Date().toISOString() })
+    .set({ engine: next, ...pref, updatedAt: new Date().toISOString() })
     .where(eq(agentThreads.id, threadId));
   return threadOnly(await getAgentThread(workspaceId, userId, threadId));
 }

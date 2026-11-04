@@ -43,7 +43,7 @@ export type AiChatTurn = { role: "user" | "assistant"; content: string };
 // permission card it is waiting on.
 export type AgentStepFrame = {
   key: string;
-  kind: "command" | "file" | "tool" | "info";
+  kind: "command" | "file" | "tool" | "info" | "thinking";
   title: string;
   detail?: string;
   status: "running" | "done" | "error" | "denied";

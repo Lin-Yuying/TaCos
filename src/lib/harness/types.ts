@@ -39,6 +39,12 @@ export type ApprovalRequest = {
   params?: unknown;
 };
 
+/** One person's model APIs for one turn: env vars to set, and the endpoints Pi should know about. */
+export type HarnessKeys = {
+  env: Record<string, string>;
+  endpoints: { id: string; label: string; baseUrl: string; envVar: string; models: string[] }[];
+};
+
 export type TurnInput = {
   sessionId: string;
   cwd: string;
@@ -56,11 +62,12 @@ export type TurnInput = {
   waitForApproval: (request: ApprovalRequest) => Promise<ApprovalDecision>;
   signal?: AbortSignal;
   proxy?: string;
+  keys?: HarnessKeys | null;
 };
 
 export type TurnEvent =
   | { type: "delta"; text: string }
-  | { type: "step"; id: string; kind?: "command" | "file" | "tool" | "info"; title: string; status: "running" | "done" | "error" | "denied"; detail?: string }
+  | { type: "step"; id: string; kind?: "command" | "file" | "tool" | "info" | "thinking"; title: string; status: "running" | "done" | "error" | "denied"; detail?: string }
   | {
       type: "approval";
       requestId: string;
@@ -83,7 +90,7 @@ export type HarnessAdapter = {
   id: HarnessId;
   label: string;
   detect: () => DetectResult;
-  listModels: () => ModelOption[];
+  listModels: () => Promise<ModelOption[]>;
   openTurn: (input: TurnInput) => AsyncIterable<TurnEvent>;
   install?: () => Promise<InstallResult>;
   upgrade?: () => Promise<InstallResult>;
@@ -93,6 +100,7 @@ export type HarnessStatus = DetectResult & {
   enabled: boolean;
   latestVersion?: string | null;
   updateAvailable?: boolean;
+  updateCheckFailed?: boolean;
 };
 
 export type HarnessGate = {

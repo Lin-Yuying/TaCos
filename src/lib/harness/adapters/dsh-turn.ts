@@ -3,10 +3,11 @@
  * Runs `dsh --profile headless --json` with a TaCos patch overlay.
  * The overlay disables dsh builtin tools and inserts the TaCos MCP server
  * through @deepseek-ai/dsh-mcp-client. Write cards are mediated in /api/agent/tools.
- * dsh keeps its own DeepSeek credential. It is not the TaCos DeepSeek API setting.
+ * The DeepSeek key comes from the viewer's Model API settings, else from dsh's own store.
  */
 import { spawn, type ChildProcess } from "node:child_process";
 import fs from "node:fs";
+import os from "node:os";
 import path from "node:path";
 import { subscribeToolApprovals, waitForAgentApproval } from "@/lib/agent-sessions";
 import { findHarnessBinary } from "../detect-bin";
@@ -33,8 +34,12 @@ export const DSH_BUILTIN_TOOL_IDS = [
   "tool-web",
 ] as const;
 
-function buildEnv(proxy: string | undefined, approval: TurnInput["approval"]): NodeJS.ProcessEnv {
-  const env: NodeJS.ProcessEnv = { ...process.env };
+function buildEnv(
+  proxy: string | undefined,
+  approval: TurnInput["approval"],
+  keys?: Record<string, string>
+): NodeJS.ProcessEnv {
+  const env: NodeJS.ProcessEnv = { ...process.env, ...keys };
   if (proxy) {
     for (const key of PROXY_KEYS) env[key] = proxy;
   }
@@ -46,8 +51,25 @@ function buildEnv(proxy: string | undefined, approval: TurnInput["approval"]): N
 
 const q = (value: string) => JSON.stringify(value);
 
-export function buildDshPatch(mcp: TurnInput["mcp"]): string {
+export function buildDshPatch(
+  mcp: TurnInput["mcp"],
+  selection?: { model: string | null; effort?: string | null },
+  emptyStore?: string
+): string {
   const lines: string[] = [];
+  // dsh documents its own store as beating the environment. Pointing the store somewhere empty
+  // keeps a key saved on this machine from answering, and billing, instead of the viewer's.
+  if (emptyStore) lines.push("- id: credentials", "  config:", `    path: ${q(emptyStore)}`);
+  // headless has no model flag; a session starts on the default-model service's selection.
+  if (selection?.model) {
+    lines.push(
+      "- id: agent-default-model",
+      "  config:",
+      "    provider: deepseek-official",
+      `    model: ${q(selection.model)}`
+    );
+    if (selection.effort) lines.push(`    reasoningEffort: ${q(selection.effort)}`);
+  }
   for (const id of DSH_BUILTIN_TOOL_IDS) {
     lines.push(`- id: ${id}`, "  disabled: true");
   }
@@ -72,11 +94,11 @@ export function buildDshPatch(mcp: TurnInput["mcp"]): string {
   return `${lines.join("\n")}\n`;
 }
 
-function writePatch(cwd: string, mcp: TurnInput["mcp"]): string {
+function writePatch(cwd: string, input: TurnInput): string {
   const dir = path.join(cwd, ".tacos-dsh");
   fs.mkdirSync(dir, { recursive: true });
   const file = path.join(dir, "patch.yml");
-  fs.writeFileSync(file, buildDshPatch(mcp));
+  fs.writeFileSync(file, buildDshPatch(input.mcp ?? null, input, input.keys ? path.join(dir, "no-stored-keys.yaml") : undefined));
   return file;
 }
 
@@ -97,10 +119,39 @@ function errorText(value: unknown): string | null {
   return null;
 }
 
-/** Make dsh credential errors diagnosable. dsh owns its own key. */
+// dsh only reveals a missing key when a turn fails, and a key listed in its credentials file can
+// still be refused. So a failure is remembered until that file changes; only its time is read.
+const keyMissingAt = globalThis as unknown as { __tacosDshKeyMissingAt?: number };
+
+function credentialsChangedAt(): number {
+  try {
+    return fs.statSync(path.join(os.homedir(), ".dsh", ".credentials.yaml")).mtimeMs;
+  } catch {
+    return 0;
+  }
+}
+
+function noteDshKeyMissing(): void {
+  keyMissingAt.__tacosDshKeyMissingAt = credentialsChangedAt();
+}
+
+export function dshKeyMissing(): boolean {
+  if (process.env.DEEPSEEK_API_KEY) return false;
+  return keyMissingAt.__tacosDshKeyMissingAt === credentialsChangedAt();
+}
+
+/** Make dsh credential errors diagnosable. */
 export function explainDshError(message: string): string {
   if (/MISSING_CREDENTIAL|no API key/i.test(message)) {
-    return `DeepSeek Harness has no API key. Open \`dsh web\` > Models and store the key there, or export DEEPSEEK_API_KEY for dsh. The TaCos DeepSeek API setting does not configure dsh. (${message})`;
+    noteDshKeyMissing();
+    return "DeepSeek Harness has no API key. Add your DeepSeek key in Settings → Model API.";
+  }
+  // The raw text quotes the end of the key; it stays in the turn log.
+  if (/\bAUTH\b|authentication fails|invalid.*api key/i.test(message)) {
+    return "DeepSeek rejected this API key. Replace it in Settings → Model API.";
+  }
+  if (/TRANSPORT/.test(message)) {
+    return "DeepSeek Harness could not get an answer from DeepSeek. Check your key in Settings → Model API, and this machine's network.";
   }
   return message;
 }
@@ -113,7 +164,7 @@ export async function* openDshTurn(input: TurnInput, log?: TurnLog): AsyncGenera
     return;
   }
 
-  const patchFile = writePatch(input.cwd, input.mcp ?? null);
+  const patchFile = writePatch(input.cwd, input);
   const args = ["--profile", "headless", "--patch", patchFile, "--json"];
   if (input.sessionId && /^session-/.test(input.sessionId)) {
     args.push("--session-id", input.sessionId);
@@ -160,7 +211,7 @@ export async function* openDshTurn(input: TurnInput, log?: TurnLog): AsyncGenera
   try {
     child = spawn(binary, args, {
       cwd: input.cwd,
-      env: buildEnv(input.proxy, input.approval),
+      env: buildEnv(input.proxy, input.approval, input.keys?.env),
       stdio: ["pipe", "pipe", "pipe"],
     });
   } catch (err) {

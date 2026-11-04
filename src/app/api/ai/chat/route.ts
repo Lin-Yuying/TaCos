@@ -34,7 +34,9 @@ import {
   skillsInText,
   type AgentStepEvent,
 } from "@/lib/cli-agents";
-import { getHarnessAdapter, turnEventsToSse } from "@/lib/harness";
+import { getHarnessAdapter, resolveTurnModel, turnEventsToSse } from "@/lib/harness";
+import { harnessKeysFor, harnessesWithKeys, modelAccessFor } from "@/lib/model-keys";
+import { readyWithKeys } from "@/lib/harness/gate";
 import type { ApprovalDecision as HarnessApprovalDecision } from "@/lib/harness";
 import { TacosError } from "@/lib/issues";
 
@@ -197,19 +199,14 @@ export async function POST(request: Request) {
         : runtime.engine;
 
     if (engine !== "api") {
-      if (!runtime.enabled) {
-        throw new TacosError(
-          "AI is turned off for this workspace",
-          400,
-          "An admin can enable it in Settings."
-        );
-      }
-      // Local CLIs sign in under the OS account that runs this server.
-      if (engine === "codex" || engine === "pi") {
-        requireCli(engine);
+      // A harness needs its own subscription, signed in under the OS account that runs this
+      // server, or the viewer's own API.
+      const keyed = await harnessesWithKeys(access.user.id);
+      if (engine === "codex") {
+        if (!keyed.includes("codex")) requireCli(engine);
       } else {
         const adapter = getHarnessAdapter(engine);
-        const detect = adapter?.detect();
+        const detect = adapter && readyWithKeys(adapter.detect(), keyed);
         if (!adapter || !detect?.ready) {
           throw new TacosError(
             `${adapter?.label ?? engine} is not ready on this server`,
@@ -277,9 +274,15 @@ export async function POST(request: Request) {
         engine === "codex" && message.includes("@") ? skillsInText(message, await listCodexSkills()) : [];
       const origin = new URL(request.url).origin;
       const cwd = path.join(DATA_DIR, "agent", workspaceId, thread.projectId || "general");
+      // A missing cwd makes spawn report ENOENT for the binary, on every harness's first turn here.
+      fs.mkdirSync(cwd, { recursive: true });
       const prompt = flattenMessages(messages);
       const isTurnApproved = () =>
         Boolean(grant && (grant.autoApproveTurn || thread.approval !== "ask"));
+
+      // The viewer's own APIs, for this turn only.
+      const keys = await harnessKeysFor(access.user.id, engine);
+      const turnModel = await resolveTurnModel(engine, thread.model, thread.effort, await modelAccessFor(access.user.id));
 
       // Codex Agent turns go through the harness adapter (chat + MCP + elicitation keys).
       if (engine === "codex") {
@@ -294,8 +297,8 @@ export async function POST(request: Request) {
           sessionId: threadId,
           cwd,
           prompt,
-          model: thread.model || defaults.model || null,
-          effort: thread.effort || defaults.effort || null,
+          model: turnModel.model || defaults.model || null,
+          effort: turnModel.effort || defaults.effort || null,
           approval: thread.approval,
           skills: skills.length > 0 ? skills : undefined,
           autoApproveTools: AGENT_TOOLS.filter((tool) => !tool.write).map((tool) => tool.name),
@@ -307,6 +310,7 @@ export async function POST(request: Request) {
             ),
           signal: request.signal,
           proxy: runtime.proxy,
+          keys,
           ...(grant
             ? {
                 mcp: {
@@ -340,8 +344,8 @@ export async function POST(request: Request) {
           sessionId: threadId,
           cwd,
           prompt,
-          model: thread.model || null,
-          effort: thread.effort || null,
+          model: turnModel.model,
+          effort: turnModel.effort,
           approval: thread.approval,
           skills: skills.length > 0 ? skills : undefined,
           autoApproveTools: AGENT_TOOLS.filter((tool) => !tool.write).map((tool) => tool.name),
@@ -353,6 +357,7 @@ export async function POST(request: Request) {
             ),
           signal: request.signal,
           proxy: runtime.proxy,
+          keys,
           ...(grant
             ? {
                 mcp: {
@@ -386,8 +391,8 @@ export async function POST(request: Request) {
           sessionId: threadId,
           cwd,
           prompt,
-          model: thread.model || null,
-          effort: thread.effort || null,
+          model: turnModel.model,
+          effort: turnModel.effort,
           approval: thread.approval,
           skills: skills.length > 0 ? skills : undefined,
           autoApproveTools: AGENT_TOOLS.filter((tool) => !tool.write).map((tool) => tool.name),
@@ -399,6 +404,7 @@ export async function POST(request: Request) {
             ),
           signal: request.signal,
           proxy: runtime.proxy,
+          keys,
           ...(grant
             ? {
                 mcp: {
@@ -432,8 +438,8 @@ export async function POST(request: Request) {
           sessionId: threadId,
           cwd,
           prompt,
-          model: thread.model || null,
-          effort: thread.effort || null,
+          model: turnModel.model,
+          effort: turnModel.effort,
           approval: thread.approval,
           skills: skills.length > 0 ? skills : undefined,
           autoApproveTools: AGENT_TOOLS.filter((tool) => !tool.write).map((tool) => tool.name),
@@ -445,6 +451,7 @@ export async function POST(request: Request) {
             ),
           signal: request.signal,
           proxy: runtime.proxy,
+          keys,
           ...(grant
             ? {
                 mcp: {
@@ -478,8 +485,8 @@ export async function POST(request: Request) {
           sessionId: threadId,
           cwd,
           prompt,
-          model: thread.model || null,
-          effort: thread.effort || null,
+          model: turnModel.model,
+          effort: turnModel.effort,
           approval: thread.approval,
           skills: skills.length > 0 ? skills : undefined,
           autoApproveTools: AGENT_TOOLS.filter((tool) => !tool.write).map((tool) => tool.name),
@@ -491,6 +498,7 @@ export async function POST(request: Request) {
             ),
           signal: request.signal,
           proxy: runtime.proxy,
+          keys,
           ...(grant
             ? {
                 mcp: {
@@ -532,7 +540,7 @@ export async function POST(request: Request) {
       context,
     });
     if (engine === "api") {
-      const stream = await openChatStream(workspaceId, messages, request.signal);
+      const stream = await openChatStream(workspaceId, access.user.id, messages, request.signal);
       return new Response(stream, { headers: STREAM_HEADERS });
     }
     // The inline editor can borrow the Codex/Pi login: no tools, no thread, one prompt

@@ -5,6 +5,7 @@
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { clearHarnessDetectCache, findHarnessBinary, HARNESS_BIN_ENV, readHarnessVersion } from "./detect-bin";
+import { clearHarnessModelCache } from "./models";
 import type { HarnessId, InstallResult } from "./types";
 
 const execFileAsync = promisify(execFile);
@@ -84,6 +85,7 @@ async function npmGlobalInstall(pkg: string): Promise<{ ok: true; out: string } 
 
 async function afterDetect(id: HarnessId): Promise<{ binary: string | null; version: string | null }> {
   clearHarnessDetectCache();
+  clearHarnessModelCache();
   const binary = findHarnessBinary(id);
   const version = binary ? readHarnessVersion(id, binary) : null;
   return { binary, version };

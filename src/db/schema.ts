@@ -471,6 +471,23 @@ export const agentSteps = sqliteTable(
 
 // The workspace's AI provider. `apiKey` is encrypted with a key stored next to the
 // SQLite file, so a copied database alone does not expose the provider credential.
+// One person's model API. The same user sees the same APIs in every workspace.
+export const userModelKeys = sqliteTable(
+  "user_model_keys",
+  {
+    userId: text("user_id").notNull(),
+    provider: text("provider").notNull(),
+    apiKey: text("api_key").notNull(),
+    editModel: text("edit_model").notNull().default(""),
+    forEdits: integer("for_edits").notNull().default(0),
+    label: text("label").notNull().default(""),
+    baseUrl: text("base_url").notNull().default(""),
+    models: text("models").notNull().default(""),
+    updatedAt: text("updated_at").notNull(),
+  },
+  (table) => [primaryKey({ columns: [table.userId, table.provider] })]
+);
+
 export const aiSettings = sqliteTable("ai_settings", {
   workspaceId: text("workspace_id").primaryKey(),
   baseUrl: text("base_url").notNull(),

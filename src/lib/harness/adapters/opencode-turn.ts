@@ -7,6 +7,8 @@
 import { spawn, type ChildProcess } from "node:child_process";
 import { subscribeToolApprovals, waitForAgentApproval } from "@/lib/agent-sessions";
 import { findHarnessBinary } from "../detect-bin";
+import { ownEndpoint } from "../own-endpoint";
+import { thinkingStep } from "../thinking";
 import type { TurnEvent, TurnInput } from "../types";
 import type { TurnLog } from "../turn-log";
 
@@ -23,9 +25,23 @@ function buildConfig(input: TurnInput): Record<string, unknown> {
       environment: input.mcp.env ?? {},
     };
   }
+  const own = ownEndpoint(input);
   return {
     $schema: "https://opencode.ai/config.json",
     mcp,
+    ...(own
+      ? {
+          provider: {
+            [own.endpoint.id]: {
+              npm: "@ai-sdk/openai-compatible",
+              name: own.endpoint.label,
+              // Names the variable, never the key: OpenCode reads the value from this turn's environment.
+              options: { baseURL: own.endpoint.baseUrl, apiKey: `{env:${own.endpoint.envVar}}` },
+              models: Object.fromEntries(own.endpoint.models.map((id) => [id, { name: id }])),
+            },
+          },
+        }
+      : {}),
     // Deny host builtins. Allow MCP (and other) tools so TaCos can mediate writes.
     permission: {
       edit: "deny",
@@ -54,6 +70,8 @@ function buildEnv(input: TurnInput): NodeJS.ProcessEnv {
   if (input.mcp?.env) {
     Object.assign(env, input.mcp.env);
   }
+  const own = ownEndpoint(input);
+  if (own) env[own.endpoint.envVar] = own.key;
   return env;
 }
 
@@ -64,6 +82,14 @@ function messageText(input: TurnInput): string {
   return body || system || "Hello";
 }
 
+/** OpenCode keeps its own keys, so the fix is on its side, not in TaCos. The raw text stays in the turn log. */
+export function explainOpencodeError(message: string): string {
+  if (/authentication fails|invalid.*api key|api key.*invalid|unauthorized/i.test(message)) {
+    return "OpenCode's stored API key was rejected. Run `opencode auth login` to replace it, or pick another model.";
+  }
+  return message;
+}
+
 export async function* openOpencodeTurn(input: TurnInput, log?: TurnLog): AsyncGenerator<TurnEvent> {
   const binary = findHarnessBinary("opencode");
   if (!binary) {
@@ -72,9 +98,12 @@ export async function* openOpencodeTurn(input: TurnInput, log?: TurnLog): AsyncG
     return;
   }
 
-  const args = ["run", "--format", "json", "--auto", "--dir", input.cwd, messageText(input)];
+  const args = ["run", "--format", "json", "--thinking", "--auto", "--dir", input.cwd, messageText(input)];
   if (input.model) {
     args.splice(1, 0, "--model", input.model);
+  }
+  if (input.effort) {
+    args.splice(1, 0, "--variant", input.effort);
   }
 
   const queue: TurnEvent[] = [];
@@ -102,6 +131,8 @@ export async function* openOpencodeTurn(input: TurnInput, log?: TurnLog): AsyncG
   let child: ChildProcess | null = null;
   let finished = false;
   let stderr = "";
+  let sawText = false;
+  let thinkingCount = 0;
 
   const finish = (error?: string) => {
     if (finished) return;
@@ -152,13 +183,14 @@ export async function* openOpencodeTurn(input: TurnInput, log?: TurnLog): AsyncG
   }
 
   child?.on("error", (err) => finish(`Could not start OpenCode: ${err.message}`));
-  child?.on("exit", (code) => {
+  // "close", not "exit": the last lines of stdout can still be on their way when it exits.
+  child?.on("close", (code) => {
     if (!finished) {
       const detail = stderr.trim()
         ? stderr.trim().split("\n").slice(-3).join(" ")
         : `OpenCode exited with code ${code ?? "unknown"}.`;
-      // Exit after session.idle is normal; finish without error if already done.
-      finish(detail);
+      // `opencode run` has no closing event of its own; a clean exit is how a turn ends.
+      finish(code === 0 ? undefined : detail);
     }
   });
 
@@ -166,6 +198,13 @@ export async function* openOpencodeTurn(input: TurnInput, log?: TurnLog): AsyncG
     let message: {
       type?: string;
       properties?: Record<string, unknown>;
+      part?: {
+        text?: unknown;
+        tool?: unknown;
+        callID?: unknown;
+        state?: { status?: unknown };
+      };
+      error?: string | { name?: string; message?: string; data?: { message?: string } };
     };
     try {
       message = JSON.parse(line);
@@ -174,6 +213,43 @@ export async function* openOpencodeTurn(input: TurnInput, log?: TurnLog): AsyncG
     }
     const type = message.type ?? "";
     const props = message.properties ?? {};
+
+    // `opencode run --format json` writes whole parts: each text, tool or error line stands alone.
+    if (type === "text") {
+      const text = message.part?.text;
+      if (typeof text === "string" && text.trim()) {
+        push({ type: "delta", text: sawText ? `\n\n${text}` : text });
+        sawText = true;
+      }
+      return;
+    }
+
+    if (type === "reasoning") {
+      const step = thinkingStep(`thinking-${++thinkingCount}`, String(message.part?.text ?? ""));
+      if (step) push(step);
+      return;
+    }
+
+    if (type === "tool_use") {
+      const part = message.part;
+      const status = part?.state?.status;
+      push({
+        type: "step",
+        id: String(part?.callID ?? part?.tool ?? "tool"),
+        kind: "tool",
+        title: String(part?.tool ?? "tool"),
+        status: status === "error" ? "error" : status === "completed" ? "done" : "running",
+      });
+      return;
+    }
+
+    if (type === "error") {
+      const err = message.error;
+      const msg = typeof err === "string" ? err : (err?.data?.message ?? err?.message ?? err?.name);
+      clearTimeout(timer);
+      finish(explainOpencodeError(msg || "OpenCode reported an error."));
+      return;
+    }
 
     if (type === "message.part.delta") {
       if (props.field === "text" && typeof props.delta === "string" && props.delta) {

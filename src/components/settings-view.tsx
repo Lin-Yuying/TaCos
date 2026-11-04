@@ -1,8 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Copy, Check, Pencil, RefreshCw, Sparkles, Trash2, Upload } from "lucide-react";
+import { ChevronRight, Copy, Check, Pencil, RefreshCw, Trash2, Upload } from "lucide-react";
 import {
   createApiKeyAction,
   createProjectAction,
@@ -21,18 +21,13 @@ import {
   saveLocaleAction,
 } from "@/app/auth-actions";
 import {
-  saveAiSettingsAction,
+  saveAgentRuntimeAction,
   setHarnessEnabledAction,
   runHarnessInstallAction,
   checkHarnessUpdatesAction,
-  testAiConnectionAction,
 } from "@/app/ai-actions";
-import {
-  AI_PRESETS,
-  type AiEngine,
-  type AiProviderId,
-  type AiSettingsView,
-} from "@/lib/ai-constants";
+import type { AiSettingsView, ModelKeysView } from "@/lib/ai-constants";
+import { ModelKeysSection } from "@/components/model-keys-section";
 import { AssigneeAvatar } from "@/components/issue-table";
 import { ProjectIcon, WorkspaceMark } from "@/components/icons";
 import { WorkspaceTrashList } from "@/components/workspace-trash-list";
@@ -112,10 +107,8 @@ function toSquareDataUrl(file: File): Promise<string> {
   });
 }
 
-function engineLabel(engine: AiEngine, model: string): string {
-  if (engine === "codex") return "Codex";
-  if (engine === "pi") return "Pi";
-  return model || "API";
+function shellQuote(value: string): string {
+  return /^[\w@%+=:,./-]+$/.test(value) ? value : `'${value.replace(/'/g, "'\\''")}'`;
 }
 
 export function SettingsView({
@@ -128,6 +121,8 @@ export function SettingsView({
   joinCode,
   membersSeeAllTasks,
   ai,
+  mcpServerPath,
+  modelKeys,
   harness,
   isOwner,
   nextWorkspaceHref,
@@ -142,6 +137,8 @@ export function SettingsView({
   joinCode: string | null;
   membersSeeAllTasks: boolean;
   ai: AiSettingsView;
+  mcpServerPath: string | null;
+  modelKeys: ModelKeysView;
   harness: HarnessSettingsView;
   isOwner: boolean;
   nextWorkspaceHref: string;
@@ -167,19 +164,14 @@ export function SettingsView({
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [deleteWord, setDeleteWord] = useState("");
   const [seeAll, setSeeAll] = useState(membersSeeAllTasks);
-  const [aiProvider, setAiProvider] = useState<AiProviderId>(ai.provider);
-  const [aiBaseUrl, setAiBaseUrl] = useState(ai.baseUrl || AI_PRESETS[0].baseUrl);
-  const [aiModel, setAiModel] = useState(ai.model || AI_PRESETS[0].model);
-  const [aiKey, setAiKey] = useState("");
-  const [aiEngine, setAiEngine] = useState<AiEngine>(ai.engine);
   const [aiProxy, setAiProxy] = useState(ai.proxy);
-  const [aiEnabled, setAiEnabled] = useState(ai.updatedAt ? ai.enabled : true);
-  const [aiBusy, setAiBusy] = useState<"save" | "test" | null>(null);
+  const [aiBusy, setAiBusy] = useState(false);
   const [aiError, setAiError] = useState<string | null>(null);
   const [aiNotice, setAiNotice] = useState<string | null>(null);
   const [harnessRows, setHarnessRows] = useState(harness.rows);
   const [harnessGateView, setHarnessGateView] = useState(harness.gate);
   const [harnessBusy, setHarnessBusy] = useState<string | null>(null);
+  const harnessUpdateSeq = useRef(0);
   const [harnessError, setHarnessError] = useState<string | null>(null);
   const [harnessNotice, setHarnessNotice] = useState<string | null>(null);
 
@@ -230,25 +222,66 @@ export function SettingsView({
       agentAllowed: anyEnabled && enabledReady.length > 0,
     });
     setHarnessNotice(result.data.message);
+    // The new version may already be behind, and these rows carry no update info.
+    void readHarnessUpdates(false);
   }
+
+  // Only the update fields are taken: a toggle made while this runs must not be undone,
+  // and only the newest check counts, so one begun before an upgrade can't bring back its button.
+  async function readHarnessUpdates(force: boolean) {
+    const seq = ++harnessUpdateSeq.current;
+    const result = await checkHarnessUpdatesAction(workspace.id, force);
+    if (seq !== harnessUpdateSeq.current) return null;
+    if (result.ok) {
+      setHarnessRows((rows) =>
+        rows.map((row) => {
+          const fresh = result.data.rows.find((entry) => entry.id === row.id);
+          return fresh
+            ? {
+                ...row,
+                latestVersion: fresh.latestVersion,
+                updateAvailable: fresh.updateAvailable,
+                updateCheckFailed: fresh.updateCheckFailed,
+              }
+            : row;
+        })
+      );
+    }
+    return result;
+  }
+
+  // Upgrade only shows when an update exists, so the page has to find out by itself.
+  useEffect(() => {
+    if (isAdmin) void readHarnessUpdates(false);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   async function checkHarnessUpdates() {
     if (!isAdmin) return;
     setHarnessBusy("check-updates");
     setHarnessError(null);
     setHarnessNotice(null);
-    const result = await checkHarnessUpdatesAction(workspace.id);
+    const result = await readHarnessUpdates(true);
     setHarnessBusy(null);
+    if (!result) return;
     if (!result.ok) {
       setHarnessError(result.error);
       return;
     }
-    setHarnessRows(result.data.rows);
     const available = result.data.rows.filter((row) => row.updateAvailable).length;
+    const failed = result.data.rows.filter((row) => row.updateCheckFailed).map((row) => row.label);
+    // "Up to date" is only true of the harnesses npm actually answered for.
     setHarnessNotice(
-      available > 0
-        ? t(available === 1 ? "{count} harness update available." : "{count} harness updates available.", { count: String(available) })
-        : t("All harnesses are up to date on npm.")
+      [
+        available > 0
+          ? t(available === 1 ? "{count} harness update available." : "{count} harness updates available.", { count: String(available) })
+          : failed.length === 0
+            ? t("All installed harnesses are up to date.")
+            : "",
+        failed.length > 0 ? t("Could not check for updates: {names}.", { names: failed.join(", ") }) : "",
+      ]
+        .filter(Boolean)
+        .join(" ")
     );
   }
 
@@ -291,67 +324,19 @@ export function SettingsView({
     router.refresh();
   }
 
-  function pickAiProvider(id: AiProviderId) {
-    setAiProvider(id);
-    const preset = AI_PRESETS.find((entry) => entry.id === id);
-    if (preset && id !== "custom") {
-      setAiBaseUrl(preset.baseUrl);
-      setAiModel(preset.model);
-    }
-    setAiError(null);
-    setAiNotice(null);
-  }
-
-  async function saveAi() {
+  async function saveRuntime() {
     if (!isAdmin || aiBusy) return;
-    setAiBusy("save");
+    setAiBusy(true);
     setAiError(null);
     setAiNotice(null);
-    const result =
-      aiEngine === "api"
-        ? await saveAiSettingsAction(workspace.id, {
-            engine: "api",
-            proxy: aiProxy,
-            baseUrl: aiBaseUrl,
-            model: aiModel,
-            ...(aiKey.trim() ? { apiKey: aiKey.trim() } : {}),
-            enabled: aiEnabled,
-          })
-        : await saveAiSettingsAction(workspace.id, {
-            engine: aiEngine,
-            proxy: aiProxy,
-            enabled: aiEnabled,
-          });
-    setAiBusy(null);
+    const result = await saveAgentRuntimeAction(workspace.id, { proxy: aiProxy });
+    setAiBusy(false);
     if (!result.ok) {
       setAiError(result.error);
       return;
     }
-    setAiKey("");
-    setAiNotice(`Saved — ${engineLabel(result.data.engine, result.data.model)}`);
+    setAiNotice(t("Saved."));
     router.refresh();
-  }
-
-  async function testAi() {
-    if (!isAdmin || aiBusy) return;
-    setAiBusy("test");
-    setAiError(null);
-    setAiNotice(null);
-    const result = await testAiConnectionAction(workspace.id, {
-      baseUrl: aiBaseUrl,
-      model: aiModel,
-      ...(aiKey.trim() ? { apiKey: aiKey.trim() } : {}),
-    });
-    setAiBusy(null);
-    if (!result.ok) {
-      setAiError(result.error);
-      return;
-    }
-    setAiNotice(
-      result.data.sample
-        ? t("Connected — {model} replied: “{sample}”", { model: result.data.model, sample: result.data.sample })
-        : t("Connected — {model} replied.", { model: result.data.model })
-    );
   }
 
   async function addProject() {
@@ -505,7 +490,9 @@ export function SettingsView({
   -d '{"title":"Fix login redirect","project":"${projects[0]?.key ?? "CORE"}","priority":"high","labels":["Bug"]}' \\
   ${origin}/api/v1/issues`;
 
-  const claudeCodeCmd = `claude mcp add tacos -- npx tsx /absolute/path/to/tacos/mcp/server.ts`;
+  const mcpCommand = mcpServerPath
+    ? `npx --prefix ${shellQuote(mcpServerPath.replace(/\/mcp\/server\.ts$/, ""))} tsx ${shellQuote(mcpServerPath)}`
+    : null;
 
   return (
     <div className="flex-1 overflow-y-auto px-10 pb-10 pt-6 lg:px-20 xl:px-32">
@@ -879,7 +866,7 @@ export function SettingsView({
             <span className="rounded-full bg-elevated px-2 py-0.5 text-[11px] text-faint">
               {t("{count} ready", { count: String(harnessRows.filter((row) => row.enabled && row.ready).length) })}
             </span>
-            {isAdmin && (
+            {isAdmin && harnessRows.some((row) => row.installed) && (
               <button
                 type="button"
                 disabled={Boolean(harnessBusy)}
@@ -922,13 +909,16 @@ export function SettingsView({
                   </div>
                   <div className="text-[12px] text-muted">
                     {t("Version:")} {row.version ?? "—"}
-                    {row.latestVersion ? (
+                    {row.updateAvailable && row.latestVersion ? (
                       <span className="ml-2 text-faint">{t("Latest:")} {row.latestVersion}</span>
                     ) : null}
                     {row.updateAvailable ? (
                       <span className="ml-2 rounded-full bg-accent/10 px-2 py-0.5 text-[11px] font-medium text-accent">
                         {t("Update available")}
                       </span>
+                    ) : null}
+                    {row.updateCheckFailed ? (
+                      <span className="ml-2 text-faint">{t("Could not check for updates")}</span>
                     ) : null}
                     {row.binary ? (
                       <span className="ml-2 font-mono text-[11px] text-faint">{row.binary}</span>
@@ -942,25 +932,25 @@ export function SettingsView({
                   )}
                 </div>
                 <div className="flex flex-wrap items-center gap-2">
-                  {isAdmin && (
-                    <>
-                      <button
-                        type="button"
-                        disabled={Boolean(harnessBusy)}
-                        onClick={() => void runHarnessRecipe(row.id, "install")}
-                        className="rounded-md border border-border px-2 py-1 text-[11.5px] text-muted hover:bg-elevated disabled:opacity-40"
-                      >
-                        {harnessBusy === `${row.id}:install` ? t("Installing…") : t("Install")}
-                      </button>
-                      <button
-                        type="button"
-                        disabled={Boolean(harnessBusy) || !row.installed}
-                        onClick={() => void runHarnessRecipe(row.id, "upgrade")}
-                        className="rounded-md border border-border px-2 py-1 text-[11.5px] text-muted hover:bg-elevated disabled:opacity-40"
-                      >
-                        {harnessBusy === `${row.id}:upgrade` ? t("Upgrading…") : t("Upgrade")}
-                      </button>
-                    </>
+                  {isAdmin && !row.installed && (
+                    <button
+                      type="button"
+                      disabled={Boolean(harnessBusy)}
+                      onClick={() => void runHarnessRecipe(row.id, "install")}
+                      className="rounded-md border border-border px-2 py-1 text-[11.5px] text-muted hover:bg-elevated disabled:opacity-40"
+                    >
+                      {harnessBusy === `${row.id}:install` ? t("Installing…") : t("Install")}
+                    </button>
+                  )}
+                  {isAdmin && row.installed && row.updateAvailable && (
+                    <button
+                      type="button"
+                      disabled={Boolean(harnessBusy)}
+                      onClick={() => void runHarnessRecipe(row.id, "upgrade")}
+                      className="rounded-md border border-border px-2 py-1 text-[11.5px] text-muted hover:bg-elevated disabled:opacity-40"
+                    >
+                      {harnessBusy === `${row.id}:upgrade` ? t("Upgrading…") : t("Upgrade")}
+                    </button>
                   )}
                   <label className="flex items-center gap-2 text-[12.5px] text-muted">
                     <input
@@ -983,352 +973,170 @@ export function SettingsView({
           )}
         </section>
 
-        <section className="space-y-3">
-          <div className="flex items-center gap-2">
-            <h2 className="text-[13px] font-semibold">{t("AI assistant")}</h2>
-            {ai.configured || ai.cli.some((status) => status.installed && status.signedIn) ? (
-              <span
-                className={`rounded-full px-2 py-0.5 text-[11px] font-medium ${
-                  ai.enabled ? "bg-accent/10 text-accent" : "bg-elevated text-faint"
-                }`}
-              >
-                {ai.enabled ? t("On") : t("Off")}
-              </span>
-            ) : (
-              <span className="rounded-full bg-elevated px-2 py-0.5 text-[11px] text-faint">
-                {t("Not configured")}
-              </span>
-            )}
-          </div>
-          <p className="text-[13px] leading-relaxed text-muted">
-            {t("Powers the Agent tab, drafts tasks from a sentence, and rewrites Markdown in projects and docs. The Agent can also drive a Codex or Pi CLI that is already signed in on this server, so no API key is needed. Keys are stored encrypted and never reach the browser.")}
+        <ModelKeysSection workspaceId={workspace.id} view={modelKeys} />
+
+        <details className="group/advanced" data-testid="settings-advanced">
+          <summary className="flex cursor-pointer list-none items-center gap-1.5 text-[13px] font-semibold [&::-webkit-details-marker]:hidden">
+            <ChevronRight size={14} className="text-muted transition-transform group-open/advanced:rotate-90" />
+            {t("Advanced")}
+          </summary>
+          <p className="mt-1 text-[12px] text-faint">
+            {t("Proxy, REST API keys and MCP server. Only needed to connect other tools to TaCos or to get through a filtered network.")}
           </p>
-
-          {isAdmin ? (
-            <div className="space-y-3 rounded-lg border border-border p-4">
-              <div className="space-y-1 text-[12px] text-muted">
-                <span>{t("Agent engine")}</span>
-                <div className="grid gap-2 sm:grid-cols-3">
-                  {(
-                    [
-                      {
-                        id: "api" as AiEngine,
-                        label: t("API key"),
-                        sub: ai.configured ? ai.model : t("Not configured"),
-                        ready: ai.configured,
-                      },
-                      ...ai.cli.map((status) => ({
-                        id: status.engine as AiEngine,
-                        label: status.label,
-                        sub: !status.installed
-                          ? t("Not installed")
-                          : status.signedIn
-                            ? (status.model ?? status.account ?? t("Signed in"))
-                            : t("Not signed in"),
-                        ready: status.installed && status.signedIn,
-                      })),
-                    ]
-                  ).map((option) => (
-                    <button
-                      key={option.id}
-                      type="button"
-                      onClick={() => {
-                        setAiEngine(option.id);
-                        setAiError(null);
-                        setAiNotice(null);
-                      }}
-                      className={`rounded-md border px-3 py-2 text-left transition-colors ${
-                        aiEngine === option.id
-                          ? "border-border-strong bg-elevated"
-                          : "border-border hover:bg-elevated/60"
-                      }`}
-                    >
-                      <span className="flex items-center gap-1.5 text-[12.5px] font-medium">
-                        <span
-                          className="h-1.5 w-1.5 rounded-full"
-                          style={{ background: option.ready ? "#2f7d4f" : "var(--color-border-strong)" }}
-                        />
-                        {option.label}
-                      </span>
-                      <span className="mt-0.5 block truncate text-[11px] text-faint">
-                        {option.sub}
-                      </span>
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              {aiEngine === "api" ? (
-                <>
-                  <div className="grid grid-cols-2 gap-2">
-                    <label className="space-y-1 text-[12px] text-muted">
-                      <span>{t("Provider")}</span>
-                      <select
-                        value={aiProvider}
-                        onChange={(e) => pickAiProvider(e.target.value as AiProviderId)}
-                        className="w-full rounded-md border border-border bg-elevated/50 px-2.5 py-1.5 text-[13px] text-text focus:border-border-strong"
-                      >
-                        {AI_PRESETS.map((preset) => (
-                          <option key={preset.id} value={preset.id}>
-                            {t(preset.label)}
-                          </option>
-                        ))}
-                      </select>
-                    </label>
-                    <label className="space-y-1 text-[12px] text-muted">
-                      <span>{t("Model")}</span>
-                      <input
-                        value={aiModel}
-                        onChange={(e) => setAiModel(e.target.value)}
-                        placeholder="deepseek-chat"
-                        className="w-full rounded-md border border-border bg-elevated/50 px-2.5 py-1.5 text-[13px] text-text placeholder:text-faint focus:border-border-strong"
-                      />
-                    </label>
-                  </div>
-
+          <div className="mt-4 space-y-8">
+              {isAdmin && (
+                <div className="space-y-3 rounded-lg border border-border p-3">
                   <label className="block space-y-1 text-[12px] text-muted">
-                    <span>{t("Base URL")}</span>
+                    <span>{t("Proxy (optional)")}</span>
                     <input
-                      value={aiBaseUrl}
-                      onChange={(e) => setAiBaseUrl(e.target.value)}
-                      placeholder="https://api.deepseek.com/v1"
+                      value={aiProxy}
+                      onChange={(e) => setAiProxy(e.target.value)}
+                      placeholder="http://127.0.0.1:7890"
                       spellCheck={false}
-                      className="w-full rounded-md border border-border bg-elevated/50 px-2.5 py-1.5 font-mono text-[12.5px] text-text placeholder:text-faint focus:border-border-strong"
-                    />
-                    <span className="block text-[11.5px] text-faint">
-                      {t(
-                        AI_PRESETS.find((preset) => preset.id === aiProvider)?.hint ??
-                          "Requests go to {baseUrl}/chat/completions."
-                      )}
-                    </span>
-                  </label>
-
-                  <label className="block space-y-1 text-[12px] text-muted">
-                    <span>{t("API key")}</span>
-                    <input
-                      type="password"
-                      value={aiKey}
-                      onChange={(e) => setAiKey(e.target.value)}
-                      autoComplete="off"
-                      placeholder={
-                        ai.configured && ai.keyHint
-                          ? t("Stored {hint} — leave blank to keep", { hint: ai.keyHint })
-                          : "sk-…"
-                      }
                       className="w-full rounded-md border border-border bg-elevated/50 px-2.5 py-1.5 font-mono text-[12px] text-text placeholder:text-faint focus:border-border-strong"
                     />
+                    <span className="block text-[11.5px] text-faint">
+                      {t("Set a local proxy when this machine needs one to reach model providers. All harnesses use it.")}
+                    </span>
                   </label>
-                </>
-              ) : (
-                (() => {
-                  const status = ai.cli.find((entry) => entry.engine === aiEngine);
-                  if (!status) return null;
-                  return (
-                    <div className="space-y-2 rounded-md bg-elevated/60 p-3 text-[12.5px] leading-relaxed">
-                      <div className="flex items-center gap-1.5 font-medium text-text">
-                        {t("{label} CLI", { label: status.label })}
-                        <span
-                          className={`rounded-full px-2 py-0.5 text-[11px] ${
-                            status.installed && status.signedIn
-                              ? "bg-accent/10 text-accent"
-                              : "bg-elevated text-faint"
-                          }`}
-                        >
-                          {!status.installed ? t("Not installed") : status.signedIn ? t("Signed in") : t("Not signed in")}
-                        </span>
-                      </div>
-                      {status.binary && (
-                        <div className="truncate font-mono text-[11.5px] text-faint">{status.binary}</div>
-                      )}
-                      {status.hint && <div className="text-muted">{status.hint}</div>}
-                      {status.installed && status.signedIn && (
-                        <div className="text-faint">
-                          {t("Uses the login from this server's own {label} install — no key is stored in TaCos.", {
-                            label: status.label,
-                          })}
-                        </div>
-                      )}
-                    </div>
-                  );
-                })()
-              )}
-
-              {aiEngine !== "api" && (
-                <label className="block space-y-1 text-[12px] text-muted">
-                  <span>{t("Proxy (optional)")}</span>
-                  <input
-                    value={aiProxy}
-                    onChange={(e) => setAiProxy(e.target.value)}
-                    placeholder="http://127.0.0.1:7890"
-                    spellCheck={false}
-                    className="w-full rounded-md border border-border bg-elevated/50 px-2.5 py-1.5 font-mono text-[12px] text-text placeholder:text-faint focus:border-border-strong"
-                  />
-                  <span className="block text-[11.5px] text-faint">
-                    {t("Codex and Pi reach their provider directly. Set a local proxy when this machine needs one.")}
-                  </span>
-                </label>
-              )}
-
-              <div className="flex flex-wrap items-center gap-3">
-                <label className="flex items-center gap-2 text-[13px] text-muted">
-                  <input
-                    type="checkbox"
-                    checked={aiEnabled}
-                    onChange={(e) => setAiEnabled(e.target.checked)}
-                    className="h-3.5 w-3.5 accent-[#0d0d0d]"
-                  />
-                  {t("Enable AI assistant")}
-                </label>
-                <div className="ml-auto flex items-center gap-2">
-                  {aiEngine === "api" && (
+                  <div className="flex flex-wrap items-center gap-3">
                     <button
                       type="button"
-                      onClick={() => void testAi()}
-                      disabled={aiBusy !== null || !aiBaseUrl.trim() || !aiModel.trim()}
-                      className="rounded-md border border-border px-2.5 py-1.5 text-[12.5px] font-medium text-muted transition-colors hover:border-border-strong hover:text-text disabled:opacity-40"
+                      onClick={() => void saveRuntime()}
+                      disabled={aiBusy}
+                      className="ml-auto rounded-md bg-accent px-3 py-1.5 text-[12.5px] font-medium text-white transition-colors hover:bg-accent-hover disabled:opacity-40"
                     >
-                      {aiBusy === "test" ? t("Testing…") : t("Test connection")}
+                      {aiBusy ? t("Saving…") : t("Save")}
                     </button>
-                  )}
-                  <button
-                    type="button"
-                    onClick={() => void saveAi()}
-                    disabled={aiBusy !== null || (aiEngine === "api" && (!aiBaseUrl.trim() || !aiModel.trim()))}
-                    className="flex items-center gap-1 rounded-md bg-accent px-3 py-1.5 text-[12.5px] font-medium text-white transition-colors hover:bg-accent-hover disabled:opacity-40"
-                  >
-                    <Sparkles size={12} />
-                    {aiBusy === "save" ? t("Saving…") : t("Save")}
-                  </button>
+                  </div>
+                  {aiError && <div className="text-[12px] text-danger">{t(aiError)}</div>}
+                  {aiNotice && <div className="text-[12px] text-muted">{aiNotice}</div>}
                 </div>
-              </div>
-              {aiError && <div className="text-[12px] text-danger">{t(aiError)}</div>}
-              {aiNotice && <div className="text-[12px] text-[#2f7d4f]">{aiNotice}</div>}
-            </div>
-          ) : (
-            <div className="rounded-lg border border-border p-4 text-[13px] text-muted">
-              {ai.enabled && (ai.configured || ai.cli.some((status) => status.installed && status.signedIn))
-                ? t("The AI assistant is available in this workspace. A workspace admin manages the provider and key.")
-                : t("AI is not available in this workspace yet. Ask a workspace admin to configure it.")}
-            </div>
-          )}
-        </section>
-
-        <section className="space-y-3">
-          <h2 className="text-[13px] font-semibold">{t("Agent access — REST API keys")}</h2>
-          <p className="text-[13px] leading-relaxed text-muted">
-            {interpolate(
-              t(
-                "AI agents and scripts read and write issues at {path} with a Bearer token scoped to this workspace ({key}). Agent activity is attributed in every issue timeline."
-              ),
-              {
-                path: (
-                  <code className="rounded bg-elevated px-1 font-mono text-[12px] text-text">
-                    /api/v1/*
-                  </code>
-                ),
-                key: workspace.key,
-              }
-            )}
-          </p>
-
-          <div className="flex items-center gap-2">
-            <input
-              value={newKeyName}
-              onChange={(e) => setNewKeyName(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter") void createKey();
-              }}
-              placeholder={t("Key name (e.g. claude-code, triage-bot)")}
-              className="w-full rounded-md border border-border bg-elevated/50 px-2.5 py-1.5 text-[13px] placeholder:text-faint focus:border-border-strong"
-            />
-            <button
-              type="button"
-              onClick={() => void createKey()}
-              disabled={!newKeyName.trim() || busy}
-              className="shrink-0 rounded-md bg-accent px-3 py-1.5 text-[13px] font-medium text-white hover:bg-accent-hover disabled:opacity-40"
-            >
-              {t("Generate")}
-            </button>
-          </div>
-          {keyError && <div className="text-[12px] text-danger">{t(keyError)}</div>}
-
-          {newKey && (
-            <div className="space-y-2 rounded-lg border border-accent/50 bg-accent/10 p-3">
-              <div className="text-[12px] font-medium text-text">
-                {t("Copy this key now — it is shown only once.")}
-              </div>
-              <div className="flex items-center gap-2">
-                <code className="min-w-0 flex-1 overflow-x-auto rounded-md bg-bg px-2 py-1.5 font-mono text-[12px] text-text">
-                  {newKey}
-                </code>
-                <CopyButton text={newKey} />
-              </div>
-            </div>
-          )}
-
-          <div className="divide-y divide-border rounded-lg border border-border">
-            {keys.length === 0 && (
-              <div className="p-4 text-[13px] text-faint">{t("No keys yet.")}</div>
-            )}
-            {keys.map((key) => (
-              <div key={key.id} className="flex items-center gap-3 px-4 py-2.5 text-[13px]">
-                <span className="font-mono text-[12px] text-text">tac_…</span>
-                <span>{key.name}</span>
-                <span className="text-[12px] text-faint">
-                  {t("created {date}", { date: formatDate(key.createdAt, locale) })}
-                </span>
-                <span suppressHydrationWarning className="text-[12px] text-faint">
-                  {key.lastUsedAt ? t("last used {time} ago", { time: timeAgo(key.lastUsedAt, locale) }) : t("never used")}
-                </span>
-                {key.revokedAt ? (
-                  <span className="ml-auto rounded-full bg-elevated px-2 py-0.5 text-[11px] text-faint">
-                    {t("Revoked")}
-                  </span>
-                ) : (
-                  <button
-                    type="button"
-                    onClick={() => void revokeKey(key)}
-                    className="ml-auto rounded-md border border-border px-2 py-0.5 text-[12px] text-muted transition-colors hover:border-danger hover:text-danger"
-                  >
-                    {t("Revoke")}
-                  </button>
+              )}
+            <section className="space-y-3">
+              <h2 className="text-[13px] font-semibold">{t("Agent access — REST API keys")}</h2>
+              <p className="text-[13px] leading-relaxed text-muted">
+                {interpolate(
+                  t(
+                    "AI agents and scripts read and write issues at {path} with a Bearer token scoped to this workspace ({key}). Agent activity is attributed in every issue timeline."
+                  ),
+                  {
+                    path: (
+                      <code className="rounded bg-elevated px-1 font-mono text-[12px] text-text">
+                        /api/v1/*
+                      </code>
+                    ),
+                    key: workspace.key,
+                  }
                 )}
+              </p>
+
+              <div className="flex items-center gap-2">
+                <input
+                  value={newKeyName}
+                  onChange={(e) => setNewKeyName(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") void createKey();
+                  }}
+                  placeholder={t("Key name (e.g. claude-code, triage-bot)")}
+                  className="w-full rounded-md border border-border bg-elevated/50 px-2.5 py-1.5 text-[13px] placeholder:text-faint focus:border-border-strong"
+                />
+                <button
+                  type="button"
+                  onClick={() => void createKey()}
+                  disabled={!newKeyName.trim() || busy}
+                  className="shrink-0 rounded-md bg-accent px-3 py-1.5 text-[13px] font-medium text-white hover:bg-accent-hover disabled:opacity-40"
+                >
+                  {t("Generate")}
+                </button>
               </div>
-            ))}
+              {keyError && <div className="text-[12px] text-danger">{t(keyError)}</div>}
+
+              {newKey && (
+                <div className="space-y-2 rounded-lg border border-accent/50 bg-accent/10 p-3">
+                  <div className="text-[12px] font-medium text-text">
+                    {t("Copy this key now — it is shown only once.")}
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <code className="min-w-0 flex-1 overflow-x-auto rounded-md bg-bg px-2 py-1.5 font-mono text-[12px] text-text">
+                      {newKey}
+                    </code>
+                    <CopyButton text={newKey} />
+                  </div>
+                </div>
+              )}
+
+              <div className="divide-y divide-border rounded-lg border border-border">
+                {keys.length === 0 && (
+                  <div className="p-4 text-[13px] text-faint">{t("No keys yet.")}</div>
+                )}
+                {keys.map((key) => (
+                  <div key={key.id} className="flex items-center gap-3 px-4 py-2.5 text-[13px]">
+                    <span className="font-mono text-[12px] text-text">tac_…</span>
+                    <span>{key.name}</span>
+                    <span className="text-[12px] text-faint">
+                      {t("created {date}", { date: formatDate(key.createdAt, locale) })}
+                    </span>
+                    <span suppressHydrationWarning className="text-[12px] text-faint">
+                      {key.lastUsedAt ? t("last used {time} ago", { time: timeAgo(key.lastUsedAt, locale) }) : t("never used")}
+                    </span>
+                    {key.revokedAt ? (
+                      <span className="ml-auto rounded-full bg-elevated px-2 py-0.5 text-[11px] text-faint">
+                        {t("Revoked")}
+                      </span>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => void revokeKey(key)}
+                        className="ml-auto rounded-md border border-border px-2 py-0.5 text-[12px] text-muted transition-colors hover:border-danger hover:text-danger"
+                      >
+                        {t("Revoke")}
+                      </button>
+                    )}
+                  </div>
+                ))}
+              </div>
+
+              <Snippet code={curlExample} />
+            </section>
+
+            <section className="space-y-3">
+              <h2 className="text-[13px] font-semibold">{t("Agent access — MCP server")}</h2>
+              <p className="text-[13px] leading-relaxed text-muted">
+                {interpolate(
+                  t(
+                    "For Claude Code / Claude Desktop. The MCP server reads and writes this same database directly, so it works even when the web app is closed. It exposes {tools} with project and assignee support."
+                  ),
+                  {
+                    tools: (
+                      <code className="font-mono text-[12px] text-text">
+                        list/get/create/update/delete issue, add_comment, list/create label
+                      </code>
+                    ),
+                  }
+                )}
+              </p>
+              {mcpCommand ? (
+                <>
+                  <div className="text-[12px] font-medium text-muted">Claude Code</div>
+                  <Snippet code={`claude mcp add tacos -- ${mcpCommand}`} />
+                  <p className="text-[12px] text-faint">
+                    {interpolate(
+                      t("For Claude Desktop, add an equivalent {entry} entry with {command} in {file}. See README for details."),
+                      {
+                        entry: <code className="font-mono">mcpServers.tacos</code>,
+                        command: <code className="font-mono">{mcpCommand}</code>,
+                        file: <code className="font-mono">claude_desktop_config.json</code>,
+                      }
+                    )}
+                  </p>
+                </>
+              ) : (
+                <p className="text-[12px] text-faint">{t("This install does not include the MCP server. See README to run it from the source code.")}</p>
+              )}
+            </section>
           </div>
-
-          <Snippet code={curlExample} />
-        </section>
-
-        <section className="space-y-3">
-          <h2 className="text-[13px] font-semibold">{t("Agent access — MCP server")}</h2>
-          <p className="text-[13px] leading-relaxed text-muted">
-            {interpolate(
-              t(
-                "For Claude Code / Claude Desktop. The MCP server reads and writes this same database directly, so it works even when the web app is closed. It exposes {tools} with project and assignee support."
-              ),
-              {
-                tools: (
-                  <code className="font-mono text-[12px] text-text">
-                    list/get/create/update/delete issue, add_comment, list/create label
-                  </code>
-                ),
-              }
-            )}
-          </p>
-          <div className="text-[12px] font-medium text-muted">Claude Code</div>
-          <Snippet code={claudeCodeCmd} />
-          <p className="text-[12px] text-faint">
-            {interpolate(
-              t("For Claude Desktop, add an equivalent {entry} entry with {command} in {file}. See README for details."),
-              {
-                entry: <code className="font-mono">mcpServers.tacos</code>,
-                command: <code className="font-mono">npx tsx /path/to/mcp/server.ts</code>,
-                file: <code className="font-mono">claude_desktop_config.json</code>,
-              }
-            )}
-          </p>
-        </section>
+        </details>
 
         {isOwner && (
           <section className="space-y-3">

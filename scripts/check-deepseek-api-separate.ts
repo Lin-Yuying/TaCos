@@ -1,21 +1,18 @@
-// H-P5-29: DeepSeek API (model/API settings) stays separate from dsh (harness).
+// H-P5-29: Model API keys stay out of the Harness section, and adapters only get them through TurnInput.
 import { readFileSync } from "node:fs";
 const read = (p: string) => readFileSync(p, "utf8");
 const fail = (m: string) => { console.error("FAIL", m); process.exit(1); };
 const settings = read("src/components/settings-view.tsx");
 const harnessStart = settings.indexOf('data-testid="harness-settings"');
-const aiStart = Math.max(settings.indexOf(">AI assistant<"), settings.indexOf('>{t("AI assistant")}<'));
-if (harnessStart < 0 || aiStart < 0) fail("settings sections not found");
-const harness = settings.slice(harnessStart, aiStart);
-const ai = settings.slice(aiStart, settings.indexOf("<section", aiStart + 1));
-if (/api\.deepseek\.com|deepseek-chat|apiKey/i.test(harness)) fail("Harness section shows DeepSeek API fields");
-if (/\bdsh\b|DeepSeek Harness/.test(ai)) fail("AI assistant section mentions dsh");
-for (const f of ["src/lib/harness/adapters/dsh.ts", "src/lib/harness/adapters/dsh-turn.ts"]) {
+const keysStart = settings.indexOf("<ModelKeysSection");
+if (harnessStart < 0 || keysStart < harnessStart) fail("settings sections not found");
+if (/api\.deepseek\.com|deepseek-chat|apiKey/i.test(settings.slice(harnessStart, keysStart))) fail("Harness section shows API key fields");
+for (const f of ["dsh", "dsh-turn", "pi", "pi-turn"].map((name) => `src/lib/harness/adapters/${name}.ts`)) {
   const s = read(f);
-  if (/@\/lib\/ai["']|aiSettings|decryptKey/.test(s)) fail(`${f} reads TaCos AI API settings`);
+  if (/@\/lib\/(ai|model-keys)["']|aiSettings|userModelKeys|decryptKey/.test(s)) fail(`${f} reads stored keys itself`);
+  // Process arguments are visible to every user on the machine.
+  if (/["']--api-key["']/.test(s)) fail(`${f} passes a key as an argument`);
 }
-const consts = read("src/lib/ai-constants.ts");
-const ds = consts.slice(consts.indexOf('id: "deepseek"'), consts.indexOf("},", consts.indexOf('id: "deepseek"')));
-if (!/not the dsh harness/i.test(ds)) fail("DeepSeek API preset hint does not say it is not the dsh harness");
-if (!/label:\s*"DeepSeek API"/.test(ds)) fail("DeepSeek preset label is not 'DeepSeek API'");
+const keys = read("src/lib/model-keys.ts");
+if (/process\.env/.test(keys)) fail("model keys must not touch this server's environment");
 console.log("PASS check-deepseek-api-separate");

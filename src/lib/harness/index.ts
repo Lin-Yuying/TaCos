@@ -48,4 +48,6 @@ export {
 export { runHarnessInstall, runHarnessUpgrade } from "./registry";
 export { installHarnessRecipe, upgradeHarnessRecipe } from "./install-recipes";
 
+export { clearHarnessModelCache, listComposerModels, listHarnessModels, resolveTurnModel } from "./models";
+
 export { checkAllHarnessUpdates, checkHarnessUpdate, isNewerVersion } from "./update-check";

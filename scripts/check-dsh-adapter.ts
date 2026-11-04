@@ -44,7 +44,7 @@ if (detect.installed && detect.binary) {
   const dump = execFileSync(detect.binary, ["--profile", "headless", "--patch", patch, "--dump-config"], { encoding: "utf8", cwd: dir });
   assert(dump.includes("id: mcp-tacos"), "live: TaCos MCP entry not composed");
   assert(/- id: tool-bash\n(?:.*\n)*?\s+disabled: true/.test(dump), "live: tool-bash not disabled");
-  assert(explainDshError("MISSING_CREDENTIAL: x").includes("TaCos DeepSeek API setting does not configure dsh"), "credential hint");
+  assert(explainDshError("MISSING_CREDENTIAL: x").includes("Settings → Model API"), "credential hint");
   live = "pass (patch composed by dsh)";
 }
 

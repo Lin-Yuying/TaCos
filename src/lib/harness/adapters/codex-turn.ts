@@ -7,6 +7,9 @@ import fs from "node:fs";
 import type { ApprovalDecision, TurnEvent, TurnInput } from "../types";
 import type { TurnLog } from "../turn-log";
 import { findHarnessBinary } from "../detect-bin";
+import { startCodexGateway, type CodexGateway } from "../codex-gateway";
+import { ownEndpoint, type OwnEndpoint } from "../own-endpoint";
+import { thinkingStep } from "../thinking";
 
 const TURN_TIMEOUT_MS = 300_000;
 
@@ -25,6 +28,8 @@ type CodexItem = {
   result?: unknown;
   error?: unknown;
   query?: string;
+  summary?: unknown;
+  content?: unknown;
 };
 
 function tomlString(value: string): string {
@@ -44,6 +49,19 @@ function mcpConfigArgs(mcp: NonNullable<TurnInput["mcp"]>): string[] {
     overrides.push(`mcp_servers.tacos.env.${key}=${tomlString(value)}`);
   }
   return overrides.flatMap((override) => ["-c", override]);
+}
+
+// Points Codex at this turn's gateway. Names the variable, never the key.
+function ownEndpointArgs({ endpoint, model }: OwnEndpoint, gateway: CodexGateway): string[] {
+  const provider = `model_providers.${endpoint.id}`;
+  return [
+    `${provider}.name=${tomlString(endpoint.label)}`,
+    `${provider}.base_url=${tomlString(gateway.baseUrl)}`,
+    `${provider}.env_key=${tomlString(endpoint.envVar)}`,
+    `${provider}.wire_api="responses"`,
+    `model_provider=${tomlString(endpoint.id)}`,
+    `model=${tomlString(model)}`,
+  ].flatMap((override) => ["-c", override]);
 }
 
 function errorText(value: unknown): string {
@@ -66,7 +84,7 @@ function stderrTail(stderr: string, fallback: string): string {
 
 function connectionHint(message: string): string {
   if (!/Reconnecting|disconnected|reset by peer|timed out/i.test(message)) return message;
-  return `${message} — Codex could not reach its provider from this server. Check the network, or set a proxy under Settings → AI assistant.`;
+  return `${message} — Codex could not reach its provider from this server. Check the network, or set a proxy under Settings → Advanced.`;
 }
 
 function stepStatus(
@@ -79,8 +97,17 @@ function stepStatus(
   return completed ? "done" : "running";
 }
 
+function reasoningText(item: CodexItem): string {
+  const parts = [item.summary, item.content].flatMap((list) => (Array.isArray(list) ? list : []));
+  return parts
+    .map((part: unknown) => (typeof part === "string" ? part : String((part as { text?: unknown })?.text ?? "")))
+    .filter(Boolean)
+    .join("\n\n");
+}
+
 function stepFromItem(item: CodexItem, completed: boolean): Extract<TurnEvent, { type: "step" }> | null {
   const id = item.id ?? "";
+  if (item.type === "reasoning") return completed ? thinkingStep(id, reasoningText(item)) : null;
   if (item.type === "commandExecution") {
     return {
       type: "step",
@@ -189,8 +216,21 @@ export async function* openCodexTurn(input: TurnInput, log?: TurnLog): AsyncGene
   );
 
   const args = ["app-server", "-c", "notify=[]", "-c", "plugins={}"];
-  if (input.model) args.push("-c", `model=${tomlString(input.model)}`);
-  if (input.effort) args.push("-c", `model_reasoning_effort=${tomlString(input.effort)}`);
+  const own = ownEndpoint(input);
+  let gateway: CodexGateway | null = null;
+  if (own) {
+    try {
+      gateway = await startCodexGateway(own, input.proxy);
+    } catch (err) {
+      yield { type: "error", message: err instanceof Error ? err.message : "Could not start Codex." };
+      yield { type: "done" };
+      return;
+    }
+    args.push(...ownEndpointArgs(own, gateway));
+  }
+  if (!own && input.model) args.push("-c", `model=${tomlString(input.model)}`);
+  // The default effort comes from this machine's Codex config and means nothing to someone else's API.
+  if (input.effort && !own) args.push("-c", `model_reasoning_effort=${tomlString(input.effort)}`);
   if (input.mcp) args.push(...mcpConfigArgs(input.mcp));
   else args.push("-c", "mcp_servers={}");
 
@@ -198,15 +238,23 @@ export async function* openCodexTurn(input: TurnInput, log?: TurnLog): AsyncGene
   try {
     proc = spawn(binary, args, {
       cwd: input.cwd,
-      env: cliEnv(input.proxy),
+      env: {
+        ...cliEnv(input.proxy),
+        // The gateway is on this machine: a proxy must not stand between Codex and it.
+        ...(own && gateway
+          ? { [own.endpoint.envVar]: gateway.key, NO_PROXY: "127.0.0.1", no_proxy: "127.0.0.1" }
+          : {}),
+      },
       stdio: ["pipe", "pipe", "pipe"],
     });
   } catch (err) {
+    gateway?.close();
     yield { type: "error", message: err instanceof Error ? err.message : "Could not start Codex." };
     yield { type: "done" };
     return;
   }
   child = proc;
+  proc.once("close", () => gateway?.close());
   if (!proc.stdout || !proc.stderr) {
     yield { type: "error", message: "Codex did not provide a stream." };
     yield { type: "done" };

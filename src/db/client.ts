@@ -323,6 +323,18 @@ CREATE TABLE IF NOT EXISTS ai_settings (
   proxy TEXT NOT NULL DEFAULT '',
   harness_enabled TEXT NOT NULL DEFAULT '{}'
 );
+CREATE TABLE IF NOT EXISTS user_model_keys (
+  user_id TEXT NOT NULL,
+  provider TEXT NOT NULL,
+  api_key TEXT NOT NULL,
+  edit_model TEXT NOT NULL DEFAULT '',
+  for_edits INTEGER NOT NULL DEFAULT 0,
+  label TEXT NOT NULL DEFAULT '',
+  base_url TEXT NOT NULL DEFAULT '',
+  models TEXT NOT NULL DEFAULT '',
+  updated_at TEXT NOT NULL,
+  PRIMARY KEY (user_id, provider)
+);
 `;
 
 export function hashPassword(password: string): string {

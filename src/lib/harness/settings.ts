@@ -5,7 +5,7 @@ import { clearHarnessDetectCache } from "./detect-bin";
 import { FIRST_CLASS_HARNESS_IDS, listHarnessDetect } from "./registry";
 import type { HarnessGate, HarnessId, HarnessSettingsView, HarnessStatus } from "./types";
 export type { HarnessSettingsView } from "./types";
-import { harnessGate } from "./gate";
+import { harnessGate, readyWithKeys } from "./gate";
 
 function parseEnabledMap(raw: string | null | undefined): Partial<Record<HarnessId, boolean>> {
   if (!raw || !raw.trim()) return {};
@@ -35,13 +35,16 @@ export async function loadHarnessEnabledMap(
   return parseEnabledMap(row?.harnessEnabled);
 }
 
-export async function getHarnessSettingsView(workspaceId: string): Promise<HarnessSettingsView> {
+export async function getHarnessSettingsView(
+  workspaceId: string,
+  keyed: HarnessId[] = []
+): Promise<HarnessSettingsView> {
   const enabledById = await loadHarnessEnabledMap(workspaceId);
   const rows: HarnessStatus[] = listHarnessDetect().map((detect) => ({
-    ...detect,
+    ...readyWithKeys(detect, keyed),
     enabled: enabledById[detect.id] ?? true,
   }));
-  return { rows, gate: harnessGate(enabledById) };
+  return { rows, gate: harnessGate(enabledById, keyed) };
 }
 
 export async function setHarnessEnabled(
@@ -70,7 +73,7 @@ export async function setHarnessEnabled(
       .set({ harnessEnabled: payload, updatedAt: now })
       .where(eq(aiSettings.workspaceId, workspaceId));
   } else {
-    // Create a minimal AI settings row so harness prefs persist before an API key is saved.
+    // Create a minimal AI settings row so harness prefs persist.
     await db.insert(aiSettings).values({
       workspaceId,
       baseUrl: "",
@@ -87,14 +90,20 @@ export async function setHarnessEnabled(
 }
 
 /** Clear detect caches and rebuild the settings view (hot refresh after install). */
-export async function refreshHarnessSettingsView(workspaceId: string): Promise<HarnessSettingsView> {
+export async function refreshHarnessSettingsView(
+  workspaceId: string,
+  keyed: HarnessId[] = []
+): Promise<HarnessSettingsView> {
   clearHarnessDetectCache();
-  return getHarnessSettingsView(workspaceId);
+  return getHarnessSettingsView(workspaceId, keyed);
 }
 
 /** Load persisted toggles and return the workspace harness gate. */
-export async function getWorkspaceHarnessGate(workspaceId: string): Promise<HarnessGate> {
+export async function getWorkspaceHarnessGate(
+  workspaceId: string,
+  keyed: HarnessId[] = []
+): Promise<HarnessGate> {
   const enabledById = await loadHarnessEnabledMap(workspaceId);
-  return harnessGate(enabledById);
+  return harnessGate(enabledById, keyed);
 }
 

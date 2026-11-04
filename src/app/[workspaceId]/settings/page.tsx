@@ -1,3 +1,5 @@
+import fs from "node:fs";
+import path from "node:path";
 import { Suspense } from "react";
 import { connection } from "next/server";
 import { redirect } from "next/navigation";
@@ -12,6 +14,7 @@ import {
 } from "@/lib/issues";
 import { getAiSettingsView } from "@/lib/ai";
 import { getHarnessSettingsView } from "@/lib/harness";
+import { getModelKeysView, harnessesWithKeys } from "@/lib/model-keys";
 import { SettingsView } from "@/components/settings-view";
 
 export default async function SettingsPage({
@@ -32,7 +35,7 @@ async function View({ params }: { params: Promise<{ workspaceId: string }> }) {
   const user = await getSessionUser();
   if (!user) redirect("/login");
   const ws = await requireWorkspace(workspaceId);
-  const [members, projects, keys, joinCode, allWorkspaces, deletedWorkspaces, seeAll, ai, harness] =
+  const [members, projects, keys, joinCode, allWorkspaces, deletedWorkspaces, seeAll, ai, harness, modelKeys] =
     await Promise.all([
       listMembers(workspaceId),
       listProjects(workspaceId),
@@ -42,11 +45,13 @@ async function View({ params }: { params: Promise<{ workspaceId: string }> }) {
       listDeletedWorkspaces(ws.user.id),
       getMembersSeeAllTasks(workspaceId),
       getAiSettingsView(workspaceId),
-      getHarnessSettingsView(workspaceId),
+      getHarnessSettingsView(workspaceId, await harnessesWithKeys(ws.user.id)),
+      getModelKeysView(ws.user.id),
     ]);
   // Where deleting this workspace lands you: the next team you belong to, or the
   // create/join screen when it was your last one.
   const next = allWorkspaces.find((other) => other.id !== workspaceId);
+  const mcpServerPath = path.join(process.cwd(), "mcp", "server.ts");
   return (
     <SettingsView
       workspace={ws.workspace}
@@ -58,6 +63,8 @@ async function View({ params }: { params: Promise<{ workspaceId: string }> }) {
       joinCode={joinCode}
       membersSeeAllTasks={seeAll}
       ai={ai}
+      mcpServerPath={fs.existsSync(mcpServerPath) ? mcpServerPath : null}
+      modelKeys={modelKeys}
       harness={harness}
       isOwner={ws.workspace.createdBy === ws.user.id}
       nextWorkspaceHref={next ? `/${next.id}` : "/onboarding"}

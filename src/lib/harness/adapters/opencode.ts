@@ -1,20 +1,12 @@
-import os from "node:os";
-import path from "node:path";
-import { findHarnessBinary, readHarnessVersion, readJsonFile } from "../detect-bin";
+import { findHarnessBinary, readHarnessVersion } from "../detect-bin";
 import type { DetectResult, HarnessAdapter, ModelOption, TurnInput } from "../types";
 import { openOpencodeTurn } from "./opencode-turn";
 import { loggedTurn } from "../turn-log";
+import { listHarnessModels } from "../models";
 import { installHarnessRecipe, upgradeHarnessRecipe } from "../install-recipes";
 
 const LABEL = "OpenCode";
 const INSTALL_HINT = "Install OpenCode (curl -fsSL https://opencode.ai/install | bash).";
-
-function isReady(_binary: string): { ok: boolean; error: string | null; hint: string | null } {
-  // OpenCode readiness is binary + version for this foundation id.
-  // Provider keys stay on the host CLI config for later adapter work.
-  return { ok: true, error: null, hint: null };
-}
-
 
 export const opencodeAdapter: HarnessAdapter = {
   id: "opencode",
@@ -46,20 +38,20 @@ export const opencodeAdapter: HarnessAdapter = {
         hint: INSTALL_HINT,
       };
     }
-    const ready = isReady(binary);
     return {
       id: "opencode",
       label: LABEL,
       installed: true,
       binary,
       version,
-      ready: ready.ok,
-      error: ready.ok ? null : ready.error,
-      hint: ready.ok ? null : ready.hint,
+      // Needs no login: without one OpenCode still has its free models.
+      ready: true,
+      error: null,
+      hint: null,
     };
   },
-  listModels(): ModelOption[] {
-    return [];
+  listModels(): Promise<ModelOption[]> {
+    return listHarnessModels("opencode");
   },
   openTurn(input: TurnInput) {
     return loggedTurn("opencode", input, (log) => openOpencodeTurn(input, log));

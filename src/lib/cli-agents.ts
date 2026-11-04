@@ -173,7 +173,9 @@ export function listCliStatuses(): CliEngineStatus[] {
 
 // Codex ships its model list next to its config; reading that file is the only way to
 // offer exactly the models this machine can actually run.
-const EFFORT_LABELS: Record<string, string> = {
+export const EFFORT_LABELS: Record<string, string> = {
+  none: "None",
+  off: "Off",
   minimal: "Minimal",
   low: "Low",
   medium: "Medium",
@@ -420,6 +422,12 @@ function systemProxy(): string {
   return value;
 }
 
+/** The proxy for a request this server makes on a harness's behalf: same order as cliEnv. */
+export function upstreamProxy(proxy: string): string {
+  const inherited = PROXY_KEYS.map((key) => (process.env[key] ?? "").trim()).find(Boolean);
+  return proxy.trim() || inherited || systemProxy();
+}
+
 // The Codex and Pi CLIs need the proxy that the desktop app itself may not use,
 // because they talk to their provider directly.
 function cliEnv(proxy: string): NodeJS.ProcessEnv {
@@ -492,7 +500,7 @@ export type CliPrompt = { system: string; body: string };
 
 export type AgentStepEvent = {
   key: string;
-  kind: "command" | "file" | "tool" | "info";
+  kind: "command" | "file" | "tool" | "info" | "thinking";
   title: string;
   detail?: string;
   status: "running" | "done" | "error" | "denied";
@@ -646,7 +654,7 @@ function stderrTail(stderr: string, fallback: string): string {
 // nothing about why.
 function connectionHint(message: string): string {
   if (!/Reconnecting|disconnected|reset by peer|timed out/i.test(message)) return message;
-  return `${message} — Codex could not reach its provider from this server. Check the network, or set a proxy under Settings → AI assistant.`;
+  return `${message} — Codex could not reach its provider from this server. Check the network, or set a proxy under Settings → Harness.`;
 }
 
 // Work turns legitimately run longer than a question: a tool loop with several writes

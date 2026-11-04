@@ -1,65 +1,24 @@
 // Shared with client components: no database or node-only imports here.
-export type AiProviderId = "openai" | "deepseek" | "qwen" | "moonshot" | "custom";
-
-export type AiPreset = {
-  id: AiProviderId;
+export type ModelEndpointView = {
+  id: string;
   label: string;
   baseUrl: string;
-  model: string;
-  hint: string;
+  models: string[];
+  // Last few characters only: the full key never leaves the server.
+  keyHint: string;
 };
 
-export const AI_PRESETS: AiPreset[] = [
-  {
-    id: "deepseek",
-    label: "DeepSeek API",
-    baseUrl: "https://api.deepseek.com/v1",
-    model: "deepseek-chat",
-    hint: "DeepSeek API key for the AI assistant. This is not the dsh harness; set up dsh in Settings → Harness.",
-  },
-  {
-    id: "openai",
-    label: "OpenAI",
-    baseUrl: "https://api.openai.com/v1",
-    model: "gpt-4o-mini",
-    hint: "Official OpenAI API.",
-  },
-  {
-    id: "qwen",
-    label: "Qwen (DashScope)",
-    baseUrl: "https://dashscope.aliyuncs.com/compatible-mode/v1",
-    model: "qwen-plus",
-    hint: "Alibaba Cloud DashScope's OpenAI-compatible endpoint.",
-  },
-  {
-    id: "moonshot",
-    label: "Moonshot",
-    baseUrl: "https://api.moonshot.cn/v1",
-    model: "moonshot-v1-8k",
-    hint: "Kimi's OpenAI-compatible endpoint.",
-  },
-  {
-    id: "custom",
-    label: "Custom",
-    baseUrl: "",
-    model: "",
-    hint: "Any endpoint that accepts POST {baseUrl}/chat/completions.",
-  },
-];
-
-export function presetFor(baseUrl: string): AiProviderId {
-  const normalized = baseUrl.replace(/\/+$/, "").toLowerCase();
-  const preset = AI_PRESETS.find(
-    (entry) => entry.id !== "custom" && entry.baseUrl.replace(/\/+$/, "").toLowerCase() === normalized
-  );
-  return preset?.id ?? "custom";
-}
+export type ModelKeysView = {
+  endpoints: ModelEndpointView[];
+  editProvider: string | null;
+  editModel: string;
+};
 
 // One inline rewrite has to fit in a single answer, so anything past this length is the
 // Agent's job instead. Shared with the panel so it can say so before the request.
 export const AI_EDIT_CHAR_LIMIT = 8_000;
 
-// "api" calls an OpenAI-compatible endpoint with a stored key; the CLI engines
+// "api" calls an OpenAI-compatible endpoint with the viewer's own key; the CLI engines
 // borrow the ChatGPT / Pi login that already exists on this machine.
 export type AiEngine = "api" | "codex" | "pi";
 export type CliEngine = "codex" | "pi";
@@ -86,13 +45,6 @@ export type CliEngineStatus = {
 };
 
 export type AiSettingsView = {
-  configured: boolean;
-  enabled: boolean;
-  provider: AiProviderId;
-  baseUrl: string;
-  model: string;
-  // Last few characters only — the full key never leaves the server.
-  keyHint: string | null;
   updatedAt: string | null;
   engine: AiEngine;
   proxy: string;

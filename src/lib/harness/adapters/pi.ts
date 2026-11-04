@@ -3,19 +3,23 @@ import path from "node:path";
 import { findHarnessBinary, readHarnessVersion, readJsonFile } from "../detect-bin";
 import { openPiTurn } from "./pi-turn";
 import { loggedTurn } from "../turn-log";
+import { listHarnessModels } from "../models";
 import type { DetectResult, HarnessAdapter, ModelOption, TurnInput } from "../types";
 import { installHarnessRecipe, upgradeHarnessRecipe } from "../install-recipes";
 
 const LABEL = "Pi";
-const INSTALL_HINT = "Install Pi (npm i -g @earendil-works/pi-coding-agent), then run pi and /login.";
+const INSTALL_HINT = "Install Pi (npm i -g @earendil-works/pi-coding-agent).";
 
 function isReady(_binary: string): { ok: boolean; error: string | null; hint: string | null } {
-  const auth = readJsonFile(path.join(os.homedir(), ".pi", "agent", "auth.json"));
-  if (!auth) {
+  const agentDir = path.join(os.homedir(), ".pi", "agent");
+  // Signing in fills auth.json; a provider with its own key lives in models.json instead.
+  const auth = readJsonFile(path.join(agentDir, "auth.json"));
+  const custom = readJsonFile(path.join(agentDir, "models.json"))?.providers;
+  if (Object.keys(auth ?? {}).length === 0 && Object.keys(custom ?? {}).length === 0) {
     return {
       ok: false,
       error: "not_signed_in",
-      hint: "Run pi in Terminal, then /login to connect a subscription.",
+      hint: "Add your own key in Settings → Model API, or run pi in Terminal and /login.",
     };
   }
   return { ok: true, error: null, hint: null };
@@ -64,8 +68,8 @@ export const piAdapter: HarnessAdapter = {
       hint: ready.ok ? null : ready.hint,
     };
   },
-  listModels(): ModelOption[] {
-    return [];
+  listModels(): Promise<ModelOption[]> {
+    return listHarnessModels("pi");
   },
   openTurn(input: TurnInput) {
     return loggedTurn("pi", input, (log) => openPiTurn(input, log));

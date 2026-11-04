@@ -8,8 +8,8 @@ export async function GET(request: Request) {
   try {
     const workspaceId = new URL(request.url).searchParams.get("workspaceId") ?? "";
     if (!workspaceId) throw new TacosError("Workspace is required", 400);
-    await requireWorkspace(workspaceId);
-    return Response.json({ engines: await aiEngineOptions(workspaceId) });
+    const { user } = await requireWorkspace(workspaceId);
+    return Response.json({ engines: await aiEngineOptions(workspaceId, user.id) });
   } catch (err) {
     const status = err instanceof TacosError ? err.status : 500;
     const message = err instanceof Error ? err.message : "Could not load the models";
