@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { ChevronRight, FileText, Lock, Plus, Users } from "lucide-react";
 import {
   draggable,
@@ -17,47 +17,12 @@ import {
 import { createPageAction, movePageAction, setPageSharedAction } from "@/app/pages-actions";
 import { useT } from "@/components/i18n-context";
 import type { PageSummary } from "@/lib/pages";
+import { useStoredJson } from "@/lib/use-stored-json";
 
 const EXPANDED_KEY = "tacos.sidebar.docTree";
 const INDENT = 12;
 
-// Which rows the person opened or closed lives in localStorage; the server renders none.
-const expandedListeners = new Set<() => void>();
-let expandedMemory: string | null = null;
-
-function subscribeExpanded(listener: () => void) {
-  expandedListeners.add(listener);
-  return () => expandedListeners.delete(listener);
-}
-
-function readExpanded(): string {
-  if (expandedMemory !== null) return expandedMemory;
-  try {
-    expandedMemory = window.localStorage.getItem(EXPANDED_KEY) ?? "{}";
-  } catch {
-    expandedMemory = "{}";
-  }
-  return expandedMemory;
-}
-
-function writeExpanded(next: Record<string, boolean>) {
-  expandedMemory = JSON.stringify(next);
-  try {
-    window.localStorage.setItem(EXPANDED_KEY, expandedMemory);
-  } catch {
-    /* storage unavailable: it still toggles for this page view */
-  }
-  for (const listener of expandedListeners) listener();
-}
-
-function parseExpanded(raw: string): Record<string, boolean> {
-  try {
-    const saved = JSON.parse(raw);
-    return saved && typeof saved === "object" ? saved : {};
-  } catch {
-    return {};
-  }
-}
+const NO_EXPANDED: Record<string, boolean> = {};
 
 function DocRow({
   workspaceId,
@@ -259,8 +224,7 @@ export function DocTree({ workspaceId, pages }: { workspaceId: string; pages: Pa
   const t = useT();
   const router = useRouter();
   const pathname = usePathname();
-  const expandedRaw = useSyncExternalStore(subscribeExpanded, readExpanded, () => "{}");
-  const expanded = useMemo(() => parseExpanded(expandedRaw), [expandedRaw]);
+  const [expanded, setExpanded] = useStoredJson(EXPANDED_KEY, NO_EXPANDED);
   const [error, setError] = useState<string | null>(null);
   const active = pathname.match(new RegExp(`^/${workspaceId}/docs/([^/]+)$`))?.[1] ?? null;
 
@@ -288,7 +252,7 @@ export function DocTree({ workspaceId, pages }: { workspaceId: string; pages: Pa
   const isOpen = (id: string) => expanded[id] ?? openByDefault.has(id);
 
   function toggle(id: string) {
-    writeExpanded({ ...expanded, [id]: !isOpen(id) });
+    setExpanded({ ...expanded, [id]: !isOpen(id) });
   }
 
   const blocked = useMemo(

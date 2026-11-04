@@ -30,7 +30,7 @@ export type FocusRef = {
   status: string;
 } | null;
 
-export type IssueLayout = "list" | "board";
+export type IssueLayout = "list" | "board" | "table" | "calendar";
 
 export type CreatedProject = {
   id: string;
@@ -182,7 +182,8 @@ export function UIProvider({
   // navigating between views does not reset it. Read after mount to match the server HTML.
   useEffect(() => {
     try {
-      if (window.localStorage.getItem(LAYOUT_KEY) === "board") setLayoutState("board");
+      const saved = window.localStorage.getItem(LAYOUT_KEY);
+      if (saved === "board" || saved === "table" || saved === "calendar") setLayoutState(saved);
     } catch {
       /* storage unavailable — stay on the list layout */
     }

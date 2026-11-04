@@ -30,7 +30,7 @@ Item-level checks stay cheap (types, check scripts). End-to-end tests and screen
 | 7 | Global search over documents, tasks, comments | done | Check script: 3+ character and 2-character Chinese queries both hit; private documents of others do not |
 | 8 | Sidebar shared and private tree, multi-level breadcrumb, document favorites | done | Check script for move rules; screenshots in item 15 |
 | 9 | Cover, image and attachment upload with size limit | done | Check script: over-limit upload refused; resumed upload completes |
-| 10 | Database on tasks: custom fields, table, board, calendar views, filter, sort | todo | Check script for field and filter logic; screenshots in item 15 |
+| 10 | Database on tasks: custom fields, table, board, calendar views, filter, sort | done | Check script for field and filter logic; screenshots in item 15 |
 | 11 | Agent partial edit and undo, shown in updates panel | todo | Check script: partial edit leaves other text unchanged; undo restores |
 | 12 | Agent workspace-level read and search, cross-workspace read; writes name a target | todo | Check script: write without target refused; no read outside joined workspaces |
 | 13 | Hand a task to own Agent, queue while computer is off, write back comment and notify | todo | Check script: queued turn runs when runner returns; write asks for approval by default |
@@ -65,3 +65,11 @@ Levels are view, comment and edit (`src/lib/page-level.ts`). A shared page has o
 ### Item 9: uploads
 
 `@tus/server` with `@tus/file-store` handles `/api/uploads`, and `@uppy/core` with `@uppy/tus` sends files in 5 MB chunks, below the 10 MB that Next's middleware buffers per request. Limits: 25 MB per file (`TACOS_UPLOAD_MAX_MB`), 5 GB per workspace (`TACOS_WORKSPACE_QUOTA_MB`). Starting an upload needs edit on the page, and only the starter may continue it. `/api/files/<id>` checks the reader's access to the page and shows a file inline only when its first bytes are PNG, JPEG, GIF or WebP, so SVG and HTML always download. Files are removed with a purge; unfinished uploads after a day.
+
+### Item 10: database on tasks
+
+- Fields belong to the workspace, not to a project, because Notion's one-database-per-view does not map onto tasks shared across projects. Any member can add a field. Its creator or a workspace admin can delete it, and the server refuses everyone else.
+- Filter and sort live in `src/lib/task-view.ts` with no database, so the browser runs them and the check script tests them. They apply to the list, board, table and calendar.
+- A view's filter and sort are saved per browser in localStorage. Saved shared views are not built.
+- The calendar is a month view. Dragging a task to another day changes its due date. Tasks with no due date are counted above the calendar.
+- TanStack Table 9 and FullCalendar 7 are the current major versions. FullCalendar 7 replaces `@fullcalendar/core`, `daygrid` and `interaction` with subpaths of `@fullcalendar/react` and needs `temporal-polyfill`.

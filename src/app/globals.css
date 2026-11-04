@@ -249,3 +249,20 @@ html[data-desktop] .app-auth-menu {
 .document-editor .ProseMirror td { border: 1px solid var(--color-border); padding: 4px 8px; text-align: left; vertical-align: top; }
 .document-editor .ProseMirror th { background: var(--color-elevated); font-weight: 600; }
 .document-editor .ProseMirror p.is-editor-empty:first-child::before { content: attr(data-placeholder); float: left; height: 0; pointer-events: none; color: var(--color-faint); }
+
+/* FullCalendar reads its colours from these; the rest of its stylesheet comes with the package. */
+.task-calendar {
+  --fc-classic-button: var(--color-elevated);
+  --fc-classic-button-border: var(--color-border);
+  --fc-classic-button-strong: var(--color-border);
+  --fc-classic-button-strong-border: var(--color-border);
+  --fc-classic-button-foreground: var(--color-text);
+  --fc-classic-primary: var(--color-accent);
+  --fc-classic-today: var(--color-elevated);
+  --fc-classic-background: var(--color-bg);
+  --fc-classic-foreground: var(--color-text);
+  --fc-classic-faint-foreground: var(--color-faint);
+  --fc-classic-muted-foreground: var(--color-muted);
+  --fc-classic-border: var(--color-border);
+  --fc-classic-strong-border: var(--color-border);
+}

@@ -410,6 +410,31 @@ export const labels = sqliteTable(
   (t) => [index("labels_workspace_idx").on(t.workspaceId)]
 );
 
+// A column every task in the workspace can fill in. options is a JSON list, for select fields.
+export const taskFields = sqliteTable(
+  "task_fields",
+  {
+    id: text("id").primaryKey(),
+    workspaceId: text("workspace_id").notNull(),
+    name: text("name").notNull(),
+    type: text("type").notNull(),
+    options: text("options").notNull().default("[]"),
+    createdBy: text("created_by").notNull(),
+    createdAt: text("created_at").notNull(),
+  },
+  (t) => [index("task_fields_workspace_idx").on(t.workspaceId)]
+);
+
+export const taskFieldValues = sqliteTable(
+  "task_field_values",
+  {
+    issueId: text("issue_id").notNull(),
+    fieldId: text("field_id").notNull(),
+    value: text("value").notNull(),
+  },
+  (t) => [primaryKey({ columns: [t.issueId, t.fieldId] }), index("task_field_values_field_idx").on(t.fieldId)]
+);
+
 export const issueLabels = sqliteTable(
   "issue_labels",
   {

@@ -1,0 +1,351 @@
+"use client";
+
+import { useState } from "react";
+import { ArrowDownUp, Filter, ListPlus, Plus, Trash2, X } from "lucide-react";
+import { createTaskFieldAction, deleteTaskFieldAction } from "@/app/actions";
+import { Menu } from "@/components/menu";
+import { useT } from "@/components/i18n-context";
+import { STATUS_META } from "@/components/icons";
+import { PRIORITY_NAMES, STATUS_ORDER } from "@/lib/constants";
+import type { IssueWithLabels } from "@/lib/issues";
+import {
+  BUILTIN_KEYS,
+  FIELD_TYPES,
+  fieldKey,
+  type FieldType,
+  type FilterOp,
+  type TaskField,
+  type TaskView,
+  type ViewFilter,
+} from "@/lib/task-view";
+
+const BUILTIN_LABEL: Record<(typeof BUILTIN_KEYS)[number], string> = {
+  title: "Title",
+  status: "Status",
+  priority: "Priority",
+  assignee: "Assignee",
+  project: "Project",
+  dueDate: "Due date",
+};
+
+const OP_LABEL: Record<FilterOp, string> = {
+  is: "is",
+  is_not: "is not",
+  contains: "contains",
+  gt: "greater or later than",
+  lt: "less or earlier than",
+  empty: "is empty",
+  not_empty: "is not empty",
+};
+
+const TYPE_LABEL: Record<FieldType, string> = {
+  text: "Text",
+  number: "Number",
+  select: "Select",
+  date: "Date",
+  checkbox: "Checkbox",
+};
+
+const inputClass = "min-w-0 rounded border border-border bg-bg px-1 py-0.5 text-[12px] text-text";
+const triggerClass =
+  "flex items-center gap-1 rounded-md px-2 py-1 text-[12px] text-muted transition-colors hover:bg-elevated hover:text-text";
+
+/** A fixed list of choices for keys that have one; everything else is typed. */
+function choicesFor(
+  key: string,
+  fields: TaskField[],
+  issues: IssueWithLabels[],
+  t: (text: string) => string
+): { value: string; label: string }[] | null {
+  if (key === "status") return STATUS_ORDER.map((value) => ({ value, label: t(STATUS_META[value].label) }));
+  if (key === "priority") {
+    return [1, 2, 3, 4].map((value) => ({ value: String(value), label: t(PRIORITY_NAMES[value as 1]) }));
+  }
+  if (key === "project") {
+    return [...new Set(issues.map((issue) => issue.projectName))].map((value) => ({ value, label: value }));
+  }
+  if (key === "assignee") {
+    const people = new Map(issues.flatMap((issue) => issue.assignees).map((person) => [person.id, person.displayName]));
+    return [...people].map(([value, label]) => ({ value, label }));
+  }
+  const field = fields.find((candidate) => fieldKey(candidate.id) === key);
+  if (field?.type === "select") return field.options.map((value) => ({ value, label: value }));
+  if (field?.type === "checkbox") return [{ value: "1", label: t("Checked") }];
+  return null;
+}
+
+function inputType(key: string, fields: TaskField[]): string {
+  if (key === "dueDate") return "date";
+  const type = fields.find((field) => fieldKey(field.id) === key)?.type;
+  return type === "date" ? "date" : type === "number" ? "number" : "text";
+}
+
+export function TaskViewBar({
+  workspaceId,
+  view,
+  onChange,
+  fields,
+  issues,
+  manageFields,
+  onFieldsChanged,
+}: {
+  workspaceId: string;
+  view: TaskView;
+  onChange: (next: TaskView) => void;
+  fields: TaskField[];
+  issues: IssueWithLabels[];
+  manageFields: boolean;
+  onFieldsChanged: () => void;
+}) {
+  const t = useT();
+  const [name, setName] = useState("");
+  const [type, setType] = useState<FieldType>("text");
+  const [options, setOptions] = useState("");
+  const [error, setError] = useState<string | null>(null);
+
+  const keys = [
+    ...BUILTIN_KEYS.map((key) => ({ key: key as string, label: t(BUILTIN_LABEL[key]) })),
+    ...fields.map((field) => ({ key: fieldKey(field.id), label: field.name })),
+  ];
+  const keySelect = (value: string, onPick: (next: string) => void) => (
+    <select value={value} onChange={(event) => onPick(event.target.value)} className={inputClass}>
+      {keys.map((key) => (
+        <option key={key.key} value={key.key}>
+          {key.label}
+        </option>
+      ))}
+    </select>
+  );
+
+  const setFilter = (index: number, patch: Partial<ViewFilter>) =>
+    onChange({
+      ...view,
+      filters: view.filters.map((filter, at) => (at === index ? { ...filter, ...patch } : filter)),
+    });
+
+  async function addField() {
+    const result = await createTaskFieldAction(workspaceId, {
+      name,
+      type,
+      options: options.split(/[,，\n]/),
+    });
+    if (!result.ok) {
+      setError(result.error);
+      return;
+    }
+    setError(null);
+    setName("");
+    setOptions("");
+    onFieldsChanged();
+  }
+
+  async function removeField(id: string) {
+    const result = await deleteTaskFieldAction(workspaceId, id);
+    if (result.ok) onFieldsChanged();
+    else setError(result.error);
+  }
+
+  return (
+    <div data-task-view-bar className="flex shrink-0 flex-wrap items-center gap-1 border-b border-border px-4 py-1">
+      <Menu
+        width={420}
+        triggerClassName={triggerClass}
+        trigger={
+          <>
+            <Filter size={12} /> {t("Filter")}
+            {view.filters.length > 0 && <span className="text-accent">{view.filters.length}</span>}
+          </>
+        }
+      >
+        {() => (
+          <div data-task-filters className="space-y-1.5 p-2 text-[12px]">
+            {view.filters.map((filter, index) => {
+              const choices = choicesFor(filter.key, fields, issues, t);
+              const needsValue = filter.op !== "empty" && filter.op !== "not_empty";
+              return (
+                <div key={index} className="flex items-center gap-1">
+                  {keySelect(filter.key, (key) => setFilter(index, { key, value: "" }))}
+                  <select
+                    value={filter.op}
+                    onChange={(event) => setFilter(index, { op: event.target.value as FilterOp })}
+                    className={inputClass}
+                  >
+                    {(Object.keys(OP_LABEL) as FilterOp[]).map((op) => (
+                      <option key={op} value={op}>
+                        {t(OP_LABEL[op])}
+                      </option>
+                    ))}
+                  </select>
+                  {needsValue &&
+                    (choices ? (
+                      <select
+                        value={filter.value ?? ""}
+                        onChange={(event) => setFilter(index, { value: event.target.value })}
+                        className={`${inputClass} flex-1`}
+                      >
+                        <option value="" />
+                        {choices.map((choice) => (
+                          <option key={choice.value} value={choice.value}>
+                            {choice.label}
+                          </option>
+                        ))}
+                      </select>
+                    ) : (
+                      <input
+                        type={inputType(filter.key, fields)}
+                        value={filter.value ?? ""}
+                        onChange={(event) => setFilter(index, { value: event.target.value })}
+                        className={`${inputClass} flex-1`}
+                      />
+                    ))}
+                  <button
+                    type="button"
+                    aria-label={t("Remove filter")}
+                    onClick={() => onChange({ ...view, filters: view.filters.filter((_, at) => at !== index) })}
+                    className="ml-auto shrink-0 text-faint hover:text-text"
+                  >
+                    <X size={12} />
+                  </button>
+                </div>
+              );
+            })}
+            <button
+              type="button"
+              onClick={() =>
+                onChange({ ...view, filters: [...view.filters, { key: "status", op: "is", value: "" }] })
+              }
+              className="flex items-center gap-1 text-muted hover:text-text"
+            >
+              <Plus size={12} /> {t("Add filter")}
+            </button>
+          </div>
+        )}
+      </Menu>
+      <Menu
+        width={280}
+        triggerClassName={triggerClass}
+        trigger={
+          <>
+            <ArrowDownUp size={12} /> {t("Sort")}
+            {view.sort.length > 0 && <span className="text-accent">{view.sort.length}</span>}
+          </>
+        }
+      >
+        {() => (
+          <div data-task-sorts className="space-y-1.5 p-2 text-[12px]">
+            {view.sort.map((sort, index) => (
+              <div key={index} className="flex items-center gap-1">
+                {keySelect(sort.key, (key) =>
+                  onChange({
+                    ...view,
+                    sort: view.sort.map((item, at) => (at === index ? { ...item, key } : item)),
+                  })
+                )}
+                <select
+                  value={sort.dir}
+                  onChange={(event) =>
+                    onChange({
+                      ...view,
+                      sort: view.sort.map((item, at) =>
+                        at === index ? { ...item, dir: event.target.value as "asc" | "desc" } : item
+                      ),
+                    })
+                  }
+                  className={inputClass}
+                >
+                  <option value="asc">{t("Ascending")}</option>
+                  <option value="desc">{t("Descending")}</option>
+                </select>
+                <button
+                  type="button"
+                  aria-label={t("Remove sort")}
+                  onClick={() => onChange({ ...view, sort: view.sort.filter((_, at) => at !== index) })}
+                  className="ml-auto shrink-0 text-faint hover:text-text"
+                >
+                  <X size={12} />
+                </button>
+              </div>
+            ))}
+            <button
+              type="button"
+              onClick={() => onChange({ ...view, sort: [...view.sort, { key: "dueDate", dir: "asc" }] })}
+              className="flex items-center gap-1 text-muted hover:text-text"
+            >
+              <Plus size={12} /> {t("Add sort")}
+            </button>
+          </div>
+        )}
+      </Menu>
+      {manageFields && (
+        <Menu
+          width={300}
+          triggerClassName={triggerClass}
+          trigger={
+            <>
+              <ListPlus size={12} /> {t("Fields")}
+              {fields.length > 0 && <span className="text-faint">{fields.length}</span>}
+            </>
+          }
+        >
+          {() => (
+            <div data-task-fields className="space-y-1.5 p-2 text-[12px]">
+              {fields.map((field) => (
+                <div key={field.id} className="flex items-center gap-2">
+                  <span className="min-w-0 flex-1 truncate text-text">{field.name}</span>
+                  <span className="shrink-0 text-faint">{t(TYPE_LABEL[field.type])}</span>
+                  <button
+                    type="button"
+                    aria-label={t("Delete field")}
+                    onClick={() => void removeField(field.id)}
+                    className="shrink-0 text-faint hover:text-danger"
+                  >
+                    <Trash2 size={12} />
+                  </button>
+                </div>
+              ))}
+              <div className="flex items-center gap-1 border-t border-border pt-1.5">
+                <input
+                  data-task-field-name
+                  value={name}
+                  placeholder={t("Field name")}
+                  onChange={(event) => setName(event.target.value)}
+                  className={`${inputClass} flex-1`}
+                />
+                <select
+                  data-task-field-type
+                  value={type}
+                  onChange={(event) => setType(event.target.value as FieldType)}
+                  className={inputClass}
+                >
+                  {FIELD_TYPES.map((value) => (
+                    <option key={value} value={value}>
+                      {t(TYPE_LABEL[value])}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              {type === "select" && (
+                <input
+                  data-task-field-options
+                  value={options}
+                  placeholder={t("Options, separated by commas")}
+                  onChange={(event) => setOptions(event.target.value)}
+                  className={`${inputClass} w-full`}
+                />
+              )}
+              <button
+                type="button"
+                data-task-field-add
+                onClick={() => void addField()}
+                className="flex items-center gap-1 text-muted hover:text-text"
+              >
+                <Plus size={12} /> {t("Add field")}
+              </button>
+              {error && <div className="text-danger">{t(error)}</div>}
+            </div>
+          )}
+        </Menu>
+      )}
+    </div>
+  );
+}

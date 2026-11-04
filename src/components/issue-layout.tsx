@@ -1,15 +1,29 @@
 "use client";
 
-import { Columns3, List, Plus } from "lucide-react";
+import dynamic from "next/dynamic";
+import { useMemo } from "react";
+import { useRouter } from "next/navigation";
+import { CalendarDays, Columns3, List, Plus, Table2 } from "lucide-react";
 import { IssueBoard } from "@/components/issue-board";
 import { IssueTable } from "@/components/issue-table";
 import { useUI, type IssueLayout as Layout } from "@/components/ui-context";
+import { TaskGrid } from "@/components/task-grid";
+import { TaskViewBar } from "@/components/task-view-bar";
 import type { IssueWithLabels } from "@/lib/issues";
+import { EMPTY_VIEW, applyView, type FieldValues, type TaskField, type TaskView } from "@/lib/task-view";
+import { useStoredJson } from "@/lib/use-stored-json";
 import { interpolate, useT } from "@/components/i18n-context";
+
+const TaskCalendar = dynamic(() => import("@/components/task-calendar"), { ssr: false });
+
+const NO_FIELDS: TaskField[] = [];
+const NO_VALUES: FieldValues = {};
 
 const LAYOUTS: { key: Layout; label: string; icon: typeof List }[] = [
   { key: "list", label: "List", icon: List },
   { key: "board", label: "Board", icon: Columns3 },
+  { key: "table", label: "Table", icon: Table2 },
+  { key: "calendar", label: "Calendar", icon: CalendarDays },
 ];
 
 export function LayoutToggle() {
@@ -64,16 +78,54 @@ export function IssueLayout({
   issues,
   workspaceId,
   currentUserId,
+  fields = NO_FIELDS,
+  values = NO_VALUES,
+  manageFields = false,
 }: {
   issues: IssueWithLabels[];
   workspaceId: string;
   currentUserId: string;
+  fields?: TaskField[];
+  values?: FieldValues;
+  manageFields?: boolean;
 }) {
+  const t = useT();
+  const router = useRouter();
   const { layout } = useUI();
+  const [view, setView] = useStoredJson<TaskView>(`tacos.tasks.view.${workspaceId}`, EMPTY_VIEW);
+  const shown = useMemo(() => applyView(issues, view, fields, values), [issues, view, fields, values]);
   if (issues.length === 0) return <Empty />;
-  return layout === "board" ? (
-    <IssueBoard issues={issues} workspaceId={workspaceId} currentUserId={currentUserId} />
-  ) : (
-    <IssueTable issues={issues} />
+  return (
+    <>
+      <TaskViewBar
+        workspaceId={workspaceId}
+        view={view}
+        onChange={setView}
+        fields={fields}
+        issues={issues}
+        manageFields={manageFields}
+        onFieldsChanged={() => router.refresh()}
+      />
+      {shown.length === 0 ? (
+        <div className="flex flex-1 items-center justify-center text-[13px] text-faint">
+          {t("No tasks match this filter")}
+        </div>
+      ) : layout === "board" ? (
+        <IssueBoard issues={shown} workspaceId={workspaceId} currentUserId={currentUserId} />
+      ) : layout === "table" ? (
+        <TaskGrid
+          workspaceId={workspaceId}
+          issues={shown}
+          fields={fields}
+          values={values}
+          view={view}
+          onViewChange={setView}
+        />
+      ) : layout === "calendar" ? (
+        <TaskCalendar workspaceId={workspaceId} issues={shown} />
+      ) : (
+        <IssueTable issues={shown} />
+      )}
+    </>
   );
 }

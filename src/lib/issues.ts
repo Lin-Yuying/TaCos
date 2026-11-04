@@ -24,6 +24,8 @@ import {
   favorites,
   issueAssignees,
   issueLabels,
+  taskFieldValues,
+  taskFields,
   issues,
   joinCodes,
   labels,
@@ -437,7 +439,9 @@ async function purgeWorkspaceData(db: ReturnType<typeof getDb>, workspaceId: str
     .select({ id: issues.id })
     .from(issues)
     .where(eq(issues.workspaceId, workspaceId));
+  await db.delete(taskFields).where(eq(taskFields.workspaceId, workspaceId));
   for (const row of workspaceIssues) {
+    await db.delete(taskFieldValues).where(eq(taskFieldValues.issueId, row.id));
     await db.delete(issueAssignees).where(eq(issueAssignees.issueId, row.id));
     await db.delete(issueLabels).where(eq(issueLabels.issueId, row.id));
     await db.delete(comments).where(eq(comments.issueId, row.id));
@@ -1572,6 +1576,7 @@ export async function purgeProject(workspaceId: string, projectId: string, userI
     .from(issues)
     .where(and(eq(issues.workspaceId, workspaceId), eq(issues.projectId, projectId)));
   for (const row of rows) {
+    await db.delete(taskFieldValues).where(eq(taskFieldValues.issueId, row.id));
     await db.delete(issueLabels).where(eq(issueLabels.issueId, row.id));
     await db.delete(comments).where(eq(comments.issueId, row.id));
     await db.delete(events).where(eq(events.issueId, row.id));
@@ -2044,7 +2049,7 @@ async function notify(input: {
   });
 }
 
-type MutationActor =
+export type MutationActor =
   | { kind: "user"; userId: string; displayName: string }
   // publishedBy is the person who ran the agent. An agent task waits for human review.
   | { kind: "agent"; label: string; via: Via; publishedBy?: string; sourceThreadId?: string };
@@ -2061,7 +2066,7 @@ function commentAuthorFields(actor: MutationActor) {
     : { authorId: null, agentAuthor: actor.label };
 }
 
-async function recordEvent(
+export async function recordEvent(
   issueId: string,
   type: string,
   data: Record<string, unknown>,
@@ -2770,6 +2775,7 @@ export async function restoreIssue(workspaceId: string, issueId: string) {
 // Only ever called from the Trash, so the issue has to be soft-deleted first.
 export async function purgeIssue(workspaceId: string, issueId: string) {
   const db = getDb();
+  await db.delete(taskFieldValues).where(eq(taskFieldValues.issueId, issueId));
   await db.delete(issueAssignees).where(eq(issueAssignees.issueId, issueId));
   await db.delete(issueLabels).where(eq(issueLabels.issueId, issueId));
   await db.delete(comments).where(eq(comments.issueId, issueId));

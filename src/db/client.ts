@@ -159,6 +159,25 @@ CREATE TABLE IF NOT EXISTS pages (
 );
 CREATE INDEX IF NOT EXISTS pages_workspace_idx ON pages (workspace_id);
 
+CREATE TABLE IF NOT EXISTS task_fields (
+  id TEXT PRIMARY KEY,
+  workspace_id TEXT NOT NULL,
+  name TEXT NOT NULL,
+  type TEXT NOT NULL,
+  options TEXT NOT NULL DEFAULT '[]',
+  created_by TEXT NOT NULL,
+  created_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS task_fields_workspace_idx ON task_fields (workspace_id);
+
+CREATE TABLE IF NOT EXISTS task_field_values (
+  issue_id TEXT NOT NULL,
+  field_id TEXT NOT NULL,
+  value TEXT NOT NULL,
+  PRIMARY KEY (issue_id, field_id)
+);
+CREATE INDEX IF NOT EXISTS task_field_values_field_idx ON task_field_values (field_id);
+
 CREATE TABLE IF NOT EXISTS attachments (
   id TEXT PRIMARY KEY,
   workspace_id TEXT NOT NULL,
