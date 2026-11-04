@@ -14,6 +14,7 @@ const fs = require("node:fs");
 const nodeNet = require("node:net");
 const { spawn, spawnSync } = require("node:child_process");
 const { initAppUpdater, getAppUpdateMenuItem } = require("./updater");
+const { createTunnel, parseTarget } = require("./ssh-tunnel");
 
 const DEFAULT_SERVER = "http://localhost:3000";
 const isMac = process.platform === "darwin";
@@ -378,6 +379,8 @@ function stopDevServer() {
 // Returns the address the app should open when it had to boot the checkout itself.
 async function startLocalDevIfNeeded(target) {
   if (!isLoopbackAddress(target)) return null;
+  // The address is the tunnel's local end. Nothing on this computer should answer for it.
+  if (tunnel) return null;
   if (devServerStart) return devServerStart;
   const base = new URL(target).origin;
   const probe = await probeServer(base);
@@ -679,6 +682,92 @@ ipcMain.handle("tacos:get-server-history", () => {
   return [...new Set([current, ...rememberedServers()])].slice(0, MAX_SERVER_HISTORY);
 });
 
+/* ---------------------------------------------------------------------------
+ * A team server reached over SSH. TaCos on that server listens only on its own localhost,
+ * so the window opens the local end of a forward.
+ * ------------------------------------------------------------------------- */
+
+let tunnel = null;
+const TUNNEL_LOCAL_PORT = 37380;
+const TUNNEL_REMOTE_PORT = 3200;
+const sshKeyPath = () => path.join(app.getPath("home"), ".ssh", "tacos_ed25519");
+
+function stopTunnel() {
+  if (tunnel) tunnel.stop();
+  tunnel = null;
+}
+
+async function localPortFree(port) {
+  return new Promise((resolve) => {
+    const server = nodeNet.createServer();
+    server.once("error", () => resolve(false));
+    server.listen(port, "127.0.0.1", () => server.close(() => resolve(true)));
+  });
+}
+
+async function startTunnel(config) {
+  stopTunnel();
+  const target = parseTarget(config.target);
+  if (!target) throw new Error("Enter the SSH address like tacos@203.0.113.7");
+  const localPort = (await localPortFree(TUNNEL_LOCAL_PORT)) ? TUNNEL_LOCAL_PORT : await freePort();
+  tunnel = createTunnel({
+    ...target,
+    localPort,
+    remotePort: config.remotePort || TUNNEL_REMOTE_PORT,
+    identityFile: fs.existsSync(sshKeyPath()) ? sshKeyPath() : null,
+    log: logLine,
+  });
+  tunnel.start();
+  if (!(await tunnel.waitReady())) {
+    const detail = tunnel.lastError();
+    stopTunnel();
+    throw new Error(
+      detail.includes("Permission denied")
+        ? "The server refused this computer's SSH key. Send your public key to the server's admin first."
+        : detail || "Could not open the SSH connection to the server."
+    );
+  }
+  return `http://127.0.0.1:${localPort}`;
+}
+
+ipcMain.handle("tacos:connect-ssh", async (_event, raw) => {
+  if (connecting) return { ok: false, error: "Already connecting — one moment." };
+  connecting = true;
+  try {
+    const config = { target: String(raw?.target || "").trim(), remotePort: Number(raw?.remotePort) || TUNNEL_REMOTE_PORT };
+    logLine(`ssh connect requested: ${config.target} port ${config.remotePort}`);
+    const url = await startTunnel(config);
+    const probe = await probeServer(url);
+    if (!probe.ok) {
+      stopTunnel();
+      return probe;
+    }
+    writeSettings({ sshTunnel: config, serverUrl: url });
+    await openServer(url);
+    return { ok: true };
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : String(err) };
+  } finally {
+    connecting = false;
+  }
+});
+
+ipcMain.handle("tacos:get-ssh-config", () => readSettings().sshTunnel || null);
+
+// The admin adds this line on the server. Made only when someone asks for it, and kept
+// apart from their own keys so that removing TaCos's access touches nothing else.
+ipcMain.handle("tacos:ssh-public-key", () => {
+  const key = sshKeyPath();
+  if (!fs.existsSync(key)) {
+    fs.mkdirSync(path.dirname(key), { recursive: true, mode: 0o700 });
+    const made = spawnSync("ssh-keygen", ["-q", "-t", "ed25519", "-N", "", "-C", "tacos", "-f", key]);
+    if (made.status !== 0) {
+      return { ok: false, error: "Could not create an SSH key. Check that OpenSSH is installed." };
+    }
+  }
+  return { ok: true, publicKey: fs.readFileSync(`${key}.pub`, "utf8").trim() };
+});
+
 ipcMain.handle("tacos:connect", async (_event, raw) => {
   if (connecting) return { ok: false, error: "Already connecting — one moment." };
   const normalized = normalizeServerUrl(raw);
@@ -688,6 +777,8 @@ ipcMain.handle("tacos:connect", async (_event, raw) => {
   logLine(`connect requested: ${normalized}`);
   connecting = true;
   try {
+    stopTunnel();
+    writeSettings({ sshTunnel: null });
     let probe = await probeServer(normalized);
     // The address may be this checkout: boot its server instead of asking people to.
     if (!probe.ok && probe.offline) {
@@ -705,6 +796,18 @@ ipcMain.handle("tacos:connect", async (_event, raw) => {
 });
 
 ipcMain.handle("tacos:retry", async () => {
+  const savedTunnel = readSettings().sshTunnel;
+  if (savedTunnel) {
+    try {
+      const url = await startTunnel(savedTunnel);
+      await openServer(url);
+      return { ok: true };
+    } catch (err) {
+      const reason = err instanceof Error ? err.message : String(err);
+      showErrorPage(ensureWindow(), savedTunnel.target, reason);
+      return { ok: false, error: reason };
+    }
+  }
   // Retry the address the window was showing before reaching for the bundled copy. Booting
   // the bundled server swaps in another database and opens on the setup page, so a
   // recovered dev server used to look like the app flipping between two different products.
@@ -845,6 +948,20 @@ if (!app.requestSingleInstanceLock()) {
     // open-file; both end up in the same queue.
     for (const arg of process.argv.slice(1)) queueOpenFile(arg);
 
+    const savedTunnel = readSettings().sshTunnel;
+    if (savedTunnel) {
+      try {
+        const url = await startTunnel(savedTunnel);
+        writeSettings({ serverUrl: url });
+        await openServer(url);
+      } catch (err) {
+        const reason = err instanceof Error ? err.message : String(err);
+        logLine(`ssh tunnel failed: ${reason}`);
+        showErrorPage(ensureWindow(), savedTunnel.target, reason);
+      }
+      return;
+    }
+
     // Open the server the user last chose before falling back to the copy inside the
     // installer. Booting the bundled server first made every launch flash through
     // Starting → bundled app → connect page → the server they actually use.
@@ -931,6 +1048,7 @@ if (!app.requestSingleInstanceLock()) {
   // would find its port taken and its database locked.
   app.on("before-quit", () => {
     quitting = true;
+    stopTunnel();
     stopLocalServer();
     stopDevServer();
   });

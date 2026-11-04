@@ -13,6 +13,11 @@
       ]
     }
   ],
+  "linux": {
+    "target": "AppImage",
+    "category": "Development",
+    "artifactName": "${productName}-Local-${version}-${arch}.${ext}"
+  },
   "dmg": {
     "title": "TaCos (Local)",
     "artifactName": "${productName}-Local-${version}-${arch}.${ext}"

@@ -2,6 +2,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { TacosError } from "./issues";
+import { isServerMode } from "./server-mode";
 
 // Codex reads skills from these two folders on the machine running the server. TaCos may
 // add and remove skills there, but never inside its bundled `.system` skills, plugin
@@ -48,7 +49,13 @@ function titleFromName(name: string): string {
     .join(" ");
 }
 
+function refuseOnServer() {
+  // These folders belong to whoever runs this machine, not to the people using TaCos on it.
+  if (isServerMode()) throw new TacosError("Skills live on your own computer, not on this server", 400);
+}
+
 export function createSkillFile(input: NewSkillInput): CreatedSkill {
+  refuseOnServer();
   const name = input.name.trim().toLowerCase();
   if (!SKILL_NAME.test(name)) {
     throw new TacosError(
@@ -113,6 +120,7 @@ function dropLockEntry(name: string) {
 }
 
 export function deleteSkillFile(file: string): { name: string } {
+  refuseOnServer();
   const folder = resolveSkillFolder(file);
   if (!folder) {
     throw new TacosError("That skill is not one TaCos can remove", 400, "Only skills in ~/.codex/skills or ~/.agents/skills can be deleted here.");

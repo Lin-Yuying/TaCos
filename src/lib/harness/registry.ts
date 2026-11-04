@@ -4,6 +4,7 @@ import { dshAdapter } from "./adapters/dsh";
 import { opencodeAdapter } from "./adapters/opencode";
 import { piAdapter } from "./adapters/pi";
 import type { DetectResult, HarnessAdapter, HarnessId, InstallResult } from "./types";
+import { isServerMode } from "../server-mode";
 
 const ADAPTERS: HarnessAdapter[] = [
   codexAdapter,
@@ -20,6 +21,7 @@ export function listHarnessAdapters(): HarnessAdapter[] {
 }
 
 export function getHarnessAdapter(id: HarnessId): HarnessAdapter | null {
+  if (isServerMode()) return null;
   return BY_ID.get(id) ?? null;
 }
 
@@ -32,6 +34,18 @@ export function requireHarnessAdapter(id: HarnessId): HarnessAdapter {
 }
 
 export function listHarnessDetect(): DetectResult[] {
+  if (isServerMode()) {
+    return ADAPTERS.map((adapter) => ({
+      id: adapter.id,
+      label: adapter.label,
+      installed: false,
+      binary: null,
+      version: null,
+      ready: false,
+      error: null,
+      hint: "Open TaCos on your own computer: Agent runs there.",
+    }));
+  }
   return ADAPTERS.map((adapter) => adapter.detect());
 }
 
@@ -45,6 +59,7 @@ export const FIRST_CLASS_HARNESS_IDS: HarnessId[] = [
 
 
 export async function runHarnessInstall(id: HarnessId): Promise<InstallResult> {
+  if (isServerMode()) return { ok: false, message: "This server does not run harnesses." };
   const adapter = getHarnessAdapter(id);
   if (!adapter?.install) {
     return { ok: false, message: `No install recipe for ${id}.` };
@@ -53,6 +68,7 @@ export async function runHarnessInstall(id: HarnessId): Promise<InstallResult> {
 }
 
 export async function runHarnessUpgrade(id: HarnessId): Promise<InstallResult> {
+  if (isServerMode()) return { ok: false, message: "This server does not run harnesses." };
   const adapter = getHarnessAdapter(id);
   if (!adapter?.upgrade) {
     return { ok: false, message: `No upgrade recipe for ${id}.` };

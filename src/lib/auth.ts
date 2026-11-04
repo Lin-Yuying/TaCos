@@ -72,7 +72,16 @@ export async function deleteSession() {
   const store = await cookies();
   const token = store.get(SESSION_COOKIE)?.value;
   if (token) {
-    await getDb().delete(sessions).where(eq(sessions.id, token));
+    const db = getDb();
+    const [session] = await db.select({ userId: sessions.userId }).from(sessions).where(eq(sessions.id, token));
+    const deviceId = store.get(DEVICE_COOKIE)?.value;
+    // Signing out also ends this browser's right to switch back without the password.
+    if (session && deviceId) {
+      await db
+        .delete(deviceAccounts)
+        .where(and(eq(deviceAccounts.deviceId, deviceId), eq(deviceAccounts.userId, session.userId)));
+    }
+    await db.delete(sessions).where(eq(sessions.id, token));
   }
   store.delete(SESSION_COOKIE);
 }

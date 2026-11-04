@@ -222,6 +222,12 @@
         font: 11px var(--mono);
       }
     </style>
+    <style>
+      #ssh-form { margin-top: 28px; padding-top: 20px; border-top: 1px solid rgba(127, 127, 127, 0.25); }
+      #ssh-form input { width: 100%; box-sizing: border-box; margin-bottom: 10px; }
+      #ssh-form button { margin-right: 8px; margin-top: 4px; }
+      #ssh-key-text { width: 100%; box-sizing: border-box; margin-top: 10px; font: 12px ui-monospace, monospace; }
+    </style>
   </head>
   <body>
     <div class="drag"></div>
@@ -259,6 +265,16 @@
         </div>
         <div class="error" id="error" role="alert"></div>
         <button id="submit" type="submit">Connect</button>
+      </form>
+      <form id="ssh-form" novalidate>
+        <label for="ssh-target">Team server over SSH</label>
+        <input id="ssh-target" type="text" spellcheck="false" autocomplete="off" placeholder="tacos@203.0.113.7" />
+        <label for="ssh-port">Port on the server</label>
+        <input id="ssh-port" type="text" inputmode="numeric" spellcheck="false" autocomplete="off" value="3200" />
+        <div class="error" id="ssh-error" role="alert"></div>
+        <button id="ssh-submit" type="submit">Connect over SSH</button>
+        <button id="ssh-key" type="button">Show my SSH key for the admin</button>
+        <textarea id="ssh-key-text" rows="3" readonly hidden></textarea>
       </form>
       <div class="hint">
         <b>Running TaCos on this computer?</b> Start it with <code>npm start</code>, then use

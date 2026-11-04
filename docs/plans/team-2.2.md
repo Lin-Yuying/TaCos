@@ -21,7 +21,7 @@ Item-level checks stay cheap (types, check scripts). End-to-end tests and screen
 | # | Item | Status | Pass |
 |---|---|---|---|
 | 0 | Replace the custom editor with TipTap + `@tiptap/markdown` for documents | done | Round-trip script over real samples shows no unexplained difference |
-| 1 | Server mode, SSH tunnel in desktop, deployment files, daily backup, security triage, Linux build | todo | Check script: server mode refuses every CLI path; tunnel reconnects after a killed ssh |
+| 1 | Server mode, SSH tunnel in desktop, deployment files, daily backup, security triage, Linux build | done | Check script: server mode refuses every CLI path; tunnel reconnects after a killed ssh |
 | 2 | Agent on the member's computer: outbound runner, capability report without keys, events, approval, cancel, offline notice | todo | Check script: turn runs through the runner with server mode on; no key reaches the server |
 | 3 | Document versions, restore, updates panel with diff, save conflict prompt | todo | Check script: stale save is refused; restore creates a new version |
 | 4 | Document trash | todo | Check script: delete, restore, purge |
@@ -44,3 +44,5 @@ Item-level checks stay cheap (types, check scripts). End-to-end tests and screen
 - Item 0: only documents moved to TipTap (`src/components/document-editor.tsx`). Task descriptions and project overviews keep `markdown-editor.tsx`, because overview comments and rewrites anchor on its selection API. Code blocks in the document editor have no syntax highlighting yet.
 - Item 0: `scripts/check-editor-roundtrip.ts` passes on 6 samples. Two differences are on purpose: a wrapped list item becomes one line, and trailing spaces go. `2 * 3 * 4` is written `2 \* 3 \* 4`, because the reader would otherwise read it as italic.
 - FTS5: `ENABLE_FTS5` is compiled into better-sqlite3 13.0.3 (`PRAGMA compile_options`) and a trigram table matched a 3-character Chinese query.
+- Item 1: `scripts/check-server-mode.ts` drives the tunnel with a fake ssh. The real server is exercised in item 16. The Linux job in the release workflow has not run yet.
+- Item 1, security triage of the 11 review findings for server mode. Fixed: a removed member's API key stops working; signing out ends the browser's switch-back right; a password reset ends old sessions and switch-back rights; skill folders are refused on a server. No longer apply on a server: 1 (registration leading to commands, since no CLI starts there) and 10 (approval runs on the server). Registration stays open on a server because only people whose SSH key was added can reach it. Left open, listed for the user: 4 (per-project visibility bypasses; the team has no private projects), 6 (any member can revoke a key), 7 (an admin can demote the owner), 8 (deleted creator's workspaces), 9 (no login rate limit; the tunnel limits who can try), 11 (deleted usernames can be reused).

@@ -6,6 +6,7 @@ import { DATA_DIR } from "@/db/client";
 import { TacosError } from "./issues";
 import { isManagedSkillPath } from "./skill-files";
 import type { AgentSkill, CliEngine, CliEngineStatus, CodexModel } from "./ai-constants";
+import { isServerMode } from "./server-mode";
 
 // Local agent CLIs reuse the login that already exists on this machine, so the
 // browser never sees a provider key. They are spawned per chat turn and killed
@@ -166,6 +167,7 @@ export function cliStatus(engine: CliEngine): CliEngineStatus {
 }
 
 export function listCliStatuses(): CliEngineStatus[] {
+  if (isServerMode()) return [];
   return [cliStatus("codex"), cliStatus("pi")];
 }
 
@@ -192,6 +194,7 @@ function asRecord(value: unknown): Record<string, unknown> | null {
 }
 
 export function listCodexModels(): CodexModel[] {
+  if (isServerMode()) return [];
   if (modelCache && Date.now() - modelCache.at < CACHE_MS) return modelCache.value;
   const cache = readJson(path.join(HOME, ".codex", "models_cache.json"));
   const raw = Array.isArray(cache?.models) ? (cache.models as unknown[]) : [];
@@ -253,6 +256,7 @@ let skillCache: Cached<AgentSkill[]> | null = null;
 // enabled plugin marketplaces). Asking its app-server instead of re-implementing the
 // discovery keeps the @ menu and turn/start agreeing on the exact names and paths.
 export async function listCodexSkills(): Promise<AgentSkill[]> {
+  if (isServerMode()) return [];
   if (skillCache && Date.now() - skillCache.at < SKILLS_CACHE_MS) return skillCache.value;
   const binary = findBinary("codex");
   if (!binary) return [];
@@ -359,6 +363,9 @@ export function skillsInText(text: string, skills: AgentSkill[]): AgentSkill[] {
 }
 
 export function requireCli(engine: CliEngine): CliEngineStatus {
+  if (isServerMode()) {
+    throw new TacosError("This server does not run harnesses", 400, "Open TaCos on your own computer: Agent runs there.");
+  }
   const status = cliStatus(engine);
   if (!status.installed) {
     throw new TacosError(`${status.label} is not installed on this server`, 400, status.hint ?? undefined);

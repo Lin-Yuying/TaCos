@@ -105,6 +105,9 @@ export async function setMemberPassword(userId: string, password: string) {
     .update(users)
     .set({ passwordHash: hashPassword(password) })
     .where(eq(users.id, userId));
+  // A reset password has to lock out whoever had the old one.
+  await getDb().delete(sessions).where(eq(sessions.userId, userId));
+  await getDb().delete(deviceAccounts).where(eq(deviceAccounts.userId, userId));
 }
 
 export async function setMemberDisplayName(userId: string, displayName: string) {

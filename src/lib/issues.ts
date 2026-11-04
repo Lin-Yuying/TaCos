@@ -3027,6 +3027,13 @@ export async function verifyApiKey(rawKey: string): Promise<ApiKeyRecord | null>
   // project where the rest of the team keeps working.
   if (!row || row.key.revokedAt || row.deletedAt) return null;
   const record = row.key;
+  // A key stands for the person who made it, so it leaves the workspace with them.
+  const [creator] = await db
+    .select({ userId: workspaceMembers.userId })
+    .from(workspaceMembers)
+    .where(and(eq(workspaceMembers.workspaceId, record.workspaceId), eq(workspaceMembers.userId, record.createdBy)))
+    .limit(1);
+  if (!creator) return null;
   await db.update(apiKeys).set({ lastUsedAt: nowIso() }).where(eq(apiKeys.id, record.id));
   return {
     id: record.id,
