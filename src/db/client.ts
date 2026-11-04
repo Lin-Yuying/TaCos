@@ -754,6 +754,8 @@ function bootstrap(sqlite: Database.Database) {
     sqlite.exec("CREATE INDEX IF NOT EXISTS pages_project_idx ON pages (project_id)");
   }
   addColumnIfMissing(sqlite, "pages", "revision", "INTEGER NOT NULL DEFAULT 0");
+  addColumnIfMissing(sqlite, "pages", "deleted_at", "TEXT");
+  addColumnIfMissing(sqlite, "pages", "trash_root", "TEXT");
   addColumnIfMissing(sqlite, "issues", "reminder_sent_for", "TEXT");
   const addedIssueCreator = addColumnIfMissing(sqlite, "issues", "created_by", "TEXT");
   if (!hadIssueAssignees && hasColumn(sqlite, "issues", "assignee_id")) {

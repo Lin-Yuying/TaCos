@@ -217,7 +217,7 @@ export function DocPageView({
   }
 
   async function removePage() {
-    if (!window.confirm(t("Delete “{title}” and everything inside it?", { title: page.title }))) return;
+    if (!window.confirm(t("Move “{title}” and everything inside it to the Trash?", { title: page.title }))) return;
     const result = await deletePageAction(workspaceId, page.id);
     if (!result.ok) {
       setError(result.error);

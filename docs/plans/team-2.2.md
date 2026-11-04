@@ -24,7 +24,7 @@ Item-level checks stay cheap (types, check scripts). End-to-end tests and screen
 | 1 | Server mode, SSH tunnel in desktop, deployment files, daily backup, security triage, Linux build | done | Check script: server mode refuses every CLI path; tunnel reconnects after a killed ssh |
 | 2 | Agent on the member's computer: outbound runner, capability report without keys, events, approval, cancel, offline notice | done | Check script: turn runs through the runner with server mode on; no key reaches the server |
 | 3 | Document versions, restore, updates panel with diff, save conflict prompt | done | Check script: stale save is refused; restore creates a new version |
-| 4 | Document trash | todo | Check script: delete, restore, purge |
+| 4 | Document trash | done | Check script: delete, restore, purge |
 | 5 | Document and paragraph comments, count, @ notify | todo | Check script: anchor survives an edit before it; mention creates a notification |
 | 6 | Document permissions: visible to all; view, comment or edit per person | todo | Check script: each level allows and refuses the right actions |
 | 7 | Global search over documents, tasks, comments | todo | Check script: 3+ character and 2-character Chinese queries both hit; private documents of others do not |

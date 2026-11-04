@@ -5,6 +5,7 @@ import { getSessionUser, requireWorkspace } from "@/lib/auth";
 import { translator } from "@/lib/i18n";
 import { resolveLocale } from "@/lib/locale";
 import { listTrashedIssues, listTrashedProjects } from "@/lib/issues";
+import { listTrashedPages } from "@/lib/pages";
 import { TrashView } from "@/components/trash-view";
 
 export default async function TrashPage({
@@ -25,16 +26,17 @@ async function View({ params }: { params: Promise<{ workspaceId: string }> }) {
   const user = await getSessionUser();
   if (!user) redirect("/login");
   const ctx = await requireWorkspace(workspaceId);
-  const [projects, issues] = await Promise.all([
+  const [projects, issues, docs] = await Promise.all([
     listTrashedProjects(workspaceId),
     listTrashedIssues(workspaceId),
+    listTrashedPages(workspaceId, user.id),
   ]);
   return (
     <>
       <header className="flex h-12 shrink-0 items-center gap-3 border-b border-border px-4">
         <h1 className="text-[14px] font-semibold">{translator(await resolveLocale(user))("Trash")}</h1>
         <span className="rounded-full bg-elevated px-2 py-0.5 text-[11px] text-muted">
-          {projects.length + issues.length}
+          {projects.length + issues.length + docs.length}
         </span>
       </header>
       <TrashView
@@ -43,6 +45,7 @@ async function View({ params }: { params: Promise<{ workspaceId: string }> }) {
         isOwner={ctx.workspace.createdBy === user.id}
         projects={projects}
         issues={issues}
+        docs={docs}
       />
     </>
   );

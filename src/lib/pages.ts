@@ -1,5 +1,5 @@
 import crypto from "node:crypto";
-import { and, desc, eq, inArray, lt, or } from "drizzle-orm";
+import { and, desc, eq, inArray, isNotNull, isNull, lt, or } from "drizzle-orm";
 import { getDb } from "../db/client";
 import { pageVersions, pages, users } from "../db/schema";
 import { TacosError, getProject, nowIso } from "./issues";
@@ -29,7 +29,7 @@ export type PageAuthor = { id: string; displayName: string; avatar: string | nul
 
 type PageRow = typeof pages.$inferSelect;
 
-function toPage(row: PageRow): DocPage {
+function toPage({ deletedAt: _deletedAt, trashRoot: _trashRoot, ...row }: PageRow): DocPage {
   return { ...row, shared: row.shared === 1 };
 }
 
@@ -43,7 +43,7 @@ async function findPage(workspaceId: string, pageId: string): Promise<DocPage | 
   const [row] = await getDb()
     .select()
     .from(pages)
-    .where(and(eq(pages.workspaceId, workspaceId), eq(pages.id, pageId)))
+    .where(and(eq(pages.workspaceId, workspaceId), eq(pages.id, pageId), isNull(pages.deletedAt)))
     .limit(1);
   return row ? toPage(row) : null;
 }
@@ -55,6 +55,7 @@ export async function listPages(workspaceId: string, viewerId: string): Promise<
     .where(
       and(
         eq(pages.workspaceId, workspaceId),
+        isNull(pages.deletedAt),
         or(eq(pages.shared, 1), eq(pages.createdBy, viewerId))
       )
     )
@@ -575,7 +576,10 @@ export async function pageConflictView(
 }
 
 export async function descendantsOf(workspaceId: string, pageId: string): Promise<DocPage[]> {
-  const all = await getDb().select().from(pages).where(eq(pages.workspaceId, workspaceId));
+  const all = await getDb()
+    .select()
+    .from(pages)
+    .where(and(eq(pages.workspaceId, workspaceId), isNull(pages.deletedAt)));
   const out: DocPage[] = [];
   const seen = new Set([pageId]);
   let frontier = [pageId];
@@ -613,6 +617,7 @@ export async function setPageShared(
   return updated;
 }
 
+/** Deleting moves the page and what is inside it to the Trash. */
 export async function deletePage(
   workspaceId: string,
   pageId: string,
@@ -623,10 +628,91 @@ export async function deletePage(
   if (page.createdBy !== viewerId) throw new TacosError("Only the page owner can delete it", 403);
   const ids = [pageId, ...(await descendantsOf(workspaceId, pageId)).map((p) => p.id)];
   await getDb()
-    .delete(pages)
+    .update(pages)
+    .set({ deletedAt: nowIso(), trashRoot: pageId })
     .where(and(eq(pages.workspaceId, workspaceId), inArray(pages.id, ids)));
-  await getDb().delete(pageVersions).where(inArray(pageVersions.pageId, ids));
   return ids;
+}
+
+export type TrashedPage = {
+  id: string;
+  title: string;
+  icon: string | null;
+  createdBy: string;
+  deletedAt: string;
+  // Pages deleted along with this one.
+  subpageCount: number;
+};
+
+/** One row per deletion. A private page stays visible only to its author here too. */
+export async function listTrashedPages(workspaceId: string, viewerId: string): Promise<TrashedPage[]> {
+  const rows = await getDb()
+    .select()
+    .from(pages)
+    .where(and(eq(pages.workspaceId, workspaceId), isNotNull(pages.deletedAt)))
+    .orderBy(desc(pages.deletedAt));
+  return rows
+    .filter((row) => row.id === row.trashRoot && (row.shared === 1 || row.createdBy === viewerId))
+    .map((row) => ({
+      id: row.id,
+      title: row.title,
+      icon: row.icon,
+      createdBy: row.createdBy,
+      deletedAt: row.deletedAt ?? "",
+      subpageCount: rows.filter((other) => other.trashRoot === row.id).length - 1,
+    }));
+}
+
+async function findTrashed(workspaceId: string, pageId: string, viewerId: string): Promise<PageRow> {
+  const [row] = await getDb()
+    .select()
+    .from(pages)
+    .where(and(eq(pages.workspaceId, workspaceId), eq(pages.trashRoot, pageId), eq(pages.id, pageId)))
+    .limit(1);
+  if (!row || !(row.shared === 1 || row.createdBy === viewerId)) {
+    throw new TacosError("Page not found", 404);
+  }
+  return row;
+}
+
+export async function restorePage(
+  workspaceId: string,
+  pageId: string,
+  viewerId: string
+): Promise<void> {
+  const row = await findTrashed(workspaceId, pageId, viewerId);
+  const db = getDb();
+  // A parent that is gone or still in the Trash cannot hold it: it comes back at the top.
+  const parent = row.parentId ? await findPage(workspaceId, row.parentId) : null;
+  await db
+    .update(pages)
+    .set({ deletedAt: null, trashRoot: null })
+    .where(and(eq(pages.workspaceId, workspaceId), eq(pages.trashRoot, pageId)));
+  if (row.parentId && !parent) {
+    await db.update(pages).set({ parentId: null }).where(eq(pages.id, pageId));
+  }
+}
+
+/** Removes the page, its subtree and their versions for good. Author or workspace owner. */
+export async function purgePage(
+  workspaceId: string,
+  pageId: string,
+  viewerId: string,
+  isWorkspaceOwner: boolean
+): Promise<void> {
+  const row = await findTrashed(workspaceId, pageId, viewerId);
+  if (row.createdBy !== viewerId && !isWorkspaceOwner) {
+    throw new TacosError("Only the page owner or the workspace owner can delete it forever", 403);
+  }
+  const db = getDb();
+  const ids = (
+    await db
+      .select({ id: pages.id })
+      .from(pages)
+      .where(and(eq(pages.workspaceId, workspaceId), eq(pages.trashRoot, pageId)))
+  ).map((page) => page.id);
+  await db.delete(pageVersions).where(inArray(pageVersions.pageId, ids));
+  await db.delete(pages).where(inArray(pages.id, ids));
 }
 
 /** Backlinks and [[Title]] need a cheap title → page lookup for the viewer. */
@@ -637,6 +723,7 @@ export async function listPageRefs(workspaceId: string, viewerId: string): Promi
     .where(
       and(
         eq(pages.workspaceId, workspaceId),
+        isNull(pages.deletedAt),
         or(eq(pages.shared, 1), eq(pages.createdBy, viewerId))
       )
     )

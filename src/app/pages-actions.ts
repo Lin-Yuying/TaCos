@@ -10,6 +10,8 @@ import {
   keepUnsavedText,
   listPageVersions,
   pageConflictView,
+  purgePage,
+  restorePage,
   restorePageVersion,
   setPageShared,
   updatePage,
@@ -159,5 +161,27 @@ export async function deletePageAction(
     const deleted = await deletePage(workspaceId, pageId, user.id);
     refresh(workspaceId);
     return deleted;
+  });
+}
+
+export async function restorePageAction(
+  workspaceId: string,
+  pageId: string
+): Promise<ActionResult<void>> {
+  return run(async () => {
+    const { user } = await requireWorkspace(workspaceId);
+    await restorePage(workspaceId, pageId, user.id);
+    refresh(workspaceId);
+  });
+}
+
+export async function purgePageAction(
+  workspaceId: string,
+  pageId: string
+): Promise<ActionResult<void>> {
+  return run(async () => {
+    const { user, workspace } = await requireWorkspace(workspaceId);
+    await purgePage(workspaceId, pageId, user.id, workspace.createdBy === user.id);
+    refresh(workspaceId);
   });
 }

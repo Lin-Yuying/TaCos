@@ -229,6 +229,10 @@ export const pages = sqliteTable(
     shared: integer("shared").notNull().default(0),
     // Goes up with every change to the body; a save names the one it started from.
     revision: integer("revision").notNull().default(0),
+    // In the Trash when set. trashRoot is the page whose deletion took this one with it,
+    // so a restore brings back exactly that subtree.
+    deletedAt: text("deleted_at"),
+    trashRoot: text("trash_root"),
     createdAt: text("created_at").notNull(),
     updatedAt: text("updated_at").notNull(),
   },

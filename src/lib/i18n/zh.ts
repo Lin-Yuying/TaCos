@@ -926,6 +926,12 @@ const zh: Record<string, string> = {
   "Title: {before} → {after}": "标题：{before} → {after}",
   "{count} unchanged lines": "{count} 行没变",
   "Someone": "有人",
+  'Delete "{name}" and everything inside it permanently? This cannot be undone.': "永久删除「{name}」和它里面的所有内容？删除后无法恢复。",
+  "{count} subpages": "{count} 个子页面",
+  "Move “{title}” and everything inside it to the Trash?": "把「{title}」和它里面的所有内容移到回收站？",
+  "Only the page owner or the workspace owner can delete it forever": "只有文档所有者或工作空间所有者可以永久删除",
+  "Deleted issues, documents and projects wait here. Restore puts one back exactly as it was; deleting it for good cannot be undone.":
+    "删除的任务、文档和项目会留在这里。恢复后和删除前一样；永久删除后无法恢复。",
 };
 
 export default zh;
