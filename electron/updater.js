@@ -1,4 +1,4 @@
-const { app, ipcMain, BrowserWindow } = require("electron");
+const { app, ipcMain, BrowserWindow, dialog } = require("electron");
 const fs = require("node:fs");
 const path = require("node:path");
 
@@ -26,7 +26,17 @@ let firstCheckTimer = null;
 let intervalTimer = null;
 let checkInFlight = false;
 let downloadInFlight = false;
+let installPromptInFlight = false;
+let promptedInstallVersion = null;
 let log = (message) => console.log("[tacos-updater]", message);
+
+const MENU_CHECK_LABEL = "Check for App Updates…";
+const INSTALL_DIALOG_TITLE = "Install App Update";
+const INSTALL_DIALOG_MESSAGE =
+  "A new version of TaCos is ready. Restart the app to install it now?";
+const INSTALL_DIALOG_DETAIL_PREFIX = "Version ";
+const INSTALL_CONFIRM = "Restart and Install";
+const INSTALL_CANCEL = "Later";
 
 function snapshot() {
   return {
@@ -134,6 +144,183 @@ function stopSchedule() {
   timersStarted = false;
 }
 
+
+function focusedWindow() {
+  try {
+    if (typeof BrowserWindow.getFocusedWindow === "function") {
+      const focused = BrowserWindow.getFocusedWindow();
+      if (focused && !focused.isDestroyed()) return focused;
+    }
+    if (typeof BrowserWindow.getAllWindows === "function") {
+      const all = BrowserWindow.getAllWindows().filter((w) => !w.isDestroyed());
+      return all[0] || null;
+    }
+  } catch {
+    // Test mocks may omit BrowserWindow helpers.
+  }
+  return null;
+}
+
+function runQuitAndInstall() {
+  if (!autoUpdater) return;
+  setImmediate(() => {
+    try {
+      autoUpdater.quitAndInstall(false, true);
+    } catch (err) {
+      log(`quitAndInstall failed: ${err && err.message ? err.message : err}`);
+    }
+  });
+}
+
+/**
+ * Ask the user, then quit and install. Used by IPC, menu, and download-ready.
+ * Returns { ok, confirmed, status }.
+ */
+async function confirmAndInstall(options = {}) {
+  const silent = Boolean(options.silent);
+  if (!status.enabled || !autoUpdater) {
+    return {
+      ok: false,
+      confirmed: false,
+      error: "App updates are only available in the packaged desktop app.",
+      status: snapshot(),
+    };
+  }
+  if (status.state !== "downloaded") {
+    return {
+      ok: false,
+      confirmed: false,
+      error: "No downloaded update is ready to install.",
+      status: snapshot(),
+    };
+  }
+  const version = status.availableVersion || "";
+  if (!silent) {
+    if (installPromptInFlight) {
+      return { ok: false, confirmed: false, error: "Install prompt already open.", status: snapshot() };
+    }
+    if (promptedInstallVersion && promptedInstallVersion === version) {
+      // User already dismissed for this version from the auto prompt.
+      // Manual IPC / menu may still re-ask when silent is false and force is set.
+      if (!options.force) {
+        return { ok: false, confirmed: false, error: "Install prompt already shown for this version.", status: snapshot() };
+      }
+    }
+    installPromptInFlight = true;
+    try {
+      if (!dialog || typeof dialog.showMessageBox !== "function") {
+        log("app update install prompt skipped (no dialog API)");
+        promptedInstallVersion = version || "unknown";
+        return { ok: false, confirmed: false, error: "No dialog API.", status: snapshot() };
+      }
+      const parent = focusedWindow();
+      const detail = version
+        ? `${INSTALL_DIALOG_DETAIL_PREFIX}${version}`
+        : undefined;
+      const boxOpts = {
+        type: "info",
+        buttons: [INSTALL_CONFIRM, INSTALL_CANCEL],
+        defaultId: 0,
+        cancelId: 1,
+        title: INSTALL_DIALOG_TITLE,
+        message: INSTALL_DIALOG_MESSAGE,
+        detail,
+        noLink: true,
+      };
+      const result = parent
+        ? await dialog.showMessageBox(parent, boxOpts)
+        : await dialog.showMessageBox(boxOpts);
+      promptedInstallVersion = version || "unknown";
+      if (result.response !== 0) {
+        log("app update install deferred by user");
+        return { ok: true, confirmed: false, status: snapshot() };
+      }
+    } finally {
+      installPromptInFlight = false;
+    }
+  }
+  log("app update install confirmed");
+  runQuitAndInstall();
+  return { ok: true, confirmed: true, status: snapshot() };
+}
+
+async function checkForAppUpdatesFromMenu() {
+  const parent = focusedWindow();
+  if (!status.enabled || !autoUpdater) {
+    await dialog.showMessageBox(parent || undefined, {
+      type: "info",
+      buttons: ["OK"],
+      title: "App Updates",
+      message: "App updates are only available in the packaged desktop app.",
+      noLink: true,
+    });
+    return { ok: false, status: snapshot() };
+  }
+  if (status.state === "downloaded") {
+    return confirmAndInstall({ force: true });
+  }
+  await runCheck("menu");
+  if (status.state === "available") await maybeDownload();
+  // Give the download-ready handler a chance to prompt.
+  if (status.state === "downloaded") {
+    return confirmAndInstall({ force: true });
+  }
+  if (status.state === "not-available") {
+    await dialog.showMessageBox(parent || undefined, {
+      type: "info",
+      buttons: ["OK"],
+      title: "App Updates",
+      message: "TaCos is up to date.",
+      detail: status.currentVersion
+        ? `Current version ${status.currentVersion}`
+        : undefined,
+      noLink: true,
+    });
+    return { ok: true, status: snapshot() };
+  }
+  if (status.state === "error") {
+    await dialog.showMessageBox(parent || undefined, {
+      type: "error",
+      buttons: ["OK"],
+      title: "App Updates",
+      message: "Could not check for app updates.",
+      detail: status.error || undefined,
+      noLink: true,
+    });
+    return { ok: false, status: snapshot() };
+  }
+  if (status.state === "downloading" || status.state === "available") {
+    await dialog.showMessageBox(parent || undefined, {
+      type: "info",
+      buttons: ["OK"],
+      title: "App Updates",
+      message: "A newer version is downloading in the background.",
+      detail: status.availableVersion
+        ? `${INSTALL_DIALOG_DETAIL_PREFIX}${status.availableVersion}`
+        : undefined,
+      noLink: true,
+    });
+    return { ok: true, status: snapshot() };
+  }
+  await dialog.showMessageBox(parent || undefined, {
+    type: "info",
+    buttons: ["OK"],
+    title: "App Updates",
+    message: "Checking for app updates…",
+    noLink: true,
+  });
+  return { ok: true, status: snapshot() };
+}
+
+function getAppUpdateMenuItem() {
+  return {
+    label: MENU_CHECK_LABEL,
+    click: () => {
+      void checkForAppUpdatesFromMenu();
+    },
+  };
+}
+
 function registerIpc() {
   if (ipcReady) return;
   ipcReady = true;
@@ -178,29 +365,9 @@ function registerIpc() {
     }
   });
 
-  ipcMain.handle("tacos:app-update:install", () => {
-    if (!status.enabled || !autoUpdater) {
-      return {
-        ok: false,
-        error: "App updates are only available in the packaged desktop app.",
-        status: snapshot(),
-      };
-    }
-    if (status.state !== "downloaded") {
-      return {
-        ok: false,
-        error: "No downloaded update is ready to install.",
-        status: snapshot(),
-      };
-    }
-    setImmediate(() => {
-      try {
-        autoUpdater.quitAndInstall(false, true);
-      } catch (err) {
-        log(`quitAndInstall failed: ${err && err.message ? err.message : err}`);
-      }
-    });
-    return { ok: true, status: snapshot() };
+  ipcMain.handle("tacos:app-update:install", async () => {
+    // Manual install always re-asks (force), even if the auto prompt was dismissed.
+    return confirmAndInstall({ force: true });
   });
 }
 
@@ -232,6 +399,8 @@ function bindUpdaterEvents(updater) {
       progress: 100,
       error: null,
     });
+    // H-DESKTOP-UPDATE-05: confirm, then quit and install.
+    void confirmAndInstall({ force: false });
   });
   updater.on("error", (err) => {
     setStatus({
@@ -293,5 +462,11 @@ module.exports = {
   initAppUpdater,
   getAppUpdateStatus,
   getAppUpdateScheduleForTests,
+  getAppUpdateMenuItem,
+  checkForAppUpdatesFromMenu,
+  confirmAndInstall,
   stopSchedule,
+  MENU_CHECK_LABEL,
+  INSTALL_DIALOG_TITLE,
+  INSTALL_CONFIRM,
 };

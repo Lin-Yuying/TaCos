@@ -13,7 +13,7 @@ const path = require("node:path");
 const fs = require("node:fs");
 const nodeNet = require("node:net");
 const { spawn, spawnSync } = require("node:child_process");
-const { initAppUpdater } = require("./updater");
+const { initAppUpdater, getAppUpdateMenuItem } = require("./updater");
 
 const DEFAULT_SERVER = "http://localhost:3000";
 const isMac = process.platform === "darwin";
@@ -656,6 +656,8 @@ function buildMenu() {
       label: "Help",
       role: "help",
       submenu: [
+        getAppUpdateMenuItem(),
+        { type: "separator" },
         {
           label: "Markdown Syntax",
           click: () => void openMarkdownGuide(),
