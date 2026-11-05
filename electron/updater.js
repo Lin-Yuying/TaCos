@@ -1,15 +1,17 @@
-const { app, ipcMain, BrowserWindow, dialog, shell } = require("electron");
+const { app, ipcMain, BrowserWindow, dialog, net, session, shell } = require("electron");
 const fs = require("node:fs");
 const path = require("node:path");
 const { execFileSync } = require("node:child_process");
+const macUpdate = require("./mac-update");
 
 // H-DESKTOP-UPDATE-01/04: desktop app binary updates via electron-updater.
 // This is not the Settings › Harness CLI update path.
 
 const STATUS_EVENT = "tacos:app-update:status-changed";
-// First check after the window is up. Later checks about every 4 hours.
+// First check after the window is up. Later checks about every hour.
 const FIRST_CHECK_DELAY_MS = 15_000;
-const CHECK_INTERVAL_MS = 4 * 60 * 60 * 1000;
+const CHECK_INTERVAL_MS = 60 * 60 * 1000;
+const AGENT_POLL_MS = 15_000;
 
 let status = {
   enabled: false,
@@ -29,12 +31,18 @@ let checkInFlight = false;
 let downloadInFlight = false;
 let installPromptInFlight = false;
 let promptedInstallVersion = null;
+// The person clicked update before the download finished; ask them when it does.
+let installRequested = false;
+let availableInfo = null;
+let selfInstall = null;
+let agentWaitTimer = null;
+let getServerUrl = () => null;
 let log = (message) => console.log("[tacos-updater]", message);
 
 const MENU_CHECK_LABEL = "Check for App Updates…";
 const INSTALL_DIALOG_TITLE = "Install App Update";
 const INSTALL_DIALOG_MESSAGE =
-  "A new version of TaCos is ready. Restart the app to install it now?";
+  "A new version of TaCos is ready. TaCos has to close and reopen for it to take effect. Restart now?";
 const INSTALL_DIALOG_DETAIL_PREFIX = "Version ";
 const INSTALL_CONFIRM = "Restart and Install";
 const INSTALL_CANCEL = "Later";
@@ -44,6 +52,30 @@ const UNSIGNED_DIALOG_MESSAGE =
   "This build is not Developer ID signed, so TaCos opens the GitHub download page instead of installing silently.";
 const UNSIGNED_DIALOG_CONFIRM = "Open Download Page";
 const UNSIGNED_DIALOG_CANCEL = "Cancel";
+const AGENT_BUSY_MESSAGE =
+  "The Agent is still working, and restarting now would interrupt it. TaCos will ask again once it finishes.";
+const AGENT_BUSY_WAIT = "Remind Me When It Finishes";
+const AGENT_UNKNOWN_NOTE = "TaCos could not confirm whether the Agent is working.";
+
+const ZH_COPY = {
+  [INSTALL_DIALOG_TITLE]: "安装更新",
+  [INSTALL_DIALOG_MESSAGE]: "新版本已准备好，需要关闭并重启 TaCos 才生效。现在重启吗？",
+  [INSTALL_DIALOG_DETAIL_PREFIX]: "版本 ",
+  [INSTALL_CONFIRM]: "重启并安装",
+  [INSTALL_CANCEL]: "稍后",
+  [UNSIGNED_DIALOG_TITLE]: "下载更新",
+  [UNSIGNED_DIALOG_MESSAGE]: "这台电脑上的 TaCos 无法自己替换，需要到 GitHub 下载页手动安装。",
+  [UNSIGNED_DIALOG_CONFIRM]: "打开下载页",
+  [UNSIGNED_DIALOG_CANCEL]: "取消",
+  [AGENT_BUSY_MESSAGE]: "Agent 正在工作，现在重启会打断它。等它结束后，TaCos 会再问你一次。",
+  [AGENT_BUSY_WAIT]: "结束后提醒我",
+  [AGENT_UNKNOWN_NOTE]: "TaCos 无法确认 Agent 是否正在工作。",
+};
+
+function copy(text) {
+  const zh = typeof app.getLocale === "function" && String(app.getLocale()).startsWith("zh");
+  return zh ? ZH_COPY[text] || text : text;
+}
 
 /** Override for tests: null = probe, true/false = forced. */
 let trustedSignatureOverride = null;
@@ -97,6 +129,8 @@ function configureGithubFeed(updater) {
 
 async function runCheck(reason) {
   if (!status.enabled || !autoUpdater || checkInFlight) return null;
+  // A check would take the update button away while the update waits or is on its way.
+  if (status.state === "downloaded" || status.state === "downloading") return null;
   checkInFlight = true;
   log(`app update check (${reason})`);
   try {
@@ -116,17 +150,95 @@ async function maybeDownload() {
   if (downloadInFlight) return;
   if (status.state !== "available" && status.state !== "downloading") return;
   if (status.state === "downloaded") return;
+  const route = installRoute();
+  if (route === "page") return;
   downloadInFlight = true;
   try {
     log("app update download start");
-    await autoUpdater.downloadUpdate();
+    if (route === "self") await downloadForSelfInstall();
+    else await autoUpdater.downloadUpdate();
   } catch (err) {
     const message = err && err.message ? err.message : String(err);
+    installRequested = false;
     setStatus({ state: "error", error: message });
     log(`app update download failed: ${message}`);
   } finally {
     downloadInFlight = false;
   }
+}
+
+async function downloadForSelfInstall() {
+  if (!availableInfo) throw new Error("No update information to download from.");
+  setStatus({ state: "downloading", progress: 0, error: null });
+  selfInstall = await macUpdate.prepare({
+    net,
+    userData: app.getPath("userData"),
+    info: availableInfo,
+    arch: process.arch,
+    log,
+    onProgress: (percent) => setStatus({ state: "downloading", progress: percent }),
+  });
+  downloadFinished(availableInfo.version);
+}
+
+function downloadFinished(version) {
+  setStatus({
+    state: "downloaded",
+    availableVersion: version || status.availableVersion,
+    progress: 100,
+    error: null,
+  });
+  if (!installRequested) return;
+  installRequested = false;
+  void confirmAndInstall({ force: true });
+}
+
+function currentBundle() {
+  return macUpdate.bundleOf(app.getPath("exe"));
+}
+
+/**
+ * How this copy gets a new version: "updater" is electron-updater, "self" is the bundle
+ * swap in mac-update.js, and "page" is the person installing from the download page.
+ */
+function installRoute() {
+  if (process.platform !== "darwin" || hasTrustedAppSignature()) return "updater";
+  return net && macUpdate.canReplace(currentBundle()) ? "self" : "page";
+}
+
+// true, false, or null when the server could not say.
+async function agentBusy() {
+  const origin = getServerUrl();
+  if (!origin) return false;
+  try {
+    const response = await session.defaultSession.fetch(`${origin}/api/agent/busy`, {
+      credentials: "include",
+      signal: AbortSignal.timeout(5000),
+    });
+    if (!response.ok) return null;
+    const body = await response.json();
+    return Boolean(body.busy);
+  } catch (err) {
+    log(`agent state unavailable: ${err && err.message ? err.message : err}`);
+    return null;
+  }
+}
+
+function stopAgentWait() {
+  if (agentWaitTimer) clearInterval(agentWaitTimer);
+  agentWaitTimer = null;
+}
+
+function waitForAgent() {
+  stopAgentWait();
+  agentWaitTimer = setInterval(() => {
+    void agentBusy().then((busy) => {
+      if (busy === true || !agentWaitTimer) return;
+      stopAgentWait();
+      void confirmAndInstall({ force: true });
+    });
+  }, AGENT_POLL_MS);
+  if (typeof agentWaitTimer.unref === "function") agentWaitTimer.unref();
 }
 
 function startSchedule() {
@@ -149,6 +261,7 @@ function startSchedule() {
 function stopSchedule() {
   if (firstCheckTimer) clearTimeout(firstCheckTimer);
   if (intervalTimer) clearInterval(intervalTimer);
+  stopAgentWait();
   firstCheckTimer = null;
   intervalTimer = null;
   timersStarted = false;
@@ -230,6 +343,11 @@ function focusedWindow() {
 
 function runQuitAndInstall() {
   if (!autoUpdater) return;
+  if (installRoute() === "self" && selfInstall) {
+    macUpdate.startSwap({ ...selfInstall, target: currentBundle(), args: process.argv.slice(1) });
+    setImmediate(() => app.quit());
+    return;
+  }
   setImmediate(() => {
     try {
       autoUpdater.quitAndInstall(false, true);
@@ -262,83 +380,91 @@ async function confirmAndInstall(options = {}) {
     };
   }
   const version = status.availableVersion || "";
-  const trusted = hasTrustedAppSignature();
+  const degraded = installRoute() !== "updater" && !(installRoute() === "self" && selfInstall);
+  if (degraded) return offerDownloadPage(version, silent);
   if (!silent) {
     if (installPromptInFlight) {
       return { ok: false, confirmed: false, error: "Install prompt already open.", status: snapshot() };
     }
-    if (promptedInstallVersion && promptedInstallVersion === version) {
-      // User already dismissed for this version from the auto prompt.
-      // Manual IPC / menu may still re-ask when silent is false and force is set.
-      if (!options.force) {
-        return { ok: false, confirmed: false, error: "Install prompt already shown for this version.", status: snapshot() };
-      }
+    if (promptedInstallVersion && promptedInstallVersion === version && !options.force) {
+      return { ok: false, confirmed: false, error: "Install prompt already shown for this version.", status: snapshot() };
+    }
+    if (!dialog || typeof dialog.showMessageBox !== "function") {
+      log("app update install prompt skipped (no dialog API)");
+      promptedInstallVersion = version || "unknown";
+      return { ok: false, confirmed: false, error: "No dialog API.", status: snapshot() };
     }
     installPromptInFlight = true;
+    stopAgentWait();
+    let busyNow = false;
     try {
-      if (!dialog || typeof dialog.showMessageBox !== "function") {
-        log("app update install prompt skipped (no dialog API)");
-        promptedInstallVersion = version || "unknown";
-        return { ok: false, confirmed: false, error: "No dialog API.", status: snapshot() };
-      }
-      const parent = focusedWindow();
-      if (!trusted) {
-        // H-DESKTOP-UPDATE-07: unsigned / ad-hoc → GitHub download page.
-        const detail = version
-          ? `${INSTALL_DIALOG_DETAIL_PREFIX}${version}`
-          : undefined;
-        const boxOpts = {
+      const busy = await agentBusy();
+      if (busy === true) {
+        const answer = await askUser({
           type: "info",
-          buttons: [UNSIGNED_DIALOG_CONFIRM, UNSIGNED_DIALOG_CANCEL],
-          defaultId: 0,
-          cancelId: 1,
-          title: UNSIGNED_DIALOG_TITLE,
-          message: UNSIGNED_DIALOG_MESSAGE,
-          detail,
-          noLink: true,
-        };
-        const result = parent
-          ? await dialog.showMessageBox(parent, boxOpts)
-          : await dialog.showMessageBox(boxOpts);
-        promptedInstallVersion = version || "unknown";
-        if (result.response !== 0) {
-          log("app update download page deferred by user");
-          return { ok: true, confirmed: false, degraded: true, status: snapshot() };
-        }
-        await openGithubDownloadPage();
-        return { ok: true, confirmed: true, degraded: true, status: snapshot() };
+          buttons: [copy(AGENT_BUSY_WAIT), copy(INSTALL_CANCEL)],
+          title: copy(INSTALL_DIALOG_TITLE),
+          message: copy(AGENT_BUSY_MESSAGE),
+          detail: version ? `${copy(INSTALL_DIALOG_DETAIL_PREFIX)}${version}` : undefined,
+        });
+        if (answer === 0) waitForAgent();
+        log(`app update install held for the Agent (wait=${answer === 0})`);
+        return { ok: true, confirmed: false, waiting: answer === 0, status: snapshot() };
       }
-      const detail = version
-        ? `${INSTALL_DIALOG_DETAIL_PREFIX}${version}`
-        : undefined;
-      const boxOpts = {
+      const lines = [];
+      if (version) lines.push(`${copy(INSTALL_DIALOG_DETAIL_PREFIX)}${version}`);
+      if (busy === null) lines.push(copy(AGENT_UNKNOWN_NOTE));
+      const answer = await askUser({
         type: "info",
-        buttons: [INSTALL_CONFIRM, INSTALL_CANCEL],
-        defaultId: 0,
-        cancelId: 1,
-        title: INSTALL_DIALOG_TITLE,
-        message: INSTALL_DIALOG_MESSAGE,
-        detail,
-        noLink: true,
-      };
-      const result = parent
-        ? await dialog.showMessageBox(parent, boxOpts)
-        : await dialog.showMessageBox(boxOpts);
+        buttons: [copy(INSTALL_CONFIRM), copy(INSTALL_CANCEL)],
+        title: copy(INSTALL_DIALOG_TITLE),
+        message: copy(INSTALL_DIALOG_MESSAGE),
+        detail: lines.join("\n") || undefined,
+      });
       promptedInstallVersion = version || "unknown";
-      if (result.response !== 0) {
+      if (answer !== 0) {
         log("app update install deferred by user");
         return { ok: true, confirmed: false, status: snapshot() };
       }
+      // The dialog may have stayed open while the person started something.
+      busyNow = (await agentBusy()) === true;
     } finally {
       installPromptInFlight = false;
     }
-  } else if (!trusted) {
-    await openGithubDownloadPage();
-    return { ok: true, confirmed: true, degraded: true, status: snapshot() };
+    if (busyNow) return confirmAndInstall({ force: true });
   }
   log("app update install confirmed");
   runQuitAndInstall();
   return { ok: true, confirmed: true, status: snapshot() };
+}
+
+async function askUser(box) {
+  const parent = focusedWindow();
+  const boxOpts = { ...box, defaultId: 0, cancelId: 1, noLink: true };
+  const result = parent
+    ? await dialog.showMessageBox(parent, boxOpts)
+    : await dialog.showMessageBox(boxOpts);
+  return result.response;
+}
+
+// H-DESKTOP-UPDATE-07: when this copy cannot replace itself, the person installs by hand.
+async function offerDownloadPage(version, silent) {
+  if (!silent) {
+    const answer = await askUser({
+      type: "info",
+      buttons: [copy(UNSIGNED_DIALOG_CONFIRM), copy(UNSIGNED_DIALOG_CANCEL)],
+      title: copy(UNSIGNED_DIALOG_TITLE),
+      message: copy(UNSIGNED_DIALOG_MESSAGE),
+      detail: version ? `${copy(INSTALL_DIALOG_DETAIL_PREFIX)}${version}` : undefined,
+    });
+    promptedInstallVersion = version || "unknown";
+    if (answer !== 0) {
+      log("app update download page deferred by user");
+      return { ok: true, confirmed: false, degraded: true, status: snapshot() };
+    }
+  }
+  await openGithubDownloadPage();
+  return { ok: true, confirmed: true, degraded: true, status: snapshot() };
 }
 
 async function checkForAppUpdatesFromMenu() {
@@ -357,8 +483,10 @@ async function checkForAppUpdatesFromMenu() {
     return confirmAndInstall({ force: true });
   }
   await runCheck("menu");
+  if (status.state === "available" && installRoute() === "page") {
+    return offerDownloadPage(status.availableVersion || "", false);
+  }
   if (status.state === "available") await maybeDownload();
-  // Give the download-ready handler a chance to prompt.
   if (status.state === "downloaded") {
     return confirmAndInstall({ force: true });
   }
@@ -452,18 +580,20 @@ function registerIpc() {
         status: snapshot(),
       };
     }
-    try {
-      await autoUpdater.downloadUpdate();
-      return { ok: true, status: snapshot() };
-    } catch (err) {
-      const message = err && err.message ? err.message : String(err);
-      setStatus({ state: "error", error: message });
-      return { ok: false, error: message, status: snapshot() };
+    await maybeDownload();
+    if (status.state === "error") {
+      return { ok: false, error: status.error, status: snapshot() };
     }
+    return { ok: true, status: snapshot() };
   });
 
   ipcMain.handle("tacos:app-update:install", async () => {
-    // Manual install always re-asks (force), even if the auto prompt was dismissed.
+    if (status.state === "available" || status.state === "downloading") {
+      if (installRoute() === "page") return offerDownloadPage(status.availableVersion || "", false);
+      installRequested = true;
+      void maybeDownload();
+      return { ok: true, queued: true, status: snapshot() };
+    }
     return confirmAndInstall({ force: true });
   });
 }
@@ -473,6 +603,7 @@ function bindUpdaterEvents(updater) {
     setStatus({ state: "checking", error: null });
   });
   updater.on("update-available", (info) => {
+    availableInfo = info || null;
     setStatus({
       state: "available",
       availableVersion: info && info.version ? info.version : null,
@@ -490,14 +621,8 @@ function bindUpdaterEvents(updater) {
     setStatus({ state: "downloading", progress: percent, error: null });
   });
   updater.on("update-downloaded", (info) => {
-    setStatus({
-      state: "downloaded",
-      availableVersion: info && info.version ? info.version : status.availableVersion,
-      progress: 100,
-      error: null,
-    });
-    // H-DESKTOP-UPDATE-05: confirm, then quit and install.
-    void confirmAndInstall({ force: false });
+    // H-DESKTOP-UPDATE-05: nothing restarts until the person clicks update and confirms.
+    downloadFinished(info && info.version);
   });
   updater.on("error", (err) => {
     setStatus({
@@ -513,6 +638,7 @@ function bindUpdaterEvents(updater) {
  */
 function initAppUpdater(options = {}) {
   if (typeof options.log === "function") log = options.log;
+  if (typeof options.getServerUrl === "function") getServerUrl = options.getServerUrl;
   status.currentVersion = app.getVersion();
   registerIpc();
 

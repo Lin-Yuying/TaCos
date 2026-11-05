@@ -20,8 +20,8 @@ async function main() {
   assert(src.includes("CHECK_INTERVAL_MS"), "updater must define a check interval");
   assert(src.includes("15_000") || src.includes("15000"), "first check must wait about 15 s");
   assert(
-    src.includes("4 * 60 * 60 * 1000") || src.includes("14400000"),
-    "interval must be about 4 hours",
+    src.includes("60 * 60 * 1000") || src.includes("3600000"),
+    "interval must be about 1 hour",
   );
   assert(src.includes("startSchedule"), "updater must start a schedule when packaged");
   assert(src.includes("maybeDownload"), "updater must download when a version is available");
@@ -89,13 +89,16 @@ async function main() {
         timersStarted: boolean;
       };
       getAppUpdateStatus: () => { state: string };
+      setTrustedSignatureForTests: (value: boolean | null) => void;
       stopSchedule: () => void;
     };
+    // Signed, so the download below is electron-updater's; the Mac's own is tested elsewhere.
+    mod.setTrustedSignatureForTests(true);
     const result = mod.initAppUpdater({ log: () => {} });
     assert(result.enabled, "packaged init must enable updater");
     const schedule = mod.getAppUpdateScheduleForTests();
     assert(schedule.firstCheckDelayMs === 15_000, "first delay must be 15000");
-    assert(schedule.checkIntervalMs === 14_400_000, "interval must be 4 hours");
+    assert(schedule.checkIntervalMs === 3_600_000, "interval must be 1 hour");
     assert(schedule.timersStarted, "schedule must start for packaged builds");
 
     // Manual check path also downloads.
@@ -103,6 +106,7 @@ async function main() {
     assert(check.ok, "manual check must succeed");
     assert(downloaded >= 1, "available update must trigger a download");
     assert(mod.getAppUpdateStatus().state === "downloaded", "state must reach downloaded");
+    mod.setTrustedSignatureForTests(null);
     mod.stopSchedule();
     console.log(
       `check-desktop-updater-schedule: pass (first=${schedule.firstCheckDelayMs} interval=${schedule.checkIntervalMs} downloads=${downloaded})`,

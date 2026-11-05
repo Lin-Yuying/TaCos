@@ -90,6 +90,15 @@ export function resolveAgentToolGrant(token: string): ToolGrant | null {
   return grant;
 }
 
+/** A turn running in this server's own process for this person. */
+export function hasLiveAgentTurn(userId: string): boolean {
+  const now = Date.now();
+  for (const grant of store().grants.values()) {
+    if (grant.userId === userId && grant.expiresAt > now) return true;
+  }
+  return false;
+}
+
 export function revokeAgentToolGrant(token: string): void {
   store().grants.delete(token);
 }

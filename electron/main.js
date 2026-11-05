@@ -1030,7 +1030,7 @@ if (!app.requestSingleInstanceLock()) {
     Menu.setApplicationMenu(buildMenu());
     logLine(`app ready ${app.getVersion()} on ${process.platform}-${process.arch}`);
     // Packaged builds only. Dev stays idle. No UI / timers in H-DESKTOP-UPDATE-01.
-    initAppUpdater({ log: logLine });
+    initAppUpdater({ log: logLine, getServerUrl: () => serverUrl });
     // Windows and Linux pass the opened file on the command line instead of sending
     // open-file; both end up in the same queue.
     for (const arg of process.argv.slice(1)) queueOpenFile(arg);
