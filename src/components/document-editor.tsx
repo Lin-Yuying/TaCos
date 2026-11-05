@@ -95,6 +95,40 @@ function menuKey<T>(event: KeyboardEvent, open: MenuState<T> | null, set: (next:
   return false;
 }
 
+const TABLE_EDITS: { label: string; run: (editor: Editor) => void }[] = [
+  { label: "Add a row below", run: (editor) => editor.chain().focus().addRowAfter().run() },
+  { label: "Delete this row", run: (editor) => editor.chain().focus().deleteRow().run() },
+  { label: "Add a column to the right", run: (editor) => editor.chain().focus().addColumnAfter().run() },
+  { label: "Delete this column", run: (editor) => editor.chain().focus().deleteColumn().run() },
+];
+
+function TableEditButtons({ editor }: { editor: Editor }) {
+  const t = useT();
+  const groups = [TABLE_EDITS.slice(0, 2), TABLE_EDITS.slice(2)];
+  return (
+    <>
+      {groups.map((group, index) => (
+        <span key={group[0].label} className="flex items-center gap-0.5">
+          {index > 0 && <span className="mx-0.5 h-4 w-px bg-border" />}
+          {group.map((action) => (
+            <button
+              key={action.label}
+              type="button"
+              title={t(action.label)}
+              aria-label={t(action.label)}
+              onMouseDown={(event) => event.preventDefault()}
+              onClick={() => action.run(editor)}
+              className="rounded px-1.5 py-1 text-small text-muted transition-colors hover:bg-elevated hover:text-text"
+            >
+              {t(action.label)}
+            </button>
+          ))}
+        </span>
+      ))}
+    </>
+  );
+}
+
 const NO_MEMBERS: Member[] = [];
 
 export type EditorAnchor = DocAnchor & { id: string };
@@ -430,7 +464,7 @@ export function DocumentEditor({
         <BubbleMenu
           editor={editor}
           shouldShow={({ state, view }) => !state.selection.empty && view.hasFocus()}
-          className="flex items-center gap-0.5 rounded-md border border-border bg-overlay p-0.5 shadow-md"
+          className="flex max-w-[320px] flex-wrap items-center gap-0.5 rounded-md border border-border bg-overlay p-0.5 shadow-md"
         >
           {editable && marks.map((mark) => (
             <button
@@ -461,6 +495,25 @@ export function DocumentEditor({
               <MessageSquare size={14} />
             </button>
           )}
+          {editable && editor.isActive("table") && (
+            <>
+              <span className="mx-0.5 h-4 w-px bg-border" />
+              <TableEditButtons editor={editor} />
+            </>
+          )}
+        </BubbleMenu>
+      )}
+      {editor && editable && (
+        <BubbleMenu
+          editor={editor}
+          pluginKey="docTableMenu"
+          shouldShow={({ editor: current, state, view }) =>
+            state.selection.empty && current.isActive("table") && view.hasFocus()
+          }
+          className="flex max-w-[320px] flex-wrap items-center gap-0.5 rounded-md border border-border bg-overlay p-0.5 shadow-md"
+          data-testid="doc-table-menu"
+        >
+          <TableEditButtons editor={editor} />
         </BubbleMenu>
       )}
       <input

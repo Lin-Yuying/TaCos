@@ -36,7 +36,7 @@ Item-level checks stay cheap (types, check scripts). End-to-end tests and screen
 | 10 | Sidebar order per Decisions; one word for workspace; the document + matches the project + and shows it is working | done | `check-agents-md` glossary; screenshots in item 26 |
 | 11 | Updates panel shows rendered inline changes, tables as tables | done | Check script over text and table diffs |
 | 12 | Updates by several editors merge into one entry that collapses | done | `node --import tsx scripts/check-doc-update-groups.ts` |
-| 13 | Table: add and delete rows and columns | todo | Round-trip check on an edited table |
+| 13 | Table: add and delete rows and columns | done | `node --import tsx scripts/check-doc-table-edit.ts` |
 | 14 | Drag blocks; turn a block into another type | todo | Round-trip check; screenshots in item 26 |
 | 15 | Link and color in the selection toolbar | todo | Round-trip check on color syntax |
 | 16 | Toggle and callout blocks | todo | Round-trip check on both |
