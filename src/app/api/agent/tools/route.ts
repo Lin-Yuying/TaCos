@@ -34,6 +34,8 @@ function denied(message: string) {
   });
 }
 
+const APPROVAL_MS_HEADER = "x-tacos-approval-ms";
+
 export async function GET(request: Request) {
   const grant = grantFor(request);
   if (!grant) return unauthorized();
@@ -72,6 +74,7 @@ export async function POST(request: Request) {
     userId: grant.userId,
     threadId: grant.threadId,
   };
+  let approvalMs = 0;
   // TaCos mediates approval for every harness. Delete always confirms (H-P5-26), and so does a
   // write to another workspace: text read in one workspace must not reach into the next unasked.
   if (decideToolApproval(spec, grant) === "confirm" || (await writesElsewhere(toolContext, name, body.arguments))) {
@@ -84,21 +87,29 @@ export async function POST(request: Request) {
       params: body.arguments,
     };
     publishToolApproval(grant.threadId, card);
+    const askedAt = Date.now();
     const decision = await waitForAgentApproval(requestId, {
       signal: request.signal,
       timeoutMs: grant.approvalWaitMs,
     });
+    approvalMs = Date.now() - askedAt;
     if (decision !== "accept") {
-      return denied(`The person denied tool "${name}".`);
+      const refused = denied(`The person denied tool "${name}".`);
+      refused.headers.set(APPROVAL_MS_HEADER, String(approvalMs));
+      return refused;
     }
   }
 
   try {
     const result = await executeAgentTool(toolContext, name, body.arguments);
-    return Response.json({
-      content: [{ type: "text", text: result.text }],
-      ...(result.isError ? { isError: true } : {}),
-    });
+    return Response.json(
+      {
+        content: [{ type: "text", text: result.text }],
+        ...(result.isError ? { isError: true } : {}),
+      },
+      // The turn's timing log counts time spent waiting for a person apart from the network.
+      { headers: { [APPROVAL_MS_HEADER]: String(approvalMs) } }
+    );
   } catch (err) {
     // Tool failures are part of the conversation, not a crash: hand the model the
     // message so it can explain itself or try a different call.

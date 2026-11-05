@@ -17,6 +17,7 @@ Item-level checks stay cheap (types, check scripts). End-to-end tests and screen
 - "Move forward with Agent" becomes "Work on it in chat" and sends the first message itself, only on a new empty chat. "Hand to my Agent" becomes "Hand to Agent in background" and keeps its behaviour. Writes still follow the approval level.
 - Sidebar order: Inbox, Agent; Tasks (My Tasks, Open Tasks, All Tasks, Active, Unassigned, Review); Projects; Documents (Shared, Private); Your team. Bottom: Help, Trash, Settings. Labels moves into Settings.
 - Board columns run todo, in progress, done, canceled. List grouping keeps in progress first.
+- CodeBuddy tool loading (2026-11-05, CodeBuddy 2.171.0, one tool on a local stub): `alwaysLoad` with `--tools DeferExecuteTool` calls the tool directly in 3 of 3 runs, 4.3 to 12.1 s; the old setting went through ToolSearch in 3 of 3, 6.2 to 10.8 s. Two runs asked to write a file made none.
 - Local direct output, a document cache and a local replica are not in this plan. They wait for the timing data from item 2.
 
 ## Items
@@ -24,7 +25,7 @@ Item-level checks stay cheap (types, check scripts). End-to-end tests and screen
 | # | Item | Status | Pass |
 |---|---|---|---|
 | 1 | New chat composer can send again after a chat was started | done | Check script or E2E in item 26: second chat sends |
-| 2 | Per-turn timing log: model, tool requests with bytes, output upload, approval wait; try the CodeBuddy tool-loading setting | todo | Check script: a turn writes every segment |
+| 2 | Per-turn timing log: model, tool requests with bytes, output upload, approval wait; try the CodeBuddy tool-loading setting | done | Check script: a turn writes every segment |
 | 3 | Members change their own display name in Settings | todo | Check script: own name changes; empty and over-long names refused |
 | 4 | Paste and upload images and files in the Agent composer, handed to the harness on the member's computer | todo | Check script: attachment reaches the turn payload; real-model check in item 26 |
 | 5 | Selected image in a document shows selection; delete leaves the cursor in place with no jump | todo | Screenshots in item 26 |

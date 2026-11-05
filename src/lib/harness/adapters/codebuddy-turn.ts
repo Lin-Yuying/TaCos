@@ -67,6 +67,8 @@ function writeMcpConfig(cwd: string, mcp: NonNullable<TurnInput["mcp"]>): string
         command: mcp.command,
         args: mcp.args,
         env: mcp.env ?? {},
+        // Listed up front, so the model calls them at once instead of searching for them first.
+        alwaysLoad: true,
       },
     },
   };
@@ -96,11 +98,12 @@ export async function* openCodebuddyTurn(input: TurnInput, log?: TurnLog): Async
     "--output-format",
     "stream-json",
     "--include-partial-messages",
-    // Recent versions list MCP tools behind these two, so turning them off hides TaCos's tools and
-    // the model reports writes it never made. No built-in tool is reachable, and the tool route
-    // asks for approval, so nothing here needs a second permission check (which cannot ask anyway).
+    // Naming one tool keeps every other built-in off; an empty list would not. TaCos's tools come
+    // from the MCP config, and the tool route asks for approval, so nothing here needs a second
+    // permission check (which cannot ask anyway). ToolSearch stays off: with it, the model keeps
+    // searching for tools it already has.
     "--tools",
-    "ToolSearch,DeferExecuteTool",
+    "DeferExecuteTool",
     "--permission-mode",
     "bypassPermissions",
     "-y",
