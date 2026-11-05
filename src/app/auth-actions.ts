@@ -23,6 +23,7 @@ import {
   requireWorkspace,
   SESSION_COOKIE,
 } from "@/lib/auth";
+import { normalizeUsername } from "@/lib/mentions";
 import {
   createWorkspace,
   deleteWorkspace,
@@ -72,7 +73,7 @@ export async function loginAction(input: {
   password: string;
 }): Promise<ActionResult<{ next: string }>> {
   return run(async () => {
-    const username = input.username.trim().toLowerCase();
+    const username = normalizeUsername(input.username);
     const db = getDb();
     const [user] = await db.select().from(users).where(eq(users.username, username)).limit(1);
     if (!user || !verifyPassword(input.password, user.passwordHash)) {

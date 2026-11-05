@@ -1,7 +1,7 @@
 import { TacosError } from "./tacos-error";
 import { removeWorkspaceAttachments } from "./attachments";
 import crypto from "node:crypto";
-import { parseMentions } from "./mentions";
+import { mentionText, parseMentions } from "./mentions";
 import {
   and,
   desc,
@@ -2370,7 +2370,7 @@ export async function updateIssue(
       // Only members that the old text did not mention get a notice.
       const before = new Set(parseMentions(row.description ?? ""));
       const added = parseMentions(sets.description).filter((name) => !before.has(name));
-      if (added.length) await notifyMentions(workspaceId, row.id, added.map((n) => `@${n}`).join(" "), actor);
+      if (added.length) await notifyMentions(workspaceId, row.id, added.map(mentionText).join(" "), actor);
     }
     const assigneeChange = changes.find((c) => c.type === "assignee_changed");
     if (assigneeChange) {

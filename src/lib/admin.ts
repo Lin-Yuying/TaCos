@@ -14,6 +14,7 @@ import {
 } from "@/db/schema";
 import { TacosError } from "./issues";
 import { BUILTIN_AVATARS, nextFreeAvatar } from "./avatars";
+import { normalizeUsername, validUsername } from "./mentions";
 
 export type SiteMember = {
   id: string;
@@ -70,9 +71,9 @@ export async function createSiteMember(input: {
   displayName: string;
   password: string;
 }) {
-  const username = input.username.trim().toLowerCase();
-  if (!/^[a-z0-9_-]{2,20}$/.test(username)) {
-    throw new TacosError("Username must be 2-20 characters (letters, digits, - or _)");
+  const username = normalizeUsername(input.username);
+  if (!validUsername(username)) {
+    throw new TacosError("Username must be 1-40 characters without @, [, ] or line breaks");
   }
   assertPassword(input.password);
   const displayName = input.displayName.trim() || username;
