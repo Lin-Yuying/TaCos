@@ -66,6 +66,8 @@ function DocPanel({
   const { openPage, toast } = useUI();
   const [detail, setDetail] = useState<PageDetail | null>(null);
   const [missing, setMissing] = useState(false);
+  const [failed, setFailed] = useState(false);
+  const [attempt, setAttempt] = useState(0);
 
   // Remounted per page id, so the loading state starts clean without resets here.
   useEffect(() => {
@@ -76,16 +78,21 @@ function DocPanel({
           if (!cancelled) setMissing(true);
           return null;
         }
+        // Anything else is an error payload, not a page: handing it to the view would
+        // read a missing `page` and crash the pane.
+        if (!res.ok) throw new Error(`Request failed: ${res.status}`);
         return res.json();
       })
       .then((data) => {
         if (!cancelled && data) setDetail(data as PageDetail);
       })
-      .catch(() => {});
+      .catch(() => {
+        if (!cancelled) setFailed(true);
+      });
     return () => {
       cancelled = true;
     };
-  }, [id, workspaceId]);
+  }, [id, workspaceId, attempt]);
 
   // Deleted here or on another device: there is nothing left to read, so the pane goes
   // away instead of holding a dead page.
@@ -94,6 +101,35 @@ function DocPanel({
     toast(t("Document deleted"));
     onClose();
   }, [missing, toast, onClose, t]);
+
+  // A failed fetch has no header of its own to close it, so the error state carries the
+  // two ways out: try again, or give the space back.
+  if (failed) {
+    return (
+      <div className="flex flex-1 flex-col items-center justify-center gap-3 p-6 text-center">
+        <p className="text-body text-muted">{t("Couldn’t load this document.")}</p>
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => {
+              setFailed(false);
+              setAttempt((n) => n + 1);
+            }}
+            className="rounded-md border border-border px-2.5 py-1 text-small text-muted transition-colors hover:border-border-strong hover:text-text"
+          >
+            {t("Retry")}
+          </button>
+          <button
+            type="button"
+            onClick={onClose}
+            className="rounded-md px-2.5 py-1 text-small text-faint transition-colors hover:text-text"
+          >
+            {t("Close")}
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   if (missing || !detail) {
     return <div className="flex-1 p-5 text-body text-muted">{t("Loading…")}</div>;
