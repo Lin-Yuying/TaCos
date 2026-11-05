@@ -3,11 +3,12 @@
 import { useEffect, useRef, useState } from "react";
 import { useLiveTick } from "@/components/live-refresh";
 import { ISSUE_DELETED, useUI, type DeletedIssue } from "@/components/ui-context";
-import { addCommentAction, deleteIssueAction, reportBlockerAction, updateIssueDetailAction } from "@/app/actions";
+import { addCommentAction, createIssueAction, deleteIssueAction, reportBlockerAction, updateIssueDetailAction } from "@/app/actions";
 import type { Label, Member } from "@/lib/issues";
 import { PanelHeader } from "./header";
 import { PropertiesRow } from "./properties";
 import { DueRow } from "./due-row";
+import { Subtasks } from "./subtasks";
 import { BlockerReport } from "./blocker-report";
 import { ClaimRow } from "./claim-row";
 import { SourceChatRow } from "./source-chat-row";
@@ -109,7 +110,10 @@ function IssuePanel({
         return res.ok ? res.json() : null;
       })
       .then((data) => {
-        if (!cancelled && data) setDetail(data as FlatDetail);
+        if (!cancelled && data) {
+          const row = data as FlatDetail;
+          setDetail({ ...row, children: row.children ?? [] });
+        }
       })
       .catch(() => {});
     return () => {
@@ -128,7 +132,10 @@ function IssuePanel({
         return res.json();
       })
       .then((data) => {
-        if (!cancelled && data) setDetail(data as FlatDetail);
+        if (!cancelled && data) {
+          const row = data as FlatDetail;
+          setDetail({ ...row, children: row.children ?? [] });
+        }
       })
       .catch(() => {
         if (!cancelled) setError("Failed to load task");
@@ -152,11 +159,39 @@ function IssuePanel({
     const result = await updateIssueDetailAction(workspaceId, detail.id, patch);
     setBusy(false);
     if (result.ok) {
-      setDetail({ ...result.data.issue, comments: result.data.comments, events: result.data.events });
+      setDetail({ ...result.data.issue, comments: result.data.comments, events: result.data.events, children: result.data.children });
       return true;
     }
     setError(result.error);
     return false;
+  }
+
+  async function addSubtask(title: string) {
+    if (!detail || busy) return false;
+    setBusy(true);
+    const result = await createIssueAction(workspaceId, {
+      title,
+      project: detail.projectKey,
+      parent: detail.id,
+    });
+    setBusy(false);
+    if (!result.ok) {
+      setError(result.error);
+      return false;
+    }
+    setDetail({
+      ...detail,
+      children: [
+        ...detail.children,
+        {
+          id: result.data.id,
+          identifier: result.data.identifier,
+          title: result.data.title,
+          status: result.data.status,
+        },
+      ],
+    });
+    return true;
   }
 
   async function submitBlocker(body: string) {
@@ -165,7 +200,7 @@ function IssuePanel({
     const result = await reportBlockerAction(workspaceId, detail.id, body);
     setBusy(false);
     if (result.ok) {
-      setDetail({ ...result.data.issue, comments: result.data.comments, events: result.data.events });
+      setDetail({ ...result.data.issue, comments: result.data.comments, events: result.data.events, children: result.data.children });
       return true;
     }
     setError(result.error);
@@ -179,7 +214,7 @@ function IssuePanel({
     setBusy(false);
     if (result.ok) {
       setComment("");
-      setDetail({ ...result.data.issue, comments: result.data.comments, events: result.data.events });
+      setDetail({ ...result.data.issue, comments: result.data.comments, events: result.data.events, children: result.data.children });
       requestAnimationFrame(scrollToComposer);
     } else {
       setError(result.error);
@@ -267,7 +302,7 @@ function IssuePanel({
           detail={detail}
           members={members}
           currentUserId={currentUserId}
-          onDetail={(next) => setDetail({ ...next.issue, comments: next.comments, events: next.events })}
+          onDetail={(next) => setDetail({ ...next.issue, comments: next.comments, events: next.events, children: next.children })}
           onError={setError}
         />
 
@@ -289,6 +324,8 @@ function IssuePanel({
         <SourceChatRow workspaceId={workspaceId} threadId={detail.sourceThreadId} />
 
         <DueRow detail={detail} onUpdate={update} />
+
+        <Subtasks children={detail.children} busy={busy} onAdd={addSubtask} />
 
         <BlockerReport events={detail.events} busy={busy} onSubmit={submitBlocker} />
 

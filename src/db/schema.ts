@@ -334,6 +334,8 @@ export const issues = sqliteTable(
     id: text("id").primaryKey(),
     workspaceId: text("workspace_id").notNull(),
     projectId: text("project_id").notNull(),
+    // The task this one belongs to. Null for a top-level task.
+    parentId: text("parent_id"),
     number: integer("number").notNull(),
     identifier: text("identifier").notNull(),
     title: text("title").notNull(),
@@ -380,6 +382,7 @@ export const issues = sqliteTable(
     index("issues_workspace_idx").on(t.workspaceId),
     index("issues_project_idx").on(t.projectId),
     index("issues_status_idx").on(t.status),
+    index("issues_parent_idx").on(t.parentId),
   ]
 );
 

@@ -96,6 +96,7 @@ export async function POST(req: Request) {
         reminder:
           typeof body.reminder === "string" ? (body.reminder as ReminderPreset) : null,
         project: projectParam,
+        parent: typeof body.parent === "string" ? body.parent : null,
       },
       { kind: "agent", label: `api:${key.name}`, via: "api" }
     );

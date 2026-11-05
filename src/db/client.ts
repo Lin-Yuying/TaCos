@@ -247,6 +247,7 @@ CREATE TABLE IF NOT EXISTS issues (
   id TEXT PRIMARY KEY,
   workspace_id TEXT NOT NULL,
   project_id TEXT NOT NULL,
+  parent_id TEXT,
   number INTEGER NOT NULL,
   identifier TEXT NOT NULL,
   title TEXT NOT NULL,
@@ -272,6 +273,7 @@ CREATE TABLE IF NOT EXISTS issues (
 CREATE INDEX IF NOT EXISTS issues_workspace_idx ON issues (workspace_id);
 CREATE INDEX IF NOT EXISTS issues_project_idx ON issues (project_id);
 CREATE INDEX IF NOT EXISTS issues_status_idx ON issues (status);
+CREATE INDEX IF NOT EXISTS issues_parent_idx ON issues (parent_id);
 
 CREATE TABLE IF NOT EXISTS issue_assignees (
   issue_id TEXT NOT NULL,
@@ -863,6 +865,7 @@ function bootstrap(sqlite: Database.Database) {
   addColumnIfMissing(sqlite, "projects", "description", "TEXT NOT NULL DEFAULT ''");
   addColumnIfMissing(sqlite, "projects", "doc", "TEXT NOT NULL DEFAULT ''");
   addColumnIfMissing(sqlite, "projects", "icon", "TEXT");
+  addColumnIfMissing(sqlite, "issues", "parent_id", "TEXT");
   addColumnIfMissing(sqlite, "issues", "deleted_at", "TEXT");
   addColumnIfMissing(sqlite, "issues", "position", "REAL NOT NULL DEFAULT 0");
   addColumnIfMissing(sqlite, "issues", "due_date", "TEXT");

@@ -15,6 +15,7 @@ export async function GET(_req: Request, ctx: Ctx) {
       priorityLabel: PRIORITY_NAMES[detail.issue.priority],
       comments: detail.comments,
       events: detail.events,
+      children: detail.children,
     });
   } catch (err) {
     if (err instanceof TacosError && err.status === 401) {

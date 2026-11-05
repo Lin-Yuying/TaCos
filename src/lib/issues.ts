@@ -94,6 +94,7 @@ export type Issue = {
   status: Status;
   priority: Priority;
   projectId: string;
+  parentId: string | null;
   projectKey: string;
   projectName: string;
   assignees: Assignee[];
@@ -133,10 +134,12 @@ export type ActivityEvent = {
   agentActor: string | null;
   createdAt: string;
 };
+export type IssueChild = { id: string; identifier: string; title: string; status: Status };
 export type IssueDetail = {
   issue: IssueWithLabels;
   comments: Comment[];
   events: ActivityEvent[];
+  children: IssueChild[];
 };
 
 type IssueRow = typeof issues.$inferSelect;
@@ -1799,6 +1802,7 @@ async function toIssueRows(workspaceId: string, rows: IssueRow[]): Promise<Issue
       status: row.status as Status,
       priority: row.priority as Priority,
       projectId: row.projectId,
+      parentId: row.parentId ?? null,
       projectKey: project?.key ?? "?",
       projectName: project?.name ?? "Unknown",
       assignees: assigneesByIssue.get(row.id) ?? [],
@@ -2019,6 +2023,22 @@ export async function getIssueDetail(
     .from(events)
     .where(eq(events.issueId, row.id))
     .orderBy(events.createdAt);
+  const childRows = await db
+    .select({
+      id: issues.id,
+      identifier: issues.identifier,
+      title: issues.title,
+      status: issues.status,
+    })
+    .from(issues)
+    .where(
+      and(
+        eq(issues.parentId, row.id),
+        isNull(issues.deletedAt),
+        ne(issues.reviewStatus, "rejected")
+      )
+    )
+    .orderBy(issues.createdAt);
   return {
     issue: withLabels,
     comments: commentRows.map((c) => ({
@@ -2037,6 +2057,12 @@ export async function getIssueDetail(
       actor: e.actorId ? memberMap.get(e.actorId) ?? null : null,
       agentActor: e.agentActor,
       createdAt: e.createdAt,
+    })),
+    children: childRows.map((child) => ({
+      id: child.id,
+      identifier: child.identifier,
+      title: child.title,
+      status: child.status as Status,
     })),
   };
 }
@@ -2102,6 +2128,8 @@ export type CreateIssueInput = {
   dueDate?: string | null;
   reminder?: ReminderPreset | null;
   project: string;
+  // Identifier or id of the task this one belongs to.
+  parent?: string | null;
 };
 export type UpdateIssueInput = {
   title?: string;
@@ -2112,6 +2140,8 @@ export type UpdateIssueInput = {
   labelNames?: string[];
   dueDate?: string | null;
   reminder?: ReminderPreset | null;
+  // Identifier or id of the parent task. Null or "" detaches this task.
+  parent?: string | null;
 };
 
 function normalizeDueDate(value: unknown): string | null {
@@ -2139,6 +2169,32 @@ export type MoveIssueInput = {
   beforeId?: string | null;
   afterId?: string | null;
 };
+
+// A subtask stays in its parent's project. Walking the parent's ancestors refuses a loop.
+async function resolveParent(
+  workspaceId: string,
+  parent: string,
+  childId: string | null,
+  projectId: string
+): Promise<string> {
+  const row = await findIssueRow(workspaceId, parent);
+  if (!row) throw new TacosError("Parent task not found", 404);
+  if (row.projectId !== projectId) throw new TacosError("A subtask stays in its parent's project", 400);
+  if (childId && row.id === childId) throw new TacosError("A task cannot be a subtask of itself", 400);
+  const seen = new Set<string>();
+  let at: string | null = row.id;
+  while (at) {
+    if (childId && at === childId) throw new TacosError("A task cannot sit inside its own subtask", 400);
+    if (seen.has(at)) throw new TacosError("A task cannot sit inside its own subtask", 400);
+    seen.add(at);
+    const [next] = await getDb()
+      .select({ parentId: issues.parentId })
+      .from(issues)
+      .where(eq(issues.id, at));
+    at = next?.parentId ?? null;
+  }
+  return row.id;
+}
 
 export async function createIssue(
   workspaceId: string,
@@ -2171,6 +2227,11 @@ export async function createIssue(
   const reviewStatus: ReviewStatus = actor.kind === "agent" ? "pending" : "approved";
   const sourceThreadId = actor.kind === "agent" ? actor.sourceThreadId ?? null : null;
 
+  const parentId =
+    typeof input.parent === "string" && input.parent.trim()
+      ? await resolveParent(workspaceId, input.parent, null, project.id)
+      : null;
+
   const assigneeIds = [...new Set(input.assigneeIds ?? [])];
   if (assigneeIds.length > 0) {
     const memberMap = await membersById(workspaceId);
@@ -2183,8 +2244,8 @@ export async function createIssue(
 
   const db = getDb();
   await db.run(sql`INSERT INTO issues
-    (id, workspace_id, project_id, number, identifier, title, description, status, priority, due_date, reminder, created_by, published_by, review_status, source_thread_id, created_via, created_at, updated_at, position)
-    VALUES (${id}, ${workspaceId}, ${project.id},
+    (id, workspace_id, project_id, parent_id, number, identifier, title, description, status, priority, due_date, reminder, created_by, published_by, review_status, source_thread_id, created_via, created_at, updated_at, position)
+    VALUES (${id}, ${workspaceId}, ${project.id}, ${parentId},
       (SELECT COALESCE(MAX(number), 0) + 1 FROM issues WHERE project_id = ${project.id}),
       'pending', ${title}, ${description}, ${status}, ${priority}, ${dueDate}, ${reminder},
       ${publisherId}, ${publisherId}, ${reviewStatus}, ${sourceThreadId},
@@ -2343,6 +2404,20 @@ export async function updateIssue(
           ),
           to: nextIds.map((userId) => memberMap.get(userId)?.displayName ?? "unknown"),
         },
+      });
+    }
+  }
+  if (patch.parent !== undefined) {
+    const next =
+      typeof patch.parent === "string" && patch.parent.trim()
+        ? await resolveParent(workspaceId, patch.parent, row.id, row.projectId)
+        : null;
+    if (next !== (row.parentId ?? null)) {
+      sets.parentId = next;
+      const parent = next ? await findIssueRow(workspaceId, next) : null;
+      changes.push({
+        type: "parent_changed",
+        data: { from: row.parentId, to: parent?.identifier ?? null },
       });
     }
   }
@@ -2742,6 +2817,7 @@ export async function deleteIssue(workspaceId: string, idOrIdentifier: string): 
     status: row.status as Status,
     priority: row.priority as Priority,
     projectId: row.projectId,
+    parentId: row.parentId ?? null,
     projectKey: "",
     projectName: "",
     assignees: [],
