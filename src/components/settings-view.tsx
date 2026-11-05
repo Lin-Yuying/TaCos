@@ -28,6 +28,7 @@ import {
   checkHarnessUpdatesAction,
 } from "@/app/ai-actions";
 import type { AiSettingsView, ModelKeysView } from "@/lib/ai-constants";
+import { PAGE_INSET } from "@/lib/page-chrome";
 import { ModelKeysSection } from "@/components/model-keys-section";
 import { AssigneeAvatar } from "@/components/issue-table";
 import { ProjectIcon, WorkspaceMark } from "@/components/icons";
@@ -521,7 +522,7 @@ export function SettingsView({
     : null;
 
   return (
-    <div className="flex-1 overflow-y-auto px-10 pb-10 pt-6 lg:px-20 xl:px-32">
+    <div className={`flex-1 overflow-y-auto pb-10 pt-6 ${PAGE_INSET}`}>
       <div className="space-y-10">
         <header className="flex items-center gap-3">
           <h1 className="text-lead font-semibold">{t("Workspace settings")}</h1>

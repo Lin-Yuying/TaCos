@@ -32,7 +32,7 @@ Item-level checks stay cheap (types, check scripts). End-to-end tests and screen
 | 6 | The two Agent buttons: new names, chat button sends the first message | done | Check script: empty chat sends once; existing chat sends nothing |
 | 7 | Shared chat: one turn at a time, says who is using it; fork from a message | done | `node --import tsx scripts/check-collab-shared-chat.ts`; smoke: `npx tsc --noEmit && npm run -s i18n:check && node --import tsx scripts/check-agents-md.ts` |
 | 8 | @ someone who cannot see the document: warn and offer sharing; @ yourself notifies | done | Check script: warning condition; self-mention notification |
-| 9 | One left edge for title, toolbar and content on every page; board fills the width and stays readable with the task panel open; board column order; line icon for documents; Documents page groups match the sidebar; read items in Inbox stay legible | todo | Screenshots at 1440 and 1100 wide in item 26 |
+| 9 | One left edge for title, toolbar and content on every page; board fills the width and stays readable with the task panel open; board column order; line icon for documents; Documents page groups match the sidebar; read items in Inbox stay legible | done | `node --import tsx scripts/check-team-2.3-layout.ts`; screenshots at 1440 and 1100 wide deferred to item 26 |
 | 10 | Sidebar order per Decisions; one word for workspace; the document + matches the project + and shows it is working | todo | `check-agents-md` glossary; screenshots in item 26 |
 | 11 | Updates panel shows rendered inline changes, tables as tables | todo | Check script over text and table diffs |
 | 12 | Updates by several editors merge into one entry that collapses | todo | Check script: grouping rule |

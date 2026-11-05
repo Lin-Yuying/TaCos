@@ -11,6 +11,7 @@ import { builtinAvatarId, builtinAvatarSrc } from "@/lib/avatars";
 import type { Assignee, IssueWithLabels } from "@/lib/issues";
 import { issueRef, timeAgo } from "@/lib/format";
 import { useLocale, useT } from "@/components/i18n-context";
+import { PAGE_INSET } from "@/lib/page-chrome";
 
 function initials(displayName: string) {
   const words = displayName
@@ -208,7 +209,7 @@ export function IssueTable({ issues }: { issues: IssueWithLabels[] }) {
     <div className="@container flex-1 overflow-y-auto">
       {groups.map((group) => (
         <div key={group.status}>
-          <div className="sticky top-0 z-10 flex items-center gap-2 border-b border-border bg-bg/95 px-4 py-1.5 backdrop-blur @2xl:px-10 @4xl:px-20 @6xl:px-32">
+          <div className={`sticky top-0 z-10 flex items-center gap-2 border-b border-border bg-bg/95 py-1.5 backdrop-blur ${PAGE_INSET}`}>
             <StatusIcon status={group.status} size={13} />
             <span className="text-small font-medium text-muted">
               {t(STATUS_META[group.status].label)}
@@ -234,7 +235,7 @@ export function IssueTable({ issues }: { issues: IssueWithLabels[] }) {
                   openIssue(issue.id);
                 }}
                 onMouseEnter={() => setFocusIndex(index)}
-                className={`flex cursor-default items-center gap-2.5 px-4 py-[7px] text-body transition-colors @2xl:px-10 @4xl:px-20 @6xl:px-32 ${
+                className={`flex cursor-default items-center gap-2.5 py-[7px] text-body transition-colors ${PAGE_INSET} ${
                   focused ? "bg-row-active" : opened ? "bg-surface" : "hover:bg-elevated/40"
                 } ${opened ? "border-l-2 border-l-accent" : "border-l-2 border-l-transparent"}`}
               >

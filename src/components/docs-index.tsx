@@ -8,6 +8,7 @@ import { createPageAction, importMarkdownAction } from "@/app/pages-actions";
 import { Menu, MenuItem } from "@/components/menu";
 import type { DocPage } from "@/lib/pages";
 import { useT } from "@/components/i18n-context";
+import { PAGE_INSET } from "@/lib/page-chrome";
 
 const MARKDOWN_FILE = /\.(md|markdown|mdx|txt)$/i;
 
@@ -22,11 +23,9 @@ function junkPath(path: string): boolean {
 
 export function DocsIndex({
   workspaceId,
-  userId,
   pages,
 }: {
   workspaceId: string;
-  userId: string;
   pages: DocPage[];
 }) {
   const t = useT();
@@ -37,8 +36,8 @@ export function DocsIndex({
   const filesRef = useRef<HTMLInputElement>(null);
   const folderRef = useRef<HTMLInputElement>(null);
   const importing = useRef(false);
-  const mine = pages.filter((page) => page.createdBy === userId);
-  const shared = pages.filter((page) => page.createdBy !== userId);
+  const sharedPages = pages.filter((page) => page.shared);
+  const privatePages = pages.filter((page) => !page.shared);
 
   async function createPage() {
     const result = await createPageAction(workspaceId);
@@ -104,8 +103,8 @@ export function DocsIndex({
     router.refresh();
   }
 
-  const section = (title: string, items: DocPage[], empty: string) => (
-    <section className="mt-6 first:mt-0">
+  const section = (sectionKey: "shared" | "private", title: string, items: DocPage[], empty: string) => (
+    <section data-doc-index-section={sectionKey} className="mt-6 first:mt-0">
       <h2 className="mb-2 text-small font-medium uppercase tracking-wider text-faint">{title}</h2>
       {items.length === 0 ? (
         <p className="text-body text-faint">{empty}</p>
@@ -132,7 +131,7 @@ export function DocsIndex({
 
   return (
     <div className="flex-1 overflow-y-auto">
-      <div className="w-full px-10 py-6 lg:px-20 xl:px-32">
+      <div className={`w-full py-6 ${PAGE_INSET}`}>
         <div className="flex items-center justify-between gap-3">
           <div>
             <h1 className="text-heading font-semibold tracking-tight">{t("Docs")}</h1>
@@ -210,8 +209,8 @@ export function DocsIndex({
         />
         {error && <div className="mt-3 text-small text-danger">{t(error)}</div>}
         {!error && note && <div className="mt-3 text-small text-muted">{note}</div>}
-        {section(t("My pages"), mine, t("No pages yet — create one."))}
-        {section(t("Shared with the workspace"), shared, t("Nothing has been shared with you yet."))}
+        {section("shared", t("Shared"), sharedPages, t("No documents yet"))}
+        {section("private", t("Private"), privatePages, t("No documents yet"))}
       </div>
     </div>
   );

@@ -13,6 +13,7 @@ import {
 import type { NotificationRow } from "@/lib/issues";
 import { issueRef, timeAgo } from "@/lib/format";
 import { useLocale, useT } from "@/components/i18n-context";
+import { PAGE_INSET } from "@/lib/page-chrome";
 
 export function NotificationsView({
   workspaceId,
@@ -94,7 +95,7 @@ export function NotificationsView({
 
   return (
     <div className="flex-1 overflow-y-auto">
-      <header className="flex h-12 shrink-0 items-center gap-3 border-b border-border px-4">
+      <header className={`flex h-12 shrink-0 items-center gap-3 border-b border-border ${PAGE_INSET}`}>
         <h1 className="text-body font-semibold">{t("Inbox")}</h1>
         <span className="rounded-full bg-elevated px-2 py-0.5 text-caption text-muted">
           {t("{count} unread", { count: unread })}
@@ -120,7 +121,7 @@ export function NotificationsView({
           )}
         </div>
       </header>
-      <div className="divide-y divide-border px-10 pb-8 lg:px-20 xl:px-32">
+      <div className={`divide-y divide-border pb-8 ${PAGE_INSET}`}>
         {visible.length === 0 && (
           <div className="p-6 text-body text-faint">
             {t("Nothing yet — you'll see mentions, assignments, and comments here.")}
@@ -129,9 +130,8 @@ export function NotificationsView({
         {visible.map((item) => (
           <div
             key={item.id}
-            className={`group flex items-center gap-3 px-4 py-3 transition-colors hover:bg-elevated/40 ${
-              isUnread(item) ? "" : "opacity-60"
-            }`}
+            data-inbox-read={isUnread(item) ? "false" : "true"}
+            className="group flex items-center gap-3 py-3 transition-colors hover:bg-elevated/40"
           >
             <button
               type="button"
@@ -143,7 +143,11 @@ export function NotificationsView({
                 style={{ background: isUnread(item) ? "var(--color-accent)" : "transparent" }}
               />
               <span className="min-w-0 flex-1">
-                <span className="block truncate text-body text-text">{noticeText(item.type, item.body, t)}</span>
+                <span
+                  className={`block truncate text-body ${isUnread(item) ? "font-medium text-text" : "text-muted"}`}
+                >
+                  {noticeText(item.type, item.body, t)}
+                </span>
                 <span className="block text-caption text-faint">
                   {item.type === "workspace_deleted"
                     ? t("Workspace deleted")

@@ -26,6 +26,7 @@ import type {
 } from "@/lib/issues";
 import { useT } from "@/components/i18n-context";
 import type { FieldValues, TaskField } from "@/lib/task-view";
+import { PAGE_INSET } from "@/lib/page-chrome";
 
 type Counts = Record<Status, number> & { total: number };
 type ProjectDetail = Project & { doc: string; createdBy: string | null };
@@ -176,7 +177,7 @@ export function ProjectWorkspace({
         <>
           {/* The list's own row is a header, so it hangs from the same 52px column as
               the project title and Properties; the board below keeps the reading gutters. */}
-          <header className="flex h-12 shrink-0 items-center gap-2 border-b border-border pl-[52px] pr-10 lg:pr-20 xl:pr-32">
+          <header className={`flex h-12 shrink-0 items-center gap-2 border-b border-border ${PAGE_INSET}`}>
             {status ? (
               <button
                 type="button"

@@ -14,6 +14,7 @@ import { formatDate, issueRef } from "@/lib/format";
 import type { TrashedIssue, TrashedProject } from "@/lib/issues";
 import type { TrashedPage } from "@/lib/pages";
 import { useLocale, useT } from "@/components/i18n-context";
+import { PAGE_INSET } from "@/lib/page-chrome";
 
 export function TrashView({
   workspaceId,
@@ -85,7 +86,7 @@ export function TrashView({
   const empty = projects.length === 0 && issues.length === 0 && docs.length === 0;
 
   return (
-    <div className="flex-1 overflow-y-auto px-10 pb-10 pt-6 lg:px-20 xl:px-32">
+    <div className={`flex-1 overflow-y-auto pb-10 pt-6 ${PAGE_INSET}`}>
       <div className="space-y-4">
         <p className="text-body leading-relaxed text-muted">
           {t(

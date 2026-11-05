@@ -18,6 +18,7 @@ import {
   type TaskView,
   type ViewFilter,
 } from "@/lib/task-view";
+import { PAGE_INSET } from "@/lib/page-chrome";
 
 const BUILTIN_LABEL: Record<(typeof BUILTIN_KEYS)[number], string> = {
   title: "Title",
@@ -146,7 +147,7 @@ export function TaskViewBar({
   }
 
   return (
-    <div data-task-view-bar className="flex shrink-0 flex-wrap items-center gap-1 border-b border-border px-4 py-1">
+    <div data-task-view-bar className={`flex shrink-0 flex-wrap items-center gap-1 border-b border-border py-1 ${PAGE_INSET}`}>
       <Menu
         width={420}
         triggerClassName={triggerClass}

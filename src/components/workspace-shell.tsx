@@ -15,7 +15,6 @@ import { createPortal } from "react-dom";
 import {
   Activity,
   Hand,
-  BookOpen,
   Bot,
   Boxes,
   ChevronRight,
@@ -276,7 +275,7 @@ function SidebarNav({
         <NavItem
           href={`/${workspaceId}/docs`}
           active={pathname.startsWith(`/${workspaceId}/docs`)}
-          icon={<BookOpen size={14} />}
+          icon={<FileText size={14} />}
         >
           {t("Documents")}
         </NavItem>
@@ -935,7 +934,7 @@ function SidebarRail({
           href={`/${workspaceId}/docs`}
           active={pathname.startsWith(`/${workspaceId}/docs`)}
           label={t("Documents")}
-          icon={<BookOpen size={16} />}
+          icon={<FileText size={16} />}
           labeled={labeled}
         />
         {/* Only the groups survive the fold, not their rows: each glyph raises a
@@ -1342,7 +1341,7 @@ function tabMeta(
       ? { label: page.title, icon: <span>{page.icon ?? <FileText size={13} />}</span> }
       : { label: t("Doc"), icon: <FileText size={13} /> };
   }
-  if (pathname === `/${workspace.id}/docs`) return { label: t("Documents"), icon: <BookOpen size={13} /> };
+  if (pathname === `/${workspace.id}/docs`) return { label: t("Documents"), icon: <FileText size={13} /> };
   return { label: t("Tasks"), icon: <List size={13} /> };
 }
 

@@ -7,6 +7,7 @@ import { LayoutToggle } from "@/components/issue-layout";
 import { STATUS_META } from "@/lib/constants";
 import type { Status } from "@/lib/constants";
 import { useT } from "@/components/i18n-context";
+import { PAGE_INSET } from "@/lib/page-chrome";
 
 type View = "all" | "active" | "open" | Status;
 
@@ -81,7 +82,7 @@ export function ListHeader({
       : t(TITLES[view] ?? "Tasks");
 
   return (
-    <header className="flex h-12 shrink-0 items-center gap-2 overflow-hidden border-b border-border pl-[52px] pr-10 lg:pr-20 xl:pr-32">
+    <header className={`flex h-12 shrink-0 items-center gap-2 overflow-hidden border-b border-border ${PAGE_INSET}`}>
       {/* The title hangs from the same 52px column as the project page's "All tasks",
           so switching between the two lists doesn't shift the heading sideways. */}
       {/* Shrinks last: the person's name and the count stay readable while the search

@@ -3,6 +3,7 @@ export type Priority = 0 | 1 | 2 | 3 | 4;
 export type Via = "web" | "api" | "mcp";
 
 export const STATUS_ORDER: Status[] = ["in_progress", "todo", "done", "canceled"];
+export const BOARD_STATUS_ORDER: Status[] = ["todo", "in_progress", "done", "canceled"];
 
 export const STATUS_META: Record<Status, { label: string; color: string }> = {
   todo: { label: "Todo", color: "#8a8f98" },

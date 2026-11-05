@@ -20,5 +20,5 @@ async function DocsContent({ params }: { params: Promise<{ workspaceId: string }
   if (!user) redirect("/login");
   await requireWorkspace(workspaceId);
   const pages = await listPages(workspaceId, user.id);
-  return <DocsIndex workspaceId={workspaceId} userId={user.id} pages={pages} />;
+  return <DocsIndex workspaceId={workspaceId} pages={pages} />;
 }
