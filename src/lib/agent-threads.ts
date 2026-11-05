@@ -1,5 +1,5 @@
 import crypto from "node:crypto";
-import { and, asc, desc, eq, inArray, isNull, or } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, isNull, lt, or } from "drizzle-orm";
 import { getDb } from "@/db/client";
 import { agentMessages, agentSteps, agentThreadFlags, agentThreads, issues, projects, users } from "@/db/schema";
 import { claimIssue, listIssues, TacosError, type Status } from "./issues";
@@ -34,6 +34,9 @@ export type AgentThread = {
   // Per viewer: a shared thread can be pinned by one member and not by another.
   pinnedAt: string | null;
   unread: boolean;
+  // team-2.3: who is running an Agent turn on this shared chat, if anyone.
+  turnUserId: string | null;
+  turnUserName: string | null;
 };
 
 export type AgentStepRecord = {
@@ -61,6 +64,7 @@ export type AgentMessageRecord = {
 export type AgentThreadDetail = AgentThread & { messages: AgentMessageRecord[] };
 
 const MAX_TITLE = 80;
+const STALE_SHARED_TURN_MS = 35 * 60_000;
 
 
 function asVisibility(value: unknown): AgentVisibility {
@@ -165,6 +169,18 @@ export async function listAgentThreads(
     .orderBy(desc(agentThreads.updatedAt))
     .limit(100);
   if (rows.length === 0) return [];
+  const turnIds = [
+    ...new Set(rows.map((row) => row.thread.turnUserId).filter((id): id is string => Boolean(id))),
+  ];
+  const turnNames = new Map<string, string>();
+  if (turnIds.length) {
+    for (const u of await db
+      .select({ id: users.id, name: users.displayName })
+      .from(users)
+      .where(inArray(users.id, turnIds))) {
+      turnNames.set(u.id, u.name);
+    }
+  }
   const counts = await db
     .select({ threadId: agentMessages.threadId, id: agentMessages.id })
     .from(agentMessages)
@@ -178,7 +194,18 @@ export async function listAgentThreads(
   for (const row of counts) {
     countByThread.set(row.threadId, (countByThread.get(row.threadId) ?? 0) + 1);
   }
-  return rows.map(({ thread, ...rest }) => threadRow(thread, rest, userId, countByThread.get(thread.id) ?? 0));
+  return rows.map(({ thread, ...rest }) =>
+    threadRow(
+      thread,
+      {
+        ...rest,
+        turnUserId: thread.turnUserId ?? null,
+        turnUserName: thread.turnUserId ? (turnNames.get(thread.turnUserId) ?? null) : null,
+      },
+      userId,
+      countByThread.get(thread.id) ?? 0
+    )
+  );
 }
 
 function threadOnly(detail: AgentThreadDetail): AgentThread {
@@ -196,6 +223,8 @@ function threadRow(
     authorName: string;
     pinnedAt: string | null;
     unread: number | null;
+    turnUserId: string | null;
+    turnUserName: string | null;
   },
   userId: string,
   messageCount: number
@@ -221,6 +250,8 @@ function threadRow(
     messageCount,
     pinnedAt: meta.pinnedAt ?? null,
     unread: Boolean(meta.unread),
+    turnUserId: meta.turnUserId ?? null,
+    turnUserName: meta.turnUserName ?? null,
   };
 }
 
@@ -240,6 +271,7 @@ async function requireThreadRow(
       authorName: users.displayName,
       pinnedAt: agentThreadFlags.pinnedAt,
       unread: agentThreadFlags.unread,
+      turnUserId: agentThreads.turnUserId,
     })
     .from(agentThreads)
     .leftJoin(projects, eq(projects.id, agentThreads.projectId))
@@ -257,6 +289,15 @@ async function requireThreadRow(
     )
     .limit(1);
   if (!row) throw new TacosError("Conversation not found", 404);
+  let turnUserName: string | null = null;
+  if (row.turnUserId) {
+    const [turnUser] = await db
+      .select({ name: users.displayName })
+      .from(users)
+      .where(eq(users.id, row.turnUserId))
+      .limit(1);
+    turnUserName = turnUser?.name ?? null;
+  }
 
   const messages = await db
     .select()
@@ -292,7 +333,21 @@ async function requireThreadRow(
     }
   }
   return {
-    thread: threadRow(row.thread, row, userId, messages.length),
+    thread: threadRow(
+      row.thread,
+      {
+        projectName: row.projectName,
+        projectKey: row.projectKey,
+        projectColor: row.projectColor,
+        authorName: row.authorName,
+        pinnedAt: row.pinnedAt,
+        unread: row.unread,
+        turnUserId: row.turnUserId ?? null,
+        turnUserName,
+      },
+      userId,
+      messages.length
+    ),
     messages: messages.map((message) => ({
       id: message.id,
       role: message.role === "assistant" ? "assistant" : "user",
@@ -480,6 +535,7 @@ export type TurnThread = {
   model: string;
   effort: string;
   approval: AgentApproval;
+  visibility: AgentVisibility;
   createdBy: string;
   focusIssueId: string | null;
   messages: { role: "user" | "assistant"; content: string }[];
@@ -517,10 +573,124 @@ export async function loadThreadForTurn(
     effort: thread.effort,
     // A collaborator does not get the owner's auto or full mode. Every write asks.
     approval: thread.createdBy === userId ? thread.approval : "ask",
+    visibility: thread.visibility,
     createdBy: thread.createdBy,
     focusIssueId: await focusIssueOf(thread.id),
     messages: history,
   };
+}
+
+// team-2.3: a shared chat runs one Agent turn at a time for the whole workspace.
+export async function claimSharedChatTurn(threadId: string, userId: string): Promise<void> {
+  const db = getDb();
+  const now = new Date().toISOString();
+  const staleBefore = new Date(Date.now() - STALE_SHARED_TURN_MS).toISOString();
+  const [row] = await db
+    .select({ visibility: agentThreads.visibility })
+    .from(agentThreads)
+    .where(eq(agentThreads.id, threadId))
+    .limit(1);
+  if (!row || row.visibility !== "shared") return;
+
+  // Clear a turn that stopped responding without releasing its lock.
+  await db
+    .update(agentThreads)
+    .set({ turnUserId: null, turnStartedAt: null })
+    .where(
+      and(eq(agentThreads.id, threadId), lt(agentThreads.turnStartedAt, staleBefore))
+    );
+
+  const claimed = await db
+    .update(agentThreads)
+    .set({ turnUserId: userId, turnStartedAt: now, updatedAt: now })
+    .where(
+      and(
+        eq(agentThreads.id, threadId),
+        eq(agentThreads.visibility, "shared"),
+        or(isNull(agentThreads.turnUserId), lt(agentThreads.turnStartedAt, staleBefore))
+      )
+    );
+  if (claimed.changes > 0) return;
+
+  const [busy] = await db
+    .select({ turnUserId: agentThreads.turnUserId })
+    .from(agentThreads)
+    .where(eq(agentThreads.id, threadId))
+    .limit(1);
+  let holder = "Someone else";
+  if (busy?.turnUserId) {
+    const [user] = await db
+      .select({ name: users.displayName })
+      .from(users)
+      .where(eq(users.id, busy.turnUserId))
+      .limit(1);
+    if (user?.name) holder = user.name;
+  }
+  throw new TacosError(`${holder} is using this shared chat`, 409, "Wait for their turn to finish, or fork from a message.");
+}
+
+export async function releaseSharedChatTurn(threadId: string, userId: string): Promise<void> {
+  const now = new Date().toISOString();
+  await getDb()
+    .update(agentThreads)
+    .set({ turnUserId: null, turnStartedAt: null, updatedAt: now })
+    .where(and(eq(agentThreads.id, threadId), eq(agentThreads.turnUserId, userId)));
+}
+
+// Copy everything up to and including one message into a new private chat; the source stays as it was.
+export async function forkAgentThreadFromMessage(
+  workspaceId: string,
+  userId: string,
+  threadId: string,
+  messageId: string
+): Promise<AgentThread> {
+  const { thread, messages } = await requireThreadRow(workspaceId, userId, threadId);
+  if (thread.visibility !== "shared") {
+    throw new TacosError("Only a shared chat can be forked here", 400);
+  }
+  const end = messages.findIndex((message) => message.id === messageId);
+  if (end < 0) throw new TacosError("Message not found", 404);
+  const slice = messages.slice(0, end + 1);
+
+  const fork = await startAgentThread({
+    workspaceId,
+    projectId: thread.projectId,
+    visibility: "private",
+    engine: thread.engine,
+    model: thread.model,
+    effort: thread.effort,
+    approval: thread.approval,
+    userId,
+  });
+
+  for (const message of slice) {
+    const newMessageId = await appendAgentMessage({
+      threadId: fork.id,
+      role: message.role,
+      content: message.content,
+      authorId: message.role === "user" ? (message.authorId ?? userId) : undefined,
+    });
+    for (const step of message.steps) {
+      await appendAgentStep({
+        threadId: fork.id,
+        messageId: newMessageId,
+        kind: step.kind,
+        title: step.title,
+        detail: step.detail,
+        status: step.status,
+      });
+    }
+  }
+
+  const titleBase = thread.title.trim() || "Shared chat";
+  await getDb()
+    .update(agentThreads)
+    .set({ title: `Fork · ${titleBase}`.slice(0, MAX_TITLE), updatedAt: new Date().toISOString() })
+    .where(eq(agentThreads.id, fork.id));
+
+  const opened = await getAgentThread(workspaceId, userId, fork.id);
+  if (!opened) throw new TacosError("Could not open the conversation", 500);
+  return threadOnly(opened);
 }
 
 export async function appendAgentMessage(input: {
@@ -532,13 +702,23 @@ export async function appendAgentMessage(input: {
   const id = crypto.randomUUID();
   const now = new Date().toISOString();
   const db = getDb();
+  const [last] = await db
+    .select({ createdAt: agentMessages.createdAt })
+    .from(agentMessages)
+    .where(eq(agentMessages.threadId, input.threadId))
+    .orderBy(desc(agentMessages.createdAt))
+    .limit(1);
+  let createdAt = now;
+  if (last?.createdAt && last.createdAt >= now) {
+    createdAt = new Date(Date.parse(last.createdAt) + 1).toISOString();
+  }
   await db.insert(agentMessages).values({
     id,
     threadId: input.threadId,
     role: input.role,
     content: input.content,
     authorId: input.role === "user" ? (input.authorId ?? null) : null,
-    createdAt: now,
+    createdAt,
   });
   // The first question names the thread; later turns only bump ordering.
   const [thread] = await db

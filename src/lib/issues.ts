@@ -3172,6 +3172,8 @@ export async function workspacePulse(workspaceId: string, userId: string): Promi
          FROM comments c JOIN issues i ON i.id = c.issue_id WHERE i.workspace_id = ${workspaceId}) AS c,
       (SELECT count(*) || ':' || coalesce(max(m.created_at), '')
          FROM agent_messages m JOIN agent_threads th ON th.id = m.thread_id WHERE th.workspace_id = ${workspaceId}) AS m,
+      (SELECT count(*) || ':' || coalesce(max(updated_at), '') || ':' || coalesce(sum(turn_user_id IS NOT NULL), 0)
+         FROM agent_threads WHERE workspace_id = ${workspaceId}) AS a,
       (SELECT count(*) || ':' || coalesce(sum(read_at IS NULL), 0)
          FROM notifications WHERE workspace_id = ${workspaceId} AND user_id = ${userId}) AS n
   `);

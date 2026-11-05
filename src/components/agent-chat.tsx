@@ -15,6 +15,7 @@ import {
   ExternalLink,
   FileText,
   Folder,
+  GitBranch,
   Info,
   Link2,
   Loader2,
@@ -49,6 +50,7 @@ import {
   createAgentSkillAction,
   deleteAgentSkillAction,
   deleteAgentThreadAction,
+  forkAgentThreadFromMessageAction,
   renameAgentThreadAction,
   setAgentThreadApprovalAction,
   setAgentThreadEngineAction,
@@ -173,13 +175,24 @@ function TurnStatus() {
   );
 }
 
+function translateTurnError(error: string, t: (key: string) => string): string {
+  const using = error.match(/^(.+) is using this shared chat$/);
+  if (using) return t("{name} is using this shared chat").replace("{name}", using[1]!);
+  const hinted = error.split(" — ");
+  if (hinted.length > 1) {
+    const head = translateTurnError(hinted[0]!, t);
+    return `${head} — ${t(hinted.slice(1).join(" — "))}`;
+  }
+  return t(error);
+}
+
 // Harness errors end with their log path. Splitting it off lets the sentence itself be translated.
 function TurnError({ error }: { error: string }) {
   const t = useT();
   const [message, log] = error.split(" Log: ");
   return (
     <div className="mb-2 px-1 text-small" data-testid="turn-error">
-      <p className="text-danger">{t(message)}</p>
+      <p className="text-danger">{translateTurnError(message, t)}</p>
       {log && <p className="mt-0.5 break-all text-caption text-faint">{t("Log: {path}", { path: log })}</p>}
     </div>
   );
@@ -2017,6 +2030,7 @@ type AgentDraftPrefs = {
 
 export function AgentWorkspace({
   workspaceId,
+  viewerId,
   ready,
   engines,
   defaultEngine,
@@ -2029,6 +2043,7 @@ export function AgentWorkspace({
   active,
 }: {
   workspaceId: string;
+  viewerId: string;
   ready: boolean;
   engines: AgentHarnessOption[];
   defaultEngine: AgentHarnessId;
@@ -2259,6 +2274,7 @@ export function AgentWorkspace({
           <Conversation
             key={active.id}
             workspaceId={workspaceId}
+            viewerId={viewerId}
             active={active}
             projects={projects}
             options={options}
@@ -2332,6 +2348,7 @@ export function AgentWorkspace({
 
 function Conversation({
   workspaceId,
+  viewerId,
   active,
   projects,
   options,
@@ -2347,6 +2364,7 @@ function Conversation({
   onNew,
 }: {
   workspaceId: string;
+  viewerId: string;
   active: AgentThreadDetail;
   projects: ProjectOption[];
   options: AgentHarnessOption[];
@@ -2437,6 +2455,9 @@ function Conversation({
   const [approval, setApproval] = useState<AgentApprovalCard | null>(null);
   const [approvalBusy, setApprovalBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [forkBusy, setForkBusy] = useState<string | null>(null);
+  const turnTaken =
+    active.visibility === "shared" && Boolean(active.turnUserId) && active.turnUserId !== viewerId;
   const abort = useRef<AbortController | null>(null);
   const bottom = useRef<HTMLDivElement | null>(null);
   const box = useRef<HTMLTextAreaElement | null>(null);
@@ -2485,9 +2506,26 @@ function Conversation({
     });
   }
 
+  async function forkAt(messageId: string) {
+    if (forkBusy) return;
+    setForkBusy(messageId);
+    setError(null);
+    try {
+      const result = await forkAgentThreadFromMessageAction(workspaceId, active.id, messageId);
+      if (!result.ok) {
+        setError(result.error);
+        return;
+      }
+      router.push(`/${workspaceId}/agent?thread=${result.data.id}`);
+      router.refresh();
+    } finally {
+      setForkBusy(null);
+    }
+  }
+
   async function send(text: string, attachments: AgentAttachmentWire[] = []) {
     const message = text.trim();
-    if ((!message && attachments.length === 0) || busy) return;
+    if ((!message && attachments.length === 0) || busy || turnTaken) return;
     setInput("");
     setError(null);
     setApproval(null);
@@ -2707,8 +2745,21 @@ function Conversation({
             </div>
           )}
 
-          {messages.map((message, index) =>
-            message.role === "user" ? (
+          {messages.map((message, index) => {
+            const forkButton =
+              active.visibility === "shared" ? (
+                <button
+                  type="button"
+                  disabled={forkBusy === message.id}
+                  onClick={() => void forkAt(message.id)}
+                  className="mt-1 flex items-center gap-1 text-caption text-faint transition-colors hover:text-muted disabled:opacity-50"
+                  data-testid="fork-message"
+                >
+                  <GitBranch size={11} />
+                  {t(forkBusy === message.id ? "Opening private chat…" : "Continue in private chat")}
+                </button>
+              ) : null;
+            return message.role === "user" ? (
               <div key={message.id} className="flex flex-col items-end gap-1">
                 {message.author && (
                   <span className="px-1 text-small text-faint" data-testid="message-author">
@@ -2718,6 +2769,7 @@ function Conversation({
                 <div className="max-w-[85%] whitespace-pre-wrap rounded-2xl rounded-br-md bg-elevated px-3.5 py-2 text-body leading-relaxed">
                   {message.content}
                 </div>
+                {forkButton}
               </div>
             ) : (
               <div key={message.id} className="min-w-0 text-body leading-relaxed">
@@ -2727,9 +2779,10 @@ function Conversation({
                 ) : busy && index === messages.length - 1 ? (
                   <TurnStatus />
                 ) : null}
+                {forkButton}
               </div>
-            )
-          )}
+            );
+          })}
 
           {approval && (
             <ApprovalPanel
@@ -2744,12 +2797,17 @@ function Conversation({
 
       <div className="shrink-0 px-4 pb-4">
         <div className="mx-auto w-full max-w-3xl">
+          {turnTaken && active.turnUserName && (
+            <p className="mb-2 text-center text-small text-muted" data-testid="shared-turn-lock">
+              {interpolate(t("{name} is using this shared chat"), { name: active.turnUserName })}
+            </p>
+          )}
           {error && <TurnError error={error} />}
           <Composer
             value={input}
             onChange={setInput}
             onSubmit={(text, attachments) => void send(text, attachments)}
-            busy={busy}
+            busy={busy || turnTaken}
             onStop={() => abort.current?.abort()}
             placeholder={t("Message TaCos")}
             inputRef={box}

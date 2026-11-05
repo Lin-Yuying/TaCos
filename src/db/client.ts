@@ -880,6 +880,8 @@ function bootstrap(sqlite: Database.Database) {
   addColumnIfMissing(sqlite, "agent_threads", "model", "TEXT NOT NULL DEFAULT ''");
   addColumnIfMissing(sqlite, "agent_threads", "effort", "TEXT NOT NULL DEFAULT ''");
   addColumnIfMissing(sqlite, "agent_threads", "approval", "TEXT NOT NULL DEFAULT 'ask'");
+  addColumnIfMissing(sqlite, "agent_threads", "turn_user_id", "TEXT");
+  addColumnIfMissing(sqlite, "agent_threads", "turn_started_at", "TEXT");
   // H-P1-08: Chat/Work mode is gone from the product. Drop the legacy column when SQLite allows it.
   dropColumnIfPresent(sqlite, "agent_threads", "mode");
   if (addColumnIfMissing(sqlite, "pages", "project_id", "TEXT")) {

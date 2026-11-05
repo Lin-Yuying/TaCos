@@ -14,6 +14,7 @@ import {
 } from "@/lib/agent-handoff";
 import {
   deleteAgentThread,
+  forkAgentThreadFromMessage,
   renameAgentThread,
   setAgentThreadApproval,
   setAgentThreadEngine,
@@ -168,6 +169,19 @@ export async function setAgentThreadUnreadAction(
   return run(async () => {
     const { user } = await requireWorkspace(workspaceId);
     const thread = await setAgentThreadUnread(workspaceId, user.id, threadId, unread);
+    refresh(workspaceId);
+    return thread;
+  });
+}
+
+export async function forkAgentThreadFromMessageAction(
+  workspaceId: string,
+  threadId: string,
+  messageId: string
+): Promise<ActionResult<AgentThread>> {
+  return run(async () => {
+    const { user } = await requireWorkspace(workspaceId);
+    const thread = await forkAgentThreadFromMessage(workspaceId, user.id, threadId, messageId);
     refresh(workspaceId);
     return thread;
   });

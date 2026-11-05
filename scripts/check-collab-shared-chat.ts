@@ -1,4 +1,4 @@
-// H-COLLAB-09: a workspace member continues a shared chat. Messages keep their author.
+// H-COLLAB-09 / team-2.3 item 7: shared chat authorship, one turn at a time, fork from a message.
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -12,6 +12,7 @@ function assert(ok: unknown, message: string): asserts ok {
 async function main() {
   const { getDb } = await import("../src/db/client");
   const { projects, users, workspaceMembers } = await import("../src/db/schema");
+  const { TacosError } = await import("../src/lib/issues");
   const threads = await import("../src/lib/agent-threads");
   const db = getDb();
   const [project] = await db.select().from(projects).limit(1);
@@ -43,6 +44,34 @@ async function main() {
     hidden = true;
   }
   assert(hidden, "a private chat must refuse other members");
+
+  await threads.setAgentThreadVisibility(ws, owner.id, t.id, "shared");
+
+  await threads.claimSharedChatTurn(t.id, owner.id);
+  let refused = false;
+  try {
+    await threads.claimSharedChatTurn(t.id, mate.id);
+  } catch (err) {
+    refused = err instanceof TacosError && err.status === 409;
+  }
+  assert(refused, "second sender refused while a turn runs");
+  await threads.releaseSharedChatTurn(t.id, owner.id);
+
+  const sourceBefore = await threads.getAgentThread(ws, owner.id, t.id);
+  const forkAt = sourceBefore.messages.find((message) => message.role === "assistant")!.id;
+  const forked = await threads.forkAgentThreadFromMessage(ws, mate.id, t.id, forkAt);
+  const forkDetail = await threads.getAgentThread(ws, mate.id, forked.id);
+  assert(forkDetail.visibility === "private" && forkDetail.mine, "fork opens a private chat for the member");
+  assert(forkDetail.messages.length === 2, "fork copies history up to the message");
+  assert(forkDetail.messages[0]?.content === "Plan the sprint", "fork keeps the opening user message");
+  assert(forkDetail.messages[1]?.content === "Here is a plan.", "fork keeps the assistant reply");
+  const sourceAfter = await threads.getAgentThread(ws, owner.id, t.id);
+  assert(sourceAfter.messages.length === sourceBefore.messages.length, "fork leaves the source unchanged");
+  assert(
+    sourceAfter.messages.every((message, index) => message.id === sourceBefore.messages[index]?.id),
+    "fork must not rewrite source message ids"
+  );
+
   console.log("check-collab-shared-chat: pass");
 }
 

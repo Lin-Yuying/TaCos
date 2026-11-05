@@ -530,6 +530,9 @@ export const agentThreads = sqliteTable(
     visibility: text("visibility").notNull().default("private"),
     // H-COLLAB-08: the task that "用 Agent 推进" opened this chat for, or null.
     focusIssueId: text("focus_issue_id"),
+    // team-2.3: one Agent turn at a time on a shared chat.
+    turnUserId: text("turn_user_id"),
+    turnStartedAt: text("turn_started_at"),
     createdBy: text("created_by").notNull(),
     createdAt: text("created_at").notNull(),
     updatedAt: text("updated_at").notNull(),

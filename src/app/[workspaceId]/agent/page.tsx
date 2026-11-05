@@ -85,6 +85,7 @@ async function AgentContent({
   return (
     <AgentWorkspace
       workspaceId={workspaceId}
+      viewerId={user.id}
       ready={ready}
       engines={engines}
       defaultEngine={defaultEngine}

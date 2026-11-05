@@ -19,7 +19,9 @@ import {
 } from "@/lib/agent-sessions";
 import {
   appendAgentMessage,
+  claimSharedChatTurn,
   loadThreadForTurn,
+  releaseSharedChatTurn,
   setThreadEngine,
 } from "@/lib/agent-threads";
 import { openHandoffOnThread } from "@/lib/agent-handoff";
@@ -161,7 +163,10 @@ export async function POST(request: Request) {
         throw new TacosError("Type a message or attach a file", 400);
       }
       const storedMessage = message || wires.map((wire) => wire.name).join(", ");
-      await appendAgentMessage({ threadId, role: "user", content: storedMessage, authorId: access.user.id });
+      const actorId = access.user.id;
+      await claimSharedChatTurn(threadId, actorId);
+      try {
+      await appendAgentMessage({ threadId, role: "user", content: storedMessage, authorId: actorId });
       const assistantId = await appendAgentMessage({ threadId, role: "assistant", content: "" });
 
       const messages = agentMessages({
@@ -184,6 +189,11 @@ export async function POST(request: Request) {
 
       const turn = { threadId, messageId: assistantId };
       const flatPrompt = flattenMessages(messages);
+      const finishSharedTurn = () => void releaseSharedChatTurn(threadId, actorId);
+      const endTurn = (also?: () => void) => () => {
+        also?.();
+        finishSharedTurn();
+      };
 
       // On a server the turn runs on this person's own computer, with their keys and logins.
       if (isServerMode()) {
@@ -209,7 +219,9 @@ export async function POST(request: Request) {
           },
           signal: request.signal,
         });
-        return new Response(recordTurn(turnEventsToSse(events), turn), { headers: STREAM_HEADERS });
+        return new Response(recordTurn(turnEventsToSse(events), { ...turn, onEnd: endTurn() }), {
+          headers: STREAM_HEADERS,
+        });
       }
 
       const grant = issueAgentToolGrant({
@@ -217,7 +229,7 @@ export async function POST(request: Request) {
         workspaceId,
         projectId: thread.projectId,
         projectKey: thread.projectKey,
-        userId: access.user.id,
+        userId: actorId,
         approval: thread.approval,
         autoApproveTools: AGENT_TOOLS.filter((tool) => !tool.write).map((tool) => tool.name),
         neverAutoApproveTools: AGENT_TOOLS.filter((tool) => tool.delete).map((tool) => tool.name),
@@ -284,7 +296,7 @@ export async function POST(request: Request) {
         });
         const stream = turnEventsToSse(events);
         return new Response(
-          recordTurn(stream, { ...turn, onEnd: grant ? () => revokeAgentToolGrant(grant.token) : undefined }),
+          recordTurn(stream, { ...turn, onEnd: endTurn(grant ? () => revokeAgentToolGrant(grant.token) : undefined) }),
           { headers: STREAM_HEADERS }
         );
       }
@@ -332,7 +344,7 @@ export async function POST(request: Request) {
         });
         const stream = turnEventsToSse(events);
         return new Response(
-          recordTurn(stream, { ...turn, onEnd: grant ? () => revokeAgentToolGrant(grant.token) : undefined }),
+          recordTurn(stream, { ...turn, onEnd: endTurn(grant ? () => revokeAgentToolGrant(grant.token) : undefined) }),
           { headers: STREAM_HEADERS }
         );
       }
@@ -380,7 +392,7 @@ export async function POST(request: Request) {
         });
         const stream = turnEventsToSse(events);
         return new Response(
-          recordTurn(stream, { ...turn, onEnd: grant ? () => revokeAgentToolGrant(grant.token) : undefined }),
+          recordTurn(stream, { ...turn, onEnd: endTurn(grant ? () => revokeAgentToolGrant(grant.token) : undefined) }),
           { headers: STREAM_HEADERS }
         );
       }
@@ -428,7 +440,7 @@ export async function POST(request: Request) {
         });
         const stream = turnEventsToSse(events);
         return new Response(
-          recordTurn(stream, { ...turn, onEnd: grant ? () => revokeAgentToolGrant(grant.token) : undefined }),
+          recordTurn(stream, { ...turn, onEnd: endTurn(grant ? () => revokeAgentToolGrant(grant.token) : undefined) }),
           { headers: STREAM_HEADERS }
         );
       }
@@ -476,7 +488,7 @@ export async function POST(request: Request) {
         });
         const stream = turnEventsToSse(events);
         return new Response(
-          recordTurn(stream, { ...turn, onEnd: grant ? () => revokeAgentToolGrant(grant.token) : undefined }),
+          recordTurn(stream, { ...turn, onEnd: endTurn(grant ? () => revokeAgentToolGrant(grant.token) : undefined) }),
           { headers: STREAM_HEADERS }
         );
       }
@@ -486,6 +498,10 @@ export async function POST(request: Request) {
         400,
         "Pick a wired harness in the composer until the remaining adapters land."
       );
+      } catch (err) {
+        await releaseSharedChatTurn(threadId, actorId);
+        throw err;
+      }
     }
 
     if (!text.trim() && action !== "continue" && action !== "custom") {
