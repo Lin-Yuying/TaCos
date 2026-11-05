@@ -10,7 +10,7 @@ import {
   builtinAvatarId,
   nextFreeAvatar,
 } from "@/lib/avatars";
-import { createSiteMember } from "@/lib/admin";
+import { createSiteMember, setMemberDisplayName } from "@/lib/admin";
 import { asLocale, LOCALE_COOKIE, type Locale } from "@/lib/i18n";
 import {
   createSession,
@@ -156,6 +156,15 @@ export async function saveAvatarAction(
       .where(eq(users.id, user.id));
     revalidatePath("/", "layout");
     return { avatar: stored };
+  });
+}
+
+export async function saveDisplayNameAction(displayName: string): Promise<ActionResult<void>> {
+  return run(async () => {
+    const user = await getSessionUser();
+    if (!user) throw new TacosError("Not signed in", 401);
+    await setMemberDisplayName(user.id, displayName);
+    revalidatePath("/", "layout");
   });
 }
 

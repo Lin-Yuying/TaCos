@@ -263,6 +263,8 @@ const zh: Record<string, string> = {
   "Username is already taken": "这个用户名已经有人用了，换一个吧。",
   "e.g. alex": "例如 alex",
   "Display name": "显示名称",
+  "Display name is required": "显示名称不能为空",
+  "Display name must be 40 characters or fewer": "显示名称不能超过 40 个字符",
   "e.g. Alex Chen": "例如 陈小明",
   Password: "密码",
   "At least 8 characters": "至少 8 个字符",

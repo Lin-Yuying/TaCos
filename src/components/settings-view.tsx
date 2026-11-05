@@ -16,6 +16,7 @@ import {
   removeMemberAction,
   rotateJoinCodeAction,
   saveAvatarAction,
+  saveDisplayNameAction,
   setMemberRoleAction,
   deleteWorkspaceAction,
   saveLocaleAction,
@@ -162,6 +163,8 @@ export function SettingsView({
   const [busy, setBusy] = useState(false);
   const [avatar, setAvatar] = useState(currentUser.avatar);
   const [avatarError, setAvatarError] = useState<string | null>(null);
+  const [displayName, setDisplayName] = useState(currentUser.displayName);
+  const [nameError, setNameError] = useState<string | null>(null);
   const [icon, setIcon] = useState(workspace.icon);
   const [iconError, setIconError] = useState<string | null>(null);
   const [deleteError, setDeleteError] = useState<string | null>(null);
@@ -420,6 +423,25 @@ export function SettingsView({
     }
   }
 
+  async function saveDisplayName() {
+    const name = displayName.trim();
+    if (name === currentUser.displayName) {
+      setDisplayName(name);
+      setNameError(null);
+      return;
+    }
+    setBusy(true);
+    setNameError(null);
+    const result = await saveDisplayNameAction(name);
+    setBusy(false);
+    if (result.ok) {
+      setDisplayName(name);
+      router.refresh();
+    } else {
+      setNameError(result.error);
+    }
+  }
+
   async function clearAvatar() {
     setBusy(true);
     setAvatarError(null);
@@ -558,7 +580,20 @@ export function SettingsView({
           <div className="flex items-center gap-4 rounded-lg border border-border p-4">
             <AssigneeAvatar displayName={currentUser.displayName} avatar={avatar} size={56} />
             <div className="min-w-0 flex-1">
-              <div className="text-body font-medium">{currentUser.displayName}</div>
+              <input
+                value={displayName}
+                maxLength={40}
+                disabled={busy}
+                aria-label={t("Display name")}
+                title={t("Display name")}
+                onChange={(e) => setDisplayName(e.target.value)}
+                onBlur={() => void saveDisplayName()}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") e.currentTarget.blur();
+                }}
+                className="-ml-1.5 w-full max-w-xs rounded border border-transparent bg-transparent px-1.5 py-0.5 text-body font-medium outline-none transition-colors hover:border-border focus:border-border-strong"
+              />
+              {nameError && <div className="text-small text-danger">{t(nameError)}</div>}
               <div className="text-caption text-faint">@{currentUser.username}</div>
               <div className="mt-2 flex items-center gap-2">
                 <label
