@@ -174,9 +174,9 @@ export function ProjectWorkspace({
         />
       ) : (
         <>
-          {/* The list's own row is a header, so it hangs from the same 52px column as
+          {/* The list's own row is a header, so it hangs from the same card gutter as
               the project title and Properties; the board below keeps the reading gutters. */}
-          <header className="flex h-12 shrink-0 items-center gap-2 border-b border-border pl-[52px] pr-10 lg:pr-20 xl:pr-32">
+          <header className="flex h-12 shrink-0 items-center gap-2 border-b border-border pl-4 pr-10 lg:pr-20 xl:pr-32">
             {status ? (
               <button
                 type="button"

@@ -81,9 +81,9 @@ export function ListHeader({
       : t(TITLES[view] ?? "Tasks");
 
   return (
-    <header className="flex h-12 shrink-0 items-center gap-2 overflow-hidden border-b border-border pl-[52px] pr-10 lg:pr-20 xl:pr-32">
-      {/* The title hangs from the same 52px column as the project page's "All tasks",
-          so switching between the two lists doesn't shift the heading sideways. */}
+    <header className="flex h-12 shrink-0 items-center gap-2 overflow-hidden border-b border-border pl-4 pr-10 lg:pr-20 xl:pr-32">
+      {/* The title hangs from the card's gutter, the same column as the project page's
+          "All tasks", so switching between the two lists doesn't shift the heading sideways. */}
       {/* Shrinks last: the person's name and the count stay readable while the search
           field gives up width as the detail panel eats into the list. */}
       <h1 className="min-w-0 shrink-[0.25] truncate text-body font-semibold">{heading}</h1>

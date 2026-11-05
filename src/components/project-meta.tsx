@@ -445,9 +445,18 @@ export function ProjectMeta({
           <MetaLabel label={t("Resources")} onHide={() => rows.toggle("resources")} />
           <div className="flex min-w-0 flex-1 flex-wrap items-center gap-1.5">
             {resources.map((resource) => {
+              // A document's name and icon belong to the page, not to the attachment:
+              // deriving them keeps the chip in step with a rename made in the pane,
+              // which refreshes the page props but leaves this row's local copy alone.
+              const page =
+                resource.kind === "doc" && resource.pageId
+                  ? documents.find((document) => document.id === resource.pageId)
+                  : undefined;
+              const title = page?.title ?? resource.title;
+              const docIcon = page ? page.icon : resource.icon;
               const icon =
-                resource.kind === "doc" && resource.icon ? (
-                  <span className="text-small leading-none">{resource.icon}</span>
+                resource.kind === "doc" && docIcon ? (
+                  <span className="text-small leading-none">{docIcon}</span>
                 ) : resource.kind === "doc" ? (
                   <FileText size={12} className="text-muted" />
                 ) : (
@@ -468,7 +477,7 @@ export function ProjectMeta({
                       className="flex min-w-0 items-center gap-1.5 py-0.5 pl-2 pr-1.5"
                     >
                       {icon}
-                      <span className="max-w-[220px] truncate">{resource.title}</span>
+                      <span className="max-w-[220px] truncate">{title}</span>
                     </Link>
                   ) : (
                     <a
@@ -478,14 +487,14 @@ export function ProjectMeta({
                       className="flex min-w-0 items-center gap-1.5 py-0.5 pl-2 pr-1.5"
                     >
                       {icon}
-                      <span className="max-w-[220px] truncate">{resource.title}</span>
+                      <span className="max-w-[220px] truncate">{title}</span>
                       <ArrowUpRight size={11} className="shrink-0 text-faint" />
                     </a>
                   )}
                   {access.canEdit && (
                     <button
                       type="button"
-                      aria-label={t("Remove {name}", { name: resource.title })}
+                      aria-label={t("Remove {name}", { name: title })}
                       title={t("Remove")}
                       onClick={() => void removeResource(resource.id)}
                       className="mr-1 rounded-full p-0.5 text-faint transition-colors hover:bg-elevated hover:text-danger"
