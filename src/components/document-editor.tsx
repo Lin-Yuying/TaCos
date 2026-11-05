@@ -201,7 +201,7 @@ function SelectionStyleButtons({ editor }: { editor: Editor }) {
       </button>
       {linkDraft !== null && (
         <form
-          className="flex basis-full items-center gap-1 px-1 py-1"
+          className="order-last flex basis-full items-center gap-1 px-1 py-1"
           onSubmit={(event) => {
             event.preventDefault();
             applyLink(linkDraft);
@@ -209,6 +209,7 @@ function SelectionStyleButtons({ editor }: { editor: Editor }) {
         >
           <input
             data-testid="doc-link-field"
+            autoFocus
             value={linkDraft}
             onChange={(event) => setLinkDraft(event.target.value)}
             placeholder={t("Web address")}
@@ -740,6 +741,7 @@ export function DocumentEditor({
           shouldShow={({ editor: current, state, view, element }) =>
             !state.selection.empty &&
             !current.isActive("codeBlock") &&
+            !current.isActive("image") &&
             (view.hasFocus() || element.contains(document.activeElement))
           }
           className="flex max-w-[360px] flex-wrap items-center gap-0.5 rounded-md border border-border bg-overlay p-0.5 shadow-md"
