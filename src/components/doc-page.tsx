@@ -33,6 +33,7 @@ import {
   createPageAction,
   deletePageAction,
   listPageCommentsAction,
+  pageEmbedBodyAction,
   removePageCommentAction,
   savePageDocAction,
   setPageCommentResolvedAction,
@@ -186,6 +187,7 @@ export function DocPageView({
   // Typing schedules a write; the unmount path writes whatever is still pending so
   // leaving the page never costs the last keystrokes.
   const outsideEdit = useRef<((edit: OutsideEdit) => void) | null>(null);
+  const [addedEmbeds, setAddedEmbeds] = useState<Record<string, string>>({});
 
   function editDoc(next: string) {
     setDoc(next);
@@ -369,6 +371,15 @@ export function DocPageView({
   // Inserting at the end is predictable; the editor owns the caret and has no public
   // "insert at cursor" API, and a page reference is usually added as its own block.
   function insertRef(reference: PageRefEntry, embed: boolean) {
+    // The server read embedded pages when this page opened; a new embed needs its text now.
+    if (embed) {
+      void pageEmbedBodyAction(workspaceId, reference.id).then((result) => {
+        if (result.ok && result.data !== null) {
+          const body = result.data;
+          setAddedEmbeds((current) => ({ ...current, [reference.id]: body }));
+        }
+      });
+    }
     const syntax = embed ? `![[${reference.title}|${reference.id}]]` : `[[${reference.title}|${reference.id}]]`;
     if (sharing) {
       outsideEdit.current?.({ at: "end", text: syntax });
@@ -414,8 +425,8 @@ export function DocPageView({
   // References inside the pane open in the pane, so following one never loses the page
   // you were reading.
   const pageCtx = useMemo<PageContext>(
-    () => (onOpenPage ? { ...ctx, onOpen: onOpenPage } : ctx),
-    [ctx, onOpenPage]
+    () => ({ ...ctx, embeds: { ...ctx.embeds, ...addedEmbeds }, ...(onOpenPage ? { onOpen: onOpenPage } : {}) }),
+    [ctx, onOpenPage, addedEmbeds]
   );
   const placed = useMemo(() => placedPageKeys(doc), [doc]);
   const blockedDocMentions = useMemo(
