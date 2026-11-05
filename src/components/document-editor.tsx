@@ -23,13 +23,16 @@ import {
   List,
   ListOrdered,
   MessageSquare,
+  MessageSquarePlus,
   Minus,
   Quote,
   Strikethrough,
   Table as TableIcon,
   Type,
 } from "lucide-react";
-import { documentExtensions } from "@/lib/editor/extensions";
+import { AssigneeAvatar } from "@/components/issue-table";
+import { DocMention, documentExtensions } from "@/lib/editor/extensions";
+import type { Member } from "@/lib/issues";
 import { documentMarkdown, markdownToDocument } from "@/lib/editor/document-markdown";
 import { anchorFromSelection, anchorRanges } from "@/lib/editor/anchors";
 import type { DocAnchor } from "@/lib/doc-anchor";
@@ -71,7 +74,28 @@ function matchCommands(query: string): SlashCommand[] {
   return COMMANDS.filter((c) => `${c.label} ${c.keywords}`.toLowerCase().includes(needle));
 }
 
-type MenuState = { items: SlashCommand[]; selected: number; x: number; y: number; pick: (c: SlashCommand) => void };
+type MenuState<T = SlashCommand> = { items: T[]; selected: number; x: number; y: number; pick: (item: T) => void };
+
+// Arrow keys, Enter and Escape while a suggestion menu is open.
+function menuKey<T>(event: KeyboardEvent, open: MenuState<T> | null, set: (next: MenuState<T> | null) => void): boolean {
+  if (!open || open.items.length === 0) return false;
+  if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+    const step = event.key === "ArrowDown" ? 1 : open.items.length - 1;
+    set({ ...open, selected: (open.selected + step) % open.items.length });
+    return true;
+  }
+  if (event.key === "Enter") {
+    open.pick(open.items[open.selected]);
+    return true;
+  }
+  if (event.key === "Escape") {
+    set(null);
+    return true;
+  }
+  return false;
+}
+
+const NO_MEMBERS: Member[] = [];
 
 export type EditorAnchor = DocAnchor & { id: string };
 
@@ -138,6 +162,8 @@ export function DocumentEditor({
   pages,
   editable = true,
   anchors = NO_ANCHORS,
+  members = NO_MEMBERS,
+  viewerId = null,
   activeAnchor = null,
   onComment,
   onAnchorClick,
@@ -152,6 +178,9 @@ export function DocumentEditor({
   // A reader who cannot edit still sees the same page and can select text to comment on.
   editable?: boolean;
   anchors?: EditorAnchor[];
+  // Who "@" offers; the viewer comes last.
+  members?: Member[];
+  viewerId?: string | null;
   activeAnchor?: string | null;
   onComment?: (anchor: DocAnchor) => void;
   onAnchorClick?: (id: string) => void;
@@ -169,6 +198,11 @@ export function DocumentEditor({
   const pagesRef = useRef(pages);
   const [menu, setMenu] = useState<MenuState | null>(null);
   const menuRef = useRef<MenuState | null>(null);
+  const [mentionMenu, setMentionMenu] = useState<MenuState<Member> | null>(null);
+  const mentionMenuRef = useRef<MenuState<Member> | null>(null);
+  const membersRef = useRef({ members, viewerId });
+  // The text block under the pointer, for the comment button in the right margin.
+  const [hovered, setHovered] = useState<{ from: number; to: number; top: number } | null>(null);
   const [anchorStore] = useState(() => new AnchorStore());
   const locatedRef = useRef(onAnchorsLocated);
   const anchorClickRef = useRef(onAnchorClick);
@@ -179,6 +213,8 @@ export function DocumentEditor({
     onChangeRef.current = onChange;
     pagesRef.current = pages;
     menuRef.current = menu;
+    mentionMenuRef.current = mentionMenu;
+    membersRef.current = { members, viewerId };
     anchorClickRef.current = onAnchorClick;
     locatedRef.current = onAnchorsLocated;
   });
@@ -209,27 +245,48 @@ export function DocumentEditor({
                 onStart: (props) => show(props, 0),
                 onUpdate: (props) => show(props, 0),
                 onExit: () => setMenu(null),
-                onKeyDown: ({ event }) => {
-                  const open = menuRef.current;
-                  if (!open || open.items.length === 0) return false;
-                  if (event.key === "ArrowDown" || event.key === "ArrowUp") {
-                    const step = event.key === "ArrowDown" ? 1 : open.items.length - 1;
-                    setMenu({ ...open, selected: (open.selected + step) % open.items.length });
-                    return true;
-                  }
-                  if (event.key === "Enter") {
-                    open.pick(open.items[open.selected]);
-                    return true;
-                  }
-                  if (event.key === "Escape") {
-                    setMenu(null);
-                    return true;
-                  }
-                  return false;
-                },
+                onKeyDown: ({ event }) => menuKey(event, menuRef.current, setMenu),
               }),
             }),
           ];
+        },
+      }),
+    []
+  );
+
+  const mention = useMemo(
+    () =>
+      DocMention.configure({
+        suggestion: {
+          char: "@",
+          // Chinese text runs up to the "@" with no space before it.
+          allowedPrefixes: null,
+          items: ({ query }: { query: string }): Member[] => {
+            const { members: everyone, viewerId: me } = membersRef.current;
+            const needle = query.toLowerCase();
+            return everyone
+              .filter((m) => m.username.toLowerCase().startsWith(needle) || m.displayName.toLowerCase().includes(needle))
+              .sort((a, b) => Number(a.id === me) - Number(b.id === me))
+              .slice(0, 8);
+          },
+          render: () => {
+            const show = (props: SuggestionProps<Member>) => {
+              const rect = props.clientRect?.();
+              setMentionMenu({
+                items: props.items,
+                selected: 0,
+                x: rect?.left ?? 0,
+                y: rect?.bottom ?? 0,
+                pick: (member) => props.command({ id: member.username, label: null }),
+              });
+            };
+            return {
+              onStart: show,
+              onUpdate: show,
+              onExit: () => setMentionMenu(null),
+              onKeyDown: ({ event }: { event: KeyboardEvent }) => menuKey(event, mentionMenuRef.current, setMentionMenu),
+            };
+          },
         },
       }),
     []
@@ -245,7 +302,7 @@ export function DocumentEditor({
   const editor = useEditor({
     immediatelyRender: false,
     extensions: [
-      ...documentExtensions({ sharedHistory: Boolean(collab) }),
+      ...documentExtensions({ sharedHistory: Boolean(collab), mention }),
       Placeholder.configure({ placeholder: placeholder ?? "" }), slash, CommentAnchors.configure({ store: anchorStore }),
       ...(collab
         ? [
@@ -344,8 +401,31 @@ export function DocumentEditor({
     { label: "Code", icon: Code, name: "code", run: (e: Editor) => e.chain().focus().toggleCode().run() },
   ];
 
+  // Finds the text block level with the pointer, wherever across the row the pointer is.
+  const trackBlock = (event: React.MouseEvent<HTMLDivElement>) => {
+    if (!editor || !onComment) return;
+    const text = editor.view.dom.getBoundingClientRect();
+    const left = Math.min(text.right - 1, Math.max(text.left + 1, event.clientX));
+    const found = editor.view.posAtCoords({ left, top: event.clientY });
+    const $pos = found ? editor.state.doc.resolve(found.pos) : null;
+    if (!$pos || !$pos.parent.isTextblock || $pos.parent.content.size === 0) {
+      setHovered(null);
+      return;
+    }
+    const from = $pos.start();
+    const to = $pos.end();
+    const top = editor.view.coordsAtPos(from).top - event.currentTarget.getBoundingClientRect().top;
+    setHovered((current) =>
+      current?.from === from && current.to === to && current.top === top ? current : { from, to, top }
+    );
+  };
+
   return (
-    <div className="document-editor">
+    <div
+      className={`document-editor relative ${onComment ? "pr-7" : ""}`}
+      onMouseMove={trackBlock}
+      onMouseLeave={() => setHovered(null)}
+    >
       {editor && (
         <BubbleMenu
           editor={editor}
@@ -396,6 +476,52 @@ export function DocumentEditor({
         }}
       />
       <EditorContent editor={editor} />
+      {editor && onComment && hovered && (
+        <button
+          type="button"
+          data-testid="block-comment"
+          title={t("Comment")}
+          aria-label={t("Comment")}
+          style={{ top: hovered.top }}
+          onMouseDown={(event) => event.preventDefault()}
+          onClick={() => {
+            const end = Math.min(hovered.to, editor.state.doc.content.size);
+            const anchor = anchorFromSelection(editor.state.doc, hovered.from, end);
+            if (anchor) onComment(anchor);
+          }}
+          className="absolute right-0 flex h-6 w-6 items-center justify-center rounded text-faint transition-colors hover:bg-elevated hover:text-text"
+        >
+          <MessageSquarePlus size={14} />
+        </button>
+      )}
+      {mentionMenu && mentionMenu.items.length > 0 && (
+        <div
+          role="listbox"
+          data-testid="doc-mention-menu"
+          style={{ position: "fixed", left: mentionMenu.x, top: mentionMenu.y + 4 }}
+          className="z-50 max-h-72 w-64 overflow-y-auto rounded-md border border-border bg-overlay p-1 shadow-md"
+        >
+          {mentionMenu.items.map((member, index) => (
+            <button
+              key={member.id}
+              type="button"
+              role="option"
+              aria-selected={index === mentionMenu.selected}
+              onMouseDown={(event) => {
+                event.preventDefault();
+                mentionMenu.pick(member);
+              }}
+              className={`flex w-full items-center gap-2 rounded px-2 py-1 text-left text-body ${
+                index === mentionMenu.selected ? "bg-elevated text-text" : "text-muted"
+              }`}
+            >
+              <AssigneeAvatar displayName={member.displayName} avatar={member.avatar} size={16} />
+              <span className="min-w-0 flex-1 truncate">{member.displayName}</span>
+              <span className="truncate text-small text-faint">@{member.username}</span>
+            </button>
+          ))}
+        </div>
+      )}
       {menu && menu.items.length > 0 && (
         <div
           role="listbox"

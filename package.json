@@ -1,7 +1,7 @@
 {
   "name": "tacos",
   "productName": "TaCos",
-  "version": "2.2.0",
+  "version": "2.2.1",
   "private": true,
   "description": "TaCos — self-hosted issue tracker for teams and their agents",
   "license": "MIT",
@@ -42,6 +42,7 @@
     "@tiptap/extension-collaboration": "^3.32.2",
     "@tiptap/extension-collaboration-caret": "^3.32.2",
     "@tiptap/extension-image": "^3.32.2",
+    "@tiptap/extension-mention": "^3.32.2",
     "@tiptap/extension-placeholder": "^3.32.2",
     "@tiptap/extension-table": "^3.32.2",
     "@tiptap/extension-table-cell": "^3.32.2",

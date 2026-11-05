@@ -15,6 +15,8 @@ const SYNTAX = `# Heading one
 A paragraph with **bold**, *italic*, ***both***, ~~struck~~, \`code\` and a [link](https://example.com/a?b=1).
 Second line of the same paragraph.
 
+Ask @sam.r and **@bold** here, 请@alice 看一下, but not a@b or foo/@bar or \`@code\`.
+
 - bullet one
 - bullet two
   - nested bullet

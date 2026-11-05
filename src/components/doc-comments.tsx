@@ -172,7 +172,7 @@ export function DocCommentsPanel({
             </button>
           </div>
         )}
-        <MentionBox value={body} members={members} busy={busy} onChange={setBody} onSubmit={() => void submit()} />
+        <MentionBox value={body} members={members} busy={busy} onChange={setBody} onSubmit={() => void submit()} focusOn={draftAnchor} />
       </div>}
     </aside>
   );
