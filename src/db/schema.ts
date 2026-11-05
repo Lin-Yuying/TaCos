@@ -351,6 +351,10 @@ export const issues = sqliteTable(
     dueDate: text("due_date"),
     // how long before dueDate to remind: 12h | 1d | 3d | 5d | 7d
     reminder: text("reminder"),
+    // daily | weekly | monthly. Null when the task does not repeat.
+    recurrence: text("recurrence"),
+    // The next task already opened from this one. Set once, when it is marked done.
+    recurredInto: text("recurred_into"),
     // H-COLLAB-11: "<dueDate>|<preset>" of the reminder already sent. A new due date or
     // preset gives a new key, so the reminder fires again; the same key never fires twice.
     reminderSentFor: text("reminder_sent_for"),

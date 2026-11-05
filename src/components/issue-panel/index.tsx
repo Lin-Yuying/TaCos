@@ -8,6 +8,7 @@ import type { Label, Member } from "@/lib/issues";
 import { PanelHeader } from "./header";
 import { PropertiesRow } from "./properties";
 import { DueRow } from "./due-row";
+import { RecurrenceRow } from "./recurrence-row";
 import { Subtasks } from "./subtasks";
 import { Dependencies } from "./dependencies";
 import { BlockerReport } from "./blocker-report";
@@ -375,6 +376,8 @@ function IssuePanel({
         <SourceChatRow workspaceId={workspaceId} threadId={detail.sourceThreadId} />
 
         <DueRow detail={detail} onUpdate={update} />
+
+        <RecurrenceRow detail={detail} onUpdate={update} />
 
         <Subtasks children={detail.children} busy={busy} onAdd={addSubtask} />
 

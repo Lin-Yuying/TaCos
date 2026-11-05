@@ -54,8 +54,11 @@ import {
   DEFAULT_PROJECT_COLOR,
   REMINDER_META,
   REMINDER_PRESETS,
+  RECURRENCES,
+  RECURRENCE_META,
   STATUS_ORDER,
   type Priority,
+  type Recurrence,
   type ReminderPreset,
   type Status,
   type Via,
@@ -102,6 +105,7 @@ export type Issue = {
   // YYYY-MM-DD, chosen from the calendar in the task panel
   dueDate: string | null;
   reminder: ReminderPreset | null;
+  recurrence: Recurrence | null;
   // the person who opened it, or who ran the agent that published it
   createdBy: string | null;
   createdVia: Via;
@@ -1818,6 +1822,7 @@ async function toIssueRows(workspaceId: string, rows: IssueRow[]): Promise<Issue
       assignees: assigneesByIssue.get(row.id) ?? [],
       dueDate: row.dueDate ?? null,
       reminder: (row.reminder as ReminderPreset | null) ?? null,
+      recurrence: (row.recurrence as Recurrence | null) ?? null,
       createdBy: row.createdBy,
       createdVia: row.createdVia as Via,
       claimedBy: row.claimedBy ?? null,
@@ -2161,6 +2166,7 @@ export type CreateIssueInput = {
   labelNames?: string[];
   dueDate?: string | null;
   reminder?: ReminderPreset | null;
+  recurrence?: Recurrence | null;
   project: string;
   // Identifier or id of the task this one belongs to.
   parent?: string | null;
@@ -2174,6 +2180,7 @@ export type UpdateIssueInput = {
   labelNames?: string[];
   dueDate?: string | null;
   reminder?: ReminderPreset | null;
+  recurrence?: Recurrence | null;
   // Identifier or id of the parent task. Null or "" detaches this task.
   parent?: string | null;
 };
@@ -2185,6 +2192,31 @@ function normalizeDueDate(value: unknown): string | null {
     throw new TacosError("Due date must be a calendar date (YYYY-MM-DD)");
   }
   return text;
+}
+
+function normalizeRecurrence(value: unknown): Recurrence | null {
+  if (value === null || value === undefined || value === "") return null;
+  const text = String(value);
+  if (!RECURRENCES.includes(text as Recurrence)) {
+    throw new TacosError("Recurrence must be daily, weekly, or monthly");
+  }
+  return text as Recurrence;
+}
+
+function addRecurrence(dueDate: string | null, recurrence: Recurrence): string | null {
+  if (!dueDate) return null;
+  const [year, month, day] = dueDate.split("-").map(Number);
+  const date = new Date(Date.UTC(year, month - 1, day));
+  if (recurrence === "daily") date.setUTCDate(date.getUTCDate() + 1);
+  if (recurrence === "weekly") date.setUTCDate(date.getUTCDate() + 7);
+  if (recurrence === "monthly") {
+    const target = new Date(Date.UTC(year, month, 1));
+    const last = new Date(Date.UTC(target.getUTCFullYear(), target.getUTCMonth() + 1, 0)).getUTCDate();
+    date.setUTCMonth(date.getUTCMonth() + 1, Math.min(day, last));
+  }
+  const monthText = String(date.getUTCMonth() + 1).padStart(2, "0");
+  const dayText = String(date.getUTCDate()).padStart(2, "0");
+  return `${date.getUTCFullYear()}-${monthText}-${dayText}`;
 }
 
 function normalizeReminder(value: unknown): ReminderPreset | null {
@@ -2254,6 +2286,7 @@ export async function createIssue(
   const description = input.description ?? "";
   const dueDate = normalizeDueDate(input.dueDate);
   const reminder = dueDate ? normalizeReminder(input.reminder) : null;
+  const recurrence = normalizeRecurrence(input.recurrence);
   const id = crypto.randomUUID();
   const now = nowIso();
   const actorUserId = actor.kind === "user" ? actor.userId : null;
@@ -2288,6 +2321,9 @@ export async function createIssue(
   await db.run(
     sql`UPDATE issues SET identifier = ${project.key} || '-' || number WHERE id = ${id}`
   );
+  if (recurrence) {
+    await db.update(issues).set({ recurrence }).where(eq(issues.id, id));
+  }
 
   const labelRecords = await getOrCreateLabels(workspaceId, input.labelNames ?? []);
   for (const label of labelRecords) {
@@ -2398,6 +2434,16 @@ export async function updateIssue(
       }
     }
   }
+  if (patch.recurrence !== undefined) {
+    const recurrence = normalizeRecurrence(patch.recurrence);
+    if (recurrence !== (row.recurrence ?? null)) {
+      sets.recurrence = recurrence;
+      changes.push({
+        type: "recurrence_changed",
+        data: { to: recurrence ? RECURRENCE_META[recurrence].label : null },
+      });
+    }
+  }
   if (patch.reminder !== undefined) {
     const effectiveDue = sets.dueDate !== undefined ? sets.dueDate : row.dueDate;
     const reminder = effectiveDue ? normalizeReminder(patch.reminder) : null;
@@ -2501,9 +2547,73 @@ export async function updateIssue(
     }
   }
 
+  await openNextOccurrence(workspaceId, row.id, actor);
+
   const detail = await getIssueDetail(workspaceId, row.id);
   if (!detail) throw new TacosError("Issue disappeared while updating", 500);
   return detail;
+}
+
+// Marking a repeating task done opens the next one. The link is written only when it is
+// still empty, so a second completion or a second call returns the same task.
+export async function openNextOccurrence(
+  workspaceId: string,
+  idOrIdentifier: string,
+  actor: MutationActor
+): Promise<{ id: string } | null> {
+  const row = await findIssueRow(workspaceId, idOrIdentifier);
+  if (!row || row.status !== "done" || !row.recurrence) return null;
+  if (row.recurredInto) return { id: row.recurredInto };
+  const recurrence = normalizeRecurrence(row.recurrence);
+  if (!recurrence) return null;
+  const db = getDb();
+  const [project] = await db
+    .select({ key: projects.key })
+    .from(projects)
+    .where(eq(projects.id, row.projectId));
+  if (!project) return null;
+  const assigneeRows = await db
+    .select({ userId: issueAssignees.userId })
+    .from(issueAssignees)
+    .where(eq(issueAssignees.issueId, row.id));
+  const labelRows = await db
+    .select({ name: labels.name })
+    .from(issueLabels)
+    .innerJoin(labels, eq(labels.id, issueLabels.labelId))
+    .where(eq(issueLabels.issueId, row.id));
+  const created = await createIssue(
+    workspaceId,
+    {
+      title: row.title,
+      description: row.description,
+      status: "todo",
+      priority: row.priority as Priority,
+      dueDate: addRecurrence(row.dueDate, recurrence),
+      reminder: (row.reminder as ReminderPreset | null) ?? null,
+      recurrence,
+      project: project.key,
+      parent: row.parentId,
+      assigneeIds: assigneeRows.map((entry) => entry.userId),
+      labelNames: labelRows.map((entry) => entry.name),
+    },
+    actor
+  );
+  const claimed = await db
+    .update(issues)
+    .set({ recurredInto: created.issue.id })
+    .where(and(eq(issues.id, row.id), isNull(issues.recurredInto)))
+    .returning({ id: issues.id });
+  if (claimed.length > 0) return { id: created.issue.id };
+  await db.delete(issueLabels).where(eq(issueLabels.issueId, created.issue.id));
+  await db.delete(issueAssignees).where(eq(issueAssignees.issueId, created.issue.id));
+  await db.delete(events).where(eq(events.issueId, created.issue.id));
+  await db.delete(notifications).where(eq(notifications.issueId, created.issue.id));
+  await db.delete(issues).where(eq(issues.id, created.issue.id));
+  const [winner] = await db
+    .select({ recurredInto: issues.recurredInto })
+    .from(issues)
+    .where(eq(issues.id, row.id));
+  return winner?.recurredInto ? { id: winner.recurredInto } : null;
 }
 
 export async function moveIssue(
@@ -2570,6 +2680,8 @@ export async function moveIssue(
       await recordEvent(row.id, change.type, change.data, actor);
     }
   }
+
+  await openNextOccurrence(workspaceId, row.id, actor);
 
   const detail = await getIssueDetail(workspaceId, row.id);
   if (!detail) throw new TacosError("Issue disappeared while moving", 500);
@@ -2929,6 +3041,7 @@ export async function deleteIssue(workspaceId: string, idOrIdentifier: string): 
     assignees: [],
     dueDate: row.dueDate ?? null,
     reminder: (row.reminder as ReminderPreset | null) ?? null,
+    recurrence: (row.recurrence as Recurrence | null) ?? null,
     createdBy: row.createdBy,
     createdVia: row.createdVia as Via,
     claimedBy: row.claimedBy ?? null,

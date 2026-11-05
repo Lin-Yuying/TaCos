@@ -75,6 +75,7 @@ Always-on rules for this repo. Put occasional workflows in skills or docs, and d
 | Task | A unit of work. | `issues` |
 | Subtask | A task that belongs to another task. | `issues.parent_id` |
 | Dependency | Another task that must finish first. | `issue_dependencies` |
+| Recurrence | A task that opens again on a schedule. | `issues.recurrence` |
 | Blocker | A report that a task is stuck. | `blockers` |
 | Document | A markdown page. Either private to its author or shared with the workspace. | `pages` |
 | Harness | An agent CLI a member runs: `codex`, `pi`, `opencode`, `codebuddy`, `dsh`. | `src/lib/harness` |

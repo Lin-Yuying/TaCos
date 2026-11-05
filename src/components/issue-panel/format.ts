@@ -80,6 +80,10 @@ export function eventText(event: ActivityEvent, t: Translate, locale: Locale): s
       return t("blocked by {task}", { task: String(event.data.task ?? "") });
     case "dependency_removed":
       return t("no longer blocked by {task}", { task: String(event.data.task ?? "") });
+    case "recurrence_changed":
+      return event.data.to
+        ? t("set recurrence to {cadence}", { cadence: t(String(event.data.to)) })
+        : t("turned recurrence off");
     case "status_changed": {
       const from = event.data.from as Status;
       const to = event.data.to as Status;

@@ -878,6 +878,8 @@ function bootstrap(sqlite: Database.Database) {
   addColumnIfMissing(sqlite, "issues", "position", "REAL NOT NULL DEFAULT 0");
   addColumnIfMissing(sqlite, "issues", "due_date", "TEXT");
   addColumnIfMissing(sqlite, "issues", "reminder", "TEXT");
+  addColumnIfMissing(sqlite, "issues", "recurrence", "TEXT");
+  addColumnIfMissing(sqlite, "issues", "recurred_into", "TEXT");
   // H-COLLAB-01: claim, source chat, publisher and review gate.
   addColumnIfMissing(sqlite, "issues", "claimed_by", "TEXT");
   addColumnIfMissing(sqlite, "issues", "claimed_at", "TEXT");
