@@ -485,6 +485,7 @@ const zh: Record<string, string> = {
   "Place {title} in the page": "把 {title} 放进正文",
   "Write something, or press '-' for a list…": "写点什么，或输入 - 开始列表…",
   "This page is empty.": "这个页面是空的。",
+  "Missing page: {title}": "找不到页面：{title}",
   "No pages yet.": "还没有页面。",
   "That selection had no Markdown files.": "选中的文件里没有 Markdown 文件。",
   "{count} imported": "导入 {count} 个",

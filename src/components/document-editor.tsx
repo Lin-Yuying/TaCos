@@ -1,8 +1,9 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { useRouter } from "next/navigation";
-import { EditorContent, useEditor, type Editor, type Range } from "@tiptap/react";
+import { EditorContent, NodeViewWrapper, ReactNodeViewRenderer, useEditor, type Editor, type Range } from "@tiptap/react";
+import type { NodeViewProps } from "@tiptap/react";
 import { DragHandle } from "@tiptap/extension-drag-handle-react";
 import type { EditorState } from "@tiptap/pm/state";
 import { BubbleMenu } from "@tiptap/react/menus";
@@ -37,14 +38,15 @@ import {
   Type,
 } from "lucide-react";
 import { AssigneeAvatar } from "@/components/issue-table";
-import { DocMention, documentExtensions } from "@/lib/editor/extensions";
+import { DocMention, PageEmbed, documentExtensions } from "@/lib/editor/extensions";
+import { embedPreview } from "@/lib/editor/page-embed";
+import { Markdown, type PageContext } from "@/components/markdown";
 import { documentColor, documentLinkHref } from "@/lib/markdown";
 import type { Member } from "@/lib/issues";
 import { BLOCK_TURNS, canTurnBlock, turnBlock } from "@/lib/editor/block-turn";
 import { documentMarkdown, markdownToDocument } from "@/lib/editor/document-markdown";
 import { anchorFromSelection, anchorRanges, commentCountsByBlock } from "@/lib/editor/anchors";
 import type { DocAnchor } from "@/lib/doc-anchor";
-import type { PageContext } from "@/components/markdown";
 import type { DocCollab } from "@/components/use-doc-collab";
 import { CodeLanguageMenu } from "@/components/code-block-controls";
 import { useT } from "@/components/i18n-context";
@@ -246,6 +248,56 @@ function dispatchTurn(editor: Editor, next: EditorState) {
 
 const NO_MEMBERS: Member[] = [];
 
+class EmbedPages {
+  pages: PageContext | undefined;
+  open = (_id: string) => {};
+  private listeners = new Set<() => void>();
+  subscribe = (listener: () => void) => {
+    this.listeners.add(listener);
+    return () => this.listeners.delete(listener);
+  };
+  snapshot = () => this.pages;
+  update(pages: PageContext | undefined) {
+    if (this.pages === pages) return;
+    this.pages = pages;
+    for (const listener of this.listeners) listener();
+  }
+}
+
+function PageEmbedNode({ node, extension }: NodeViewProps) {
+  const store = extension.storage as EmbedPages;
+  const pages = useSyncExternalStore(store.subscribe, store.snapshot, () => undefined);
+  const preview = embedPreview(pages, String(node.attrs.title ?? ""), (node.attrs.pageId as string | null) ?? null);
+  const t = useT();
+  return (
+    <NodeViewWrapper
+      data-page-embed={String(node.attrs.pageId ?? node.attrs.title ?? "")}
+      data-testid="doc-page-embed"
+      className="my-2"
+    >
+      <button
+        type="button"
+        data-embed-title
+        onMouseDown={(event) => event.preventDefault()}
+        onClick={() => {
+          if (preview.id) store.open(preview.id);
+        }}
+        className="text-body"
+      >
+        {preview.missing ? t("Missing page: {title}", { title: preview.label }) : preview.label}
+      </button>
+      {preview.body !== null &&
+        (preview.body.trim() ? (
+          <div className="mt-1.5">
+            <Markdown source={preview.body} pages={pages ? { ...pages, embeds: {} } : undefined} />
+          </div>
+        ) : (
+          <p className="mt-1 text-small text-faint">{t("This page is empty.")}</p>
+        ))}
+    </NodeViewWrapper>
+  );
+}
+
 export type EditorAnchor = DocAnchor & { id: string };
 
 const NO_ANCHORS: EditorAnchor[] = [];
@@ -357,6 +409,7 @@ export function DocumentEditor({
   const frameRef = useRef<HTMLDivElement>(null);
   const [marginCounts, setMarginCounts] = useState<{ from: number; top: number; count: number; ids: string[] }[]>([]);
   const [anchorStore] = useState(() => new AnchorStore());
+  const [embedPages] = useState(() => new EmbedPages());
   const locatedRef = useRef(onAnchorsLocated);
   const anchorClickRef = useRef(onAnchorClick);
   const uploadRef = useRef(onUpload);
@@ -365,6 +418,13 @@ export function DocumentEditor({
   useEffect(() => {
     onChangeRef.current = onChange;
     pagesRef.current = pages;
+    embedPages.update(pages);
+    embedPages.open = (id: string) => {
+      const ctx = pagesRef.current;
+      if (!ctx) return;
+      if (ctx.onOpen) ctx.onOpen(id);
+      else router.push(`${ctx.base}${id}`);
+    };
     menuRef.current = menu;
     mentionMenuRef.current = mentionMenu;
     membersRef.current = { members, viewerId };
@@ -445,6 +505,19 @@ export function DocumentEditor({
     []
   );
 
+  const embed = useMemo(
+    () =>
+      PageEmbed.extend({
+        addStorage() {
+          return embedPages;
+        },
+        addNodeView() {
+          return ReactNodeViewRenderer(PageEmbedNode);
+        },
+      }),
+    [embedPages],
+  );
+
   const insertRef = useRef<(files: File[], at?: number) => void>(() => {});
   const dropFiles = (files: FileList | undefined | null, at?: number) => {
     if (!files?.length || !uploadRef.current) return false;
@@ -455,7 +528,7 @@ export function DocumentEditor({
   const editor = useEditor({
     immediatelyRender: false,
     extensions: [
-      ...documentExtensions({ sharedHistory: Boolean(collab), mention }),
+      ...documentExtensions({ sharedHistory: Boolean(collab), mention, embed }),
       Placeholder.configure({ placeholder: placeholder ?? "" }), slash, CommentAnchors.configure({ store: anchorStore }),
       ...(collab
         ? [
@@ -474,7 +547,7 @@ export function DocumentEditor({
           view.posAtCoords({ left: (event as DragEvent).clientX, top: (event as DragEvent).clientY })?.pos
         ),
       handleClickOn: (_view, _pos, node) => {
-        if (node.type.name !== "pageRef" && node.type.name !== "pageEmbed") return false;
+        if (node.type.name !== "pageRef") return false;
         const ctx = pagesRef.current;
         const target = node.attrs.pageId ?? ctx?.lookup[String(node.attrs.title).toLowerCase()]?.id;
         if (!ctx || !target) return false;
