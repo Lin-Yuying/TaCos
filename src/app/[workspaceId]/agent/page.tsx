@@ -49,8 +49,6 @@ async function AgentContent({
   const gate = await getWorkspaceHarnessGate(workspaceId, ...(await harnessViewFor(user.id)));
 
   const engines: AgentHarnessOption[] = await listAgentHarnessOptions(workspaceId, user.id);
-  // Agent opens only when Settings has at least one enabled+ready harness (H-P3-16).
-  const ready = gate.agentAllowed;
   const usable = (id: string | undefined): AgentHarnessId | undefined =>
     engines.find((engine) => engine.id === id && engine.available)?.id;
   const saved = (await cookies()).get(ENGINE_COOKIE)?.value;
@@ -75,6 +73,9 @@ async function AgentContent({
           await modelAccessFor(user.id)
         ),
   ]);
+  // Agent opens when Settings has at least one enabled+ready harness (H-P3-16), or when there
+  // is a chat to read: a shared chat stays readable without a harness on this computer.
+  const ready = gate.agentAllowed || threads.length > 0;
   // A thread the viewer cannot read is treated like a missing one: the Agent tab opens on
   // the start panel instead of leaking whether that id exists.
   let active: AgentThreadDetail | null = null;

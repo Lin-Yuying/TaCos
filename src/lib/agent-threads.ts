@@ -141,6 +141,16 @@ export async function startAgentThread(input: {
   return thread;
 }
 
+export async function hasAgentThreads(workspaceId: string, userId: string): Promise<boolean> {
+  const row = await getDb()
+    .select({ id: agentThreads.id })
+    .from(agentThreads)
+    .where(and(eq(agentThreads.workspaceId, workspaceId), visibleTo(userId)))
+    .limit(1)
+    .get();
+  return Boolean(row);
+}
+
 export async function listAgentThreads(
   workspaceId: string,
   userId: string,
