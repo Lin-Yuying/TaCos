@@ -277,6 +277,9 @@ const zh: Record<string, string> = {
   Register: "注册",
   "Already registered?": "已经注册过？",
   "Invalid username or password": "用户名或密码不对",
+  "Too many sign-in attempts. Try again later.": "登录尝试过多，请稍后再试。",
+  "Only the key's owner or an admin can revoke it": "只有密钥的所有者或管理员可以撤销它",
+  "The workspace owner cannot be demoted": "不能取消工作区所有者的管理员身份",
   "Something went wrong": "出错了",
   // command-palette
   "Search documents, tasks and comments, or run a command…": "搜索文档、任务和评论，或运行命令…",

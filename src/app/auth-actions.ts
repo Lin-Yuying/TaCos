@@ -3,7 +3,7 @@
 import { cookies } from "next/headers";
 import { revalidatePath } from "next/cache";
 import { eq } from "drizzle-orm";
-import { getDb, verifyPassword } from "@/db/client";
+import { getDb } from "@/db/client";
 import { users } from "@/db/schema";
 import {
   BUILTIN_AVATAR_PREFIX,
@@ -15,6 +15,7 @@ import { asLocale, LOCALE_COOKIE, type Locale } from "@/lib/i18n";
 import {
   createSession,
   deleteSession,
+  signIn,
   getSessionUser,
   landingWorkspaceId,
   linkDeviceAccount,
@@ -73,12 +74,7 @@ export async function loginAction(input: {
   password: string;
 }): Promise<ActionResult<{ next: string }>> {
   return run(async () => {
-    const username = normalizeUsername(input.username);
-    const db = getDb();
-    const [user] = await db.select().from(users).where(eq(users.username, username)).limit(1);
-    if (!user || !verifyPassword(input.password, user.passwordHash)) {
-      throw new TacosError("Invalid username or password", 401);
-    }
+    const user = await signIn(normalizeUsername(input.username), input.password);
     const token = await createSession(user.id);
     const store = await cookies();
     store.set(SESSION_COOKIE, token, {

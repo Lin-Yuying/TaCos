@@ -379,6 +379,13 @@ export async function resolveAssigneeIds(workspaceId: string, values: string[]):
 
 export async function setMemberRole(workspaceId: string, userId: string, role: "admin" | "member") {
   const db = getDb();
+  const [workspace] = await db
+    .select({ createdBy: workspaces.createdBy })
+    .from(workspaces)
+    .where(eq(workspaces.id, workspaceId));
+  if (workspace?.createdBy === userId && role !== "admin") {
+    throw new TacosError("The workspace owner cannot be demoted", 403);
+  }
   if (role === "member") {
     await assertNotLastAdmin(db, workspaceId, userId);
   }
@@ -403,6 +410,13 @@ async function clearAssignmentsInWorkspace(
 
 export async function removeMember(workspaceId: string, userId: string) {
   const db = getDb();
+  const [workspace] = await db
+    .select({ createdBy: workspaces.createdBy })
+    .from(workspaces)
+    .where(eq(workspaces.id, workspaceId));
+  if (workspace?.createdBy === userId) {
+    throw new TacosError("The workspace owner cannot be demoted", 403);
+  }
   await assertNotLastAdmin(db, workspaceId, userId);
   await clearAssignmentsInWorkspace(db, workspaceId, userId);
   await db
@@ -1632,10 +1646,15 @@ async function findProjectRow(workspaceId: string, idOrKey: string): Promise<Pro
 // Accepts either the project id or its identifier prefix, same as the issue lookups.
 export async function getProject(
   workspaceId: string,
-  idOrKey: string
+  idOrKey: string,
+  viewerId?: string
 ): Promise<(Project & { doc: string }) | null> {
   const row = await findProjectRow(workspaceId, idOrKey);
   if (!row) return null;
+  if (viewerId && !(await seesAllTasks(workspaceId, viewerId))) {
+    const visible = await listProjects(workspaceId, viewerId);
+    if (!visible.some((project) => project.id === row.id)) return null;
+  }
   const { id, workspaceId: ws, name, key, color, icon, description, doc, createdBy } = row;
   return {
     id,
@@ -3439,8 +3458,18 @@ export async function listApiKeys(workspaceId: string): Promise<ApiKeyRecord[]> 
     .orderBy(apiKeys.createdAt);
 }
 
-export async function revokeApiKey(workspaceId: string, id: string) {
-  await getDb()
+export async function revokeApiKey(workspaceId: string, id: string, actorId: string) {
+  const db = getDb();
+  const [key] = await db
+    .select({ createdBy: apiKeys.createdBy, revokedAt: apiKeys.revokedAt })
+    .from(apiKeys)
+    .where(and(eq(apiKeys.id, id), eq(apiKeys.workspaceId, workspaceId)))
+    .limit(1);
+  if (!key || key.revokedAt) return;
+  const facts = await workspaceFacts(workspaceId, actorId);
+  const allowed = key.createdBy === actorId || facts.ownerId === actorId || facts.role === "admin";
+  if (!allowed) throw new TacosError("Only the key's owner or an admin can revoke it", 403);
+  await db
     .update(apiKeys)
     .set({ revokedAt: nowIso() })
     .where(and(eq(apiKeys.id, id), eq(apiKeys.workspaceId, workspaceId)));

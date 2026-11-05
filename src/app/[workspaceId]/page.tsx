@@ -42,7 +42,7 @@ async function IssuesView({
   const projectId = typeof sp.project === "string" ? sp.project : undefined;
   const assigneeParam = typeof sp.assignee === "string" ? sp.assignee : undefined;
 
-  const projects = await listProjects(workspaceId);
+  const projects = await listProjects(workspaceId, user.id);
   const [project] = projectId
     ? projects.filter((p) => p.id === projectId || p.key.toUpperCase() === projectId.toUpperCase())
     : [undefined];
@@ -73,6 +73,7 @@ async function IssuesView({
           ? null
           : (assigneeMember?.id ?? undefined),
     agent: view === "agent",
+    viewerId: user.id,
   });
 
   const [fields, values] = await Promise.all([

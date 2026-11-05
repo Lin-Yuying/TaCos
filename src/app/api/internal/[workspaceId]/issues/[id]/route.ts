@@ -7,8 +7,8 @@ type Ctx = { params: Promise<{ workspaceId: string; id: string }> };
 export async function GET(_req: Request, ctx: Ctx) {
   const { workspaceId, id } = await ctx.params;
   try {
-    await requireWorkspace(workspaceId);
-    const detail = await getIssueDetail(workspaceId, id);
+    const { user } = await requireWorkspace(workspaceId);
+    const detail = await getIssueDetail(workspaceId, id, user.id);
     if (!detail) throw new TacosError("Not found", 404);
     return Response.json({
       ...detail.issue,

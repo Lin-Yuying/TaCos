@@ -48,6 +48,6 @@ Item-level checks stay cheap (types, check scripts). End-to-end tests and screen
 | 22 | Sub-tasks | done | `node --import tsx scripts/check-subtasks.ts` |
 | 23 | Task dependencies | done | `node --import tsx scripts/check-task-dependencies.ts` |
 | 24 | Recurring tasks | done | `node --import tsx scripts/check-recurrence.ts` |
-| 25 | Fix the six open security findings from the 2.2 review | todo | Check script per finding |
+| 25 | Fix the six open security findings from the 2.2 review | done | `node --import tsx scripts/check-security-2.2.ts` |
 | 26 | Batch E2E and screenshots with real models and new data dirs; fresh-context review; fix findings | todo | Report lists tested and untested |
 | 27 | Version 2.3.0, PR for the user to merge; after the merge, tag and publish | todo | PR open; release published after the merge |

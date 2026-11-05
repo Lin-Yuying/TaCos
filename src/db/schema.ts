@@ -16,6 +16,22 @@ export const users = sqliteTable("users", {
   createdAt: text("created_at").notNull(),
 });
 
+// A deleted account keeps its username so a later person cannot take it.
+export const retiredUsernames = sqliteTable("retired_usernames", {
+  username: text("username").primaryKey(),
+  retiredAt: text("retired_at").notNull(),
+});
+
+export const loginAttempts = sqliteTable(
+  "login_attempts",
+  {
+    id: text("id").primaryKey(),
+    username: text("username").notNull(),
+    createdAt: text("created_at").notNull(),
+  },
+  (t) => [index("login_attempts_username_idx").on(t.username, t.createdAt)]
+);
+
 export const sessions = sqliteTable(
   "sessions",
   {

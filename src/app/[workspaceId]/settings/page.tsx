@@ -40,7 +40,7 @@ async function View({ params }: { params: Promise<{ workspaceId: string }> }) {
   const [members, projects, labels, keys, joinCode, allWorkspaces, deletedWorkspaces, seeAll, ai, harness, modelKeys] =
     await Promise.all([
       listMembers(workspaceId),
-      listProjects(workspaceId),
+      listProjects(workspaceId, user.id),
       listLabelsWithCounts(workspaceId),
       listApiKeys(workspaceId),
       getJoinCode(workspaceId),

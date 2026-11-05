@@ -449,8 +449,8 @@ export async function createApiKeyAction(workspaceId: string, name: string) {
 
 export async function revokeApiKeyAction(workspaceId: string, id: string) {
   return run<void>(async () => {
-    await requireWorkspace(workspaceId);
-    await revokeApiKey(workspaceId, id);
+    const { user } = await requireWorkspace(workspaceId);
+    await revokeApiKey(workspaceId, id, user.id);
     refresh(workspaceId);
   });
 }
