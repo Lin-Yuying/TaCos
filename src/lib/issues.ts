@@ -24,6 +24,7 @@ import {
   events,
   favorites,
   issueAssignees,
+  issueDependencies,
   issueLabels,
   taskFieldValues,
   taskFields,
@@ -135,11 +136,14 @@ export type ActivityEvent = {
   createdAt: string;
 };
 export type IssueChild = { id: string; identifier: string; title: string; status: Status };
+export type TaskDependency = { id: string; identifier: string; title: string; status: Status };
 export type IssueDetail = {
   issue: IssueWithLabels;
   comments: Comment[];
   events: ActivityEvent[];
   children: IssueChild[];
+  dependencies: TaskDependency[];
+  blocked: boolean;
 };
 
 type IssueRow = typeof issues.$inferSelect;
@@ -450,6 +454,9 @@ async function purgeWorkspaceData(db: ReturnType<typeof getDb>, workspaceId: str
     await db.delete(taskFieldValues).where(eq(taskFieldValues.issueId, row.id));
     await db.delete(issueAssignees).where(eq(issueAssignees.issueId, row.id));
     await db.delete(issueLabels).where(eq(issueLabels.issueId, row.id));
+    await db
+      .delete(issueDependencies)
+      .where(or(eq(issueDependencies.issueId, row.id), eq(issueDependencies.blockedById, row.id)));
     await db.delete(blockers).where(eq(blockers.issueId, row.id));
     await db.delete(comments).where(eq(comments.issueId, row.id));
     await db.delete(events).where(eq(events.issueId, row.id));
@@ -1586,6 +1593,9 @@ export async function purgeProject(workspaceId: string, projectId: string, userI
     await db.delete(taskFieldValues).where(eq(taskFieldValues.issueId, row.id));
     await db.delete(issueLabels).where(eq(issueLabels.issueId, row.id));
     await db.delete(blockers).where(eq(blockers.issueId, row.id));
+    await db
+      .delete(issueDependencies)
+      .where(or(eq(issueDependencies.issueId, row.id), eq(issueDependencies.blockedById, row.id)));
     await db.delete(comments).where(eq(comments.issueId, row.id));
     await db.delete(events).where(eq(events.issueId, row.id));
     await db.delete(notifications).where(eq(notifications.issueId, row.id));
@@ -2039,6 +2049,28 @@ export async function getIssueDetail(
       )
     )
     .orderBy(issues.createdAt);
+  const dependencyRows = await db
+    .select({
+      id: issues.id,
+      identifier: issues.identifier,
+      title: issues.title,
+      status: issues.status,
+    })
+    .from(issueDependencies)
+    .innerJoin(issues, eq(issues.id, issueDependencies.blockedById))
+    .where(
+      and(
+        eq(issueDependencies.issueId, row.id),
+        isNull(issues.deletedAt),
+        ne(issues.reviewStatus, "rejected")
+      )
+    );
+  const dependencies = dependencyRows.map((item) => ({
+    id: item.id,
+    identifier: item.identifier,
+    title: item.title,
+    status: item.status as Status,
+  }));
   return {
     issue: withLabels,
     comments: commentRows.map((c) => ({
@@ -2064,6 +2096,8 @@ export async function getIssueDetail(
       title: child.title,
       status: child.status as Status,
     })),
+    dependencies,
+    blocked: dependencies.some((item) => item.status !== "done" && item.status !== "canceled"),
   };
 }
 
@@ -2704,6 +2738,78 @@ export async function reportBlocker(
   return { id };
 }
 
+// Walk what `blockedById` waits on. Reaching `issueId` means the new link would loop.
+async function dependencyLoops(issueId: string, blockedById: string): Promise<boolean> {
+  const db = getDb();
+  const seen = new Set<string>();
+  const pending = [blockedById];
+  while (pending.length > 0) {
+    const current = pending.pop();
+    if (!current || seen.has(current)) continue;
+    if (current === issueId) return true;
+    seen.add(current);
+    const next = await db
+      .select({ blockedById: issueDependencies.blockedById })
+      .from(issueDependencies)
+      .where(eq(issueDependencies.issueId, current));
+    pending.push(...next.map((row) => row.blockedById));
+  }
+  return false;
+}
+
+export async function addDependency(
+  workspaceId: string,
+  idOrIdentifier: string,
+  blockedBy: string,
+  actor: MutationActor
+): Promise<IssueDetail> {
+  const row = await findIssueRow(workspaceId, idOrIdentifier);
+  if (!row) throw new TacosError(`Issue "${idOrIdentifier}" not found`, 404);
+  const blocker = await findIssueRow(workspaceId, blockedBy);
+  if (!blocker) throw new TacosError(`Issue "${blockedBy}" not found`, 404);
+  if (row.id === blocker.id) throw new TacosError("A task cannot depend on itself", 400);
+  if (await dependencyLoops(row.id, blocker.id)) throw new TacosError("That dependency would loop", 400);
+  const db = getDb();
+  const [existing] = await db
+    .select({ issueId: issueDependencies.issueId })
+    .from(issueDependencies)
+    .where(and(eq(issueDependencies.issueId, row.id), eq(issueDependencies.blockedById, blocker.id)))
+    .limit(1);
+  if (!existing) {
+    await db.insert(issueDependencies).values({
+      issueId: row.id,
+      blockedById: blocker.id,
+      createdAt: nowIso(),
+    });
+    await recordEvent(row.id, "dependency_added", { task: blocker.identifier }, actor);
+  }
+  const detail = await getIssueDetail(workspaceId, row.id);
+  if (!detail) throw new TacosError("Issue disappeared while updating", 500);
+  return detail;
+}
+
+export async function removeDependency(
+  workspaceId: string,
+  idOrIdentifier: string,
+  blockedBy: string,
+  actor: MutationActor
+): Promise<IssueDetail> {
+  const row = await findIssueRow(workspaceId, idOrIdentifier);
+  if (!row) throw new TacosError(`Issue "${idOrIdentifier}" not found`, 404);
+  const blocker = await findIssueRow(workspaceId, blockedBy);
+  if (!blocker) throw new TacosError(`Issue "${blockedBy}" not found`, 404);
+  const removed = await getDb()
+    .delete(issueDependencies)
+    .where(and(eq(issueDependencies.issueId, row.id), eq(issueDependencies.blockedById, blocker.id)))
+    .returning({ issueId: issueDependencies.issueId });
+  if (removed.length > 0) {
+    await recordEvent(row.id, "dependency_removed", { task: blocker.identifier }, actor);
+  }
+  const detail = await getIssueDetail(workspaceId, row.id);
+  if (!detail) throw new TacosError("Issue disappeared while updating", 500);
+  return detail;
+}
+
 async function notifyClaimWatchers(workspaceId: string, issueId: string, type: ClaimNotice, actorId: string) {
   const db = getDb();
   const [issue] = await db.select({ createdBy: issues.createdBy }).from(issues).where(eq(issues.id, issueId));
@@ -2916,6 +3022,9 @@ export async function purgeIssue(workspaceId: string, issueId: string) {
   await db.delete(issueAssignees).where(eq(issueAssignees.issueId, issueId));
   await db.delete(issueLabels).where(eq(issueLabels.issueId, issueId));
   await db.delete(blockers).where(eq(blockers.issueId, issueId));
+  await db
+    .delete(issueDependencies)
+    .where(or(eq(issueDependencies.issueId, issueId), eq(issueDependencies.blockedById, issueId)));
   await db.delete(comments).where(eq(comments.issueId, issueId));
   await db.delete(events).where(eq(events.issueId, issueId));
   await db.delete(notifications).where(eq(notifications.issueId, issueId));

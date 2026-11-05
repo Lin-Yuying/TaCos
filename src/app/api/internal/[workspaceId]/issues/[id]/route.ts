@@ -16,6 +16,8 @@ export async function GET(_req: Request, ctx: Ctx) {
       comments: detail.comments,
       events: detail.events,
       children: detail.children,
+      dependencies: detail.dependencies,
+      blocked: detail.blocked,
     });
   } catch (err) {
     if (err instanceof TacosError && err.status === 401) {

@@ -25,6 +25,8 @@ import {
   removeOverviewGrant,
   releaseIssue,
   reportBlocker,
+  addDependency,
+  removeDependency,
   removeProjectMember,
   restoreIssue,
   reviewIssue,
@@ -184,6 +186,24 @@ export async function purgeIssueAction(workspaceId: string, issueId: string) {
     await requireWorkspace(workspaceId);
     await purgeIssue(workspaceId, issueId);
     refresh(workspaceId);
+  });
+}
+
+export async function addDependencyAction(workspaceId: string, idOrIdentifier: string, blockedBy: string) {
+  return run<IssueDetail>(async () => {
+    const { user } = await requireWorkspace(workspaceId);
+    const detail = await addDependency(workspaceId, idOrIdentifier, blockedBy, userActor(user));
+    refresh(workspaceId);
+    return detail;
+  });
+}
+
+export async function removeDependencyAction(workspaceId: string, idOrIdentifier: string, blockedBy: string) {
+  return run<IssueDetail>(async () => {
+    const { user } = await requireWorkspace(workspaceId);
+    const detail = await removeDependency(workspaceId, idOrIdentifier, blockedBy, userActor(user));
+    refresh(workspaceId);
+    return detail;
   });
 }
 

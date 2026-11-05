@@ -275,6 +275,14 @@ CREATE INDEX IF NOT EXISTS issues_project_idx ON issues (project_id);
 CREATE INDEX IF NOT EXISTS issues_status_idx ON issues (status);
 CREATE INDEX IF NOT EXISTS issues_parent_idx ON issues (parent_id);
 
+CREATE TABLE IF NOT EXISTS issue_dependencies (
+  issue_id TEXT NOT NULL,
+  blocked_by_id TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  PRIMARY KEY (issue_id, blocked_by_id)
+);
+CREATE INDEX IF NOT EXISTS issue_dependencies_blocked_idx ON issue_dependencies (blocked_by_id);
+
 CREATE TABLE IF NOT EXISTS issue_assignees (
   issue_id TEXT NOT NULL,
   user_id TEXT NOT NULL,

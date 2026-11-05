@@ -388,6 +388,20 @@ export const issues = sqliteTable(
 
 // An issue can be worked by more than one person; assigning "everyone" is just
 // one row per workspace member.
+// The task in `issueId` stays blocked until `blockedById` is done or canceled.
+export const issueDependencies = sqliteTable(
+  "issue_dependencies",
+  {
+    issueId: text("issue_id").notNull(),
+    blockedById: text("blocked_by_id").notNull(),
+    createdAt: text("created_at").notNull(),
+  },
+  (t) => [
+    primaryKey({ columns: [t.issueId, t.blockedById] }),
+    index("issue_dependencies_blocked_idx").on(t.blockedById),
+  ]
+);
+
 export const issueAssignees = sqliteTable(
   "issue_assignees",
   {

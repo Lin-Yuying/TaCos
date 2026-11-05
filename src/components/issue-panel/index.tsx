@@ -3,12 +3,13 @@
 import { useEffect, useRef, useState } from "react";
 import { useLiveTick } from "@/components/live-refresh";
 import { ISSUE_DELETED, useUI, type DeletedIssue } from "@/components/ui-context";
-import { addCommentAction, createIssueAction, deleteIssueAction, reportBlockerAction, updateIssueDetailAction } from "@/app/actions";
+import { addCommentAction, addDependencyAction, createIssueAction, deleteIssueAction, removeDependencyAction, reportBlockerAction, updateIssueDetailAction } from "@/app/actions";
 import type { Label, Member } from "@/lib/issues";
 import { PanelHeader } from "./header";
 import { PropertiesRow } from "./properties";
 import { DueRow } from "./due-row";
 import { Subtasks } from "./subtasks";
+import { Dependencies } from "./dependencies";
 import { BlockerReport } from "./blocker-report";
 import { ClaimRow } from "./claim-row";
 import { SourceChatRow } from "./source-chat-row";
@@ -112,7 +113,12 @@ function IssuePanel({
       .then((data) => {
         if (!cancelled && data) {
           const row = data as FlatDetail;
-          setDetail({ ...row, children: row.children ?? [] });
+          setDetail({
+            ...row,
+            children: row.children ?? [],
+            dependencies: row.dependencies ?? [],
+            blocked: row.blocked ?? false,
+          });
         }
       })
       .catch(() => {});
@@ -134,7 +140,12 @@ function IssuePanel({
       .then((data) => {
         if (!cancelled && data) {
           const row = data as FlatDetail;
-          setDetail({ ...row, children: row.children ?? [] });
+          setDetail({
+            ...row,
+            children: row.children ?? [],
+            dependencies: row.dependencies ?? [],
+            blocked: row.blocked ?? false,
+          });
         }
       })
       .catch(() => {
@@ -159,7 +170,7 @@ function IssuePanel({
     const result = await updateIssueDetailAction(workspaceId, detail.id, patch);
     setBusy(false);
     if (result.ok) {
-      setDetail({ ...result.data.issue, comments: result.data.comments, events: result.data.events, children: result.data.children });
+      setDetail({ ...result.data.issue, comments: result.data.comments, events: result.data.events, children: result.data.children, dependencies: result.data.dependencies, blocked: result.data.blocked });
       return true;
     }
     setError(result.error);
@@ -194,13 +205,53 @@ function IssuePanel({
     return true;
   }
 
+  async function addTaskDependency(identifier: string) {
+    if (!detail || busy) return false;
+    setBusy(true);
+    const result = await addDependencyAction(workspaceId, detail.id, identifier);
+    setBusy(false);
+    if (!result.ok) {
+      setError(result.error);
+      return false;
+    }
+    setDetail({
+      ...result.data.issue,
+      comments: result.data.comments,
+      events: result.data.events,
+      children: result.data.children,
+      dependencies: result.data.dependencies,
+      blocked: result.data.blocked,
+    });
+    return true;
+  }
+
+  async function removeTaskDependency(identifier: string) {
+    if (!detail || busy) return false;
+    setBusy(true);
+    const result = await removeDependencyAction(workspaceId, detail.id, identifier);
+    setBusy(false);
+    if (!result.ok) {
+      setError(result.error);
+      return false;
+    }
+    setDetail({
+      ...result.data.issue,
+      comments: result.data.comments,
+      events: result.data.events,
+      children: result.data.children,
+      dependencies: result.data.dependencies,
+      blocked: result.data.blocked,
+    });
+    return true;
+  }
+
   async function submitBlocker(body: string) {
     if (!detail || busy) return false;
     setBusy(true);
     const result = await reportBlockerAction(workspaceId, detail.id, body);
     setBusy(false);
     if (result.ok) {
-      setDetail({ ...result.data.issue, comments: result.data.comments, events: result.data.events, children: result.data.children });
+      setDetail({ ...result.data.issue, comments: result.data.comments, events: result.data.events, children: result.data.children, dependencies: result.data.dependencies, blocked: result.data.blocked });
       return true;
     }
     setError(result.error);
@@ -214,7 +265,7 @@ function IssuePanel({
     setBusy(false);
     if (result.ok) {
       setComment("");
-      setDetail({ ...result.data.issue, comments: result.data.comments, events: result.data.events, children: result.data.children });
+      setDetail({ ...result.data.issue, comments: result.data.comments, events: result.data.events, children: result.data.children, dependencies: result.data.dependencies, blocked: result.data.blocked });
       requestAnimationFrame(scrollToComposer);
     } else {
       setError(result.error);
@@ -302,7 +353,7 @@ function IssuePanel({
           detail={detail}
           members={members}
           currentUserId={currentUserId}
-          onDetail={(next) => setDetail({ ...next.issue, comments: next.comments, events: next.events, children: next.children })}
+          onDetail={(next) => setDetail({ ...next.issue, comments: next.comments, events: next.events, children: next.children, dependencies: next.dependencies, blocked: next.blocked })}
           onError={setError}
         />
 
@@ -326,6 +377,14 @@ function IssuePanel({
         <DueRow detail={detail} onUpdate={update} />
 
         <Subtasks children={detail.children} busy={busy} onAdd={addSubtask} />
+
+        <Dependencies
+          dependencies={detail.dependencies}
+          blocked={detail.blocked}
+          busy={busy}
+          onAdd={addTaskDependency}
+          onRemove={removeTaskDependency}
+        />
 
         <BlockerReport events={detail.events} busy={busy} onSubmit={submitBlocker} />
 

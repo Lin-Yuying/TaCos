@@ -76,6 +76,10 @@ export function eventText(event: ActivityEvent, t: Translate, locale: Locale): s
       return event.data.to
         ? t("made a subtask of {parent}", { parent: String(event.data.to) })
         : t("removed the parent task");
+    case "dependency_added":
+      return t("blocked by {task}", { task: String(event.data.task ?? "") });
+    case "dependency_removed":
+      return t("no longer blocked by {task}", { task: String(event.data.task ?? "") });
     case "status_changed": {
       const from = event.data.from as Status;
       const to = event.data.to as Status;

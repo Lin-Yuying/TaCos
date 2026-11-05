@@ -20,6 +20,8 @@ function flatDetail(detail: NonNullable<Awaited<ReturnType<typeof getIssueDetail
     comments: detail.comments,
     events: detail.events,
     children: detail.children,
+    dependencies: detail.dependencies,
+    blocked: detail.blocked,
   };
 }
 
