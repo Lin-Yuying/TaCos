@@ -52,6 +52,12 @@ function DiffInlines({ nodes }: { nodes: Inline[] }) {
                 {node.text}
               </code>
             );
+          case "color":
+            return (
+              <span key={i} style={{ color: node.color }}>
+                <DiffInlines nodes={node.children} />
+              </span>
+            );
           case "link":
             return (
               <a key={i} href={node.href} className="text-accent underline underline-offset-2">

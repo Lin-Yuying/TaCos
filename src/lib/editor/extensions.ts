@@ -1,10 +1,13 @@
 import { Node, mergeAttributes, type AnyExtension } from "@tiptap/core";
 import StarterKit from "@tiptap/starter-kit";
+import Color from "@tiptap/extension-color";
+import { TextStyle } from "@tiptap/extension-text-style";
 import { TaskItem, TaskList } from "@tiptap/extension-list";
 import { Table, TableCell, TableHeader, TableRow, renderTableToMarkdown } from "@tiptap/extension-table";
 import Image from "@tiptap/extension-image";
 import Mention from "@tiptap/extension-mention";
 import { deleteSelectedImage, DOC_IMAGE_CLASS } from "@/lib/editor/doc-image";
+import { documentColor } from "@/lib/markdown";
 import { mentionText } from "@/lib/mentions";
 
 const DocumentImage = Image.extend({
@@ -18,6 +21,36 @@ const DocumentImage = Image.extend({
 
 // Stored documents stay Markdown. These nodes carry the three things TaCos adds to it,
 // so `[[page]]`, `![[page]]` and `[PROJ-1](issue:id)` come back from the editor unchanged.
+
+// A text color is stored as `{color:#rrggbb}…{/color}`. The mark renders a CSS color in the
+// editor, and this syntax is what gets written so the page stays Markdown.
+const DocTextStyle = TextStyle.extend({
+  priority: 200,
+  markdownTokenName: "textColor",
+  markdownTokenizer: {
+    name: "textColor",
+    level: "inline",
+    start: (src: string) => src.indexOf("{color:"),
+    tokenize: (src: string) => {
+      const match = /^\{color:(#[0-9a-fA-F]{6}|#[0-9a-fA-F]{3})\}([^\n]*?)\{\/color\}/.exec(src);
+      const color = match ? documentColor(match[1]) : null;
+      if (!match || !color) return undefined;
+      return { type: "textColor", raw: match[0], text: match[2], color };
+    },
+  },
+  parseMarkdown: (token, helpers) => {
+    const color = documentColor(String(token.color ?? ""));
+    if (!color) return helpers.createTextNode(String(token.raw ?? token.text ?? ""));
+    const tokenize = helpers.tokenizeInline;
+    const inner = helpers.parseInline(tokenize ? tokenize(String(token.text ?? "")) : []);
+    return helpers.applyMark("textStyle", inner.length > 0 ? inner : [helpers.createTextNode("")], { color });
+  },
+  renderMarkdown: (node, helpers) => {
+    const color = documentColor(String(node.attrs?.color ?? ""));
+    const inner = helpers.renderChildren(node);
+    return color ? `{color:${color}}${inner}{/color}` : inner;
+  },
+});
 
 export const PageRef = Node.create({
   name: "pageRef",
@@ -142,6 +175,8 @@ export function documentExtensions(
 ): AnyExtension[] {
   return [
     options.mention ?? DocMention,
+    DocTextStyle,
+    Color,
     StarterKit.configure({
       link: { openOnClick: false, autolink: true },
       underline: false,

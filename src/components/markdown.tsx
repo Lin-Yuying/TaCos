@@ -294,6 +294,12 @@ function renderInline(
             {node.text}
           </code>
         );
+      case "color":
+        return (
+          <span key={key} style={{ color: node.color }}>
+            {renderInline(node.children, key, pages, issues)}
+          </span>
+        );
       case "link":
         return (
           <a

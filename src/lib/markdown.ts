@@ -11,6 +11,8 @@ export type Inline =
   | { type: "code"; text: string }
   | { type: "strike"; text: string }
   | { type: "link"; text: string; href: string }
+  // {color:#rrggbb}text{/color} — a text color the document editor writes and reads back
+  | { type: "color"; color: string; children: Inline[] }
   // [[Page title]] or [[Page title|page-id]] — a link to another document
   | { type: "page"; text: string; pageId?: string }
   // [PROJ-12](issue:<id>) — an inline reference to a task
@@ -121,9 +123,22 @@ type InlineToken = {
   href?: string;
   pageId?: string;
   issueId?: string;
+  color?: string;
 };
 
-function tokenizeInline(text: string): InlineToken[] {
+// Only #rgb and #rrggbb. Anything else stays ordinary text, so a document cannot
+// carry an arbitrary CSS color.
+export function documentColor(value: string): string | null {
+  const hex = value.trim().toLowerCase();
+  const short = /^#([0-9a-f]{3})$/.exec(hex);
+  if (short) {
+    const [r, g, b] = short[1];
+    return `#${r}${r}${g}${g}${b}${b}`;
+  }
+  return /^#[0-9a-f]{6}$/.test(hex) ? hex : null;
+}
+
+function tokenizeInline(text: string, depth = 0): InlineToken[] {
   const out: InlineToken[] = [];
   let buffer = "";
   let bufferStart = 0;
@@ -147,6 +162,25 @@ function tokenizeInline(text: string): InlineToken[] {
     }
 
     const rest = text.slice(i);
+
+    if (depth < 6) {
+      const color = rest.match(/^\{color:(#[0-9a-fA-F]{6}|#[0-9a-fA-F]{3})\}([^\n]*?)\{\/color\}/);
+      const hex = color ? documentColor(color[1]) : null;
+      if (color && hex) {
+        flush(i);
+        const open = `{color:${color[1]}}`;
+        out.push({
+          type: "color",
+          text: color[2],
+          color: hex,
+          start: i,
+          inner: i + open.length,
+          end: i + color[0].length,
+        });
+        i += color[0].length;
+        continue;
+      }
+    }
 
     const code = rest.match(/^`([^`\n]+)`/);
     if (code) {
@@ -295,9 +329,11 @@ function tokenizeInline(text: string): InlineToken[] {
   return out;
 }
 
-export function parseInline(text: string): Inline[] {
-  return tokenizeInline(text).map((token): Inline => {
+export function parseInline(text: string, depth = 0): Inline[] {
+  return tokenizeInline(text, depth).map((token): Inline => {
     switch (token.type) {
+      case "color":
+        return { type: "color", color: token.color ?? "", children: parseInline(token.text, depth + 1) };
       case "link":
         return { type: "link", text: token.text, href: token.href ?? "#" };
       case "page":
@@ -318,7 +354,13 @@ export function parseInline(text: string): Inline[] {
 
 // javascript:/data: URLs would turn a document into an attack on the reader.
 export function safeHref(href: string): string {
-  return /^(https?:|mailto:)/i.test(href.trim()) ? href.trim() : "#";
+  return documentLinkHref(href) ?? "#";
+}
+
+// The selection toolbar only stores a web or mail address. Anything else is refused.
+export function documentLinkHref(href: string): string | null {
+  const value = href.trim();
+  return /^(https?:|mailto:)/i.test(value) && !/[\s<>]/.test(value) ? value : null;
 }
 
 // Pictures may only come from the web: a document must not be able to run anything or
@@ -812,6 +854,7 @@ function styleOfType(type: Inline["type"]): InlineSet | null {
     case "link":
     case "page":
     case "issue":
+    case "color":
       return null;
     default:
       return new Set();

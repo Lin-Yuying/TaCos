@@ -23,6 +23,7 @@ import {
   Heading3,
   Image as ImageIcon,
   Italic,
+  Link as LinkIcon,
   List,
   ListOrdered,
   MessageSquare,
@@ -35,6 +36,7 @@ import {
 } from "lucide-react";
 import { AssigneeAvatar } from "@/components/issue-table";
 import { DocMention, documentExtensions } from "@/lib/editor/extensions";
+import { documentColor, documentLinkHref } from "@/lib/markdown";
 import type { Member } from "@/lib/issues";
 import { BLOCK_TURNS, canTurnBlock, turnBlock } from "@/lib/editor/block-turn";
 import { documentMarkdown, markdownToDocument } from "@/lib/editor/document-markdown";
@@ -129,6 +131,105 @@ function TableEditButtons({ editor }: { editor: Editor }) {
           ))}
         </span>
       ))}
+    </>
+  );
+}
+
+const TEXT_COLORS = [
+  ["Red", "#b42318"],
+  ["Orange", "#b54708"],
+  ["Green", "#067647"],
+  ["Blue", "#175cd3"],
+  ["Purple", "#6941c6"],
+] as const;
+
+function SelectionStyleButtons({ editor }: { editor: Editor }) {
+  const t = useT();
+  const [linkDraft, setLinkDraft] = useState<string | null>(null);
+  const current = documentColor(String(editor.getAttributes("textStyle").color ?? ""));
+  const applyLink = (value: string) => {
+    const href = documentLinkHref(value);
+    if (!href) return;
+    editor.chain().focus().extendMarkRange("link").setLink({ href }).run();
+    setLinkDraft(null);
+  };
+  return (
+    <>
+      <button
+        type="button"
+        title={t("Link")}
+        aria-label={t("Link")}
+        onMouseDown={(event) => event.preventDefault()}
+        onClick={() => {
+          const href = editor.getAttributes("link").href;
+          setLinkDraft(typeof href === "string" ? href : "");
+        }}
+        className={`rounded p-1 transition-colors hover:bg-elevated ${
+          editor.isActive("link") || linkDraft !== null ? "text-text" : "text-muted"
+        }`}
+      >
+        <LinkIcon size={14} />
+      </button>
+      {TEXT_COLORS.map(([label, color]) => (
+        <button
+          key={color}
+          type="button"
+          title={t(label)}
+          aria-label={t(label)}
+          onMouseDown={(event) => event.preventDefault()}
+          onClick={() => editor.chain().focus().setColor(color).run()}
+          className={`h-4 w-4 rounded-full border ${current === color ? "border-text" : "border-border"}`}
+          style={{ backgroundColor: color }}
+        />
+      ))}
+      <button
+        type="button"
+        title={t("Remove color")}
+        aria-label={t("Remove color")}
+        onMouseDown={(event) => event.preventDefault()}
+        onClick={() => editor.chain().focus().unsetColor().run()}
+        className="rounded p-1 text-small text-muted line-through transition-colors hover:bg-elevated hover:text-text"
+      >
+        A
+      </button>
+      {linkDraft !== null && (
+        <form
+          className="flex basis-full items-center gap-1 px-1 py-1"
+          onSubmit={(event) => {
+            event.preventDefault();
+            applyLink(linkDraft);
+          }}
+        >
+          <input
+            data-testid="doc-link-field"
+            value={linkDraft}
+            onChange={(event) => setLinkDraft(event.target.value)}
+            placeholder={t("Web address")}
+            aria-label={t("Web address")}
+            className="min-w-0 flex-1 rounded border border-border bg-bg px-1 py-0.5 text-small text-text"
+          />
+          <button
+            type="submit"
+            disabled={documentLinkHref(linkDraft) === null}
+            className="rounded px-1.5 py-1 text-small text-muted transition-colors hover:bg-elevated hover:text-text disabled:opacity-40"
+          >
+            {t("Add link")}
+          </button>
+          {editor.isActive("link") && (
+            <button
+              type="button"
+              onMouseDown={(event) => event.preventDefault()}
+              onClick={() => {
+                editor.chain().focus().extendMarkRange("link").unsetLink().run();
+                setLinkDraft(null);
+              }}
+              className="rounded px-1.5 py-1 text-small text-muted transition-colors hover:bg-elevated hover:text-text"
+            >
+              {t("Remove link")}
+            </button>
+          )}
+        </form>
+      )}
     </>
   );
 }
@@ -525,8 +626,10 @@ export function DocumentEditor({
       {editor && (
         <BubbleMenu
           editor={editor}
-          shouldShow={({ state, view }) => !state.selection.empty && view.hasFocus()}
-          className="flex max-w-[320px] flex-wrap items-center gap-0.5 rounded-md border border-border bg-overlay p-0.5 shadow-md"
+          shouldShow={({ state, view, element }) =>
+            !state.selection.empty && (view.hasFocus() || element.contains(document.activeElement))
+          }
+          className="flex max-w-[360px] flex-wrap items-center gap-0.5 rounded-md border border-border bg-overlay p-0.5 shadow-md"
         >
           {editable && marks.map((mark) => (
             <button
@@ -542,6 +645,7 @@ export function DocumentEditor({
               <mark.icon size={14} />
             </button>
           ))}
+          {editable && <SelectionStyleButtons editor={editor} />}
           {onComment && (
             <button
               type="button"
