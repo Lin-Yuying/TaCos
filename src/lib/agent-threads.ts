@@ -683,9 +683,23 @@ async function focusIssueOf(threadId: string): Promise<string | null> {
   return row?.focus ?? null;
 }
 
-// H-COLLAB-08: "用 Agent 推进". Claims the task when nobody has it, then opens the
-// user's chat for this task. A second click reopens the same chat.
-export async function startTaskChat(workspaceId: string, issueId: string, userId: string): Promise<AgentThread> {
+export function taskChatOpeningMessage(identifier: string): string {
+  return `Work on task ${identifier}. Do what it asks, then say what you did and what is left.`;
+}
+
+export type TaskChatStart = {
+  thread: AgentThread;
+  /** First user turn for a brand-new task chat; null when reopening an existing one. */
+  openingMessage: string | null;
+};
+
+// H-COLLAB-08 / team-2.3: "Work on it in chat". Claims the task when nobody has it, then
+// opens the user's chat for this task. A second click reopens the same chat without a new opening turn.
+export async function startTaskChat(
+  workspaceId: string,
+  issueId: string,
+  userId: string
+): Promise<TaskChatStart> {
   const db = getDb();
   const [task] = await db
     .select()
@@ -713,7 +727,7 @@ export async function startTaskChat(workspaceId: string, issueId: string, userId
     .limit(1);
   if (existing) {
     const thread = await getAgentThread(workspaceId, userId, existing.id);
-    if (thread) return thread;
+    if (thread) return { thread, openingMessage: null };
   }
 
   const thread = await startAgentThread({
@@ -729,5 +743,5 @@ export async function startTaskChat(workspaceId: string, issueId: string, userId
     .where(eq(agentThreads.id, thread.id));
   const opened = await getAgentThread(workspaceId, userId, thread.id);
   if (!opened) throw new TacosError("Could not open the conversation", 500);
-  return opened;
+  return { thread: opened, openingMessage: taskChatOpeningMessage(task.identifier) };
 }

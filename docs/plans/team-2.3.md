@@ -29,7 +29,7 @@ Item-level checks stay cheap (types, check scripts). End-to-end tests and screen
 | 3 | Members change their own display name in Settings | done | Check script: own name changes; empty and over-long names refused |
 | 4 | Paste and upload images and files in the Agent composer, handed to the harness on the member's computer | done | Check script: `npx tsx scripts/check-composer-attachments.ts`; real-model check in item 26 |
 | 5 | Selected image in a document shows selection; delete leaves the cursor in place with no jump | done | Check script: `node --import tsx scripts/check-doc-image-selection.ts`; screenshots in item 26 |
-| 6 | The two Agent buttons: new names, chat button sends the first message | todo | Check script: empty chat sends once; existing chat sends nothing |
+| 6 | The two Agent buttons: new names, chat button sends the first message | done | Check script: empty chat sends once; existing chat sends nothing |
 | 7 | Shared chat: one turn at a time, says who is using it; fork from a message | todo | Check script: second sender refused while a turn runs; fork copies history up to the message and leaves the source unchanged |
 | 8 | @ someone who cannot see the document: warn and offer sharing; @ yourself notifies | todo | Check script: warning condition; self-mention notification |
 | 9 | One left edge for title, toolbar and content on every page; board fills the width and stays readable with the task panel open; board column order; line icon for documents; Documents page groups match the sidebar; read items in Inbox stay legible | todo | Screenshots at 1440 and 1100 wide in item 26 |

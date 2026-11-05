@@ -27,7 +27,12 @@ async function main() {
   const created = await createIssue(ws, { title: "Fix the login bug", description: "Steps: open login.", project: project.key }, { kind: "user", userId: me.id, displayName: me.displayName });
   const task = created.issue;
 
-  const t1 = (await threads.startTaskChat(ws, task.id, me.id)) as { id: string; title: string; projectId: string };
+  const open1 = (await threads.startTaskChat(ws, task.id, me.id)) as {
+    thread: { id: string; title: string; projectId: string };
+    openingMessage: string | null;
+  };
+  const t1 = open1.thread;
+  assert(open1.openingMessage, "a new task chat must include an opening message");
   const [row] = await db.select().from(issues).where(eq(issues.id, task.id));
   assert(row.claimedBy === me.id, "an unclaimed task must be claimed by the user");
   assert(t1.projectId === project.id, "the chat must bind to the task project");
@@ -39,8 +44,12 @@ async function main() {
   const chips = (await threads.listThreadTasks(ws, t1.id, me.id)) as { id: string }[];
   assert(chips.some((c) => c.id === task.id), "the chat header must show the task chip");
 
-  const t2 = (await threads.startTaskChat(ws, task.id, me.id)) as { id: string };
-  assert(t2.id === t1.id, "a second click must reopen the same chat");
+  const open2 = (await threads.startTaskChat(ws, task.id, me.id)) as {
+    thread: { id: string };
+    openingMessage: string | null;
+  };
+  assert(open2.thread.id === t1.id, "a second click must reopen the same chat");
+  assert(open2.openingMessage === null, "reopening must not offer another opening message");
 
   let refused = false;
   try {
