@@ -157,4 +157,4 @@ Every mutation records an event with an actor (`you`, `api:<key-name>`, or `mcp`
 
 ## License
 
-[MIT](LICENSE) © 2026 Zhenglin Chen, Yongqi Liu, Jiahao Xu, Yuying Lin. 
+[MIT](LICENSE) © 2026 Zhenglin Chen, Yongqi Liu, Jiahao Xu, Xinyue Zhang and Yuying Lin. 
