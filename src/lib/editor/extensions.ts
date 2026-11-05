@@ -4,7 +4,17 @@ import { TaskItem, TaskList } from "@tiptap/extension-list";
 import { Table, TableCell, TableHeader, TableRow, renderTableToMarkdown } from "@tiptap/extension-table";
 import Image from "@tiptap/extension-image";
 import Mention from "@tiptap/extension-mention";
+import { deleteSelectedImage, DOC_IMAGE_CLASS } from "@/lib/editor/doc-image";
 import { mentionText } from "@/lib/mentions";
+
+const DocumentImage = Image.extend({
+  addKeyboardShortcuts() {
+    return {
+      Backspace: ({ editor }) => deleteSelectedImage(editor.state, (tr) => editor.view.dispatch(tr)),
+      Delete: ({ editor }) => deleteSelectedImage(editor.state, (tr) => editor.view.dispatch(tr)),
+    };
+  },
+}).configure({ HTMLAttributes: { class: DOC_IMAGE_CLASS } });
 
 // Stored documents stay Markdown. These nodes carry the three things TaCos adds to it,
 // so `[[page]]`, `![[page]]` and `[PROJ-1](issue:id)` come back from the editor unchanged.
@@ -152,7 +162,7 @@ export function documentExtensions(
     TableRow,
     TableHeader,
     TableCell,
-    Image,
+    DocumentImage,
     PageRef,
     IssueRef,
     PageEmbed,

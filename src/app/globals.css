@@ -257,7 +257,11 @@ html[data-desktop] .app-auth-menu {
 .document-editor .doc-comment-anchor { background: color-mix(in srgb, var(--color-code-number) 16%, transparent); border-bottom: 1px solid color-mix(in srgb, var(--color-code-number) 60%, transparent); }
 .document-editor .doc-comment-anchor.is-active { background: color-mix(in srgb, var(--color-code-number) 32%, transparent); }
 .document-editor .ProseMirror hr { margin: 16px 0; border-color: var(--color-border); }
-.document-editor .ProseMirror img { max-height: 520px; max-width: 100%; border-radius: 8px; border: 1px solid var(--color-border); }
+.document-editor .ProseMirror img.doc-image { max-height: 520px; max-width: 100%; border-radius: 8px; border: 1px solid var(--color-border); }
+.document-editor .ProseMirror img.doc-image.ProseMirror-selectednode {
+  border-color: var(--color-accent);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--color-accent) 40%, transparent);
+}
 .document-editor .ProseMirror table { width: 100%; border-collapse: collapse; font-size: 12.5px; table-layout: fixed; }
 .document-editor .ProseMirror th,
 .document-editor .ProseMirror td { border: 1px solid var(--color-border); padding: 4px 8px; text-align: left; vertical-align: top; }
