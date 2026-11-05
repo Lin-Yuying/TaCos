@@ -42,7 +42,7 @@ import { documentColor, documentLinkHref } from "@/lib/markdown";
 import type { Member } from "@/lib/issues";
 import { BLOCK_TURNS, canTurnBlock, turnBlock } from "@/lib/editor/block-turn";
 import { documentMarkdown, markdownToDocument } from "@/lib/editor/document-markdown";
-import { anchorFromSelection, anchorRanges } from "@/lib/editor/anchors";
+import { anchorFromSelection, anchorRanges, commentCountsByBlock } from "@/lib/editor/anchors";
 import type { DocAnchor } from "@/lib/doc-anchor";
 import type { PageContext } from "@/components/markdown";
 import type { DocCollab } from "@/components/use-doc-collab";
@@ -353,7 +353,9 @@ export function DocumentEditor({
   const mentionMenuRef = useRef<MenuState<Member> | null>(null);
   const membersRef = useRef({ members, viewerId });
   // The text block under the pointer, for the comment button in the right margin.
-  const [hovered, setHovered] = useState<{ from: number; to: number; top: number } | null>(null);
+  const [hovered, setHovered] = useState<{ from: number; to: number; top: number; block: number } | null>(null);
+  const frameRef = useRef<HTMLDivElement>(null);
+  const [marginCounts, setMarginCounts] = useState<{ from: number; top: number; count: number; ids: string[] }[]>([]);
   const [anchorStore] = useState(() => new AnchorStore());
   const locatedRef = useRef(onAnchorsLocated);
   const anchorClickRef = useRef(onAnchorClick);
@@ -538,6 +540,15 @@ export function DocumentEditor({
     editor.view.dispatch(editor.state.tr.setMeta(anchorsKey, true));
     const ranges = anchorRanges(editor.state.doc, anchors);
     locatedRef.current?.(new Set(ranges.map((range) => range.anchor.id)));
+    const root = frameRef.current?.getBoundingClientRect();
+    setMarginCounts(
+      root
+        ? commentCountsByBlock(editor.state.doc, anchors).map((group) => ({
+            ...group,
+            top: editor.view.coordsAtPos(Math.min(group.from + 1, editor.state.doc.content.size)).top - root.top,
+          }))
+        : [],
+    );
     const active = ranges.find((range) => range.anchor.id === activeAnchor);
     if (active) {
       const { node } = editor.view.domAtPos(active.from);
@@ -565,15 +576,19 @@ export function DocumentEditor({
     }
     const from = $pos.start();
     const to = $pos.end();
+    const block = $pos.depth >= 1 ? $pos.before(1) : 0;
     const top = editor.view.coordsAtPos(from).top - event.currentTarget.getBoundingClientRect().top;
     setHovered((current) =>
-      current?.from === from && current.to === to && current.top === top ? current : { from, to, top }
+      current?.from === from && current.to === to && current.top === top && current.block === block
+        ? current
+        : { from, to, top, block }
     );
   };
 
   return (
     <div
-      className={`document-editor relative ${onComment ? "pr-7" : ""}`}
+      ref={frameRef}
+      className={`document-editor relative ${onComment || marginCounts.length > 0 ? "pr-7" : ""}`}
       onMouseMove={trackBlock}
       onMouseLeave={() => setHovered(null)}
     >
@@ -720,7 +735,24 @@ export function DocumentEditor({
         }}
       />
       <EditorContent editor={editor} />
-      {editor && onComment && hovered && (
+      {marginCounts.map((group) => (
+        <button
+          key={group.from}
+          type="button"
+          data-testid="doc-comment-count"
+          title={t(group.count === 1 ? "{count} comment" : "{count} comments", { count: group.count })}
+          aria-label={t(group.count === 1 ? "{count} comment" : "{count} comments", { count: group.count })}
+          style={{ top: group.top }}
+          onMouseDown={(event) => event.preventDefault()}
+          onClick={() => onAnchorClick?.(group.ids[0])}
+          className={`absolute right-0 flex h-6 min-w-6 items-center justify-center rounded px-1 text-small tabular-nums ${
+            group.ids.includes(activeAnchor ?? "") ? "bg-elevated text-text" : "text-muted hover:bg-elevated hover:text-text"
+          }`}
+        >
+          {group.count}
+        </button>
+      ))}
+      {editor && onComment && hovered && !marginCounts.some((group) => group.from === hovered.block) && (
         <button
           type="button"
           data-testid="block-comment"

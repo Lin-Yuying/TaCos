@@ -47,6 +47,24 @@ export function anchorFromSelection(doc: PMNode, from: number, to: number): DocA
   return anchorFromRange(text, start, last + 1);
 }
 
+/** How many comments sit on each top-level block, in document order. */
+export function commentCountsByBlock<T extends DocAnchor & { id: string }>(
+  doc: PMNode,
+  anchors: T[],
+): Array<{ from: number; count: number; ids: string[] }> {
+  const groups = new Map<number, string[]>();
+  for (const range of anchorRanges(doc, anchors)) {
+    const $pos = doc.resolve(range.from);
+    const block = $pos.depth >= 1 ? $pos.before(1) : 0;
+    const ids = groups.get(block) ?? [];
+    ids.push(range.anchor.id);
+    groups.set(block, ids);
+  }
+  return [...groups.entries()]
+    .sort((a, b) => a[0] - b[0])
+    .map(([from, ids]) => ({ from, count: ids.length, ids }));
+}
+
 /** Editor range of each anchor that can still be found. */
 export function anchorRanges<T extends DocAnchor>(doc: PMNode, anchors: T[]): Array<{ anchor: T; from: number; to: number }> {
   const { text, segments } = docText(doc);
