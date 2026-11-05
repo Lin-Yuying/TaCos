@@ -130,7 +130,7 @@ export function AssigneeStack({
           />
         </span>
       ))}
-      {hidden > 0 && <span className="ml-1 text-[11px] text-faint">+{hidden}</span>}
+      {hidden > 0 && <span className="ml-1 text-caption text-faint">+{hidden}</span>}
     </span>
   );
 }
@@ -205,15 +205,15 @@ export function IssueTable({ issues }: { issues: IssueWithLabels[] }) {
   let flatIndex = -1;
 
   return (
-    <div className="flex-1 overflow-y-auto">
+    <div className="@container flex-1 overflow-y-auto">
       {groups.map((group) => (
         <div key={group.status}>
-          <div className="sticky top-0 z-10 flex items-center gap-2 border-b border-border bg-bg/95 px-10 py-1.5 backdrop-blur lg:px-20 xl:px-32">
+          <div className="sticky top-0 z-10 flex items-center gap-2 border-b border-border bg-bg/95 px-4 py-1.5 backdrop-blur @2xl:px-10 @4xl:px-20 @6xl:px-32">
             <StatusIcon status={group.status} size={13} />
-            <span className="text-[12px] font-medium text-muted">
+            <span className="text-small font-medium text-muted">
               {t(STATUS_META[group.status].label)}
             </span>
-            <span className="text-[12px] text-faint">{group.items.length}</span>
+            <span className="text-small text-faint">{group.items.length}</span>
             <AddIssueButton status={group.status} />
           </div>
           {group.items.map((issue) => {
@@ -234,25 +234,25 @@ export function IssueTable({ issues }: { issues: IssueWithLabels[] }) {
                   openIssue(issue.id);
                 }}
                 onMouseEnter={() => setFocusIndex(index)}
-                className={`flex cursor-default items-center gap-2.5 px-10 py-[7px] text-[13px] transition-colors lg:px-20 xl:px-32 ${
+                className={`flex cursor-default items-center gap-2.5 px-4 py-[7px] text-body transition-colors @2xl:px-10 @4xl:px-20 @6xl:px-32 ${
                   focused ? "bg-row-active" : opened ? "bg-surface" : "hover:bg-elevated/40"
                 } ${opened ? "border-l-2 border-l-accent" : "border-l-2 border-l-transparent"}`}
               >
                 <StatusIcon status={issue.status} size={14} />
                 <span
                   title={issueRef(issue)}
-                  className="w-[124px] shrink-0 truncate font-mono text-[12px] text-faint"
+                  className="w-[124px] shrink-0 truncate font-mono text-small text-faint"
                 >
                   {issueRef(issue)}
                 </span>
                 <span className="min-w-0 flex-1 truncate">{issue.title}</span>
-                <span className="flex w-[96px] shrink-0 items-center gap-1.5 text-[12px]">
+                <span className="hidden w-[96px] shrink-0 items-center gap-1.5 text-small @xl:flex">
                   <PriorityIcon priority={issue.priority} size={14} />
                   <span className={issue.priority === 0 ? "truncate text-faint" : "truncate text-muted"}>
                     {t(PRIORITY_NAMES[issue.priority])}
                   </span>
                 </span>
-                <span className="flex w-[146px] shrink-0 items-center gap-1.5">
+                <span className="hidden w-[146px] shrink-0 items-center gap-1.5 @4xl:flex">
                   {issue.assignees.length === 1 ? (
                     (() => {
                       const assignee = issue.assignees[0];
@@ -263,7 +263,7 @@ export function IssueTable({ issues }: { issues: IssueWithLabels[] }) {
                             displayName={assignee.displayName}
                             avatar={assignee.avatar}
                           />
-                          <span className="min-w-0 truncate text-[12px] text-muted">
+                          <span className="min-w-0 truncate text-small text-muted">
                             {assignee.displayName}
                           </span>
                         </>
@@ -288,23 +288,23 @@ export function IssueTable({ issues }: { issues: IssueWithLabels[] }) {
                       className="flex min-w-0 items-center gap-1.5"
                     >
                       <AssigneeStack assignees={issue.assignees} max={2} hrefFor={assigneeHref} />
-                      <span className="min-w-0 truncate text-[12px] text-muted">
+                      <span className="min-w-0 truncate text-small text-muted">
                         {issue.assignees.map((assignee) => assignee.displayName).join(", ")}
                       </span>
                     </span>
                   ) : null}
                 </span>
-                <span className="flex w-[112px] shrink-0 items-center justify-end gap-1">
+                <span className="hidden w-[112px] shrink-0 items-center justify-end gap-1 @4xl:flex">
                   {issue.labels.slice(0, 2).map((label) => (
                     <LabelPill key={label.id} name={label.name} color={label.color} small />
                   ))}
                   {issue.labels.length > 2 && (
-                    <span className="text-[11px] text-faint">+{issue.labels.length - 2}</span>
+                    <span className="text-caption text-faint">+{issue.labels.length - 2}</span>
                   )}
                 </span>
-                <span className="flex w-[44px] shrink-0 items-center justify-end gap-1">
+                <span className="flex w-[72px] shrink-0 items-center justify-end gap-1">
                   <ViaBadge via={issue.createdVia} />
-                  <span suppressHydrationWarning className="w-8 text-right text-[12px] text-faint">
+                  <span suppressHydrationWarning className="whitespace-nowrap text-right text-small text-faint">
                     {timeAgo(issue.updatedAt, locale)}
                   </span>
                 </span>

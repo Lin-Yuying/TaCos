@@ -6,6 +6,7 @@ import {
   getIssueDetail,
   getProject,
   listIssues,
+  listProjects,
   normalizePriority,
   normalizeStatus,
   resolveAssigneeIds,
@@ -15,7 +16,11 @@ import {
   type Priority,
   type Status,
 } from "./issues";
-import { createPage, listPages, updatePage } from "./pages";
+import { listUserWorkspaces, type UserWorkspace } from "./auth";
+import { applyDocEdits } from "./doc-edits";
+import { searchWorkspace } from "./search";
+import { listFieldValues, listTaskFields } from "./task-fields";
+import { createPage, getPage, listPages, undoAgentEdit, updatePage } from "./pages";
 import { PRIORITY_NAMES, STATUS_META } from "./constants";
 
 // Tools the Agent can call through the TaCos MCP bridge. Delete tools always wait for
@@ -50,10 +55,45 @@ const STATUS_HELP = (Object.keys(STATUS_META) as Status[])
   .map((status) => `${STATUS_META[status].label} (${status})`)
   .join(", ");
 
-export const AGENT_TOOLS: AgentToolSpec[] = [
+const READ_WORKSPACE = {
+  type: "string",
+  description: "Key or name of another workspace you joined. Leave it out for this conversation's workspace.",
+};
+const READ_PROJECT = { type: "string", description: "Key or name of a project in that workspace" };
+
+const TOOLS: AgentToolSpec[] = [
+  {
+    name: "list_workspaces",
+    description: "List the workspaces this person has joined. Only these can be read or written.",
+    write: false,
+    inputSchema: { type: "object", properties: {} },
+  },
+  {
+    name: "list_projects",
+    description: "List the projects of a workspace that this person can see.",
+    write: false,
+    inputSchema: { type: "object", properties: { workspace: READ_WORKSPACE } },
+  },
+  {
+    name: "search_workspace",
+    description:
+      "Search documents, tasks and comments this person can see, in this workspace, another joined workspace, or all of them.",
+    write: false,
+    inputSchema: {
+      type: "object",
+      properties: {
+        query: { type: "string", description: "Words to find" },
+        workspace: {
+          type: "string",
+          description: 'Key or name of a joined workspace, or "all". Leave it out for this conversation\'s workspace.',
+        },
+      },
+      required: ["query"],
+    },
+  },
   {
     name: "list_tasks",
-    description: `List tasks in this project. Statuses: ${STATUS_HELP}.`,
+    description: `List tasks in this project, or in a project or workspace you name. Statuses: ${STATUS_HELP}.`,
     write: false,
     inputSchema: {
       type: "object",
@@ -64,24 +104,26 @@ export const AGENT_TOOLS: AgentToolSpec[] = [
         },
         q: { type: "string", description: "Free-text search across title, description and identifier" },
         limit: { type: "number", description: "Max results (default 30, max 100)" },
+        workspace: READ_WORKSPACE,
+        project: READ_PROJECT,
       },
     },
   },
   {
     name: "get_task",
-    description: "Read one task by identifier (e.g. TEST-12) or id, including its comments.",
+    description: "Read one task by identifier (e.g. TEST-12) or id, including its comments and custom fields.",
     write: false,
     inputSchema: {
       type: "object",
-      properties: { id: { type: "string", description: "Task identifier or id" } },
+      properties: { id: { type: "string", description: "Task identifier or id" }, workspace: READ_WORKSPACE },
       required: ["id"],
     },
   },
   {
     name: "get_overview",
-    description: "Read this project's Overview document (markdown) and its description.",
+    description: "Read a project's Overview document (markdown) and its description. Defaults to this project.",
     write: false,
-    inputSchema: { type: "object", properties: {} },
+    inputSchema: { type: "object", properties: { workspace: READ_WORKSPACE, project: READ_PROJECT } },
   },
   {
     name: "create_task",
@@ -232,6 +274,7 @@ export const AGENT_TOOLS: AgentToolSpec[] = [
       properties: {
         id: { type: "string", description: "Document id from an earlier result" },
         title: { type: "string", description: "Exact document title, when the id is unknown" },
+        workspace: READ_WORKSPACE,
       },
     },
   },
@@ -249,9 +292,47 @@ export const AGENT_TOOLS: AgentToolSpec[] = [
     },
   },
   {
+    name: "edit_doc",
+    description:
+      "Change passages of a document and leave the rest exactly as it is. Prefer this to update_doc. Read it with get_doc first. Each find must match exactly one place in the current markdown; if any edit fails, nothing changes. An empty replace deletes the passage.",
+    write: true,
+    inputSchema: {
+      type: "object",
+      properties: {
+        id: { type: "string", description: "Document id from get_doc" },
+        edits: {
+          type: "array",
+          description: "Applied in order",
+          items: {
+            type: "object",
+            properties: {
+              find: { type: "string", description: "Exact text to replace, long enough to match one place" },
+              replace: { type: "string", description: "Text to put there" },
+            },
+            required: ["find", "replace"],
+          },
+        },
+      },
+      required: ["id", "edits"],
+    },
+  },
+  {
+    name: "undo_doc_edit",
+    description:
+      "Take back your latest change to a document, when nobody has changed the document since. Everything is kept in its version history.",
+    write: true,
+    inputSchema: {
+      type: "object",
+      properties: {
+        id: { type: "string", description: "Document id" },
+      },
+      required: ["id"],
+    },
+  },
+  {
     name: "update_doc",
     description:
-      "Replace a document's complete markdown. Read it with get_doc first and send the whole new body; this overwrites what is there.",
+      "Replace a document's complete markdown, for rewriting most of it; use edit_doc for smaller changes. Read it with get_doc first and send the whole new body; this overwrites what is there.",
     write: true,
     inputSchema: {
       type: "object",
@@ -277,6 +358,36 @@ export const AGENT_TOOLS: AgentToolSpec[] = [
     },
   },
 ];
+
+// Documents are found by id, so editing one needs no project.
+const WORKSPACE_ONLY_WRITES = new Set(["edit_doc", "undo_doc_edit", "update_doc"]);
+
+// A write always says where it goes, so nothing lands in a workspace by assumption, and the
+// approval card shows the target.
+function withWriteTarget(tool: AgentToolSpec): AgentToolSpec {
+  if (!tool.write) return tool;
+  return {
+    ...tool,
+    inputSchema: {
+      ...tool.inputSchema,
+      properties: {
+        ...tool.inputSchema.properties,
+        workspace: { type: "string", description: "Key or name of the workspace this write goes to. Required." },
+        ...(WORKSPACE_ONLY_WRITES.has(tool.name)
+          ? {}
+          : {
+              project: {
+                type: "string",
+                description: "Key or name of the project. Required when the workspace is not this conversation's.",
+              },
+            }),
+      },
+      required: [...(tool.inputSchema.required ?? []), "workspace"],
+    },
+  };
+}
+
+export const AGENT_TOOLS: AgentToolSpec[] = TOOLS.map(withWriteTarget);
 
 const READ_TOOLS = new Set(AGENT_TOOLS.filter((tool) => !tool.write).map((tool) => tool.name));
 const DELETE_TOOLS = new Set(AGENT_TOOLS.filter((tool) => tool.delete).map((tool) => tool.name));
@@ -340,6 +451,8 @@ function taskSummary(issue: {
     ...(issue.description ? { description: issue.description } : {}),
   };
 }
+
+const SEARCH_RESULT_LIMIT = 40;
 
 const AGENT_ACTOR = { kind: "agent" as const, label: "codex", via: "mcp" as const };
 
@@ -417,20 +530,157 @@ async function updateOne(ctx: AgentToolContext, args: ToolArgs): Promise<string>
   return `Updated ${detail.issue.identifier} — ${detail.issue.title}`;
 }
 
+// Unjoined and nonexistent read the same, so a refusal says nothing about other people's workspaces.
+async function joinedWorkspace(userId: string, wanted: string): Promise<UserWorkspace> {
+  const joined = await listUserWorkspaces(userId);
+  const lower = wanted.toLowerCase();
+  const exact = joined.filter((workspace) => workspace.id === wanted || workspace.key.toLowerCase() === lower);
+  const found = exact.length ? exact : joined.filter((workspace) => workspace.name.toLowerCase() === lower);
+  if (found.length > 1) {
+    throw new TacosError(`"${wanted}" matches several workspaces; use a key: ${found.map((w) => w.key).join(", ")}`, 409);
+  }
+  if (!found[0]) throw new TacosError(`You have not joined a workspace called "${wanted}"`, 404);
+  return found[0];
+}
+
+async function namedProject(workspaceId: string, userId: string, wanted: string) {
+  const lower = wanted.toLowerCase();
+  const visible = await listProjects(workspaceId, userId);
+  const project = visible.find(
+    (row) => row.id === wanted || row.key.toLowerCase() === lower || row.name.toLowerCase() === lower
+  );
+  if (!project) throw new TacosError(`No project called "${wanted}" in that workspace`, 404);
+  return project;
+}
+
+/** Where this call reads: this conversation's project, unless it names somewhere else. */
+async function readScope(ctx: AgentToolContext, args: ToolArgs): Promise<AgentToolContext> {
+  const workspace = str(args.workspace);
+  const project = str(args.project);
+  const workspaceId = workspace ? (await joinedWorkspace(ctx.userId, workspace)).id : ctx.workspaceId;
+  if (project) {
+    const found = await namedProject(workspaceId, ctx.userId, project);
+    return { ...ctx, workspaceId, projectId: found.id, projectKey: found.key };
+  }
+  if (workspaceId === ctx.workspaceId) return ctx;
+  return { ...ctx, workspaceId, projectId: "", projectKey: "" };
+}
+
+export const NO_WRITE_TARGET =
+  "Name the workspace this write goes to, with workspace. list_workspaces shows the choices.";
+
+export function namesWriteTarget(rawArgs: unknown): boolean {
+  return Boolean(str(asRecord(rawArgs).workspace));
+}
+
+/** Where this write goes. It must name a workspace; a bare write is refused. */
+async function writeScope(ctx: AgentToolContext, name: string, args: ToolArgs): Promise<AgentToolContext> {
+  const workspace = str(args.workspace);
+  if (!workspace) throw new TacosError(NO_WRITE_TARGET);
+  const { id: workspaceId } = await joinedWorkspace(ctx.userId, workspace);
+  const project = str(args.project);
+  if (project) {
+    const found = await namedProject(workspaceId, ctx.userId, project);
+    return { ...ctx, workspaceId, projectId: found.id, projectKey: found.key };
+  }
+  if (workspaceId === ctx.workspaceId) return ctx;
+  if (!WORKSPACE_ONLY_WRITES.has(name)) {
+    throw new TacosError("Name the project too, with project: this is not the conversation's workspace.");
+  }
+  return { ...ctx, workspaceId, projectId: "", projectKey: "" };
+}
+
+/** True when a write names a workspace other than the conversation's. Those always ask first. */
+export async function writesElsewhere(ctx: AgentToolContext, name: string, rawArgs: unknown): Promise<boolean> {
+  const spec = AGENT_TOOLS.find((tool) => tool.name === name);
+  if (!spec?.write) return false;
+  const workspace = str(asRecord(rawArgs).workspace);
+  if (!workspace) return false;
+  try {
+    return (await joinedWorkspace(ctx.userId, workspace)).id !== ctx.workspaceId;
+  } catch {
+    return false; // The tool itself refuses this one and explains why.
+  }
+}
+
+async function searchTool(ctx: AgentToolContext, args: ToolArgs) {
+  const query = str(args.query);
+  if (!query) throw new TacosError("Pass something to search for");
+  const wanted = str(args.workspace);
+  const targets =
+    wanted.toLowerCase() === "all"
+      ? await listUserWorkspaces(ctx.userId)
+      : [
+          wanted
+            ? await joinedWorkspace(ctx.userId, wanted)
+            : { id: ctx.workspaceId, key: "", name: "" },
+        ];
+  const results = [];
+  for (const target of targets) {
+    for (const hit of await searchWorkspace(target.id, ctx.userId, query)) {
+      results.push({
+        ...(target.key ? { workspace: target.key } : {}),
+        kind: hit.kind,
+        id: hit.openId,
+        title: hit.title,
+        ref: hit.ref,
+        snippet: hit.snippet,
+        updatedAt: hit.updatedAt,
+      });
+    }
+  }
+  return { count: results.length, results: results.slice(0, SEARCH_RESULT_LIMIT) };
+}
+
 export async function executeAgentTool(
-  ctx: AgentToolContext,
+  bound: AgentToolContext,
   name: string,
   rawArgs: unknown
 ): Promise<{ text: string; isError?: boolean }> {
   const args = asRecord(rawArgs);
   const spec = AGENT_TOOLS.find((tool) => tool.name === name);
   if (!spec) throw new TacosError(`Unknown tool "${name}"`, 400);
+  // Reads say where they look through their own scope; every write below uses the named target.
+  const ctx = spec.write ? await writeScope(bound, name, args) : bound;
 
   switch (name) {
+    case "list_workspaces": {
+      const joined = await listUserWorkspaces(ctx.userId);
+      return {
+        text: JSON.stringify(
+          joined.map((workspace) => ({
+            key: workspace.key,
+            name: workspace.name,
+            current: workspace.id === ctx.workspaceId,
+          })),
+          null,
+          2
+        ),
+      };
+    }
+    case "list_projects": {
+      const scope = await readScope(ctx, args);
+      const visible = await listProjects(scope.workspaceId, ctx.userId);
+      return {
+        text: JSON.stringify(
+          visible.map((project) => ({
+            key: project.key,
+            name: project.name,
+            description: project.description,
+            current: project.id === ctx.projectId,
+          })),
+          null,
+          2
+        ),
+      };
+    }
+    case "search_workspace":
+      return { text: JSON.stringify(await searchTool(ctx, args), null, 2) };
     case "list_tasks": {
       const status = str(args.status);
-      const issues = await listIssues(ctx.workspaceId, {
-        projectId: ctx.projectId,
+      const scope = await readScope(ctx, args);
+      const issues = await listIssues(scope.workspaceId, {
+        projectId: scope.projectId || undefined,
         viewerId: ctx.userId,
         status: status === "active" || status === "open" || status === "all" ? status : asStatus(status) ?? "all",
         q: str(args.q) || undefined,
@@ -439,7 +689,7 @@ export async function executeAgentTool(
       return {
         text: JSON.stringify(
           {
-            project: ctx.projectKey,
+            project: scope.projectKey || "all",
             count: issues.length,
             tasks: issues.map((issue) => taskSummary(issue)),
           },
@@ -449,7 +699,19 @@ export async function executeAgentTool(
       };
     }
     case "get_task": {
-      const { issue, comments } = await requireProjectTask(ctx, str(args.id));
+      // Reading follows the person's own visibility, not this conversation's project.
+      const scope = await readScope(ctx, args);
+      const id = str(args.id);
+      if (!id) throw new TacosError("Task id is required");
+      const detail = await getIssueDetail(scope.workspaceId, id, ctx.userId);
+      if (!detail) throw new TacosError(`Task "${id}" not found`, 404);
+      const { issue, comments } = detail;
+      const fieldValues = (await listFieldValues([issue.id]))[issue.id] ?? {};
+      const customFields = Object.fromEntries(
+        (await listTaskFields(scope.workspaceId))
+          .filter((field) => fieldValues[field.id])
+          .map((field) => [field.name, fieldValues[field.id]])
+      );
       return {
         text: JSON.stringify(
           {
@@ -457,6 +719,7 @@ export async function executeAgentTool(
             assignees: issue.assignees.map((assignee) => assignee.displayName),
             labels: issue.labels.map((label) => label.name),
             dueDate: issue.dueDate,
+            customFields,
             comments: comments.map((comment) => ({
               author: comment.author?.displayName ?? comment.agentAuthor ?? "agent",
               body: comment.body,
@@ -475,7 +738,9 @@ export async function executeAgentTool(
       return { text: `Claimed ${issue.identifier} — ${issue.title} for you` };
     }
     case "get_overview": {
-      const project = await getProject(ctx.workspaceId, ctx.projectId);
+      const scope = await readScope(ctx, args);
+      if (!scope.projectId) throw new TacosError("Name the project too, with project.");
+      const project = await getProject(scope.workspaceId, scope.projectId);
       if (!project) throw new TacosError("Project not found", 404);
       return {
         text: JSON.stringify(
@@ -491,7 +756,8 @@ export async function executeAgentTool(
       if (!id && !title) throw new TacosError("Pass a document id or title");
       // Documents are a workspace-wide library, not project tasks, so the conversation's
       // project does not fence them; the person's own visibility rule does.
-      const all = await listPages(ctx.workspaceId, ctx.userId);
+      const scope = await readScope(ctx, args);
+      const all = await listPages(scope.workspaceId, ctx.userId);
       const matches = id
         ? all.filter((page) => page.id === id)
         : all.filter((page) => page.title.trim().toLowerCase() === title.toLowerCase());
@@ -584,9 +850,32 @@ export async function executeAgentTool(
       });
       const markdown = typeof args.markdown === "string" ? args.markdown : "";
       if (markdown.trim()) {
-        await updatePage(ctx.workspaceId, page.id, ctx.userId, { doc: markdown });
+        await updatePage(ctx.workspaceId, page.id, ctx.userId, { doc: markdown }, { via: "mcp" });
       }
       return { text: `Created document "${page.title}" in ${ctx.projectKey}` };
+    }
+    case "edit_doc": {
+      const id = str(args.id);
+      if (!id) throw new TacosError("Document id is required — call get_doc first");
+      const page = await getPage(ctx.workspaceId, id, ctx.userId);
+      if (!page) throw new TacosError(`Document "${id}" not found`, 404);
+      const edits = (Array.isArray(args.edits) ? args.edits : []).map((raw) => {
+        const edit = asRecord(raw);
+        return {
+          find: typeof edit.find === "string" ? edit.find : "",
+          replace: typeof edit.replace === "string" ? edit.replace : "",
+        };
+      });
+      const doc = applyDocEdits(page.doc, edits);
+      // baseRevision refuses the write when someone saved after the edits were matched.
+      await updatePage(ctx.workspaceId, id, ctx.userId, { doc, baseRevision: page.revision }, { via: "mcp" });
+      return { text: `Edited "${page.title}": ${edits.length} passage(s) changed; the rest is as it was` };
+    }
+    case "undo_doc_edit": {
+      const id = str(args.id);
+      if (!id) throw new TacosError("Document id is required");
+      const page = await undoAgentEdit(ctx.workspaceId, id, ctx.userId, { via: "mcp" });
+      return { text: `Took back the latest edit to "${page.title}"` };
     }
     case "update_doc": {
       const id = str(args.id);
@@ -594,7 +883,7 @@ export async function executeAgentTool(
       const markdown = typeof args.markdown === "string" ? args.markdown : "";
       if (!markdown.trim()) throw new TacosError("The new document is empty");
       // updatePage applies the person's own page permissions to the agent's write.
-      const page = await updatePage(ctx.workspaceId, id, ctx.userId, { doc: markdown });
+      const page = await updatePage(ctx.workspaceId, id, ctx.userId, { doc: markdown }, { via: "mcp" });
       return { text: `Replaced document "${page.title}" (${markdown.length} characters)` };
     }
     case "delete_task": {

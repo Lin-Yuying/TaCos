@@ -29,6 +29,7 @@ import {
 } from "@/lib/pages";
 import type { PageContext } from "@/components/markdown";
 import { listProjectResources, type ProjectResource } from "@/lib/resources";
+import { listFieldValues, listTaskFields } from "@/lib/task-fields";
 import type { ProjectTab } from "@/components/project-header";
 
 // Both the project route and its legacy /issues sub-route render this, so the
@@ -66,6 +67,11 @@ export async function ProjectPage({
     redirect(`/${workspaceId}`);
   }
 
+  const [fields, fieldValues] = await Promise.all([
+    listTaskFields(workspaceId),
+    listFieldValues(issues.map((issue) => issue.id)),
+  ]);
+
   const [grants, comments, edits, unseenDocEdits, resources, trashedTitles, pageRefs, embeds]: [
     OverviewGrant[],
     OverviewComment[],
@@ -99,6 +105,8 @@ export async function ProjectPage({
     // Keyed by project: the tab, the star and the filters are per-project state, and
     // jumping between projects in the sidebar would otherwise carry them over.
     <ProjectWorkspace
+      fields={fields}
+      fieldValues={fieldValues}
       key={project.id}
       workspaceId={workspaceId}
       project={project}

@@ -1,5 +1,7 @@
 "use server";
 
+import { createTaskField, deleteTaskField, setTaskFieldValue } from "@/lib/task-fields";
+import type { TaskField } from "@/lib/task-view";
 import { revalidatePath } from "next/cache";
 import { requireAdmin, requireWorkspace } from "@/lib/auth";
 import {
@@ -454,5 +456,39 @@ export async function removeProjectResourceAction(
     const { user } = await requireWorkspace(workspaceId);
     await removeProjectResource(workspaceId, projectId, resourceId, user.id);
     refresh(workspaceId);
+  });
+}
+
+export async function createTaskFieldAction(
+  workspaceId: string,
+  input: { name: string; type: string; options?: string[] }
+) {
+  return run<TaskField>(async () => {
+    const { user } = await requireWorkspace(workspaceId);
+    const field = await createTaskField(workspaceId, user.id, input);
+    refresh(workspaceId);
+    return field;
+  });
+}
+
+export async function deleteTaskFieldAction(workspaceId: string, fieldId: string) {
+  return run<void>(async () => {
+    const { user } = await requireWorkspace(workspaceId);
+    await deleteTaskField(workspaceId, user.id, fieldId);
+    refresh(workspaceId);
+  });
+}
+
+export async function setTaskFieldValueAction(
+  workspaceId: string,
+  issueId: string,
+  fieldId: string,
+  value: string | null
+) {
+  return run<string | null>(async () => {
+    const { user } = await requireWorkspace(workspaceId);
+    const saved = await setTaskFieldValue(workspaceId, issueId, fieldId, value, user.id, userActor(user));
+    refresh(workspaceId);
+    return saved;
   });
 }

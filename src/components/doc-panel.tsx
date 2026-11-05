@@ -5,14 +5,18 @@ import { useRouter } from "next/navigation";
 import { useUI } from "@/components/ui-context";
 import { DocPageView } from "@/components/doc-page";
 import type { PageContext, PageRefEntry } from "@/components/markdown";
-import type { DocPage, PageAuthor, PageSummary } from "@/lib/pages";
+import type { DocPage, PageAuthor, PageRef, PageSummary } from "@/lib/pages";
+import type { PageLevel } from "@/lib/page-level";
 import { useT } from "@/components/i18n-context";
 
 type PageDetail = {
   page: DocPage;
   author: PageAuthor | null;
-  canEdit: boolean;
+  level: PageLevel;
+  ancestors: PageRef[];
+  favorite: boolean;
   isOwner: boolean;
+  viewerId: string;
   subpages: PageSummary[];
   refs: PageRefEntry[];
   ctx: PageContext;
@@ -92,7 +96,7 @@ function DocPanel({
   }, [missing, toast, onClose, t]);
 
   if (missing || !detail) {
-    return <div className="flex-1 p-5 text-[13px] text-muted">{t("Loading…")}</div>;
+    return <div className="flex-1 p-5 text-body text-muted">{t("Loading…")}</div>;
   }
 
   return (
@@ -100,8 +104,11 @@ function DocPanel({
       workspaceId={workspaceId}
       page={detail.page}
       author={detail.author}
-      canEdit={detail.canEdit}
+      level={detail.level}
+      ancestors={detail.ancestors}
+      favorite={detail.favorite}
       isOwner={detail.isOwner}
+      viewerId={detail.viewerId}
       subpages={detail.subpages}
       ctx={detail.ctx}
       refs={detail.refs}

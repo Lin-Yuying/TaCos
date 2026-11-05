@@ -31,8 +31,8 @@ function ActionCard({
         {icon}
       </span>
       <span className="min-w-0 flex-1">
-        <span className="block text-[13px] font-medium">{title}</span>
-        <span className="block text-[11.5px] text-faint">{hint}</span>
+        <span className="block text-body font-medium">{title}</span>
+        <span className="block text-small text-faint">{hint}</span>
       </span>
       <ArrowUpRight
         size={14}
@@ -56,7 +56,7 @@ function JumpRow({
   return (
     <Link
       href={href}
-      className={`group flex items-center gap-2.5 px-3.5 py-2 text-[13px] text-text transition-colors hover:bg-elevated/60 ${
+      className={`group flex items-center gap-2.5 px-3.5 py-2 text-body text-text transition-colors hover:bg-elevated/60 ${
         divider ? "border-t border-border" : ""
       }`}
     >
@@ -98,8 +98,8 @@ export function StartScreen({
         <div className="mb-7 flex items-center gap-3">
           <WorkspaceMark icon={workspaceIcon} className="h-9 w-9" />
           <div className="min-w-0">
-            <div className="truncate text-[14px] font-semibold text-text">{workspaceName}</div>
-            <div className="text-[12.5px] text-muted">
+            <div className="truncate text-body font-semibold text-text">{workspaceName}</div>
+            <div className="text-small text-muted">
               {t("Nothing is open. Start something, or pick up where you left off.")}
             </div>
           </div>
@@ -140,7 +140,7 @@ export function StartScreen({
 
         {recentProjects.length > 0 && (
           <section className="mt-8">
-            <h2 className="mb-2 px-1 text-[11px] font-medium uppercase tracking-wider text-faint">
+            <h2 className="mb-2 px-1 text-caption font-medium uppercase tracking-wider text-faint">
               {t("Projects")}
             </h2>
             <div className="overflow-hidden rounded-xl border border-border">
@@ -159,7 +159,7 @@ export function StartScreen({
 
         {recentPages.length > 0 && (
           <section className="mt-6">
-            <h2 className="mb-2 px-1 text-[11px] font-medium uppercase tracking-wider text-faint">
+            <h2 className="mb-2 px-1 text-caption font-medium uppercase tracking-wider text-faint">
               {t("Recent documents")}
             </h2>
             <div className="overflow-hidden rounded-xl border border-border">
@@ -169,7 +169,7 @@ export function StartScreen({
                   href={`/${workspaceId}/docs/${page.id}`}
                   icon={
                     page.icon ? (
-                      <span className="text-[14px] leading-none">{page.icon}</span>
+                      <span className="text-body leading-none">{page.icon}</span>
                     ) : (
                       <FileText size={14} />
                     )
@@ -182,19 +182,19 @@ export function StartScreen({
           </section>
         )}
 
-        <div className="mt-8 flex items-center gap-4 px-1 text-[11.5px] text-faint">
+        <div className="mt-8 flex items-center gap-4 px-1 text-small text-faint">
           <button
             type="button"
             onClick={() => setPaletteOpen(true)}
             className="flex items-center gap-1.5 transition-colors hover:text-text"
           >
-            <kbd className="rounded border border-border bg-surface px-1 py-0.5 text-[10.5px]">
+            <kbd className="rounded border border-border bg-surface px-1 py-0.5 text-caption">
               ⌘K
             </kbd>
             {t("Jump anywhere")}
           </button>
           <span className="flex items-center gap-1.5">
-            <kbd className="rounded border border-border bg-surface px-1 py-0.5 text-[10.5px]">C</kbd>
+            <kbd className="rounded border border-border bg-surface px-1 py-0.5 text-caption">C</kbd>
             {t("New task")}
           </span>
         </div>

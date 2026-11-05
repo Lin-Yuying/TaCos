@@ -196,9 +196,52 @@ jobs:
           if-no-files-found: error
           retention-days: 7
 
+  linux:
+    runs-on: ubuntu-24.04
+    env:
+      CSC_IDENTITY_AUTO_DISCOVERY: "false"
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@v7
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build Next.js and the embedded server
+        run: |
+          npm run build
+          npm run server:bundle -- --target=linux-x64
+
+      - name: Pack the team server
+        shell: bash
+        run: |
+          set -euo pipefail
+          version=$(node -p "require('./package.json').version")
+          mkdir -p out
+          tar -czf "out/TaCos-Server-${version}-linux-x64.tar.gz" -C dist/server payload -C "$PWD" deploy
+
+      - name: Build the Linux desktop app
+        run: npx electron-builder --linux AppImage --x64 --publish never --config electron/builder.standalone.json
+
+      - name: Upload Linux files
+        uses: actions/upload-artifact@v7
+        with:
+          name: tacos-linux-x64
+          path: |
+            out/*.tar.gz
+            release-standalone/*.AppImage
+          if-no-files-found: error
+          retention-days: 7
+
   release:
     if: startsWith(github.ref, 'refs/tags/v')
-    needs: [windows, macos]
+    needs: [windows, macos, linux]
     runs-on: ubuntu-latest
     steps:
       - name: Check out the repository
@@ -216,6 +259,12 @@ jobs:
           name: tacos-macos-arm64
           path: dist/macos
 
+      - name: Download Linux files
+        uses: actions/download-artifact@v7
+        with:
+          name: tacos-linux-x64
+          path: dist/linux
+
       - name: Publish GitHub release
         shell: bash
         env:
@@ -223,7 +272,7 @@ jobs:
         run: |
           set -euo pipefail
           tag="$GITHUB_REF_NAME"
-          mapfile -t assets < <(ls dist/windows/*.exe dist/windows/latest.yml dist/macos/*.dmg dist/macos/*.zip dist/macos/latest-mac.yml 2>/dev/null)
+          mapfile -t assets < <(ls dist/windows/*.exe dist/windows/latest.yml dist/macos/*.dmg dist/macos/*.zip dist/macos/latest-mac.yml dist/linux/out/*.tar.gz dist/linux/release-standalone/*.AppImage 2>/dev/null)
           # Fail if required updater metadata is missing.
           test -f dist/windows/latest.yml
           test -f dist/macos/latest-mac.yml
@@ -253,6 +302,8 @@ jobs:
           | macOS (Apple silicon) | `TaCos-Local-*-arm64.dmg` |
           | macOS updater zip | `*-mac.zip` |
           | macOS updater feed | `latest-mac.yml` |
+          | Linux desktop app | `*.AppImage` |
+          | Team server (Linux x64) | `TaCos-Server-*-linux-x64.tar.gz` |
 
           Both installers run TaCos with its own local server and SQLite database, so no account or cloud service is involved.
 

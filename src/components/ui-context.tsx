@@ -30,7 +30,7 @@ export type FocusRef = {
   status: string;
 } | null;
 
-export type IssueLayout = "list" | "board";
+export type IssueLayout = "list" | "board" | "table" | "calendar";
 
 export type CreatedProject = {
   id: string;
@@ -182,7 +182,8 @@ export function UIProvider({
   // navigating between views does not reset it. Read after mount to match the server HTML.
   useEffect(() => {
     try {
-      if (window.localStorage.getItem(LAYOUT_KEY) === "board") setLayoutState("board");
+      const saved = window.localStorage.getItem(LAYOUT_KEY);
+      if (saved === "board" || saved === "table" || saved === "calendar") setLayoutState(saved);
     } catch {
       /* storage unavailable — stay on the list layout */
     }
@@ -248,7 +249,7 @@ export function UIProvider({
           <div
             key={entry.id}
             role="status"
-            className="rounded-lg bg-text px-3.5 py-2 text-[12.5px] font-medium text-bg shadow-[0_6px_20px_rgba(0,0,0,0.18)]"
+            className="rounded-lg bg-text px-3.5 py-2 text-small font-medium text-bg shadow-[0_6px_20px_rgba(0,0,0,0.18)]"
           >
             {entry.message}
           </div>

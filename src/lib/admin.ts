@@ -7,6 +7,7 @@ import {
   issueAssignees,
   issues,
   notifications,
+  runnerTokens,
   sessions,
   users,
   workspaceMembers,
@@ -105,6 +106,10 @@ export async function setMemberPassword(userId: string, password: string) {
     .update(users)
     .set({ passwordHash: hashPassword(password) })
     .where(eq(users.id, userId));
+  // A reset password has to lock out whoever had the old one.
+  await getDb().delete(sessions).where(eq(sessions.userId, userId));
+  await getDb().delete(deviceAccounts).where(eq(deviceAccounts.userId, userId));
+  await getDb().delete(runnerTokens).where(eq(runnerTokens.userId, userId));
 }
 
 export async function setMemberDisplayName(userId: string, displayName: string) {

@@ -6,7 +6,7 @@ import { requireAdmin, requireWorkspace } from "@/lib/auth";
 import { draftTask, generateTasks, saveAgentRuntime } from "@/lib/ai";
 import {
   getModelKeysView,
-  harnessesWithKeys,
+  harnessViewFor,
   removeModelEndpoint,
   saveEditModel,
   saveModelEndpoint,
@@ -160,7 +160,7 @@ export async function runHarnessInstallAction(
     }
     const harnessId = id as import("@/lib/harness").HarnessId;
     const result = mode === "upgrade" ? await runHarnessUpgrade(harnessId) : await runHarnessInstall(harnessId);
-    const view = await refreshHarnessSettingsView(workspaceId, await harnessesWithKeys(user.id));
+    const view = await refreshHarnessSettingsView(workspaceId, ...(await harnessViewFor(user.id)));
     revalidatePath(`/${workspaceId}/settings`, "page");
     revalidatePath(`/${workspaceId}/agent`, "page");
     return {
@@ -186,7 +186,7 @@ export async function checkHarnessUpdatesAction(
       getHarnessSettingsView,
       checkAllHarnessUpdates,
     } = await import("@/lib/harness");
-    const view = await getHarnessSettingsView(workspaceId, await harnessesWithKeys(user.id));
+    const view = await getHarnessSettingsView(workspaceId, ...(await harnessViewFor(user.id)));
     const currentById = Object.fromEntries(view.rows.map((row) => [row.id, row.version])) as Record<
       string,
       string | null

@@ -135,7 +135,7 @@ export function PageRow({
       </span>
     </>
   );
-  const frame = `flex items-center gap-2 rounded px-1 text-[14px] leading-relaxed text-text hover:bg-elevated/60 ${className ?? ""}`;
+  const frame = `flex items-center gap-2 rounded px-1 text-body leading-relaxed text-text hover:bg-elevated/60 ${className ?? ""}`;
   if (ctx.onOpen) {
     return (
       <button
@@ -199,7 +199,7 @@ function IssueChip({
   const identifier = entry?.identifier ?? fallback;
   const title = entry?.title ?? "";
   const frame =
-    "inline-flex max-w-full items-center gap-1 rounded-[4px] border border-border bg-elevated px-1.5 align-baseline text-[12.5px] font-medium leading-[18px] text-text shadow-[0_1px_2px_rgba(0,0,0,0.14)]";
+    "inline-flex max-w-full items-center gap-1 rounded-[4px] border border-border bg-elevated px-1.5 align-baseline text-small font-medium leading-[18px] text-text shadow-[0_1px_2px_rgba(0,0,0,0.14)]";
   const body = (
     <>
       <span className="shrink-0" aria-hidden>
@@ -289,7 +289,7 @@ function renderInline(
         return (
           <code
             key={key}
-            className="rounded bg-elevated px-1 py-0.5 font-mono text-[12px] text-text"
+            className="rounded bg-elevated px-1 py-0.5 font-mono text-small text-text"
           >
             {node.text}
           </code>
@@ -361,7 +361,7 @@ function CodeBlock({
       {!collapsed && (
         // Soft-wrap like the open line's textarea: a long line takes as many rows as the
         // column gives it, so finishing an edit never re-flows the code.
-        <pre className="overflow-x-auto whitespace-pre-wrap break-words rounded-b-lg p-3 font-mono text-[12.5px] leading-relaxed text-text">
+        <pre className="overflow-x-auto whitespace-pre-wrap break-words rounded-b-lg p-3 font-mono text-small leading-relaxed text-text">
           {showNumbers ? (
             <code className="block">
               {block.body.split("\n").map((line, i) => (
@@ -423,7 +423,7 @@ export function MarkdownBlock({
     renderInline(nodes, keyPrefix, pages, issues);
   switch (block.kind) {
     case "heading": {
-      const size = ["text-[20px]", "text-[17px]", "text-[15px]", "text-[14px]", "text-[13px]", "text-[13px]"][
+      const size = ["text-heading", "text-title", "text-lead", "text-body", "text-body", "text-body"][
         block.level - 1
       ];
       const Tag = (`h${block.level}` as unknown) as "h1";
@@ -443,7 +443,7 @@ export function MarkdownBlock({
           style={{ marginLeft: block.depth * 20 }}
         >
           {block.lines.map((line, i) => (
-            <p key={i} className="whitespace-pre-wrap text-[13.5px] leading-relaxed">
+            <p key={i} className="whitespace-pre-wrap text-body leading-relaxed">
               {inline(line, `q${i}`)}
             </p>
           ))}
@@ -463,7 +463,7 @@ export function MarkdownBlock({
           <span
             aria-hidden
             data-md-glyph
-            className={`flex min-h-[24px] w-4 shrink-0 select-none text-[13.5px] leading-relaxed ${
+            className={`flex min-h-[24px] w-4 shrink-0 select-none text-body leading-relaxed ${
               block.ordered ? "justify-end text-muted" : "justify-start text-faint"
             }`}
           >
@@ -473,9 +473,9 @@ export function MarkdownBlock({
         </li>
       ));
       return block.ordered ? (
-        <ol className="my-1.5 space-y-1 text-[13.5px] leading-relaxed">{items}</ol>
+        <ol className="my-1.5 space-y-1 text-body leading-relaxed">{items}</ol>
       ) : (
-        <ul className="my-1.5 space-y-1 text-[13.5px] leading-relaxed">{items}</ul>
+        <ul className="my-1.5 space-y-1 text-body leading-relaxed">{items}</ul>
       );
     }
     case "todo":
@@ -484,7 +484,7 @@ export function MarkdownBlock({
           {block.items.map((item, i) => (
             <div
               key={i}
-              className="flex items-start gap-2 text-[13.5px] leading-relaxed"
+              className="flex items-start gap-2 text-body leading-relaxed"
               style={{ marginLeft: item.depth * 20 }}
             >
               <span data-md-glyph className="flex w-4 shrink-0 justify-start pt-[3px]">
@@ -500,7 +500,7 @@ export function MarkdownBlock({
                     event.stopPropagation();
                     onToggleTodo?.(i, !item.checked);
                   }}
-                  className={`flex h-3.5 w-3.5 items-center justify-center rounded border text-[9px] ${
+                  className={`flex h-3.5 w-3.5 items-center justify-center rounded border text-caption ${
                     item.checked ? "border-accent bg-accent text-white" : "border-border-strong bg-bg"
                   } ${onToggleTodo ? "cursor-pointer transition-colors hover:border-accent" : ""}`}
                 >
@@ -529,7 +529,7 @@ export function MarkdownBlock({
             className="max-h-[520px] max-w-full rounded-lg border border-border bg-elevated object-contain"
           />
           {block.alt && (
-            <figcaption className="mt-1 text-[12px] text-faint">{block.alt}</figcaption>
+            <figcaption className="mt-1 text-small text-faint">{block.alt}</figcaption>
           )}
         </figure>
       );
@@ -540,7 +540,7 @@ export function MarkdownBlock({
       const body = target && pages?.embeds ? pages.embeds[target.id] : undefined;
       return (
         <div className="my-3" style={{ marginLeft: block.depth * 20 }}>
-          <div className="flex items-center gap-1.5 text-[13px]">
+          <div className="flex items-center gap-1.5 text-body">
             {target && pages ? (
               <PageChip target={target} ctx={pages} className="font-medium text-muted" />
             ) : (
@@ -557,7 +557,7 @@ export function MarkdownBlock({
                   storageId={target ? `doc:${target.id}` : undefined}
                 />
               ) : (
-                <p className="text-[12.5px] text-faint">{t("This page is empty.")}</p>
+                <p className="text-small text-faint">{t("This page is empty.")}</p>
               )}
             </div>
           )}
@@ -584,7 +584,7 @@ export function MarkdownBlock({
       }
       return (
         <p
-          className="my-1.5 whitespace-pre-wrap text-[13.5px] leading-relaxed"
+          className="my-1.5 whitespace-pre-wrap text-body leading-relaxed"
           style={{ marginLeft: block.depth * 20 }}
         >
           {block.lines.map((line, i) => (
@@ -834,7 +834,7 @@ function TableBlock({
     >
       <table
         ref={tableRef}
-        className="w-full border-collapse text-[12.5px] leading-relaxed"
+        className="w-full border-collapse text-small leading-relaxed"
         style={widths ? { tableLayout: "fixed" } : undefined}
       >
         {widths && (

@@ -26,7 +26,7 @@ export function SourceChatRow({ workspaceId, threadId }: { workspaceId: string; 
 
   if (!threadId || thread === undefined) return null;
   return (
-    <div className="flex items-center gap-2 text-[13px] text-muted" data-testid="source-chat-row">
+    <div className="flex items-center gap-2 text-body text-muted" data-testid="source-chat-row">
       <MessageSquare size={13} className="shrink-0 text-faint" />
       {thread ? (
         <Link

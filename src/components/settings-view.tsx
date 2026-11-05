@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { useRouter } from "next/navigation";
 import { ChevronRight, Copy, Check, Pencil, RefreshCw, Trash2, Upload } from "lucide-react";
 import {
@@ -50,7 +50,7 @@ function CopyButton({ text }: { text: string }) {
           setTimeout(() => setCopied(false), 1500);
         });
       }}
-      className="inline-flex shrink-0 items-center gap-1 rounded-md border border-border px-1.5 py-0.5 text-[11px] text-muted transition-colors hover:text-text"
+      className="inline-flex shrink-0 items-center gap-1 rounded-md border border-border px-1.5 py-0.5 text-caption text-muted transition-colors hover:text-text"
     >
       {copied ? <Check size={11} /> : <Copy size={11} />}
       {t(copied ? "Copied" : "Copy")}
@@ -61,7 +61,7 @@ function CopyButton({ text }: { text: string }) {
 function Snippet({ code }: { code: string }) {
   return (
     <div className="flex items-start gap-2 rounded-md border border-border bg-bg px-3 py-2">
-      <pre className="min-w-0 flex-1 overflow-x-auto font-mono text-[12px] leading-relaxed text-muted">
+      <pre className="min-w-0 flex-1 overflow-x-auto font-mono text-small leading-relaxed text-muted">
         {code}
       </pre>
       <CopyButton text={code} />
@@ -111,6 +111,8 @@ function shellQuote(value: string): string {
   return /^[\w@%+=:,./-]+$/.test(value) ? value : `'${value.replace(/'/g, "'\\''")}'`;
 }
 
+const subscribeNever = () => () => {};
+
 export function SettingsView({
   workspace,
   role,
@@ -123,6 +125,7 @@ export function SettingsView({
   ai,
   mcpServerPath,
   modelKeys,
+  serverMode,
   harness,
   isOwner,
   nextWorkspaceHref,
@@ -139,6 +142,7 @@ export function SettingsView({
   ai: AiSettingsView;
   mcpServerPath: string | null;
   modelKeys: ModelKeysView;
+  serverMode: boolean;
   harness: HarnessSettingsView;
   isOwner: boolean;
   nextWorkspaceHref: string;
@@ -175,7 +179,7 @@ export function SettingsView({
   const [harnessError, setHarnessError] = useState<string | null>(null);
   const [harnessNotice, setHarnessNotice] = useState<string | null>(null);
 
-  const origin = typeof window !== "undefined" ? window.location.origin : "http://localhost:3000";
+  const origin = useSyncExternalStore(subscribeNever, () => window.location.origin, () => "http://localhost:3000");
 
   async function toggleHarness(id: string, enabled: boolean) {
     if (!isAdmin) return;
@@ -498,22 +502,22 @@ export function SettingsView({
     <div className="flex-1 overflow-y-auto px-10 pb-10 pt-6 lg:px-20 xl:px-32">
       <div className="space-y-10">
         <header className="flex items-center gap-3">
-          <h1 className="text-[16px] font-semibold">{t("Workspace settings")}</h1>
-          <span className="rounded-full bg-elevated px-2 py-0.5 text-[11px] text-muted">
+          <h1 className="text-lead font-semibold">{t("Workspace settings")}</h1>
+          <span className="rounded-full bg-elevated px-2 py-0.5 text-caption text-muted">
             {workspace.name}
           </span>
         </header>
 
         <section className="space-y-3">
-          <h2 className="text-[13px] font-semibold">{t("Workspace icon")}</h2>
+          <h2 className="text-body font-semibold">{t("Workspace icon")}</h2>
           <div className="flex items-center gap-4 rounded-lg border border-border p-4">
             <WorkspaceMark icon={icon} className="h-14 w-14" />
             <div className="min-w-0 flex-1">
-              <div className="text-[13px] font-medium">{workspace.name}</div>
+              <div className="text-body font-medium">{workspace.name}</div>
               {isAdmin && (
                 <div className="mt-2 flex items-center gap-2">
                   <label
-                    className={`inline-flex cursor-pointer items-center gap-1 rounded-md border border-border px-2 py-1 text-[12px] text-muted transition-colors hover:text-text ${
+                    className={`inline-flex cursor-pointer items-center gap-1 rounded-md border border-border px-2 py-1 text-small text-muted transition-colors hover:text-text ${
                       busy ? "pointer-events-none opacity-50" : ""
                     }`}
                   >
@@ -532,17 +536,17 @@ export function SettingsView({
                     <button
                       type="button"
                       onClick={() => void clearIcon()}
-                      className="rounded-md px-2 py-1 text-[12px] text-faint transition-colors hover:text-danger"
+                      className="rounded-md px-2 py-1 text-small text-faint transition-colors hover:text-danger"
                     >
                       {t("Remove")}
                     </button>
                   )}
                 </div>
               )}
-              {iconError && <div className="mt-1 text-[12px] text-danger">{t(iconError)}</div>}
+              {iconError && <div className="mt-1 text-small text-danger">{t(iconError)}</div>}
             </div>
           </div>
-          <p className="text-[12px] leading-relaxed text-faint">
+          <p className="text-small leading-relaxed text-faint">
             {isAdmin
               ? t("Shown next to the workspace name in the sidebar and the switcher. Without an image, the otter is used. Cropped to a square and resized to 128×128 in the browser.")
               : t("Only workspace admins can change this icon. Without an image, the otter is used.")}
@@ -550,15 +554,15 @@ export function SettingsView({
         </section>
 
         <section className="space-y-3">
-          <h2 className="text-[13px] font-semibold">{t("Your profile")}</h2>
+          <h2 className="text-body font-semibold">{t("Your profile")}</h2>
           <div className="flex items-center gap-4 rounded-lg border border-border p-4">
             <AssigneeAvatar displayName={currentUser.displayName} avatar={avatar} size={56} />
             <div className="min-w-0 flex-1">
-              <div className="text-[13px] font-medium">{currentUser.displayName}</div>
-              <div className="text-[11px] text-faint">@{currentUser.username}</div>
+              <div className="text-body font-medium">{currentUser.displayName}</div>
+              <div className="text-caption text-faint">@{currentUser.username}</div>
               <div className="mt-2 flex items-center gap-2">
                 <label
-                  className={`inline-flex cursor-pointer items-center gap-1 rounded-md border border-border px-2 py-1 text-[12px] text-muted transition-colors hover:text-text ${
+                  className={`inline-flex cursor-pointer items-center gap-1 rounded-md border border-border px-2 py-1 text-small text-muted transition-colors hover:text-text ${
                     busy ? "pointer-events-none opacity-50" : ""
                   }`}
                 >
@@ -577,18 +581,18 @@ export function SettingsView({
                   <button
                     type="button"
                     onClick={() => void clearAvatar()}
-                    className="rounded-md px-2 py-1 text-[12px] text-faint transition-colors hover:text-danger"
+                    className="rounded-md px-2 py-1 text-small text-faint transition-colors hover:text-danger"
                   >
                     {t("Remove image")}
                   </button>
                 )}
               </div>
-              {avatarError && <div className="mt-1 text-[12px] text-danger">{t(avatarError)}</div>}
+              {avatarError && <div className="mt-1 text-small text-danger">{t(avatarError)}</div>}
             </div>
           </div>
           <div className="rounded-lg border border-border p-4">
-            <div className="text-[12px] font-medium text-muted">{t("Avatar library")}</div>
-            <div className="mt-0.5 text-[11.5px] text-faint">
+            <div className="text-small font-medium text-muted">{t("Avatar library")}</div>
+            <div className="mt-0.5 text-small text-faint">
               {t("Every account starts with its own taco ingredient. Pick another one, or upload a picture above.")}
             </div>
             <div className="mt-3 flex flex-wrap gap-1.5">
@@ -617,17 +621,17 @@ export function SettingsView({
               })}
             </div>
           </div>
-          <p className="text-[12px] leading-relaxed text-faint">
+          <p className="text-small leading-relaxed text-faint">
             {t("Your picture shows as a circle next to your name in issue rows, timelines and the member list. Uploaded images are cropped to a square and resized to 128×128 in the browser before being saved.")}
           </p>
         </section>
 
         <section className="space-y-3">
-          <h2 className="text-[13px] font-semibold">{t("Language")}</h2>
+          <h2 className="text-body font-semibold">{t("Language")}</h2>
           <div className="flex items-center gap-4 rounded-lg border border-border p-4">
             <div className="min-w-0 flex-1">
-              <div className="text-[13px] font-medium">{t("Interface language")}</div>
-              <p className="mt-0.5 text-[12px] leading-relaxed text-muted">
+              <div className="text-body font-medium">{t("Interface language")}</div>
+              <p className="mt-0.5 text-small leading-relaxed text-muted">
                 {t("Applies to this account on every device.")}
               </p>
             </div>
@@ -639,7 +643,7 @@ export function SettingsView({
                   role="radio"
                   aria-checked={locale === code}
                   onClick={() => void chooseLocale(code)}
-                  className={`rounded-md px-3 py-1 text-[12.5px] transition-colors ${
+                  className={`rounded-md px-3 py-1 text-small transition-colors ${
                     locale === code
                       ? "bg-accent/10 font-medium text-accent"
                       : "text-muted hover:bg-elevated hover:text-text"
@@ -650,14 +654,14 @@ export function SettingsView({
               ))}
             </div>
           </div>
-          {localeError && <div className="text-[12px] text-danger">{t(localeError)}</div>}
-          <p className="text-[12px] leading-relaxed text-faint">
+          {localeError && <div className="text-small text-danger">{t(localeError)}</div>}
+          <p className="text-small leading-relaxed text-faint">
             {t("Task content, documents and replies from the API or MCP server are not translated.")}
           </p>
         </section>
 
         <section className="space-y-3">
-          <h2 className="text-[13px] font-semibold">
+          <h2 className="text-body font-semibold">
             {t("Members ({count})", { count: members.length })}
           </h2>
           <div className="divide-y divide-border rounded-lg border border-border">
@@ -665,13 +669,13 @@ export function SettingsView({
               <div key={member.id} className="flex items-center gap-3 px-4 py-2.5">
                 <AssigneeAvatar displayName={member.displayName} avatar={member.avatar} size={24} />
                 <div className="min-w-0">
-                  <div className="text-[13px]">
+                  <div className="text-body">
                     {member.displayName}
                     {member.id === currentUser.id && (
-                      <span className="ml-1 text-[11px] text-faint">{t("(you)")}</span>
+                      <span className="ml-1 text-caption text-faint">{t("(you)")}</span>
                     )}
                   </div>
-                  <div className="text-[11px] text-faint">@{member.username}</div>
+                  <div className="text-caption text-faint">@{member.username}</div>
                 </div>
                 {isAdmin && member.id !== currentUser.id ? (
                   <>
@@ -684,7 +688,7 @@ export function SettingsView({
                           e.target.value as "admin" | "member"
                         ).then(() => router.refresh());
                       }}
-                      className="ml-auto rounded-md border border-border bg-elevated px-1.5 py-1 text-[12px] text-muted"
+                      className="ml-auto rounded-md border border-border bg-elevated px-1.5 py-1 text-small text-muted"
                     >
                       <option value="admin">{t("Admin")}</option>
                       <option value="member">{t("Member")}</option>
@@ -703,7 +707,7 @@ export function SettingsView({
                     </button>
                   </>
                 ) : (
-                  <span className="ml-auto rounded-full bg-elevated px-2 py-0.5 text-[11px] text-muted">
+                  <span className="ml-auto rounded-full bg-elevated px-2 py-0.5 text-caption text-muted">
                     {member.role === "admin" ? t("Admin") : t("Member")}
                   </span>
                 )}
@@ -712,14 +716,14 @@ export function SettingsView({
           </div>
 
           <div className="space-y-2 rounded-lg border border-border bg-surface/60 p-4">
-            <div className="text-[13px] font-medium">{t("Invite teammates")}</div>
-            <p className="text-[12px] leading-relaxed text-muted">
+            <div className="text-body font-medium">{t("Invite teammates")}</div>
+            <p className="text-small leading-relaxed text-muted">
               {interpolate(t("Share this join code — anyone can register at {url} and join with it."), {
-                url: <code className="font-mono text-[11px]">{origin}/register</code>,
+                url: <code className="font-mono text-caption">{origin}/register</code>,
               })}
             </p>
             <div className="flex items-center gap-2">
-              <code className="min-w-0 flex-1 overflow-x-auto rounded-md bg-bg px-2 py-1.5 font-mono text-[13px] text-text">
+              <code className="min-w-0 flex-1 overflow-x-auto rounded-md bg-bg px-2 py-1.5 font-mono text-body text-text">
                 {code ?? t("No active code")}
               </code>
               {code && <CopyButton text={code} />}
@@ -727,7 +731,7 @@ export function SettingsView({
                 <button
                   type="button"
                   onClick={() => void rotateCode()}
-                  className="inline-flex items-center gap-1 rounded-md border border-border px-2 py-1 text-[12px] text-muted transition-colors hover:text-text"
+                  className="inline-flex items-center gap-1 rounded-md border border-border px-2 py-1 text-small text-muted transition-colors hover:text-text"
                 >
                   <RefreshCw size={12} /> {t("Rotate")}
                 </button>
@@ -737,13 +741,13 @@ export function SettingsView({
         </section>
 
         <section className="space-y-3">
-          <h2 className="text-[13px] font-semibold">{t("Task visibility")}</h2>
+          <h2 className="text-body font-semibold">{t("Task visibility")}</h2>
           <div className="flex items-center gap-4 rounded-lg border border-border p-4">
             <div className="min-w-0 flex-1">
-              <div className="text-[13px] font-medium">
+              <div className="text-body font-medium">
                 {seeAll ? t("Everyone sees all tasks") : t("Members only see their projects")}
               </div>
-              <p className="mt-0.5 text-[12px] leading-relaxed text-muted">
+              <p className="mt-0.5 text-small leading-relaxed text-muted">
                 {seeAll
                   ? t("Every workspace member can open every project and its tasks.")
                   : t("A member only sees tasks in projects they created or joined. Owners and admins still see everything.")}
@@ -767,7 +771,7 @@ export function SettingsView({
               />
             </button>
           </div>
-          <p className="text-[12px] leading-relaxed text-faint">
+          <p className="text-small leading-relaxed text-faint">
             {isAdmin
               ? t("Turn this off to hand out tasks per project. Agents using API keys or MCP always see everything.")
               : t("Only workspace admins can change who sees tasks.")}
@@ -775,7 +779,7 @@ export function SettingsView({
         </section>
 
         <section className="space-y-3">
-          <h2 className="text-[13px] font-semibold">{t("Projects")}</h2>
+          <h2 className="text-body font-semibold">{t("Projects")}</h2>
           <div className="divide-y divide-border rounded-lg border border-border">
             {projects.map((project) => {
               const editing = renaming && renaming.id === project.id ? renaming : null;
@@ -793,12 +797,12 @@ export function SettingsView({
                           if (e.key === "Escape") setRenaming(null);
                         }}
                         aria-label={t("Rename {name}", { name: project.name })}
-                        className="min-w-0 flex-1 rounded-md border border-border bg-elevated/50 px-2 py-1 text-[13px] focus:border-border-strong"
+                        className="min-w-0 flex-1 rounded-md border border-border bg-elevated/50 px-2 py-1 text-body focus:border-border-strong"
                       />
                       <button
                         type="button"
                         onClick={() => void saveRename(project, editing.name)}
-                        className="shrink-0 rounded-md bg-accent px-2.5 py-1 text-[12px] font-medium text-white hover:bg-accent-hover"
+                        className="shrink-0 rounded-md bg-accent px-2.5 py-1 text-small font-medium text-white hover:bg-accent-hover"
                       >
                         {t("Save")}
                       </button>
@@ -809,7 +813,7 @@ export function SettingsView({
                         type="button"
                         onClick={() => setRenaming({ id: project.id, name: project.name })}
                         title={t("Rename project")}
-                        className="group flex min-w-0 items-center gap-1.5 text-[13px] hover:text-accent"
+                        className="group flex min-w-0 items-center gap-1.5 text-body hover:text-accent"
                       >
                         <span className="truncate">{project.name}</span>
                         <Pencil
@@ -835,7 +839,7 @@ export function SettingsView({
               );
             })}
             {projects.length === 0 && (
-              <div className="p-4 text-[13px] text-faint">{t("No projects yet.")}</div>
+              <div className="p-4 text-body text-faint">{t("No projects yet.")}</div>
             )}
           </div>
           <div className="flex items-center gap-2">
@@ -846,24 +850,24 @@ export function SettingsView({
                 if (e.key === "Enter") void addProject();
               }}
               placeholder={t("Project name (e.g. Mobile App)")}
-              className="w-full rounded-md border border-border bg-elevated/50 px-2.5 py-1.5 text-[13px] placeholder:text-faint focus:border-border-strong"
+              className="w-full rounded-md border border-border bg-elevated/50 px-2.5 py-1.5 text-body placeholder:text-faint focus:border-border-strong"
             />
             <button
               type="button"
               onClick={() => void addProject()}
               disabled={busy || !projName.trim()}
-              className="shrink-0 rounded-md bg-accent px-3 py-1.5 text-[13px] font-medium text-white hover:bg-accent-hover disabled:opacity-40"
+              className="shrink-0 rounded-md bg-accent px-3 py-1.5 text-body font-medium text-white hover:bg-accent-hover disabled:opacity-40"
             >
               {t("Add")}
             </button>
           </div>
-          {projError && <div className="text-[12px] text-danger">{t(projError)}</div>}
+          {projError && <div className="text-small text-danger">{t(projError)}</div>}
         </section>
 
         <section className="space-y-3" data-testid="harness-settings">
           <div className="flex flex-wrap items-center gap-2">
-            <h2 className="text-[13px] font-semibold">{t("Harness")}</h2>
-            <span className="rounded-full bg-elevated px-2 py-0.5 text-[11px] text-faint">
+            <h2 className="text-body font-semibold">{t("Harness")}</h2>
+            <span className="rounded-full bg-elevated px-2 py-0.5 text-caption text-faint">
               {t("{count} ready", { count: String(harnessRows.filter((row) => row.enabled && row.ready).length) })}
             </span>
             {isAdmin && harnessRows.some((row) => row.installed) && (
@@ -871,17 +875,17 @@ export function SettingsView({
                 type="button"
                 disabled={Boolean(harnessBusy)}
                 onClick={() => void checkHarnessUpdates()}
-                className="ml-auto rounded-md border border-border px-2 py-1 text-[11.5px] text-muted hover:bg-elevated disabled:opacity-40"
+                className="ml-auto rounded-md border border-border px-2 py-1 text-small text-muted hover:bg-elevated disabled:opacity-40"
               >
                 {harnessBusy === "check-updates" ? t("Checking…") : t("Check for updates")}
               </button>
             )}
           </div>
-          <p className="text-[13px] leading-relaxed text-muted">
+          <p className="text-body leading-relaxed text-muted">
             {t("Local CLI harnesses for the Agent tab. Turn each one on or off for this workspace. The list shows version, ready state, and the last detect error.")}
           </p>
           {!harnessGateView.agentAllowed && (
-            <div className="rounded-md border border-border bg-elevated px-3 py-2 text-[12.5px] text-muted" data-testid="harness-agent-disabled">
+            <div className="rounded-md border border-border bg-elevated px-3 py-2 text-small text-muted" data-testid="harness-agent-disabled">
               {t("The Agent tab is disabled. Enable at least one ready harness to use Agent.")}
             </div>
           )}
@@ -895,25 +899,25 @@ export function SettingsView({
               >
                 <div className="min-w-0 flex-1 space-y-1">
                   <div className="flex flex-wrap items-center gap-2">
-                    <span className="text-[13px] font-medium text-text">{row.label}</span>
-                    <span className="rounded-full bg-elevated px-2 py-0.5 font-mono text-[11px] text-faint">
+                    <span className="text-body font-medium text-text">{row.label}</span>
+                    <span className="rounded-full bg-elevated px-2 py-0.5 font-mono text-caption text-faint">
                       {row.id}
                     </span>
                     <span
-                      className={`rounded-full px-2 py-0.5 text-[11px] font-medium ${
+                      className={`rounded-full px-2 py-0.5 text-caption font-medium ${
                         row.ready ? "bg-accent/10 text-accent" : "bg-elevated text-faint"
                       }`}
                     >
                       {row.ready ? t("Ready") : row.installed ? t("Not ready") : t("Not installed")}
                     </span>
                   </div>
-                  <div className="text-[12px] text-muted">
+                  <div className="text-small text-muted">
                     {t("Version:")} {row.version ?? "—"}
                     {row.updateAvailable && row.latestVersion ? (
                       <span className="ml-2 text-faint">{t("Latest:")} {row.latestVersion}</span>
                     ) : null}
                     {row.updateAvailable ? (
-                      <span className="ml-2 rounded-full bg-accent/10 px-2 py-0.5 text-[11px] font-medium text-accent">
+                      <span className="ml-2 rounded-full bg-accent/10 px-2 py-0.5 text-caption font-medium text-accent">
                         {t("Update available")}
                       </span>
                     ) : null}
@@ -921,38 +925,38 @@ export function SettingsView({
                       <span className="ml-2 text-faint">{t("Could not check for updates")}</span>
                     ) : null}
                     {row.binary ? (
-                      <span className="ml-2 font-mono text-[11px] text-faint">{row.binary}</span>
+                      <span className="ml-2 font-mono text-caption text-faint">{row.binary}</span>
                     ) : null}
                   </div>
                   {(row.error || row.hint) && (
-                    <div className="text-[12px] text-muted">
+                    <div className="text-small text-muted">
                       {row.error ? <span className="text-danger">{t(row.error)}. </span> : null}
                       {row.hint ? t(row.hint) : null}
                     </div>
                   )}
                 </div>
                 <div className="flex flex-wrap items-center gap-2">
-                  {isAdmin && !row.installed && (
+                  {isAdmin && !serverMode && !row.installed && (
                     <button
                       type="button"
                       disabled={Boolean(harnessBusy)}
                       onClick={() => void runHarnessRecipe(row.id, "install")}
-                      className="rounded-md border border-border px-2 py-1 text-[11.5px] text-muted hover:bg-elevated disabled:opacity-40"
+                      className="rounded-md border border-border px-2 py-1 text-small text-muted hover:bg-elevated disabled:opacity-40"
                     >
                       {harnessBusy === `${row.id}:install` ? t("Installing…") : t("Install")}
                     </button>
                   )}
-                  {isAdmin && row.installed && row.updateAvailable && (
+                  {isAdmin && !serverMode && row.installed && row.updateAvailable && (
                     <button
                       type="button"
                       disabled={Boolean(harnessBusy)}
                       onClick={() => void runHarnessRecipe(row.id, "upgrade")}
-                      className="rounded-md border border-border px-2 py-1 text-[11.5px] text-muted hover:bg-elevated disabled:opacity-40"
+                      className="rounded-md border border-border px-2 py-1 text-small text-muted hover:bg-elevated disabled:opacity-40"
                     >
                       {harnessBusy === `${row.id}:upgrade` ? t("Upgrading…") : t("Upgrade")}
                     </button>
                   )}
-                  <label className="flex items-center gap-2 text-[12.5px] text-muted">
+                  <label className="flex items-center gap-2 text-small text-muted">
                     <input
                       type="checkbox"
                       checked={row.enabled}
@@ -966,36 +970,36 @@ export function SettingsView({
               </div>
             ))}
           </div>
-          {harnessError && <div className="text-[12px] text-danger">{t(harnessError)}</div>}
-          {harnessNotice && <div className="text-[12px] text-muted">{t(harnessNotice)}</div>}
+          {harnessError && <div className="text-small text-danger">{t(harnessError)}</div>}
+          {harnessNotice && <div className="text-small text-muted">{t(harnessNotice)}</div>}
           {!isAdmin && (
-            <p className="text-[12px] text-faint">{t("Only a workspace admin can change harness toggles.")}</p>
+            <p className="text-small text-faint">{t("Only a workspace admin can change harness toggles.")}</p>
           )}
         </section>
 
-        <ModelKeysSection workspaceId={workspace.id} view={modelKeys} />
+        <ModelKeysSection workspaceId={workspace.id} view={modelKeys} serverMode={serverMode} />
 
         <details className="group/advanced" data-testid="settings-advanced">
-          <summary className="flex cursor-pointer list-none items-center gap-1.5 text-[13px] font-semibold [&::-webkit-details-marker]:hidden">
+          <summary className="flex cursor-pointer list-none items-center gap-1.5 text-body font-semibold [&::-webkit-details-marker]:hidden">
             <ChevronRight size={14} className="text-muted transition-transform group-open/advanced:rotate-90" />
             {t("Advanced")}
           </summary>
-          <p className="mt-1 text-[12px] text-faint">
+          <p className="mt-1 text-small text-faint">
             {t("Proxy, REST API keys and MCP server. Only needed to connect other tools to TaCos or to get through a filtered network.")}
           </p>
           <div className="mt-4 space-y-8">
               {isAdmin && (
                 <div className="space-y-3 rounded-lg border border-border p-3">
-                  <label className="block space-y-1 text-[12px] text-muted">
+                  <label className="block space-y-1 text-small text-muted">
                     <span>{t("Proxy (optional)")}</span>
                     <input
                       value={aiProxy}
                       onChange={(e) => setAiProxy(e.target.value)}
                       placeholder="http://127.0.0.1:7890"
                       spellCheck={false}
-                      className="w-full rounded-md border border-border bg-elevated/50 px-2.5 py-1.5 font-mono text-[12px] text-text placeholder:text-faint focus:border-border-strong"
+                      className="w-full rounded-md border border-border bg-elevated/50 px-2.5 py-1.5 font-mono text-small text-text placeholder:text-faint focus:border-border-strong"
                     />
-                    <span className="block text-[11.5px] text-faint">
+                    <span className="block text-small text-faint">
                       {t("Set a local proxy when this machine needs one to reach model providers. All harnesses use it.")}
                     </span>
                   </label>
@@ -1004,25 +1008,25 @@ export function SettingsView({
                       type="button"
                       onClick={() => void saveRuntime()}
                       disabled={aiBusy}
-                      className="ml-auto rounded-md bg-accent px-3 py-1.5 text-[12.5px] font-medium text-white transition-colors hover:bg-accent-hover disabled:opacity-40"
+                      className="ml-auto rounded-md bg-accent px-3 py-1.5 text-small font-medium text-white transition-colors hover:bg-accent-hover disabled:opacity-40"
                     >
                       {aiBusy ? t("Saving…") : t("Save")}
                     </button>
                   </div>
-                  {aiError && <div className="text-[12px] text-danger">{t(aiError)}</div>}
-                  {aiNotice && <div className="text-[12px] text-muted">{aiNotice}</div>}
+                  {aiError && <div className="text-small text-danger">{t(aiError)}</div>}
+                  {aiNotice && <div className="text-small text-muted">{aiNotice}</div>}
                 </div>
               )}
             <section className="space-y-3">
-              <h2 className="text-[13px] font-semibold">{t("Agent access — REST API keys")}</h2>
-              <p className="text-[13px] leading-relaxed text-muted">
+              <h2 className="text-body font-semibold">{t("Agent access — REST API keys")}</h2>
+              <p className="text-body leading-relaxed text-muted">
                 {interpolate(
                   t(
                     "AI agents and scripts read and write issues at {path} with a Bearer token scoped to this workspace ({key}). Agent activity is attributed in every issue timeline."
                   ),
                   {
                     path: (
-                      <code className="rounded bg-elevated px-1 font-mono text-[12px] text-text">
+                      <code className="rounded bg-elevated px-1 font-mono text-small text-text">
                         /api/v1/*
                       </code>
                     ),
@@ -1039,26 +1043,26 @@ export function SettingsView({
                     if (e.key === "Enter") void createKey();
                   }}
                   placeholder={t("Key name (e.g. claude-code, triage-bot)")}
-                  className="w-full rounded-md border border-border bg-elevated/50 px-2.5 py-1.5 text-[13px] placeholder:text-faint focus:border-border-strong"
+                  className="w-full rounded-md border border-border bg-elevated/50 px-2.5 py-1.5 text-body placeholder:text-faint focus:border-border-strong"
                 />
                 <button
                   type="button"
                   onClick={() => void createKey()}
                   disabled={!newKeyName.trim() || busy}
-                  className="shrink-0 rounded-md bg-accent px-3 py-1.5 text-[13px] font-medium text-white hover:bg-accent-hover disabled:opacity-40"
+                  className="shrink-0 rounded-md bg-accent px-3 py-1.5 text-body font-medium text-white hover:bg-accent-hover disabled:opacity-40"
                 >
                   {t("Generate")}
                 </button>
               </div>
-              {keyError && <div className="text-[12px] text-danger">{t(keyError)}</div>}
+              {keyError && <div className="text-small text-danger">{t(keyError)}</div>}
 
               {newKey && (
                 <div className="space-y-2 rounded-lg border border-accent/50 bg-accent/10 p-3">
-                  <div className="text-[12px] font-medium text-text">
+                  <div className="text-small font-medium text-text">
                     {t("Copy this key now — it is shown only once.")}
                   </div>
                   <div className="flex items-center gap-2">
-                    <code className="min-w-0 flex-1 overflow-x-auto rounded-md bg-bg px-2 py-1.5 font-mono text-[12px] text-text">
+                    <code className="min-w-0 flex-1 overflow-x-auto rounded-md bg-bg px-2 py-1.5 font-mono text-small text-text">
                       {newKey}
                     </code>
                     <CopyButton text={newKey} />
@@ -1068,27 +1072,27 @@ export function SettingsView({
 
               <div className="divide-y divide-border rounded-lg border border-border">
                 {keys.length === 0 && (
-                  <div className="p-4 text-[13px] text-faint">{t("No keys yet.")}</div>
+                  <div className="p-4 text-body text-faint">{t("No keys yet.")}</div>
                 )}
                 {keys.map((key) => (
-                  <div key={key.id} className="flex items-center gap-3 px-4 py-2.5 text-[13px]">
-                    <span className="font-mono text-[12px] text-text">tac_…</span>
+                  <div key={key.id} className="flex items-center gap-3 px-4 py-2.5 text-body">
+                    <span className="font-mono text-small text-text">tac_…</span>
                     <span>{key.name}</span>
-                    <span className="text-[12px] text-faint">
+                    <span className="text-small text-faint">
                       {t("created {date}", { date: formatDate(key.createdAt, locale) })}
                     </span>
-                    <span suppressHydrationWarning className="text-[12px] text-faint">
+                    <span suppressHydrationWarning className="text-small text-faint">
                       {key.lastUsedAt ? t("last used {time} ago", { time: timeAgo(key.lastUsedAt, locale) }) : t("never used")}
                     </span>
                     {key.revokedAt ? (
-                      <span className="ml-auto rounded-full bg-elevated px-2 py-0.5 text-[11px] text-faint">
+                      <span className="ml-auto rounded-full bg-elevated px-2 py-0.5 text-caption text-faint">
                         {t("Revoked")}
                       </span>
                     ) : (
                       <button
                         type="button"
                         onClick={() => void revokeKey(key)}
-                        className="ml-auto rounded-md border border-border px-2 py-0.5 text-[12px] text-muted transition-colors hover:border-danger hover:text-danger"
+                        className="ml-auto rounded-md border border-border px-2 py-0.5 text-small text-muted transition-colors hover:border-danger hover:text-danger"
                       >
                         {t("Revoke")}
                       </button>
@@ -1101,15 +1105,15 @@ export function SettingsView({
             </section>
 
             <section className="space-y-3">
-              <h2 className="text-[13px] font-semibold">{t("Agent access — MCP server")}</h2>
-              <p className="text-[13px] leading-relaxed text-muted">
+              <h2 className="text-body font-semibold">{t("Agent access — MCP server")}</h2>
+              <p className="text-body leading-relaxed text-muted">
                 {interpolate(
                   t(
                     "For Claude Code / Claude Desktop. The MCP server reads and writes this same database directly, so it works even when the web app is closed. It exposes {tools} with project and assignee support."
                   ),
                   {
                     tools: (
-                      <code className="font-mono text-[12px] text-text">
+                      <code className="font-mono text-small text-text">
                         list/get/create/update/delete issue, add_comment, list/create label
                       </code>
                     ),
@@ -1118,9 +1122,9 @@ export function SettingsView({
               </p>
               {mcpCommand ? (
                 <>
-                  <div className="text-[12px] font-medium text-muted">Claude Code</div>
+                  <div className="text-small font-medium text-muted">Claude Code</div>
                   <Snippet code={`claude mcp add tacos -- ${mcpCommand}`} />
-                  <p className="text-[12px] text-faint">
+                  <p className="text-small text-faint">
                     {interpolate(
                       t("For Claude Desktop, add an equivalent {entry} entry with {command} in {file}. See README for details."),
                       {
@@ -1132,7 +1136,7 @@ export function SettingsView({
                   </p>
                 </>
               ) : (
-                <p className="text-[12px] text-faint">{t("This install does not include the MCP server. See README to run it from the source code.")}</p>
+                <p className="text-small text-faint">{t("This install does not include the MCP server. See README to run it from the source code.")}</p>
               )}
             </section>
           </div>
@@ -1140,11 +1144,11 @@ export function SettingsView({
 
         {isOwner && (
           <section className="space-y-3">
-            <h2 className="text-[13px] font-semibold text-danger">{t("Danger zone")}</h2>
+            <h2 className="text-body font-semibold text-danger">{t("Danger zone")}</h2>
             <div className="flex items-center gap-3 rounded-lg border border-danger/40 bg-danger/5 p-4">
               <div className="min-w-0 flex-1">
-                <div className="text-[13px] font-medium">{t("Delete this workspace")}</div>
-                <p className="mt-0.5 text-[12px] leading-relaxed text-muted">
+                <div className="text-body font-medium">{t("Delete this workspace")}</div>
+                <p className="mt-0.5 text-small leading-relaxed text-muted">
                   {t(
                     "{name} moves to your recycle bin and every member is notified. You can restore it for 30 days; after that its projects, issues, members and API keys are gone for good.",
                     { name: workspace.name }
@@ -1159,7 +1163,7 @@ export function SettingsView({
                   setDeleteOpen(true);
                 }}
                 disabled={busy}
-                className="shrink-0 rounded-md border border-danger px-3 py-1.5 text-[13px] font-medium text-danger transition-colors hover:bg-danger hover:text-white disabled:opacity-40"
+                className="shrink-0 rounded-md border border-danger px-3 py-1.5 text-body font-medium text-danger transition-colors hover:bg-danger hover:text-white disabled:opacity-40"
               >
                 {t("Delete workspace")}
               </button>
@@ -1182,15 +1186,15 @@ export function SettingsView({
               aria-labelledby="delete-workspace-title"
               className="w-[420px] max-w-[94vw] rounded-xl border border-border bg-overlay p-5 shadow-2xl shadow-black/15"
             >
-              <h2 id="delete-workspace-title" className="text-[15px] font-semibold">
+              <h2 id="delete-workspace-title" className="text-lead font-semibold">
                 {t("Delete “{name}”?", { name: workspace.name })}
               </h2>
-              <p className="mt-2 text-[13px] leading-relaxed text-muted">
+              <p className="mt-2 text-body leading-relaxed text-muted">
                 {interpolate(
                   t("It goes to your recycle bin for 30 days and every member is notified. Type {word} to move it there."),
                   {
                     word: (
-                      <code className="rounded bg-elevated px-1 py-0.5 font-mono text-[12px] text-text">
+                      <code className="rounded bg-elevated px-1 py-0.5 font-mono text-small text-text">
                         confirmed
                       </code>
                     ),
@@ -1207,15 +1211,15 @@ export function SettingsView({
                 }}
                 placeholder="confirmed"
                 aria-label={t('Type "confirmed" to delete this workspace')}
-                className="mt-3 w-full rounded-md border border-border bg-background px-2.5 py-1.5 text-[13px] outline-none focus:border-danger"
+                className="mt-3 w-full rounded-md border border-border bg-background px-2.5 py-1.5 text-body outline-none focus:border-danger"
               />
-              {deleteError && <div className="mt-2 text-[12px] text-danger">{t(deleteError)}</div>}
+              {deleteError && <div className="mt-2 text-small text-danger">{t(deleteError)}</div>}
               <div className="mt-4 flex justify-end gap-2">
                 <button
                   type="button"
                   onClick={closeDeleteDialog}
                   disabled={busy}
-                  className="rounded-md border border-border px-3 py-1.5 text-[13px] text-muted transition-colors hover:text-text disabled:opacity-40"
+                  className="rounded-md border border-border px-3 py-1.5 text-body text-muted transition-colors hover:text-text disabled:opacity-40"
                 >
                   {t("Cancel")}
                 </button>
@@ -1223,7 +1227,7 @@ export function SettingsView({
                   type="button"
                   onClick={() => void deleteWorkspaceNow()}
                   disabled={busy || deleteWord.trim() !== "confirmed"}
-                  className="rounded-md border border-danger px-3 py-1.5 text-[13px] font-medium text-danger transition-colors hover:bg-danger hover:text-white disabled:opacity-40"
+                  className="rounded-md border border-danger px-3 py-1.5 text-body font-medium text-danger transition-colors hover:bg-danger hover:text-white disabled:opacity-40"
                 >
                   {busy ? t("Deleting…") : t("Delete workspace")}
                 </button>

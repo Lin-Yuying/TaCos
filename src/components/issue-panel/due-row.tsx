@@ -44,7 +44,7 @@ export function DueRow({ detail, onUpdate }: { detail: FlatDetail; onUpdate: Iss
   }
 
   return (
-    <div className="-mx-2 -mt-2 flex flex-wrap items-center gap-x-2 gap-y-1.5 text-[11.5px] text-faint">
+    <div className="-mx-2 -mt-2 flex flex-wrap items-center gap-x-2 gap-y-1.5 text-small text-faint">
       <div className="flex items-center gap-1.5 whitespace-nowrap pl-2">
         <ViaBadge via={detail.createdVia} />
         <span title={fullTimestamp(detail.createdAt, locale)}>
@@ -59,7 +59,7 @@ export function DueRow({ detail, onUpdate }: { detail: FlatDetail; onUpdate: Iss
       <div className="relative flex items-center gap-0.5">
         <Menu
           width={252}
-          triggerClassName={`flex items-center gap-1.5 rounded-md border px-2 py-1 text-[12px] transition-colors hover:border-border-strong hover:text-text ${
+          triggerClassName={`flex items-center gap-1.5 rounded-md border px-2 py-1 text-small transition-colors hover:border-border-strong hover:text-text ${
             detail.dueDate ? "border-border text-text" : "border-dashed border-border text-faint"
           }`}
           trigger={
@@ -80,7 +80,7 @@ export function DueRow({ detail, onUpdate }: { detail: FlatDetail; onUpdate: Iss
                 aria-label={t("Due year")}
                 value={due.year}
                 onChange={(event) => pickDue("year", Number(event.target.value))}
-                className="h-7 flex-1 rounded-md border border-border bg-bg px-1.5 text-[12px] text-text focus:border-border-strong focus:outline-none"
+                className="h-7 flex-1 rounded-md border border-border bg-bg px-1.5 text-small text-text focus:border-border-strong focus:outline-none"
               >
                 {dueYears.map((year) => (
                   <option key={year} value={year}>
@@ -92,7 +92,7 @@ export function DueRow({ detail, onUpdate }: { detail: FlatDetail; onUpdate: Iss
                 aria-label={t("Due month")}
                 value={due.month}
                 onChange={(event) => pickDue("month", Number(event.target.value))}
-                className="h-7 flex-1 rounded-md border border-border bg-bg px-1.5 text-[12px] text-text focus:border-border-strong focus:outline-none"
+                className="h-7 flex-1 rounded-md border border-border bg-bg px-1.5 text-small text-text focus:border-border-strong focus:outline-none"
               >
                 {MONTH_NAMES.map((name, index) => (
                   <option key={name} value={index + 1}>
@@ -104,7 +104,7 @@ export function DueRow({ detail, onUpdate }: { detail: FlatDetail; onUpdate: Iss
                 aria-label={t("Due day")}
                 value={due.day}
                 onChange={(event) => pickDue("day", Number(event.target.value))}
-                className="h-7 w-16 rounded-md border border-border bg-bg px-1.5 text-[12px] text-text focus:border-border-strong focus:outline-none"
+                className="h-7 w-16 rounded-md border border-border bg-bg px-1.5 text-small text-text focus:border-border-strong focus:outline-none"
               >
                 {Array.from({ length: daysInMonth(due.year, due.month) }, (_, i) => i + 1).map(
                   (day) => (
@@ -136,7 +136,7 @@ export function DueRow({ detail, onUpdate }: { detail: FlatDetail; onUpdate: Iss
       {detail.dueDate && (
         <Menu
           width={180}
-          triggerClassName="flex items-center gap-1.5 rounded-md border border-border px-2 py-1 text-[12px] text-muted transition-colors hover:border-border-strong hover:text-text"
+          triggerClassName="flex items-center gap-1.5 rounded-md border border-border px-2 py-1 text-small text-muted transition-colors hover:border-border-strong hover:text-text"
           trigger={
             <>
               <Bell size={12} className={detail.reminder ? "text-accent" : "text-faint"} />

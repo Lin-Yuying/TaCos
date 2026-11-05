@@ -63,6 +63,8 @@ export type TurnInput = {
   signal?: AbortSignal;
   proxy?: string;
   keys?: HarnessKeys | null;
+  /** Replaces the adapter's five-minute limit on this turn. */
+  timeoutMs?: number;
 };
 
 export type TurnEvent =

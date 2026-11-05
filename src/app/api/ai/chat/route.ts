@@ -19,13 +19,11 @@ import {
 } from "@/lib/agent-sessions";
 import {
   appendAgentMessage,
-  appendAgentStep,
-  finishAgentStep,
   loadThreadForTurn,
-  removeAgentMessage,
   setThreadEngine,
-  updateAgentMessage,
 } from "@/lib/agent-threads";
+import { openHandoffOnThread } from "@/lib/agent-handoff";
+import { recordTurn } from "@/lib/agent-turn-record";
 import {
   codexDefaults,
   listCodexSkills,
@@ -39,6 +37,8 @@ import { harnessKeysFor, harnessesWithKeys, modelAccessFor } from "@/lib/model-k
 import { readyWithKeys } from "@/lib/harness/gate";
 import type { ApprovalDecision as HarnessApprovalDecision } from "@/lib/harness";
 import { TacosError } from "@/lib/issues";
+import { requireRunnerOnline, startRun } from "@/lib/runner/hub";
+import { isServerMode } from "@/lib/server-mode";
 
 const EDIT_ACTIONS = new Set<string>([
   ...AI_EDIT_ACTIONS.map((action) => action.id),
@@ -64,108 +64,6 @@ function shimPath(): string {
   const found = candidates.find((file) => fs.existsSync(file));
   if (!found) throw new TacosError("The Agent tool bridge is missing from this build", 500);
   return found;
-}
-
-type StepFrame = {
-  type: "step";
-  step: { key: string; kind: AgentStepEvent["kind"]; title: string; detail?: string; status: AgentStepEvent["status"] };
-};
-
-type TacosFrame =
-  | StepFrame
-  | { type: "approval"; request: unknown }
-  | { type: "approval_done"; requestId: string; decision: string };
-
-// The turn is already part of TaCos by the time the bytes reach the browser: this tap
-// keeps the assistant text and every tool/command step in the database, so a reopened
-// conversation shows the same trajectory that scrolled past live.
-function recordTurn(
-  upstream: ReadableStream<Uint8Array>,
-  turn: { threadId: string; messageId: string; onEnd?: () => void }
-): ReadableStream<Uint8Array> {
-  const decoder = new TextDecoder();
-  const reader = upstream.getReader();
-  const stepIds = new Map<string, string>();
-  let buffer = "";
-  let text = "";
-  let queue: Promise<unknown> = Promise.resolve();
-  let settled = false;
-
-  const recordStep = async (step: StepFrame["step"]) => {
-    // A step's codex item id is stable across started/completed, but not every item has
-    // one; falling back to kind+title still keeps running and done on the same row.
-    const key = step.key || `${step.kind}|${step.title}`;
-    const known = stepIds.get(key);
-    if (known) {
-      await finishAgentStep(known, step.status, step.detail ?? undefined);
-      return;
-    }
-    const id = await appendAgentStep({
-      threadId: turn.threadId,
-      messageId: turn.messageId,
-      kind: step.kind,
-      title: step.title,
-      detail: step.detail ?? null,
-      status: step.status,
-    });
-    stepIds.set(key, id);
-  };
-
-  const consume = (block: string) => {
-    for (const line of block.split("\n")) {
-      if (!line.startsWith("data:")) continue;
-      const payload = line.slice(5).trim();
-      if (!payload || payload === "[DONE]") continue;
-      let frame: { choices?: { delta?: { content?: unknown } }[]; tacos?: TacosFrame };
-      try {
-        frame = JSON.parse(payload) as typeof frame;
-      } catch {
-        continue;
-      }
-      if (frame.tacos?.type === "step") {
-        const step = frame.tacos.step;
-        queue = queue.then(() => recordStep(step)).catch(() => {});
-      }
-      const delta = frame.choices?.[0]?.delta?.content;
-      if (typeof delta === "string") text += delta;
-    }
-  };
-
-  const settle = async () => {
-    if (settled) return;
-    settled = true;
-    await queue;
-    await (text.trim() ? updateAgentMessage(turn.messageId, text) : removeAgentMessage(turn.messageId));
-    turn.onEnd?.();
-  };
-
-  return new ReadableStream<Uint8Array>({
-    async pull(controller) {
-      const { value, done } = await reader.read();
-      if (done) {
-        if (buffer.trim()) consume(buffer);
-        await settle();
-        controller.close();
-        return;
-      }
-      controller.enqueue(value);
-      buffer += decoder.decode(value, { stream: true });
-      let index = buffer.indexOf("\n\n");
-      while (index >= 0) {
-        consume(buffer.slice(0, index));
-        buffer = buffer.slice(index + 2);
-        index = buffer.indexOf("\n\n");
-      }
-    },
-    async cancel() {
-      try {
-        await reader.cancel();
-      } catch {
-        /* the upstream already ended */
-      }
-      await settle();
-    },
-  });
 }
 
 // Streams the provider's OpenAI-compatible SSE straight through, so the preview can
@@ -198,7 +96,18 @@ export async function POST(request: Request) {
         ? (requested as AiEngine | AgentHarnessId)
         : runtime.engine;
 
-    if (engine !== "api") {
+    if (engine !== "api" && isServerMode()) {
+      const capabilities = await requireRunnerOnline(access.user.id);
+      const found = capabilities.harnesses.find((detect) => detect.id === engine);
+      const detect = found && readyWithKeys(found, capabilities.keyed);
+      if (!detect?.ready) {
+        throw new TacosError(
+          `${detect?.label ?? engine} is not ready on your computer`,
+          400,
+          detect?.hint ?? "Install it on your computer, then try again."
+        );
+      }
+    } else if (engine !== "api") {
       // A harness needs its own subscription, signed in under the OS account that runs this
       // server, or the viewer's own API.
       const keyed = await harnessesWithKeys(access.user.id);
@@ -233,6 +142,9 @@ export async function POST(request: Request) {
       // this conversation is what the model gets, including turns from other sessions.
       // Harness on the request is a turn pref. A mismatch updates last-used and keeps the session.
       const thread = await loadThreadForTurn(workspaceId, access.user.id, threadId);
+      if (await openHandoffOnThread(threadId)) {
+        throw new TacosError("Your Agent is working on this task in this conversation", 409, "Wait for it to finish, or cancel it in the task.");
+      }
       if (thread.engine !== engine) await setThreadEngine(threadId, engine);
 
       const message = text.trim();
@@ -246,6 +158,7 @@ export async function POST(request: Request) {
           workspaceId,
           userId: access.user.id,
           workspaceName: access.workspace.name,
+          workspaceKey: access.workspace.key,
           userName: access.user.displayName,
           focusIssueId: thread.focusIssueId,
           // A conversation started with "Don't work in a project" gets the whole
@@ -257,6 +170,31 @@ export async function POST(request: Request) {
       });
 
       const turn = { threadId, messageId: assistantId };
+
+      // On a server the turn runs on this person's own computer, with their keys and logins.
+      if (isServerMode()) {
+        const events = await startRun({
+          userId: access.user.id,
+          workspaceId,
+          threadId,
+          payload: {
+            kind: "turn",
+            harness: engine,
+            threadId,
+            projectId: thread.projectId,
+            prompt: flattenMessages(messages),
+            message,
+            model: thread.model,
+            effort: thread.effort,
+            approval: thread.approval,
+            autoApproveTools: AGENT_TOOLS.filter((tool) => !tool.write).map((tool) => tool.name),
+            neverAutoApproveTools: AGENT_TOOLS.filter((tool) => tool.delete).map((tool) => tool.name),
+            proxy: runtime.proxy,
+          },
+          signal: request.signal,
+        });
+        return new Response(recordTurn(turnEventsToSse(events), turn), { headers: STREAM_HEADERS });
+      }
 
       const grant = issueAgentToolGrant({
         threadId,
@@ -551,6 +489,15 @@ export async function POST(request: Request) {
         400,
         "Other harnesses are Agent-only for now."
       );
+    }
+    if (isServerMode()) {
+      const events = await startRun({
+        userId: access.user.id,
+        workspaceId,
+        payload: { kind: "edit", engine, messages, prompt: flattenMessages(messages), proxy: runtime.proxy },
+        signal: request.signal,
+      });
+      return new Response(turnEventsToSse(events), { headers: STREAM_HEADERS });
     }
     const stream = openCliStream(engine, flattenMessages(messages), {
       proxy: runtime.proxy,

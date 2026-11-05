@@ -4,20 +4,27 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Command } from "cmdk";
 import { useUI } from "@/components/ui-context";
+import { FileText, MessageSquare, SquareCheck } from "lucide-react";
 import { StatusIcon, STATUS_META } from "@/components/icons";
 import { updateIssueAction } from "@/app/actions";
 import { STATUS_ORDER } from "@/lib/constants";
-import type { IssueWithLabels } from "@/lib/issues";
-import { issueRef, timeAgo } from "@/lib/format";
+import type { SearchHit } from "@/lib/search";
+import { timeAgo } from "@/lib/format";
 import { useLocale, useT } from "@/components/i18n-context";
+
+const SEARCH_GROUPS: { heading: string; kinds: SearchHit["kind"][]; Icon: typeof FileText }[] = [
+  { heading: "Documents", kinds: ["doc"], Icon: FileText },
+  { heading: "Issues", kinds: ["task"], Icon: SquareCheck },
+  { heading: "Comments", kinds: ["task_comment", "doc_comment"], Icon: MessageSquare },
+];
 
 export function CommandPalette({ workspaceId }: { workspaceId: string }) {
   const t = useT();
   const locale = useLocale();
-  const { paletteOpen, setPaletteOpen, openIssue, focused, setComposerOpen } = useUI();
+  const { paletteOpen, setPaletteOpen, openIssue, openPage, focused, setComposerOpen } = useUI();
   const router = useRouter();
   const [query, setQuery] = useState("");
-  const [results, setResults] = useState<IssueWithLabels[]>([]);
+  const [results, setResults] = useState<SearchHit[]>([]);
 
   useEffect(() => {
     if (!paletteOpen) return;
@@ -45,7 +52,7 @@ export function CommandPalette({ workspaceId }: { workspaceId: string }) {
         `/api/internal/${workspaceId}/search?q=${encodeURIComponent(trimmed)}`
       )
         .then((res) => res.json())
-        .then((data) => setResults(data as IssueWithLabels[]))
+        .then((data) => setResults(data as SearchHit[]))
         .catch(() => setResults([]));
     }, 150);
     return () => clearTimeout(timer);
@@ -68,42 +75,57 @@ export function CommandPalette({ workspaceId }: { workspaceId: string }) {
               autoFocus
               value={query}
               onValueChange={setQuery}
-              placeholder={t("Search tasks or run a command…")}
+              placeholder={t("Search documents, tasks and comments, or run a command…")}
             />
           </div>
           <Command.List className="max-h-[380px] overflow-y-auto p-1 pb-2">
             <Command.Empty>
-              <div className="px-3 py-6 text-center text-[13px] text-faint">
+              <div className="px-3 py-6 text-center text-body text-faint">
                 {t("No results for “{query}”")}
               </div>
             </Command.Empty>
 
-            {query.trim() && results.length > 0 && (
-              <Command.Group heading={t("Issues")}>
-                {results.map((issue) => (
-                  <Command.Item
-                    key={issue.id}
-                    value={`${issueRef(issue)} ${issue.identifier} ${issue.title}`}
-                    onSelect={() => {
-                      openIssue(issue.id);
-                      close();
-                    }}
-                  >
-                    <StatusIcon status={issue.status} size={13} />
-                    <span
-                      title={issueRef(issue)}
-                      className="w-[124px] shrink-0 truncate font-mono text-[12px] text-faint"
-                    >
-                      {issueRef(issue)}
-                    </span>
-                    <span className="min-w-0 flex-1 truncate">{issue.title}</span>
-                    <span suppressHydrationWarning className="text-[11px] text-faint">
-                      {timeAgo(issue.updatedAt, locale)}
-                    </span>
-                  </Command.Item>
-                ))}
-              </Command.Group>
-            )}
+            {query.trim() &&
+              SEARCH_GROUPS.map(({ heading, kinds, Icon }) => {
+                const hits = results.filter((hit) => kinds.includes(hit.kind));
+                if (!hits.length) return null;
+                return (
+                  <Command.Group key={heading} heading={t(heading)}>
+                    {hits.map((hit) => (
+                      <Command.Item
+                        key={hit.id}
+                        data-search-hit={hit.kind}
+                        value={`${hit.kind} ${hit.id}`}
+                        // The server already matched; the palette's own filter only sees this text.
+                        keywords={[query]}
+                        onSelect={() => {
+                          if (hit.kind === "doc" || hit.kind === "doc_comment") openPage(hit.openId);
+                          else openIssue(hit.openId);
+                          close();
+                        }}
+                      >
+                        <Icon size={13} className="shrink-0 text-faint" />
+                        <span className="min-w-0 flex-1">
+                          <span className="flex items-center gap-2">
+                            {hit.ref && (
+                              <span className="max-w-[124px] shrink-0 truncate font-mono text-small text-faint">
+                                {hit.ref}
+                              </span>
+                            )}
+                            <span className="min-w-0 flex-1 truncate">{hit.title || t("Untitled")}</span>
+                          </span>
+                          {hit.snippet && (
+                            <span className="block truncate text-small text-faint">{hit.snippet}</span>
+                          )}
+                        </span>
+                        <span suppressHydrationWarning className="shrink-0 text-caption text-faint">
+                          {timeAgo(hit.updatedAt, locale)}
+                        </span>
+                      </Command.Item>
+                    ))}
+                  </Command.Group>
+                );
+              })}
 
             <Command.Group heading={t("Actions")}>
               <Command.Item
@@ -190,7 +212,7 @@ export function CommandPalette({ workspaceId }: { workspaceId: string }) {
               </Command.Item>
             </Command.Group>
           </Command.List>
-          <div className="flex items-center gap-3 border-t border-border px-3 py-2 text-[11px] text-faint">
+          <div className="flex items-center gap-3 border-t border-border px-3 py-2 text-caption text-faint">
             <span>
               <kbd className="rounded border border-border bg-elevated px-1 font-mono">↑↓</kbd>{" "}
               {t("navigate")}

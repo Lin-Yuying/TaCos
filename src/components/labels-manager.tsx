@@ -49,7 +49,7 @@ export function LabelsManager({
     <div className="flex-1 overflow-y-auto p-6">
       <div className="mx-auto max-w-xl space-y-6">
         <div className="space-y-2 rounded-lg border border-border bg-surface/60 p-4">
-          <div className="text-[13px] font-medium">{t("New label")}</div>
+          <div className="text-body font-medium">{t("New label")}</div>
           <div className="flex items-center gap-2">
             <input
               value={name}
@@ -58,13 +58,13 @@ export function LabelsManager({
                 if (e.key === "Enter") void submit();
               }}
               placeholder={t("Label name")}
-              className="w-full rounded-md border border-border bg-elevated/50 px-2.5 py-1.5 text-[13px] placeholder:text-faint focus:border-border-strong"
+              className="w-full rounded-md border border-border bg-elevated/50 px-2.5 py-1.5 text-body placeholder:text-faint focus:border-border-strong"
             />
             <button
               type="button"
               onClick={() => void submit()}
               disabled={!name.trim() || busy}
-              className="shrink-0 rounded-md bg-accent px-3 py-1.5 text-[13px] font-medium text-white hover:bg-accent-hover disabled:opacity-40"
+              className="shrink-0 rounded-md bg-accent px-3 py-1.5 text-body font-medium text-white hover:bg-accent-hover disabled:opacity-40"
             >
               {t("Add")}
             </button>
@@ -83,12 +83,12 @@ export function LabelsManager({
               />
             ))}
           </div>
-          {error && <div className="text-[12px] text-danger">{t(error)}</div>}
+          {error && <div className="text-small text-danger">{t(error)}</div>}
         </div>
 
         <div className="divide-y divide-border rounded-lg border border-border">
           {initialLabels.length === 0 && (
-            <div className="p-4 text-[13px] text-faint">{t("No labels yet.")}</div>
+            <div className="p-4 text-body text-faint">{t("No labels yet.")}</div>
           )}
           {initialLabels.map((label) => (
             <div key={label.id} className="flex items-center gap-3 px-4 py-2.5">
@@ -98,7 +98,7 @@ export function LabelsManager({
                 onClick={() =>
                   router.push(`/${workspaceId}?label=${encodeURIComponent(label.name)}`)
                 }
-                className="text-[12px] text-faint hover:text-muted"
+                className="text-small text-faint hover:text-muted"
               >
                 {t(label.issueCount === 1 ? "{count} task" : "{count} tasks", { count: label.issueCount })}
               </button>

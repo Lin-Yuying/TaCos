@@ -76,7 +76,7 @@ export function ProjectHeader({
                         close();
                         onPickIcon(emoji);
                       }}
-                      className="rounded p-1 text-[18px] transition-colors hover:bg-elevated"
+                      className="rounded p-1 text-title transition-colors hover:bg-elevated"
                     >
                       {emoji}
                     </button>
@@ -89,7 +89,7 @@ export function ProjectHeader({
                       close();
                       onPickIcon(null);
                     }}
-                    className="mt-1 w-full rounded px-2 py-1.5 text-left text-[12px] text-muted transition-colors hover:bg-elevated hover:text-text"
+                    className="mt-1 w-full rounded px-2 py-1.5 text-left text-small text-muted transition-colors hover:bg-elevated hover:text-text"
                   >
                     {t("Use the cube instead")}
                   </button>
@@ -100,7 +100,7 @@ export function ProjectHeader({
         ) : (
           <span className="shrink-0 p-0.5">{mark}</span>
         )}
-        <h1 className="truncate text-[20px] font-semibold tracking-tight">{project.name}</h1>
+        <h1 className="truncate text-heading font-semibold tracking-tight">{project.name}</h1>
         <button
           type="button"
           onClick={onToggleFavorite}
@@ -123,7 +123,7 @@ export function ProjectHeader({
               type="button"
               onClick={() => onTab(item.key)}
               aria-current={active ? "page" : undefined}
-              className={`flex items-center gap-1.5 rounded-full border px-3 py-1 text-[12px] transition-colors ${
+              className={`flex items-center gap-1.5 rounded-full border px-3 py-1 text-small transition-colors ${
                 active
                   ? "border-transparent bg-elevated font-medium text-text"
                   : "border-border text-muted hover:border-border-strong hover:text-text"

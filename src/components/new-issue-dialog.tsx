@@ -156,7 +156,7 @@ export function NewIssueDialog({ workspaceId }: { workspaceId: string }) {
             }
           }}
         >
-          <div className="flex items-center justify-between border-b border-border px-4 py-2 text-[12px] text-faint">
+          <div className="flex items-center justify-between border-b border-border px-4 py-2 text-small text-faint">
             <span>
               {t("New task")}
               {project ? (
@@ -187,14 +187,14 @@ export function NewIssueDialog({ workspaceId }: { workspaceId: string }) {
                 }
               }}
               placeholder={t("Issue title")}
-              className="w-full bg-transparent text-[18px] font-semibold text-text placeholder:text-faint"
+              className="w-full bg-transparent text-title font-semibold text-text placeholder:text-faint"
             />
             <textarea
               value={description}
               onChange={(e) => setDescription(e.target.value)}
               placeholder={t("Add description…")}
               rows={4}
-              className="mt-2 w-full resize-none bg-transparent text-[13px] leading-relaxed text-muted placeholder:text-faint"
+              className="mt-2 w-full resize-none bg-transparent text-body leading-relaxed text-muted placeholder:text-faint"
             />
             {aiReady && (
               <div className="mt-2">
@@ -212,13 +212,13 @@ export function NewIssueDialog({ workspaceId }: { workspaceId: string }) {
                         if (event.key === "Escape") setAiOpen(false);
                       }}
                       placeholder={t("Describe the task, e.g. 修复微信登录回调偶发失败")}
-                      className="min-w-0 flex-1 rounded-md border border-border bg-elevated/40 px-2.5 py-1.5 text-[12.5px] text-text placeholder:text-faint focus:border-border-strong"
+                      className="min-w-0 flex-1 rounded-md border border-border bg-elevated/40 px-2.5 py-1.5 text-small text-text placeholder:text-faint focus:border-border-strong"
                     />
                     <button
                       type="button"
                       onClick={() => void aiDraft()}
                       disabled={!aiPrompt.trim() || aiBusy}
-                      className="flex shrink-0 items-center gap-1 rounded-md bg-accent px-2.5 py-1.5 text-[12px] font-medium text-white disabled:opacity-40"
+                      className="flex shrink-0 items-center gap-1 rounded-md bg-accent px-2.5 py-1.5 text-small font-medium text-white disabled:opacity-40"
                     >
                       {aiBusy ? <LoaderCircle size={11} className="animate-spin" /> : <Sparkles size={11} />}
                       {aiBusy ? t("Drafting…") : t("Draft")}
@@ -236,12 +236,12 @@ export function NewIssueDialog({ workspaceId }: { workspaceId: string }) {
                   <button
                     type="button"
                     onClick={() => setAiOpen(true)}
-                    className="flex items-center gap-1 rounded-md px-1.5 py-1 text-[12px] text-muted transition-colors hover:bg-elevated hover:text-text"
+                    className="flex items-center gap-1 rounded-md px-1.5 py-1 text-small text-muted transition-colors hover:bg-elevated hover:text-text"
                   >
                     <Sparkles size={12} /> AI draft
                   </button>
                 )}
-                {aiError && <div className="mt-1 text-[11.5px] text-danger">{t(aiError)}</div>}
+                {aiError && <div className="mt-1 text-small text-danger">{t(aiError)}</div>}
               </div>
             )}
             <div className="mt-3 flex flex-wrap items-center gap-2">
@@ -251,7 +251,7 @@ export function NewIssueDialog({ workspaceId }: { workspaceId: string }) {
                   <>
                     <span className="text-muted">{t("Project")}</span>
                     {project ? (
-                      <span className="flex items-center gap-1 text-[12px] text-muted">
+                      <span className="flex items-center gap-1 text-small text-muted">
                         <ProjectIcon color={project.color} icon={project.icon} size={12} />
                         {project.name}
                       </span>
@@ -275,7 +275,7 @@ export function NewIssueDialog({ workspaceId }: { workspaceId: string }) {
                       </MenuItem>
                     ))}
                     {projects.length === 0 && (
-                      <div className="px-2 py-1.5 text-[12px] text-faint">
+                      <div className="px-2 py-1.5 text-small text-faint">
                         {t("No projects yet — create one in Settings.")}
                       </div>
                     )}
@@ -443,7 +443,7 @@ export function NewIssueDialog({ workspaceId }: { workspaceId: string }) {
                       );
                     })}
                     {labels.length === 0 && (
-                      <div className="px-2 py-1.5 text-[12px] text-faint">
+                      <div className="px-2 py-1.5 text-small text-faint">
                         {t("No labels yet — create some on the Labels page.")}
                       </div>
                     )}
@@ -452,15 +452,15 @@ export function NewIssueDialog({ workspaceId }: { workspaceId: string }) {
               </Menu>
 
               <div className="ml-auto flex items-center gap-2">
-                {error && <span className="text-[12px] text-danger">{t(error)}</span>}
+                {error && <span className="text-small text-danger">{t(error)}</span>}
                 <button
                   type="button"
                   onClick={() => void submit()}
                   disabled={!title.trim() || !project || busy}
-                  className="rounded-md bg-accent px-3 py-1.5 text-[13px] font-medium text-white transition-colors hover:bg-accent-hover disabled:opacity-40"
+                  className="rounded-md bg-accent px-3 py-1.5 text-body font-medium text-white transition-colors hover:bg-accent-hover disabled:opacity-40"
                 >
                   {t("Create task")}
-                  <span className="ml-2 text-[11px] opacity-75">⌘↵</span>
+                  <span className="ml-2 text-caption opacity-75">⌘↵</span>
                 </button>
               </div>
             </div>

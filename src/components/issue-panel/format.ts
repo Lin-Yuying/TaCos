@@ -84,6 +84,11 @@ export function eventText(event: ActivityEvent, t: Translate, locale: Locale): s
       const to = event.data.to as Priority;
       return t("set priority to {priority}", { priority: label(PRIORITY_META[to], to) });
     }
+    case "field_changed": {
+      const field = String(event.data.field);
+      const to = event.data.to as string | null;
+      return to ? t("set {field} to {value}", { field, value: to }) : t("cleared {field}", { field });
+    }
     case "due_changed": {
       const to = event.data.to as string | null;
       return to

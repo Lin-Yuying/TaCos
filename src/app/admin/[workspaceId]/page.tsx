@@ -22,7 +22,7 @@ export default function WorkspaceAdminPage({
   return (
     <Suspense
       fallback={
-        <div className="flex h-full items-center justify-center text-[13px] text-muted">
+        <div className="flex h-full items-center justify-center text-body text-muted">
           Loading…
         </div>
       }

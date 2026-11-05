@@ -21,6 +21,8 @@ export type ToolGrant = {
   approval: "ask" | "auto" | "full";
   autoApproveTools: string[];
   neverAutoApproveTools: string[];
+  /** How long a card waits for an answer; a person may be away from a handed-off task. */
+  approvalWaitMs?: number;
 };
 
 export type ToolApprovalCard = {

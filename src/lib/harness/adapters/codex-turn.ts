@@ -211,8 +211,8 @@ export async function* openCodexTurn(input: TurnInput, log?: TurnLog): AsyncGene
   };
 
   timer = setTimeout(
-    () => finish("This work turn took longer than five minutes and was stopped."),
-    TURN_TIMEOUT_MS
+    () => finish("This work turn took longer than its time limit and was stopped."),
+    input.timeoutMs ?? TURN_TIMEOUT_MS
   );
 
   const args = ["app-server", "-c", "notify=[]", "-c", "plugins={}"];
@@ -283,6 +283,11 @@ export async function* openCodexTurn(input: TurnInput, log?: TurnLog): AsyncGene
     const meta = (params._meta ?? {}) as Record<string, unknown>;
     if (meta.codex_approval_kind !== "mcp_tool_call") {
       send({ jsonrpc: "2.0", id, result: { action: "decline" } });
+      return;
+    }
+    // The tool route asks for TaCos's own tools, for every harness. Asking here too means two cards.
+    if (params.serverName === "tacos") {
+      send({ jsonrpc: "2.0", id, result: { action: "accept", content: {} } });
       return;
     }
     const message = String(params.message ?? "Allow this tool call?");

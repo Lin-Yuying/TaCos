@@ -10,6 +10,7 @@ import {
   readdirSync,
   realpathSync,
   rmSync,
+  unlinkSync,
   statSync,
 } from "node:fs";
 import { execFileSync } from "node:child_process";
@@ -73,7 +74,7 @@ function dereference(dir) {
     const full = path.join(dir, entry.name);
     if (entry.isSymbolicLink()) {
       const target = realpathSync(full);
-      rmSync(full);
+      unlinkSync(full);
       cpSync(target, full, { recursive: true });
       dereference(full);
     } else if (entry.isDirectory()) {
@@ -151,3 +152,6 @@ const bytes = readdirSync(outDir, { recursive: true })
 console.log(
   `[bundle-server] ${path.relative(root, outDir)} ready for ${target} — ${(bytes / 1024 / 1024).toFixed(1)} MB`
 );
+
+// Ships with the desktop app, for when it connects to a server instead of running its own.
+execFileSync(process.execPath, [path.join(root, "scripts", "bundle-runner.mjs")], { cwd: root, stdio: "inherit" });

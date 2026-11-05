@@ -6,6 +6,7 @@ import { AssigneeAvatar } from "@/components/issue-table";
 import { Menu, MenuItem } from "@/components/menu";
 import { listSwitchableUsersAction, switchUserAction, type SwitchUser } from "@/app/admin-actions";
 import { logoutAction } from "@/app/auth-actions";
+import { desktopRunner } from "@/components/runner-bridge";
 import { useT } from "@/components/i18n-context";
 
 export type UserInfo = {
@@ -88,15 +89,15 @@ export function UserMenu({
       {(close) => (
         <>
           <div className="px-2 py-1.5">
-            <div className="text-[13px] font-medium text-text">{user.displayName}</div>
-            <div className="text-[11px] text-faint">@{user.username}</div>
+            <div className="text-body font-medium text-text">{user.displayName}</div>
+            <div className="text-caption text-faint">@{user.username}</div>
           </div>
 
           {/* Above the list: a tall switch list can push a closing message out of view. */}
           {switching && (
-            <div className="px-2 pb-1 text-[11px] text-faint">{t("Switching account…")}</div>
+            <div className="px-2 pb-1 text-caption text-faint">{t("Switching account…")}</div>
           )}
-          {error && <div className="px-2 pb-1 text-[11px] text-danger">{t(error)}</div>}
+          {error && <div className="px-2 pb-1 text-caption text-danger">{t(error)}</div>}
 
           {workspaceUrl && (
             <MenuItem
@@ -112,7 +113,7 @@ export function UserMenu({
           {people && people.length > 0 && (
             <>
               <div className="my-1 border-t border-border" />
-              <div className="px-2 pb-1 pt-1 text-[11px] uppercase tracking-wider text-faint">
+              <div className="px-2 pb-1 pt-1 text-caption uppercase tracking-wider text-faint">
                 {t("Switch user")}
               </div>
               <div className="max-h-52 overflow-y-auto">
@@ -128,7 +129,7 @@ export function UserMenu({
                         {person.displayName}
                         <span className="text-faint"> @{person.username}</span>
                       </span>
-                      <span className="block truncate text-[11px] text-faint">
+                      <span className="block truncate text-caption text-faint">
                         {person.workspaceName ?? t("No workspace")}
                       </span>
                     </span>
@@ -136,7 +137,7 @@ export function UserMenu({
                 ))}
               </div>
               {!isSiteAdmin && (
-                <div className="px-2 pb-1 pt-0.5 text-[11px] text-faint">
+                <div className="px-2 pb-1 pt-0.5 text-caption text-faint">
                   {t("Accounts signed in on this device")}
                 </div>
               )}
@@ -164,6 +165,7 @@ export function UserMenu({
               // Wait for the session to be deleted before leaving the page; navigating
               // immediately can cancel the request and land back as the old account.
               void (async () => {
+                await desktopRunner()?.stop();
                 await logoutAction();
                 window.location.href = "/login";
               })();

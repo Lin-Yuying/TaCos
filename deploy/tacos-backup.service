@@ -1,0 +1,9 @@
+[Unit]
+Description=TaCos daily backup
+
+[Service]
+Type=oneshot
+User=tacos
+Group=tacos
+WorkingDirectory=/opt/tacos/app
+ExecStart=/opt/tacos/node/bin/node /opt/tacos/deploy/backup.mjs

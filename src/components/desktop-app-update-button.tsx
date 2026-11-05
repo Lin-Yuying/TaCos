@@ -123,7 +123,7 @@ export function DesktopAppUpdateButton({ compact }: { compact?: boolean }) {
       disabled={busy && !ready}
       data-desktop-app-update="true"
       className={
-        "ml-1 flex max-w-[148px] shrink-0 items-center gap-1 rounded-full border px-2 py-1 text-[11px] font-medium transition-colors disabled:opacity-60 " +
+        "ml-1 flex max-w-[148px] shrink-0 items-center gap-1 rounded-full border px-2 py-1 text-caption font-medium transition-colors disabled:opacity-60 " +
         (ready
           ? "border-accent/40 bg-accent/10 text-accent hover:bg-accent/15"
           : "border-border bg-elevated/40 text-muted hover:bg-elevated hover:text-text")

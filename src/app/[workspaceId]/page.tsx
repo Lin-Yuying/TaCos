@@ -5,6 +5,7 @@ import { getSessionUser } from "@/lib/auth";
 import { listIssues, listMembers, listProjects, type Status } from "@/lib/issues";
 import { ListHeader } from "@/components/list-header";
 import { IssueLayout } from "@/components/issue-layout";
+import { listFieldValues, listTaskFields } from "@/lib/task-fields";
 
 type View = "all" | "active" | "open" | "my" | "unassigned" | Status;
 
@@ -16,7 +17,7 @@ export default async function WorkspaceIssuesPage({
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
   return (
-    <Suspense fallback={<div className="p-6 text-[13px] text-muted">Loading…</div>}>
+    <Suspense fallback={<div className="p-6 text-body text-muted">Loading…</div>}>
       <IssuesView params={params} searchParams={searchParams} />
     </Suspense>
   );
@@ -73,6 +74,11 @@ async function IssuesView({
           : (assigneeMember?.id ?? undefined),
   });
 
+  const [fields, values] = await Promise.all([
+    listTaskFields(workspaceId),
+    listFieldValues(issues.map((issue) => issue.id)),
+  ]);
+
   return (
     <div className="flex min-h-0 min-w-0 flex-1 flex-col">
       <ListHeader
@@ -85,7 +91,14 @@ async function IssuesView({
         assigneeParam={assigneeParam}
         assigneeName={assigneeParam === "me" ? user.displayName : assigneeMember?.displayName}
       />
-      <IssueLayout issues={issues} workspaceId={workspaceId} currentUserId={user.id} />
+      <IssueLayout
+        issues={issues}
+        workspaceId={workspaceId}
+        currentUserId={user.id}
+        fields={fields}
+        values={values}
+        manageFields
+      />
     </div>
   );
 }

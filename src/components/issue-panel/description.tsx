@@ -96,7 +96,7 @@ export function DescriptionSection({
             setDoc(description);
           }
         }}
-        className="min-h-[120px] w-full grow shrink-0 cursor-text rounded-md text-[13.5px] leading-relaxed text-muted"
+        className="min-h-[120px] w-full grow shrink-0 cursor-text rounded-md text-body leading-relaxed text-muted"
       >
         {description.trim() ? (
           <Markdown
@@ -104,7 +104,7 @@ export function DescriptionSection({
             onSourceChange={(next) => void onUpdate({ description: next })}
           />
         ) : (
-          <p className="text-[13px] text-faint">{t("Add a description…")}</p>
+          <p className="text-body text-faint">{t("Add a description…")}</p>
         )}
       </div>
     );

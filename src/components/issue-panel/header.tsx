@@ -28,7 +28,7 @@ export function PanelHeader({
   const t = useT();
   return (
     <div className="flex h-12 shrink-0 items-center gap-2 border-b border-border px-4">
-      <span className="max-w-[240px] truncate font-mono text-[12px] text-faint">
+      <span className="max-w-[240px] truncate font-mono text-small text-faint">
         {issueRef(detail)}
       </span>
       {canChangeStatus ? (
@@ -62,7 +62,7 @@ export function PanelHeader({
       ) : (
         <span
           title={t("Only assignees can change a task's status")}
-          className="flex items-center gap-1.5 rounded-md border border-border px-2 py-1 text-[13px] text-muted"
+          className="flex items-center gap-1.5 rounded-md border border-border px-2 py-1 text-body text-muted"
         >
           <StatusIcon status={detail.status} size={13} />
           {t(STATUS_META[detail.status].label)}
@@ -91,7 +91,7 @@ export function PanelHeader({
         <button
           type="button"
           onClick={onClose}
-          className="rounded-md px-1.5 py-1 text-[16px] leading-none text-muted transition-colors hover:bg-elevated hover:text-text"
+          className="rounded-md px-1.5 py-1 text-lead leading-none text-muted transition-colors hover:bg-elevated hover:text-text"
           aria-label={t("Close panel")}
         >
           ×

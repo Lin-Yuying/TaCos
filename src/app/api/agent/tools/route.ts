@@ -1,4 +1,10 @@
-import { AGENT_TOOLS, executeAgentTool } from "@/lib/agent-tools";
+import {
+  AGENT_TOOLS,
+  executeAgentTool,
+  namesWriteTarget,
+  NO_WRITE_TARGET,
+  writesElsewhere,
+} from "@/lib/agent-tools";
 import { decideToolApproval } from "@/lib/agent-tool-policy";
 import {
   publishToolApproval,
@@ -56,8 +62,19 @@ export async function POST(request: Request) {
     return denied(`Unknown tool "${name}"`);
   }
 
-  // TaCos mediates approval for every harness. Delete always confirms (H-P5-26).
-  if (decideToolApproval(spec, grant) === "confirm") {
+  // Refused here, so nobody is asked to approve a write that cannot run.
+  if (spec.write && !namesWriteTarget(body.arguments)) return denied(NO_WRITE_TARGET);
+
+  const toolContext = {
+    workspaceId: grant.workspaceId,
+    projectId: grant.projectId,
+    projectKey: grant.projectKey,
+    userId: grant.userId,
+    threadId: grant.threadId,
+  };
+  // TaCos mediates approval for every harness. Delete always confirms (H-P5-26), and so does a
+  // write to another workspace: text read in one workspace must not reach into the next unasked.
+  if (decideToolApproval(spec, grant) === "confirm" || (await writesElsewhere(toolContext, name, body.arguments))) {
     const requestId = `approval-${grant.threadId}-${name}-${Date.now()}`;
     const card = {
       requestId,
@@ -67,24 +84,17 @@ export async function POST(request: Request) {
       params: body.arguments,
     };
     publishToolApproval(grant.threadId, card);
-    const decision = await waitForAgentApproval(requestId);
+    const decision = await waitForAgentApproval(requestId, {
+      signal: request.signal,
+      timeoutMs: grant.approvalWaitMs,
+    });
     if (decision !== "accept") {
       return denied(`The person denied tool "${name}".`);
     }
   }
 
   try {
-    const result = await executeAgentTool(
-      {
-        workspaceId: grant.workspaceId,
-        projectId: grant.projectId,
-        projectKey: grant.projectKey,
-        userId: grant.userId,
-        threadId: grant.threadId,
-      },
-      name,
-      body.arguments
-    );
+    const result = await executeAgentTool(toolContext, name, body.arguments);
     return Response.json({
       content: [{ type: "text", text: result.text }],
       ...(result.isError ? { isError: true } : {}),

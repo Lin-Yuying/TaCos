@@ -1,3 +1,5 @@
+import { TacosError } from "./tacos-error";
+import { removeWorkspaceAttachments } from "./attachments";
 import crypto from "node:crypto";
 import { parseMentions } from "./mentions";
 import {
@@ -22,6 +24,8 @@ import {
   favorites,
   issueAssignees,
   issueLabels,
+  taskFieldValues,
+  taskFields,
   issues,
   joinCodes,
   labels,
@@ -35,6 +39,12 @@ import {
   users,
   workspaceMembers,
   workspaces,
+  pageAccess,
+  pageCollab,
+  pageComments,
+  pageFavorites,
+  pageVersions,
+  pages,
 } from "../db/schema";
 import {
   LABEL_COLORS,
@@ -52,16 +62,7 @@ import {
 export { LABEL_COLORS, PRIORITY_NAMES, REMINDER_PRESETS, REMINDER_META, STATUS_ORDER, STATUS_META } from "./constants";
 export type { Priority, ReminderPreset, Status, Via } from "./constants";
 
-export class TacosError extends Error {
-  status: number;
-  hint?: string;
-
-  constructor(message: string, status = 400, hint?: string) {
-    super(message);
-    this.status = status;
-    this.hint = hint;
-  }
-}
+export { TacosError };
 
 export type Label = { id: string; name: string; color: string };
 export type Member = {
@@ -428,11 +429,21 @@ const WORKSPACE_TRASH_DAYS = 30;
 
 // Hard delete: only the 30-day sweep and an expired restore call this.
 async function purgeWorkspaceData(db: ReturnType<typeof getDb>, workspaceId: string) {
+  const workspacePages = db.select({ id: pages.id }).from(pages).where(eq(pages.workspaceId, workspaceId));
+  await db.delete(pageCollab).where(inArray(pageCollab.pageId, workspacePages));
+  await db.delete(pageAccess).where(inArray(pageAccess.pageId, workspacePages));
+  await db.delete(pageFavorites).where(inArray(pageFavorites.pageId, workspacePages));
+  await removeWorkspaceAttachments(workspaceId);
+  await db.delete(pageVersions).where(eq(pageVersions.workspaceId, workspaceId));
+  await db.delete(pageComments).where(eq(pageComments.workspaceId, workspaceId));
+  await db.delete(pages).where(eq(pages.workspaceId, workspaceId));
   const workspaceIssues = await db
     .select({ id: issues.id })
     .from(issues)
     .where(eq(issues.workspaceId, workspaceId));
+  await db.delete(taskFields).where(eq(taskFields.workspaceId, workspaceId));
   for (const row of workspaceIssues) {
+    await db.delete(taskFieldValues).where(eq(taskFieldValues.issueId, row.id));
     await db.delete(issueAssignees).where(eq(issueAssignees.issueId, row.id));
     await db.delete(issueLabels).where(eq(issueLabels.issueId, row.id));
     await db.delete(comments).where(eq(comments.issueId, row.id));
@@ -1567,6 +1578,7 @@ export async function purgeProject(workspaceId: string, projectId: string, userI
     .from(issues)
     .where(and(eq(issues.workspaceId, workspaceId), eq(issues.projectId, projectId)));
   for (const row of rows) {
+    await db.delete(taskFieldValues).where(eq(taskFieldValues.issueId, row.id));
     await db.delete(issueLabels).where(eq(issueLabels.issueId, row.id));
     await db.delete(comments).where(eq(comments.issueId, row.id));
     await db.delete(events).where(eq(events.issueId, row.id));
@@ -2021,11 +2033,11 @@ export async function getIssueDetail(
   };
 }
 
-async function notify(input: {
+export async function notify(input: {
   workspaceId: string;
   userId: string;
   issueId: string;
-  type: "assigned" | "commented" | "mentioned" | "due_soon" | ClaimNotice;
+  type: "assigned" | "commented" | "mentioned" | "due_soon" | "handoff_done" | "handoff_failed" | "handoff_waiting" | ClaimNotice;
   body: string;
 }) {
   await getDb().insert(notifications).values({
@@ -2039,7 +2051,7 @@ async function notify(input: {
   });
 }
 
-type MutationActor =
+export type MutationActor =
   | { kind: "user"; userId: string; displayName: string }
   // publishedBy is the person who ran the agent. An agent task waits for human review.
   | { kind: "agent"; label: string; via: Via; publishedBy?: string; sourceThreadId?: string };
@@ -2056,7 +2068,7 @@ function commentAuthorFields(actor: MutationActor) {
     : { authorId: null, agentAuthor: actor.label };
 }
 
-async function recordEvent(
+export async function recordEvent(
   issueId: string,
   type: string,
   data: Record<string, unknown>,
@@ -2765,6 +2777,7 @@ export async function restoreIssue(workspaceId: string, issueId: string) {
 // Only ever called from the Trash, so the issue has to be soft-deleted first.
 export async function purgeIssue(workspaceId: string, issueId: string) {
   const db = getDb();
+  await db.delete(taskFieldValues).where(eq(taskFieldValues.issueId, issueId));
   await db.delete(issueAssignees).where(eq(issueAssignees.issueId, issueId));
   await db.delete(issueLabels).where(eq(issueLabels.issueId, issueId));
   await db.delete(comments).where(eq(comments.issueId, issueId));
@@ -2785,7 +2798,9 @@ export async function addComment(
   workspaceId: string,
   idOrIdentifier: string,
   body: string,
-  actor: MutationActor
+  actor: MutationActor,
+  // This person hears about the comment another way.
+  options: { exceptUser?: string } = {}
 ): Promise<IssueDetail> {  const text = typeof body === "string" ? body.trim() : "";
   if (!text) throw new TacosError("Comment body is required");
   const row = await findIssueRow(workspaceId, idOrIdentifier);
@@ -2814,6 +2829,7 @@ export async function addComment(
   if (row.createdBy && row.createdBy !== actorUserId) {
     targets.add(row.createdBy);
   }
+  if (options.exceptUser) targets.delete(options.exceptUser);
   const who = actor.kind === "user" ? actor.displayName : `Agent (${actor.label})`;
   // A mentioned member gets one "mentioned" notice instead of the "commented" one.
   const mentioned = await notifyMentions(workspaceId, row.id, text, actor);
@@ -2842,6 +2858,8 @@ export type NotificationRow = {
   issueNumber: number | null;
   issueProjectName: string | null;
   issueTitle: string;
+  pageId: string | null;
+  pageTitle: string | null;
   type: string;
   body: string;
   readAt: string | null;
@@ -2857,6 +2875,8 @@ export async function listNotifications(workspaceId: string, userId: string): Pr
       issueNumber: issues.number,
       issueProjectName: projects.name,
       issueTitle: issues.title,
+      pageId: notifications.pageId,
+      pageTitle: pages.title,
       type: notifications.type,
       body: notifications.body,
       readAt: notifications.readAt,
@@ -2865,6 +2885,7 @@ export async function listNotifications(workspaceId: string, userId: string): Pr
     .from(notifications)
     .leftJoin(issues, eq(issues.id, notifications.issueId))
     .leftJoin(projects, eq(projects.id, issues.projectId))
+    .leftJoin(pages, eq(pages.id, notifications.pageId))
     // A deleted workspace cannot be opened, so its farewell notice follows the member
     // into whichever workspace they still have.
     .where(
@@ -3027,6 +3048,13 @@ export async function verifyApiKey(rawKey: string): Promise<ApiKeyRecord | null>
   // project where the rest of the team keeps working.
   if (!row || row.key.revokedAt || row.deletedAt) return null;
   const record = row.key;
+  // A key stands for the person who made it, so it leaves the workspace with them.
+  const [creator] = await db
+    .select({ userId: workspaceMembers.userId })
+    .from(workspaceMembers)
+    .where(and(eq(workspaceMembers.workspaceId, record.workspaceId), eq(workspaceMembers.userId, record.createdBy)))
+    .limit(1);
+  if (!creator) return null;
   await db.update(apiKeys).set({ lastUsedAt: nowIso() }).where(eq(apiKeys.id, record.id));
   return {
     id: record.id,

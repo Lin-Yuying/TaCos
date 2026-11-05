@@ -25,6 +25,7 @@ import type {
   ProjectMember,
 } from "@/lib/issues";
 import { useT } from "@/components/i18n-context";
+import type { FieldValues, TaskField } from "@/lib/task-view";
 
 type Counts = Record<Status, number> & { total: number };
 type ProjectDetail = Project & { doc: string; createdBy: string | null };
@@ -48,7 +49,11 @@ export function ProjectWorkspace({
   unseenDocEdits,
   resources,
   trashedTitles,
+  fields,
+  fieldValues,
 }: {
+  fields: TaskField[];
+  fieldValues: FieldValues;
   workspaceId: string;
   project: ProjectDetail;
   counts: Counts;
@@ -176,26 +181,26 @@ export function ProjectWorkspace({
               <button
                 type="button"
                 onClick={() => setStatus(null)}
-                className="flex items-center gap-1.5 rounded-full bg-elevated px-2 py-0.5 text-[12px] text-text transition-colors hover:bg-elevated/70"
+                className="flex items-center gap-1.5 rounded-full bg-elevated px-2 py-0.5 text-small text-text transition-colors hover:bg-elevated/70"
               >
                 <StatusIcon status={status} size={12} />
                 {t(STATUS_META[status].label)}
                 <X size={11} className="text-faint" />
               </button>
             ) : (
-              <span className="text-[13px] font-medium text-muted">{t("All tasks")}</span>
+              <span className="whitespace-nowrap text-body font-medium text-muted">{t("All tasks")}</span>
             )}
-            <span className="rounded-full bg-elevated px-2 py-0.5 text-[11px] text-muted">
+            <span className="rounded-full bg-elevated px-2 py-0.5 text-caption text-muted">
               {shown.length}
             </span>
-            <div className="ml-auto flex items-center gap-2">
-              <div className="flex w-60 items-center gap-2 rounded-md border border-border bg-elevated/50 px-2 py-1.5 focus-within:border-border-strong">
+            <div className="ml-auto flex min-w-0 items-center gap-2">
+              <div className="flex w-60 min-w-0 shrink items-center gap-2 rounded-md border border-border bg-elevated/50 px-2 py-1.5 focus-within:border-border-strong">
                 <Search size={13} className="shrink-0 text-faint" />
                 <input
                   value={q}
                   onChange={(e) => setQ(e.target.value)}
                   placeholder={t("Search tasks…")}
-                  className="w-full bg-transparent text-[13px] text-text placeholder:text-faint"
+                  className="w-full bg-transparent text-body text-text placeholder:text-faint"
                 />
                 {q && (
                   <button
@@ -211,7 +216,14 @@ export function ProjectWorkspace({
               <LayoutToggle />
             </div>
           </header>
-          <IssueLayout issues={shown} workspaceId={workspaceId} currentUserId={currentUserId} />
+          <IssueLayout
+            issues={shown}
+            workspaceId={workspaceId}
+            currentUserId={currentUserId}
+            fields={fields}
+            values={fieldValues}
+            manageFields
+          />
         </>
       )}
     </div>

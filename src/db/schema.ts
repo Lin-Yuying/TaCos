@@ -1,4 +1,4 @@
-import { index, integer, primaryKey, real, sqliteTable, text } from "drizzle-orm/sqlite-core";
+import { blob,index, integer, primaryKey, real, sqliteTable, text, uniqueIndex } from "drizzle-orm/sqlite-core";
 
 export const users = sqliteTable("users", {
   id: text("id").primaryKey(),
@@ -227,6 +227,18 @@ export const pages = sqliteTable(
     doc: text("doc").notNull().default(""),
     createdBy: text("created_by").notNull(),
     shared: integer("shared").notNull().default(0),
+    // Goes up with every change to the body; a save names the one it started from.
+    revision: integer("revision").notNull().default(0),
+    // A finished attachment shown across the top of the page.
+    cover: text("cover"),
+    // Order among siblings; older rows stay 0 and fall back to createdAt.
+    position: integer("position").notNull().default(0),
+    // What every member may do once it is shared: view | comment | edit
+    shareLevel: text("share_level").notNull().default("edit"),
+    // In the Trash when set. trashRoot is the page whose deletion took this one with it,
+    // so a restore brings back exactly that subtree.
+    deletedAt: text("deleted_at"),
+    trashRoot: text("trash_root"),
     createdAt: text("created_at").notNull(),
     updatedAt: text("updated_at").notNull(),
   },
@@ -235,6 +247,85 @@ export const pages = sqliteTable(
     index("pages_parent_idx").on(t.parentId),
     index("pages_project_idx").on(t.projectId),
   ]
+);
+
+// What a document looked like after each change; the Updates panel reads these.
+export const pageVersions = sqliteTable(
+  "page_versions",
+  {
+    id: text("id").primaryKey(),
+    pageId: text("page_id").notNull(),
+    workspaceId: text("workspace_id").notNull(),
+    seq: integer("seq").notNull(),
+    title: text("title").notNull(),
+    doc: text("doc").notNull(),
+    actorId: text("actor_id").notNull(),
+    // you | mcp
+    via: text("via").notNull(),
+    // edit | restore | earlier (the text before history started) | unsaved (refused text
+    // kept when its writer left the page; never the page's current text)
+    reason: text("reason").notNull(),
+    restoredFrom: integer("restored_from"),
+    createdAt: text("created_at").notNull(),
+    updatedAt: text("updated_at").notNull(),
+  },
+  (t) => [uniqueIndex("page_versions_page_seq_idx").on(t.pageId, t.seq)]
+);
+
+// A file sent to a page. The bytes live under <data>/uploads/<id>.
+export const attachments = sqliteTable(
+  "attachments",
+  {
+    id: text("id").primaryKey(),
+    workspaceId: text("workspace_id").notNull(),
+    pageId: text("page_id").notNull(),
+    uploaderId: text("uploader_id").notNull(),
+    name: text("name").notNull(),
+    size: integer("size").notNull(),
+    complete: integer("complete").notNull().default(0),
+    createdAt: text("created_at").notNull(),
+  },
+  (t) => [index("attachments_page_idx").on(t.pageId), index("attachments_workspace_idx").on(t.workspaceId)]
+);
+
+export const pageFavorites = sqliteTable(
+  "page_favorites",
+  {
+    userId: text("user_id").notNull(),
+    pageId: text("page_id").notNull(),
+    createdAt: text("created_at").notNull(),
+  },
+  (t) => [primaryKey({ columns: [t.userId, t.pageId] })]
+);
+
+// One member's level on a shared page, in place of the page's shareLevel.
+export const pageAccess = sqliteTable(
+  "page_access",
+  {
+    pageId: text("page_id").notNull(),
+    userId: text("user_id").notNull(),
+    level: text("level").notNull(),
+  },
+  (t) => [primaryKey({ columns: [t.pageId, t.userId] })]
+);
+
+export const pageComments = sqliteTable(
+  "page_comments",
+  {
+    id: text("id").primaryKey(),
+    pageId: text("page_id").notNull(),
+    workspaceId: text("workspace_id").notNull(),
+    authorId: text("author_id").notNull(),
+    body: text("body").notNull(),
+    // The passage it is about, with its surroundings; empty for a comment on the document.
+    quote: text("quote"),
+    prefix: text("prefix").notNull().default(""),
+    suffix: text("suffix").notNull().default(""),
+    via: text("via").notNull().default("you"),
+    resolvedAt: text("resolved_at"),
+    createdAt: text("created_at").notNull(),
+  },
+  (t) => [index("page_comments_page_idx").on(t.pageId)]
 );
 
 export const issues = sqliteTable(
@@ -319,6 +410,31 @@ export const labels = sqliteTable(
   (t) => [index("labels_workspace_idx").on(t.workspaceId)]
 );
 
+// A column every task in the workspace can fill in. options is a JSON list, for select fields.
+export const taskFields = sqliteTable(
+  "task_fields",
+  {
+    id: text("id").primaryKey(),
+    workspaceId: text("workspace_id").notNull(),
+    name: text("name").notNull(),
+    type: text("type").notNull(),
+    options: text("options").notNull().default("[]"),
+    createdBy: text("created_by").notNull(),
+    createdAt: text("created_at").notNull(),
+  },
+  (t) => [index("task_fields_workspace_idx").on(t.workspaceId)]
+);
+
+export const taskFieldValues = sqliteTable(
+  "task_field_values",
+  {
+    issueId: text("issue_id").notNull(),
+    fieldId: text("field_id").notNull(),
+    value: text("value").notNull(),
+  },
+  (t) => [primaryKey({ columns: [t.issueId, t.fieldId] }), index("task_field_values_field_idx").on(t.fieldId)]
+);
+
 export const issueLabels = sqliteTable(
   "issue_labels",
   {
@@ -365,7 +481,9 @@ export const notifications = sqliteTable(
     workspaceId: text("workspace_id").notNull(),
     userId: text("user_id").notNull(),
     issueId: text("issue_id").notNull(),
-    // assigned | commented | mentioned
+    // Set on a document's notice; issueId is empty then.
+    pageId: text("page_id"),
+    // assigned | commented | mentioned | doc_commented | doc_mentioned
     type: text("type").notNull(),
     body: text("body").notNull(),
     readAt: text("read_at"),
@@ -499,4 +617,43 @@ export const aiSettings = sqliteTable("ai_settings", {
   proxy: text("proxy").notNull().default(""),
   // JSON map of HarnessId -> enabled. Empty object means every harness is enabled.
   harnessEnabled: text("harness_enabled").notNull().default("{}"),
+});
+
+// One per member's computer. Only the hash is stored; the runner holds the token.
+export const runnerTokens = sqliteTable("runner_tokens", {
+  tokenHash: text("token_hash").primaryKey(),
+  userId: text("user_id").notNull(),
+  createdAt: text("created_at").notNull(),
+});
+
+// What a member's computer last said it can run. Holds no key.
+export const runnerStatus = sqliteTable("runner_status", {
+  userId: text("user_id").primaryKey(),
+  capabilities: text("capabilities").notNull(),
+  lastSeenAt: text("last_seen_at").notNull(),
+});
+
+// A piece of Agent work waiting for, or running on, the member's computer. It only runs on
+// the computer of the member who started it.
+export const agentRuns = sqliteTable("agent_runs", {
+  id: text("id").primaryKey(),
+  userId: text("user_id").notNull(),
+  workspaceId: text("workspace_id").notNull(),
+  threadId: text("thread_id"),
+  issueId: text("issue_id"),
+  payload: text("payload").notNull(),
+  // queued | running | done | failed | cancelled
+  status: text("status").notNull(),
+  error: text("error"),
+  createdAt: text("created_at").notNull(),
+  finishedAt: text("finished_at"),
+});
+
+// A document's shared editing state; pages.doc stays the text everything else reads.
+export const pageCollab = sqliteTable("page_collab", {
+  pageId: text("page_id").primaryKey(),
+  state: blob("state", { mode: "buffer" }).notNull(),
+  // The page revision this state matches. If the page moved on, the state takes in its text.
+  revision: integer("revision").notNull(),
+  updatedAt: text("updated_at").notNull(),
 });

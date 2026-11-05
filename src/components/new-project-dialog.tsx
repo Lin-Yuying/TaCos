@@ -81,7 +81,7 @@ export function NewProjectDialog({
             }
           }}
         >
-          <div className="flex items-center justify-between border-b border-border px-4 py-2 text-[12px] text-faint">
+          <div className="flex items-center justify-between border-b border-border px-4 py-2 text-small text-faint">
             <span>
               {workspaceName} <span className="mx-1">›</span>
               <span className="text-muted">{t("New project")}</span>
@@ -102,26 +102,26 @@ export function NewProjectDialog({
               value={name}
               onChange={(e) => setName(e.target.value)}
               placeholder={t("Project name")}
-              className="w-full bg-transparent text-[18px] font-semibold placeholder:text-faint focus:outline-none"
+              className="w-full bg-transparent text-title font-semibold placeholder:text-faint focus:outline-none"
             />
             <textarea
               value={description}
               onChange={(e) => setDescription(e.target.value)}
               rows={2}
               placeholder={t("Add a short summary…")}
-              className="mt-1 w-full resize-none bg-transparent text-[13px] leading-relaxed text-muted placeholder:text-faint focus:outline-none"
+              className="mt-1 w-full resize-none bg-transparent text-body leading-relaxed text-muted placeholder:text-faint focus:outline-none"
             />
-            <p className="mt-2 text-[12px] text-faint">
+            <p className="mt-2 text-small text-faint">
               {t("An icon colour is chosen for you — change it later from the project overview.")}
             </p>
           </div>
 
           <div className="flex items-center justify-end gap-2 border-t border-border px-4 py-2.5">
-            {error && <span className="mr-auto text-[12px] text-danger">{t(error)}</span>}
+            {error && <span className="mr-auto text-small text-danger">{t(error)}</span>}
             <button
               type="button"
               onClick={() => setProjectComposerOpen(false)}
-              className="rounded-md px-2.5 py-1.5 text-[13px] text-muted transition-colors hover:text-text"
+              className="rounded-md px-2.5 py-1.5 text-body text-muted transition-colors hover:text-text"
             >
               {t("Cancel")}
             </button>
@@ -129,10 +129,10 @@ export function NewProjectDialog({
               type="button"
               onClick={() => void submit()}
               disabled={!name.trim() || busy}
-              className="rounded-md bg-accent px-3 py-1.5 text-[13px] font-medium text-white transition-colors hover:bg-accent-hover disabled:opacity-40"
+              className="rounded-md bg-accent px-3 py-1.5 text-body font-medium text-white transition-colors hover:bg-accent-hover disabled:opacity-40"
             >
               {t("Create project")}
-              <span className="ml-2 text-[11px] opacity-75">⌘↵</span>
+              <span className="ml-2 text-caption opacity-75">⌘↵</span>
             </button>
           </div>
         </div>

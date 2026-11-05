@@ -12,7 +12,7 @@ export default async function PersonRoute({
   params: Promise<{ workspaceId: string; userId: string }>;
 }) {
   return (
-    <Suspense fallback={<div className="p-6 text-[13px] text-muted">Loading…</div>}>
+    <Suspense fallback={<div className="p-6 text-body text-muted">Loading…</div>}>
       <Person params={params} />
     </Suspense>
   );

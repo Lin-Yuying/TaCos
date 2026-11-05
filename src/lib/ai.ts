@@ -13,7 +13,11 @@ import {
   type AiTaskDraft,
 } from "./ai-constants";
 import { listCliStatuses, normalizeProxy } from "./cli-agents";
-import { harnessesWithKeys, resolveEditConfig } from "./model-keys";
+import { readyWithKeys } from "./harness/gate";
+import { harnessViewFor, resolveEditConfig } from "./model-keys";
+import { requireRunnerOnline, runnerViewFor, startRun } from "./runner/hub";
+import { turnEventsToSse } from "./harness/sse";
+import { isServerMode } from "./server-mode";
 
 const MAX_PROMPT = AI_EDIT_CHAR_LIMIT;
 
@@ -55,6 +59,31 @@ function asEngine(value: string | null | undefined): AiEngine {
 // engines this viewer may actually run. A CLI signs in on the machine that hosts this
 // server, so that machine's subscription serves everyone in the workspace.
 export async function aiEngineOptions(workspaceId: string, userId: string): Promise<AgentEngineOption[]> {
+  if (isServerMode()) {
+    const { online, capabilities } = await runnerViewFor(userId);
+    const hint = "Open TaCos on your computer, then try again.";
+    return [
+      {
+        id: "api",
+        label: capabilities?.editModel || "API key",
+        detail: null,
+        available: online && Boolean(capabilities?.editModel),
+        hint: capabilities?.editModel ? hint : "Add your API key in Settings → Model API.",
+      },
+      ...(capabilities?.harnesses ?? [])
+        .filter((detect): detect is typeof detect & { id: "codex" | "pi" } => detect.id === "codex" || detect.id === "pi")
+        .map((detect) => {
+          const status = readyWithKeys(detect, capabilities?.keyed ?? []);
+          return {
+            id: status.id,
+            label: status.label,
+            detail: status.version,
+            available: online && status.ready,
+            hint: status.ready ? hint : status.hint,
+          };
+        }),
+    ];
+  }
   const ai = await getAiSettingsView(workspaceId);
   const edit = await resolveEditConfig(userId);
   return [
@@ -84,7 +113,7 @@ export async function agentCliEngineOptions(workspaceId: string, userId: string)
 /** Enabled+ready harness options for the Agent composer (H-P3-17). */
 export async function listAgentHarnessOptions(workspaceId: string, userId: string): Promise<AgentHarnessOption[]> {
   const { getWorkspaceHarnessGate } = await import("@/lib/harness");
-  const gate = await getWorkspaceHarnessGate(workspaceId, await harnessesWithKeys(userId));
+  const gate = await getWorkspaceHarnessGate(workspaceId, ...(await harnessViewFor(userId)));
   return gate.enabledReady.map((row) => ({
     id: row.id,
     label: row.label,
@@ -97,6 +126,7 @@ export async function listAgentHarnessOptions(workspaceId: string, userId: strin
 // Cheap check used by pages that only need to know whether the sparkle buttons
 // should be offered at all. A viewer without a key of their own gets none.
 export async function aiReady(workspaceId: string, userId: string): Promise<boolean> {
+  if (isServerMode()) return Boolean((await runnerViewFor(userId)).capabilities?.editModel);
   return Boolean(await resolveEditConfig(userId));
 }
 
@@ -132,6 +162,35 @@ async function resolveConfig(userId: string): Promise<ResolvedConfig> {
     throw new TacosError("AI is not configured yet", 400, "Add your API key in Settings → Model API.");
   }
   return config;
+}
+
+// On a server the API and its key are on the member's computer, so the call goes through there.
+async function runnerChat(
+  workspaceId: string,
+  userId: string,
+  messages: ChatMessage[],
+  opts: { maxTokens: number; temperature: number; json?: boolean; signal?: AbortSignal }
+) {
+  const capabilities = await requireRunnerOnline(userId);
+  if (!capabilities.editModel) {
+    throw new TacosError("AI is not configured yet", 400, "Add your API key in Settings → Model API.");
+  }
+  const { proxy } = await agentRuntime(workspaceId);
+  return startRun({
+    userId,
+    workspaceId,
+    payload: {
+      kind: "edit",
+      engine: "api",
+      messages,
+      prompt: flattenMessages(messages),
+      proxy,
+      maxTokens: opts.maxTokens,
+      temperature: opts.temperature,
+      json: opts.json,
+    },
+    signal: opts.signal,
+  });
 }
 
 // --- provider calls --------------------------------------------------------
@@ -242,6 +301,21 @@ export async function completeChat(
   messages: ChatMessage[],
   opts: { maxTokens?: number; temperature?: number; json?: boolean } = {}
 ): Promise<string> {
+  if (isServerMode()) {
+    const events = await runnerChat(workspaceId, userId, messages, {
+      maxTokens: opts.maxTokens ?? 1_500,
+      temperature: opts.temperature ?? 0.4,
+      json: opts.json,
+      signal: withTimeout(undefined, 90_000),
+    });
+    let text = "";
+    for await (const event of events) {
+      if (event.type === "delta") text += event.text;
+      if (event.type === "error") throw new TacosError(event.message, 502);
+    }
+    if (text) return text;
+    throw new TacosError("The AI provider returned an empty response", 502);
+  }
   const config = await resolveConfig(userId);
   const response = await sendChat(config, messages, {
     stream: false,
@@ -277,6 +351,14 @@ export async function openChatStream(
   messages: ChatMessage[],
   signal?: AbortSignal
 ): Promise<ReadableStream<Uint8Array>> {
+  if (isServerMode()) {
+    const events = await runnerChat(workspaceId, userId, messages, {
+      maxTokens: 2_500,
+      temperature: 0.4,
+      signal: withTimeout(signal, 180_000),
+    });
+    return turnEventsToSse(events);
+  }
   const config = await resolveConfig(userId);
   const response = await sendChat(config, messages, {
     stream: true,
@@ -364,10 +446,12 @@ const AGENT_SYSTEM = `You are the Agent inside TaCos, a team task tracker.
 - If the request is unclear, ask one short clarifying question instead of guessing.`;
 
 
-const WORK_RULES = `- You can use TaCos tools for the project this conversation is bound to: list_tasks, get_task, get_overview, create_task, update_task, add_comment, claim_task, update_overview, create_doc, get_doc, update_doc.
-- Documents that are too long for the inline editor are yours to rewrite: read the whole page with get_doc, then send the complete new markdown with update_doc. Documents belong to the workspace library rather than one project, so a page whose projectId is null or names another project is still fair game when the user points you at it.
+const WORK_RULES = `- You can use TaCos tools for the project this conversation is bound to: list_tasks, get_task, get_overview, create_task, update_task, add_comment, claim_task, update_overview, create_doc, get_doc, edit_doc, undo_doc_edit, update_doc.
+- To change part of a document, read it with get_doc and use edit_doc, which leaves the rest as it is. Documents that are too long for the inline editor are yours to rewrite: read the whole page with get_doc, then send the complete new markdown with update_doc. Documents belong to the workspace library rather than one project, so a page whose projectId is null or names another project is still fair game when the user points you at it.
 - Read before you write, then make the change the user asked for. Each write pauses for the user's Allow/Deny card in the Agent tab, so do not ask them to confirm twice in chat.
-- Only touch the bound project's tasks and comments. Report what you created or changed with task identifiers.
+- You can read everything this person can see: search_workspace finds documents, tasks and comments, and list_workspaces, list_projects, list_tasks, get_task, get_overview and get_doc take workspace and project to read elsewhere.
+- Every write tool needs workspace, set to this conversation's workspace key unless the person asked for another. Write to another workspace only when the person asked for it; that write also needs project and always asks them first.
+- Unless they ask for another project, only touch the bound project's tasks and comments. Report what you created or changed with task identifiers.
 - Shell and file edits in the project folder are allowed inside the sandbox; do not try to reach the TaCos database or anything outside it.`;
 
 const MAX_AGENT_HISTORY = 20;
@@ -430,6 +514,7 @@ export async function agentContext(input: {
   workspaceId: string;
   userId: string;
   workspaceName: string;
+  workspaceKey: string;
   userName: string;
   // A conversation is bound to one project; the context leads with it and lists its tasks.
   project?: { id: string; name: string; key: string };
@@ -445,7 +530,7 @@ export async function agentContext(input: {
     ? allIssues.filter((issue) => issue.projectId === input.project?.id)
     : allIssues;
   const open = issues.filter((issue) => issue.status !== "done" && issue.status !== "canceled");
-  const lines = [`Workspace: ${input.workspaceName}`, `Signed-in user: ${input.userName}`];
+  const lines = [`Workspace: ${input.workspaceName} (key ${input.workspaceKey})`, `Signed-in user: ${input.userName}`];
   if (input.project) {
     lines.push(
       `Bound project: ${input.project.name} (${input.project.key}) — this conversation is about this project.`

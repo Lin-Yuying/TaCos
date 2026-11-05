@@ -80,7 +80,7 @@ export function OnboardingForm({
         <UserMenu user={user} workspaceUrl={workspaceUrl} />
       </div>
       <div className="w-[400px] max-w-[92vw]">
-        <div className="mb-5 flex items-center gap-3 text-[12px]">
+        <div className="mb-5 flex items-center gap-3 text-small">
           <span className="text-faint">
             {t("Wrong account? Switch back from the avatar menu at the top right.")}
           </span>
@@ -93,10 +93,10 @@ export function OnboardingForm({
             </Link>
           )}
         </div>
-        <h1 className="text-[22px] font-semibold tracking-tight">
+        <h1 className="text-heading font-semibold tracking-tight">
           {hasWorkspaces ? t("Add a workspace") : t("Welcome, {name}", { name: displayName })}
         </h1>
-        <p className="mb-6 mt-1 text-[13px] text-muted">
+        <p className="mb-6 mt-1 text-body text-muted">
           {hasWorkspaces
             ? t("Create another workspace, or join a teammate's with a code.")
             : t("Create a workspace for your team, or join an existing one with a code from a teammate.")}
@@ -107,13 +107,13 @@ export function OnboardingForm({
             {notices.map((notice) => (
               <div
                 key={notice.id}
-                className="flex items-start gap-2 rounded-lg border border-border bg-elevated/50 px-3 py-2 text-[12px] leading-relaxed text-muted"
+                className="flex items-start gap-2 rounded-lg border border-border bg-elevated/50 px-3 py-2 text-small leading-relaxed text-muted"
               >
                 <span className="min-w-0 flex-1">{notice.body}</span>
                 <button
                   type="button"
                   onClick={() => dismissNotice(notice.id)}
-                  className="shrink-0 text-[11px] text-faint transition-colors hover:text-text"
+                  className="shrink-0 text-caption text-faint transition-colors hover:text-text"
                 >
                   {t("Dismiss")}
                 </button>
@@ -131,7 +131,7 @@ export function OnboardingForm({
                 setTab(option);
                 setError(null);
               }}
-              className={`flex-1 rounded-md py-1.5 text-[13px] font-medium transition-colors ${
+              className={`flex-1 rounded-md py-1.5 text-body font-medium transition-colors ${
                 tab === option ? "bg-elevated text-text" : "text-muted hover:text-text"
               }`}
             >
@@ -149,34 +149,34 @@ export function OnboardingForm({
             }}
           >
             <label className="block">
-              <span className="mb-1 block text-[12px] font-medium text-muted">{t("Workspace name")}</span>
+              <span className="mb-1 block text-small font-medium text-muted">{t("Workspace name")}</span>
               <input
                 autoFocus
                 value={wsName}
                 onChange={(e) => setWsName(e.target.value)}
-                className="w-full rounded-md border border-border bg-elevated/50 px-2.5 py-2 text-[13px] placeholder:text-faint focus:border-border-strong"
+                className="w-full rounded-md border border-border bg-elevated/50 px-2.5 py-2 text-body placeholder:text-faint focus:border-border-strong"
                 placeholder={t("e.g. Acme Inc")}
               />
             </label>
             <label className="block">
-              <span className="mb-1 block text-[12px] font-medium text-muted">
+              <span className="mb-1 block text-small font-medium text-muted">
                 {t("Workspace key (issue prefix)")}
               </span>
               <input
                 value={wsKey}
                 onChange={(e) => setWsKey(e.target.value.toUpperCase())}
-                className="w-full rounded-md border border-border bg-elevated/50 px-2.5 py-2 font-mono text-[13px] placeholder:text-faint focus:border-border-strong"
+                className="w-full rounded-md border border-border bg-elevated/50 px-2.5 py-2 font-mono text-body placeholder:text-faint focus:border-border-strong"
                 placeholder={t("e.g. ACME")}
               />
-              <span className="mt-1 block text-[11px] text-faint">
+              <span className="mt-1 block text-caption text-faint">
                 2-10 letters/digits. Projects get their own prefixes; this reserves the workspace default.
               </span>
             </label>
-            {error && <div className="text-[12px] text-danger">{t(error)}</div>}
+            {error && <div className="text-small text-danger">{t(error)}</div>}
             <button
               type="submit"
               disabled={busy || !wsName.trim() || !wsKey.trim()}
-              className="w-full rounded-md bg-accent px-3 py-2 text-[13px] font-medium text-white transition-colors hover:bg-accent-hover disabled:opacity-40"
+              className="w-full rounded-md bg-accent px-3 py-2 text-body font-medium text-white transition-colors hover:bg-accent-hover disabled:opacity-40"
             >
               {t("Create workspace")}
             </button>
@@ -190,23 +190,23 @@ export function OnboardingForm({
             }}
           >
             <label className="block">
-              <span className="mb-1 block text-[12px] font-medium text-muted">{t("Join code")}</span>
+              <span className="mb-1 block text-small font-medium text-muted">{t("Join code")}</span>
               <input
                 autoFocus
                 value={joinCode}
                 onChange={(e) => setJoinCode(e.target.value.toUpperCase())}
-                className="w-full rounded-md border border-border bg-elevated/50 px-2.5 py-2 font-mono text-[13px] placeholder:text-faint focus:border-border-strong"
+                className="w-full rounded-md border border-border bg-elevated/50 px-2.5 py-2 font-mono text-body placeholder:text-faint focus:border-border-strong"
                 placeholder="TACOS-XXXXXXXX"
               />
-              <span className="mt-1 block text-[11px] text-faint">
+              <span className="mt-1 block text-caption text-faint">
                 {t("Any workspace admin can find the code in Settings → Members.")}
               </span>
             </label>
-            {error && <div className="text-[12px] text-danger">{t(error)}</div>}
+            {error && <div className="text-small text-danger">{t(error)}</div>}
             <button
               type="submit"
               disabled={busy || !joinCode.trim()}
-              className="w-full rounded-md bg-accent px-3 py-2 text-[13px] font-medium text-white transition-colors hover:bg-accent-hover disabled:opacity-40"
+              className="w-full rounded-md bg-accent px-3 py-2 text-body font-medium text-white transition-colors hover:bg-accent-hover disabled:opacity-40"
             >
               {t("Join workspace")}
             </button>
@@ -217,7 +217,7 @@ export function OnboardingForm({
           <button
             type="button"
             onClick={() => router.back()}
-            className="mt-4 w-full rounded-md px-3 py-2 text-[13px] text-muted transition-colors hover:bg-elevated hover:text-text"
+            className="mt-4 w-full rounded-md px-3 py-2 text-body text-muted transition-colors hover:bg-elevated hover:text-text"
           >
             {t("Back")}
           </button>

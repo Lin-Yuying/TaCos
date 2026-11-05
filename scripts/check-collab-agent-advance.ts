@@ -34,7 +34,7 @@ async function main() {
   assert(t1.title.includes(task.identifier), "the chat title must name the task");
   const turn = (await threads.loadThreadForTurn(ws, me.id, t1.id)) as { focusIssueId: string | null };
   assert(turn.focusIssueId === task.id, "the chat must link to the task");
-  const ctx = await agentContext({ workspaceId: ws, userId: me.id, workspaceName: "W", userName: "U", focusIssueId: task.id } as Parameters<typeof agentContext>[0]);
+  const ctx = await agentContext({ workspaceId: ws, userId: me.id, workspaceName: "W", workspaceKey: "W", userName: "U", focusIssueId: task.id } as Parameters<typeof agentContext>[0]);
   assert(ctx.includes("Focus task") && ctx.includes("Steps: open login."), "the agent context must carry the task details");
   const chips = (await threads.listThreadTasks(ws, t1.id, me.id)) as { id: string }[];
   assert(chips.some((c) => c.id === task.id), "the chat header must show the task chip");

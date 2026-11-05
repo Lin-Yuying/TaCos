@@ -34,9 +34,10 @@ export function signedInHarnesses(): HarnessId[] {
  */
 export function harnessGate(
   enabledById?: Partial<Record<HarnessId, boolean>>,
-  keyed: HarnessId[] = []
+  keyed: HarnessId[] = [],
+  detects: DetectResult[] = listHarnessDetect()
 ): HarnessGate {
-  const statuses: HarnessStatus[] = listHarnessDetect().map((detect) => ({
+  const statuses: HarnessStatus[] = detects.map((detect) => ({
     ...readyWithKeys(detect, keyed),
     enabled: enabledById?.[detect.id] ?? true,
   }));

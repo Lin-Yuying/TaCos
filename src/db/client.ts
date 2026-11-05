@@ -1,3 +1,4 @@
+import { DATA_DIR } from "@/lib/data-dir";
 import Database from "better-sqlite3";
 import { drizzle } from "drizzle-orm/better-sqlite3";
 import { existsSync, mkdirSync } from "node:fs";
@@ -7,11 +8,7 @@ import { DEFAULT_PROJECT_COLOR, PROJECT_COLORS } from "../lib/constants";
 import { BUILTIN_AVATAR_PREFIX, builtinAvatarId, nextFreeAvatar } from "../lib/avatars";
 import * as schema from "./schema";
 
-// A packaged desktop install cannot write next to its read-only app bundle, so the
-// data directory comes from the environment and only falls back to the repo checkout.
-export const DATA_DIR = process.env.TACOS_DATA_DIR
-  ? path.resolve(process.env.TACOS_DATA_DIR)
-  : path.join(process.cwd(), "data");
+export { DATA_DIR };
 
 const DDL = `
 CREATE TABLE IF NOT EXISTS users (
@@ -161,6 +158,89 @@ CREATE TABLE IF NOT EXISTS pages (
   updated_at TEXT NOT NULL
 );
 CREATE INDEX IF NOT EXISTS pages_workspace_idx ON pages (workspace_id);
+
+CREATE TABLE IF NOT EXISTS task_fields (
+  id TEXT PRIMARY KEY,
+  workspace_id TEXT NOT NULL,
+  name TEXT NOT NULL,
+  type TEXT NOT NULL,
+  options TEXT NOT NULL DEFAULT '[]',
+  created_by TEXT NOT NULL,
+  created_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS task_fields_workspace_idx ON task_fields (workspace_id);
+
+CREATE TABLE IF NOT EXISTS task_field_values (
+  issue_id TEXT NOT NULL,
+  field_id TEXT NOT NULL,
+  value TEXT NOT NULL,
+  PRIMARY KEY (issue_id, field_id)
+);
+CREATE INDEX IF NOT EXISTS task_field_values_field_idx ON task_field_values (field_id);
+
+CREATE TABLE IF NOT EXISTS attachments (
+  id TEXT PRIMARY KEY,
+  workspace_id TEXT NOT NULL,
+  page_id TEXT NOT NULL,
+  uploader_id TEXT NOT NULL,
+  name TEXT NOT NULL,
+  size INTEGER NOT NULL,
+  complete INTEGER NOT NULL DEFAULT 0,
+  created_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS attachments_page_idx ON attachments (page_id);
+CREATE INDEX IF NOT EXISTS attachments_workspace_idx ON attachments (workspace_id);
+
+CREATE TABLE IF NOT EXISTS page_favorites (
+  user_id TEXT NOT NULL,
+  page_id TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  PRIMARY KEY (user_id, page_id)
+);
+
+CREATE TABLE IF NOT EXISTS page_access (
+  page_id TEXT NOT NULL,
+  user_id TEXT NOT NULL,
+  level TEXT NOT NULL,
+  PRIMARY KEY (page_id, user_id)
+);
+
+CREATE TABLE IF NOT EXISTS page_comments (
+  id TEXT PRIMARY KEY,
+  page_id TEXT NOT NULL,
+  workspace_id TEXT NOT NULL,
+  author_id TEXT NOT NULL,
+  body TEXT NOT NULL,
+  quote TEXT,
+  prefix TEXT NOT NULL DEFAULT '',
+  suffix TEXT NOT NULL DEFAULT '',
+  via TEXT NOT NULL DEFAULT 'you',
+  resolved_at TEXT,
+  created_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS page_comments_page_idx ON page_comments (page_id);
+
+CREATE TABLE IF NOT EXISTS page_collab (
+    page_id TEXT PRIMARY KEY,
+    state BLOB NOT NULL,
+    revision INTEGER NOT NULL,
+    updated_at TEXT NOT NULL
+  );
+  CREATE TABLE IF NOT EXISTS page_versions (
+  id TEXT PRIMARY KEY,
+  page_id TEXT NOT NULL,
+  workspace_id TEXT NOT NULL,
+  seq INTEGER NOT NULL,
+  title TEXT NOT NULL,
+  doc TEXT NOT NULL,
+  actor_id TEXT NOT NULL,
+  via TEXT NOT NULL,
+  reason TEXT NOT NULL,
+  restored_from INTEGER,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
+CREATE UNIQUE INDEX IF NOT EXISTS page_versions_page_seq_idx ON page_versions (page_id, seq);
 CREATE INDEX IF NOT EXISTS pages_parent_idx ON pages (parent_id);
 
 CREATE TABLE IF NOT EXISTS issues (
@@ -335,6 +415,29 @@ CREATE TABLE IF NOT EXISTS user_model_keys (
   updated_at TEXT NOT NULL,
   PRIMARY KEY (user_id, provider)
 );
+CREATE TABLE IF NOT EXISTS runner_tokens (
+  token_hash TEXT PRIMARY KEY,
+  user_id TEXT NOT NULL,
+  created_at TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS runner_status (
+  user_id TEXT PRIMARY KEY,
+  capabilities TEXT NOT NULL,
+  last_seen_at TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS agent_runs (
+  id TEXT PRIMARY KEY,
+  user_id TEXT NOT NULL,
+  workspace_id TEXT NOT NULL,
+  thread_id TEXT,
+  issue_id TEXT,
+  payload TEXT NOT NULL,
+  status TEXT NOT NULL,
+  error TEXT,
+  created_at TEXT NOT NULL,
+  finished_at TEXT
+);
+CREATE INDEX IF NOT EXISTS agent_runs_user_status ON agent_runs(user_id, status);
 `;
 
 export function hashPassword(password: string): string {
@@ -664,6 +767,71 @@ function ensureInitialAvatars(sqlite: Database.Database) {
   }
 }
 
+// Triggers keep search_fts in step with every write path. The trigram tokenizer needs no word
+// breaks, so Chinese matches without a dictionary. Titles of tasks carry the identifier.
+function ensureSearchIndex(sqlite: Database.Database) {
+  const fresh = !tableExists(sqlite, "search_fts");
+  sqlite.exec(`
+    CREATE VIRTUAL TABLE IF NOT EXISTS search_fts USING fts5(
+      kind UNINDEXED, ref_id UNINDEXED, workspace_id UNINDEXED, title, body, tokenize = 'trigram'
+    );
+    CREATE TRIGGER IF NOT EXISTS search_pages_ai AFTER INSERT ON pages BEGIN
+      INSERT INTO search_fts (kind, ref_id, workspace_id, title, body)
+      VALUES ('doc', new.id, new.workspace_id, new.title, new.doc);
+    END;
+    CREATE TRIGGER IF NOT EXISTS search_pages_au AFTER UPDATE OF title, doc ON pages BEGIN
+      DELETE FROM search_fts WHERE kind = 'doc' AND ref_id = old.id;
+      INSERT INTO search_fts (kind, ref_id, workspace_id, title, body)
+      VALUES ('doc', new.id, new.workspace_id, new.title, new.doc);
+    END;
+    CREATE TRIGGER IF NOT EXISTS search_pages_ad AFTER DELETE ON pages BEGIN
+      DELETE FROM search_fts WHERE kind = 'doc' AND ref_id = old.id;
+    END;
+    CREATE TRIGGER IF NOT EXISTS search_issues_ai AFTER INSERT ON issues BEGIN
+      INSERT INTO search_fts (kind, ref_id, workspace_id, title, body)
+      VALUES ('task', new.id, new.workspace_id, new.identifier || ' ' || new.title, new.description);
+    END;
+    CREATE TRIGGER IF NOT EXISTS search_issues_au AFTER UPDATE OF identifier, title, description ON issues BEGIN
+      DELETE FROM search_fts WHERE kind = 'task' AND ref_id = old.id;
+      INSERT INTO search_fts (kind, ref_id, workspace_id, title, body)
+      VALUES ('task', new.id, new.workspace_id, new.identifier || ' ' || new.title, new.description);
+    END;
+    CREATE TRIGGER IF NOT EXISTS search_issues_ad AFTER DELETE ON issues BEGIN
+      DELETE FROM search_fts WHERE kind = 'task' AND ref_id = old.id;
+    END;
+    CREATE TRIGGER IF NOT EXISTS search_comments_ai AFTER INSERT ON comments BEGIN
+      INSERT INTO search_fts (kind, ref_id, workspace_id, title, body)
+      VALUES ('task_comment', new.id, (SELECT workspace_id FROM issues WHERE id = new.issue_id), '', new.body);
+    END;
+    CREATE TRIGGER IF NOT EXISTS search_comments_au AFTER UPDATE OF body ON comments BEGIN
+      DELETE FROM search_fts WHERE kind = 'task_comment' AND ref_id = old.id;
+      INSERT INTO search_fts (kind, ref_id, workspace_id, title, body)
+      VALUES ('task_comment', new.id, (SELECT workspace_id FROM issues WHERE id = new.issue_id), '', new.body);
+    END;
+    CREATE TRIGGER IF NOT EXISTS search_comments_ad AFTER DELETE ON comments BEGIN
+      DELETE FROM search_fts WHERE kind = 'task_comment' AND ref_id = old.id;
+    END;
+    CREATE TRIGGER IF NOT EXISTS search_page_comments_ai AFTER INSERT ON page_comments BEGIN
+      INSERT INTO search_fts (kind, ref_id, workspace_id, title, body)
+      VALUES ('doc_comment', new.id, new.workspace_id, '', new.body);
+    END;
+    CREATE TRIGGER IF NOT EXISTS search_page_comments_ad AFTER DELETE ON page_comments BEGIN
+      DELETE FROM search_fts WHERE kind = 'doc_comment' AND ref_id = old.id;
+    END;
+  `);
+  if (!fresh) return;
+  sqlite.exec(`
+    INSERT INTO search_fts (kind, ref_id, workspace_id, title, body)
+    SELECT 'doc', id, workspace_id, title, doc FROM pages;
+    INSERT INTO search_fts (kind, ref_id, workspace_id, title, body)
+    SELECT 'task', id, workspace_id, identifier || ' ' || title, description FROM issues;
+    INSERT INTO search_fts (kind, ref_id, workspace_id, title, body)
+    SELECT 'task_comment', c.id, i.workspace_id, '', c.body FROM comments c JOIN issues i ON i.id = c.issue_id;
+    INSERT INTO search_fts (kind, ref_id, workspace_id, title, body)
+    SELECT 'doc_comment', id, workspace_id, '', body FROM page_comments;
+  `);
+}
+
 function bootstrap(sqlite: Database.Database) {
   const hadIssueAssignees = tableExists(sqlite, "issue_assignees");
   sqlite.exec(DDL);
@@ -717,6 +885,13 @@ function bootstrap(sqlite: Database.Database) {
   if (addColumnIfMissing(sqlite, "pages", "project_id", "TEXT")) {
     sqlite.exec("CREATE INDEX IF NOT EXISTS pages_project_idx ON pages (project_id)");
   }
+  addColumnIfMissing(sqlite, "pages", "revision", "INTEGER NOT NULL DEFAULT 0");
+  addColumnIfMissing(sqlite, "notifications", "page_id", "TEXT");
+  addColumnIfMissing(sqlite, "pages", "cover", "TEXT");
+  addColumnIfMissing(sqlite, "pages", "position", "INTEGER NOT NULL DEFAULT 0");
+  addColumnIfMissing(sqlite, "pages", "share_level", "TEXT NOT NULL DEFAULT 'edit'");
+  addColumnIfMissing(sqlite, "pages", "deleted_at", "TEXT");
+  addColumnIfMissing(sqlite, "pages", "trash_root", "TEXT");
   addColumnIfMissing(sqlite, "issues", "reminder_sent_for", "TEXT");
   const addedIssueCreator = addColumnIfMissing(sqlite, "issues", "created_by", "TEXT");
   if (!hadIssueAssignees && hasColumn(sqlite, "issues", "assignee_id")) {
@@ -777,6 +952,7 @@ function bootstrap(sqlite: Database.Database) {
   seed(sqlite);
   ensureSuperAdmin(sqlite);
   ensureInitialAvatars(sqlite);
+  ensureSearchIndex(sqlite);
   // Rows that predate manual ordering (and freshly seeded demo issues) get a slot in
   // insertion order. New issues are created with MAX(position) + 1, so they never hit 0.
   sqlite.exec("UPDATE issues SET position = rowid * 1000 WHERE position = 0");

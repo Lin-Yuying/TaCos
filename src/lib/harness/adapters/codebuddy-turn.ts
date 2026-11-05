@@ -1,7 +1,7 @@
 /**
  * WorkBuddy / codebuddy turn (H-P4-23).
  * Mounts TaCos MCP via --mcp-config --strict-mcp-config.
- * Disables builtin tools; headless -y pre-authorizes MCP.
+ * Builtin tools stay off; headless -y pre-authorizes MCP.
  * Write cards are mediated in /api/agent/tools.
  */
 import { spawn, type ChildProcess } from "node:child_process";
@@ -81,12 +81,6 @@ function messageText(input: TurnInput): string {
   return body || system || "Hello";
 }
 
-function permissionMode(approval: TurnInput["approval"]): string {
-  // Headless print needs a non-blocking mode. TaCos still mediates MCP writes.
-  if (approval === "full") return "bypassPermissions";
-  if (approval === "auto") return "acceptEdits";
-  return "dontAsk";
-}
 
 export async function* openCodebuddyTurn(input: TurnInput, log?: TurnLog): AsyncGenerator<TurnEvent> {
   const binary = findHarnessBinary("codebuddy");
@@ -102,10 +96,13 @@ export async function* openCodebuddyTurn(input: TurnInput, log?: TurnLog): Async
     "--output-format",
     "stream-json",
     "--include-partial-messages",
+    // Recent versions list MCP tools behind these two, so turning them off hides TaCos's tools and
+    // the model reports writes it never made. No built-in tool is reachable, and the tool route
+    // asks for approval, so nothing here needs a second permission check (which cannot ask anyway).
     "--tools",
-    "",
+    "ToolSearch,DeferExecuteTool",
     "--permission-mode",
-    permissionMode(input.approval),
+    "bypassPermissions",
     "-y",
     "--no-session-persistence",
   ];
@@ -181,7 +178,7 @@ export async function* openCodebuddyTurn(input: TurnInput, log?: TurnLog): Async
   }
   child?.once("close", removeConfig);
 
-  const timer = setTimeout(() => finish("WorkBuddy took longer than five minutes."), TURN_TIMEOUT_MS);
+  const timer = setTimeout(() => finish("WorkBuddy took longer than its time limit."), input.timeoutMs ?? TURN_TIMEOUT_MS);
 
   if (child?.stdout) {
     let buffer = "";

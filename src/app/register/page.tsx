@@ -12,7 +12,7 @@ export default function RegisterPage({
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
   return (
-    <Suspense fallback={<div className="flex h-full items-center justify-center text-[13px] text-muted">Loading…</div>}>
+    <Suspense fallback={<div className="flex h-full items-center justify-center text-body text-muted">Loading…</div>}>
       <RegisterView searchParams={searchParams} />
     </Suspense>
   );

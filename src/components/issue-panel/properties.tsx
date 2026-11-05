@@ -30,7 +30,7 @@ export function PropertiesRow({
     <div className="-mx-2 -mt-1.5 flex flex-wrap items-center gap-2">
       <Menu
         width={180}
-        triggerClassName="flex items-center gap-1.5 rounded-md px-2 py-1 text-[13px] text-muted transition-colors hover:bg-elevated hover:text-text"
+        triggerClassName="flex items-center gap-1.5 rounded-md px-2 py-1 text-body text-muted transition-colors hover:bg-elevated hover:text-text"
         trigger={
           <>
             <PriorityIcon priority={detail.priority} size={13} />
@@ -59,7 +59,7 @@ export function PropertiesRow({
 
       <Menu
         width={220}
-        triggerClassName="flex items-center gap-1.5 rounded-md px-2 py-1 text-[13px] text-muted transition-colors hover:bg-elevated hover:text-text"
+        triggerClassName="flex items-center gap-1.5 rounded-md px-2 py-1 text-body text-muted transition-colors hover:bg-elevated hover:text-text"
         trigger={
           <>
             {detail.assignees.length === 0 ? (
@@ -132,7 +132,7 @@ export function PropertiesRow({
           empty issue keeps a quiet "+ Labels" affordance so adding one stays possible. */}
       <Menu
         width={220}
-        triggerClassName="flex items-center gap-1.5 rounded-md px-2 py-1 text-[13px] text-muted transition-colors hover:bg-elevated hover:text-text"
+        triggerClassName="flex items-center gap-1.5 rounded-md px-2 py-1 text-body text-muted transition-colors hover:bg-elevated hover:text-text"
         trigger={
           detail.labels.length === 0 ? (
             <span className="text-faint">+ {t("Labels")}</span>
@@ -168,7 +168,7 @@ export function PropertiesRow({
               );
             })}
             {allLabels.length === 0 && (
-              <div className="px-2 py-1.5 text-[12px] text-faint">
+              <div className="px-2 py-1.5 text-small text-faint">
                 {t("No labels yet — create some on the Labels page.")}
               </div>
             )}

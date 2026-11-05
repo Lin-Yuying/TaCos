@@ -59,10 +59,10 @@ export function PersonPage({
       <header className="shrink-0 border-b border-border px-4 pb-2 pt-3">
         <div className="flex items-center gap-2.5">
           <AssigneeAvatar displayName={person.displayName} avatar={person.avatar} size={26} />
-          <h1 className="truncate text-[20px] font-semibold tracking-tight">
+          <h1 className="truncate text-heading font-semibold tracking-tight">
             {person.displayName}
           </h1>
-          <span className="shrink-0 rounded-full bg-elevated px-2 py-0.5 text-[11px] text-muted">
+          <span className="shrink-0 rounded-full bg-elevated px-2 py-0.5 text-caption text-muted">
             {t(workspaceRole)}
           </span>
         </div>
@@ -75,7 +75,7 @@ export function PersonPage({
                 type="button"
                 onClick={() => setTab(item.key)}
                 aria-current={active ? "page" : undefined}
-                className={`flex items-center gap-1.5 rounded-full border px-3 py-1 text-[12.5px] transition-colors ${
+                className={`flex items-center gap-1.5 rounded-full border px-3 py-1 text-small transition-colors ${
                   active
                     ? "border-transparent bg-elevated font-medium text-text"
                     : "border-border text-muted hover:border-border-strong hover:text-text"
@@ -95,7 +95,7 @@ export function PersonPage({
         <div className="flex-1 overflow-y-auto">
           <div className="w-full px-10 py-5 lg:px-20 xl:px-32">
             {projects.length === 0 ? (
-              <p className="text-[13px] text-faint">
+              <p className="text-body text-faint">
                 {firstName(person.displayName)} does not own or belong to any project yet.
               </p>
             ) : (
@@ -104,7 +104,7 @@ export function PersonPage({
                   <Link
                     key={project.id}
                     href={`/${workspaceId}/projects/${project.id}`}
-                    className={`group flex items-center gap-2.5 px-3.5 py-2 text-[13px] text-text transition-colors hover:bg-elevated/60 ${
+                    className={`group flex items-center gap-2.5 px-3.5 py-2 text-body text-text transition-colors hover:bg-elevated/60 ${
                       index > 0 ? "border-t border-border" : ""
                     }`}
                   >
@@ -115,7 +115,7 @@ export function PersonPage({
                     {/* Owner is the project's creator; everyone else in the list was
                         added through project membership, so the badge says which. */}
                     <span
-                      className={`shrink-0 rounded-full px-2 py-0.5 text-[11px] ${
+                      className={`shrink-0 rounded-full px-2 py-0.5 text-caption ${
                         project.role === "owner"
                           ? "bg-elevated font-medium text-text"
                           : "border border-border text-muted"
@@ -137,7 +137,7 @@ export function PersonPage({
         <div className="flex-1 overflow-y-auto">
           <div className="w-full px-10 py-5 lg:px-20 xl:px-32">
             {documents.length === 0 ? (
-              <p className="text-[13px] text-faint">
+              <p className="text-body text-faint">
                 {firstName(person.displayName)} has not written any documents you can see.
               </p>
             ) : (
@@ -146,17 +146,17 @@ export function PersonPage({
                   <Link
                     key={page.id}
                     href={`/${workspaceId}/docs/${page.id}`}
-                    className="flex items-center gap-2 rounded-md px-2 py-1.5 text-[13.5px] text-text transition-colors hover:bg-elevated/60"
+                    className="flex items-center gap-2 rounded-md px-2 py-1.5 text-body text-text transition-colors hover:bg-elevated/60"
                   >
                     <span className="flex w-4 shrink-0 items-center justify-center text-faint">
                       {page.icon ? (
-                        <span className="text-[14px] leading-none">{page.icon}</span>
+                        <span className="text-body leading-none">{page.icon}</span>
                       ) : (
                         <FileText size={14} />
                       )}
                     </span>
                     <span className="truncate">{page.title}</span>
-                    <span className="ml-auto flex shrink-0 items-center gap-1 text-[11px] text-faint">
+                    <span className="ml-auto flex shrink-0 items-center gap-1 text-caption text-faint">
                       {page.shared ? <Users size={11} /> : <Lock size={11} />}
                       {page.shared ? t("Shared") : t("Private")}
                     </span>
@@ -169,8 +169,8 @@ export function PersonPage({
       ) : (
         <>
           <header className="flex h-12 shrink-0 items-center gap-2 border-b border-border px-10 lg:px-20 xl:px-32">
-            <span className="text-[13px] font-medium text-muted">{t("Assigned tasks")}</span>
-            <span className="rounded-full bg-elevated px-2 py-0.5 text-[11px] text-muted">
+            <span className="text-body font-medium text-muted">{t("Assigned tasks")}</span>
+            <span className="rounded-full bg-elevated px-2 py-0.5 text-caption text-muted">
               {shown.length}
             </span>
             <div className="ml-auto flex items-center gap-2">
@@ -180,7 +180,7 @@ export function PersonPage({
                   value={q}
                   onChange={(e) => setQ(e.target.value)}
                   placeholder={t("Search tasks…")}
-                  className="w-full bg-transparent text-[13px] text-text placeholder:text-faint"
+                  className="w-full bg-transparent text-body text-text placeholder:text-faint"
                 />
                 {q && (
                   <button

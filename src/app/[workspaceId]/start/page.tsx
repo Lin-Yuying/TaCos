@@ -9,7 +9,7 @@ import { StartScreen } from "@/components/start-screen";
 // Shown when no tab is open; it is not itself a tab, so closing the last tab lands here.
 export default function StartPage({ params }: { params: Promise<{ workspaceId: string }> }) {
   return (
-    <Suspense fallback={<div className="p-6 text-[13px] text-muted">Loading…</div>}>
+    <Suspense fallback={<div className="p-6 text-body text-muted">Loading…</div>}>
       <StartContent params={params} />
     </Suspense>
   );

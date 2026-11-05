@@ -149,7 +149,7 @@ export function LabelPill({
 }) {
   return (
     <span
-      className={`inline-flex shrink-0 items-center rounded-full ${small ? "px-1.5 text-[10px]" : "px-2 text-[11px]"} font-medium leading-4`}
+      className={`inline-flex shrink-0 items-center rounded-full ${small ? "px-1.5 text-caption" : "px-2 text-caption"} font-medium leading-4`}
       style={{
         backgroundColor: `${color}1f`,
         color: `color-mix(in srgb, ${color} 62%, #1a1a1a)`,

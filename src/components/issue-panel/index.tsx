@@ -11,6 +11,7 @@ import { DueRow } from "./due-row";
 import { ClaimRow } from "./claim-row";
 import { SourceChatRow } from "./source-chat-row";
 import { AdvanceButton } from "./advance-button";
+import { HandoffRow } from "./handoff-row";
 import { DescriptionSection } from "./description";
 import { ChangelogSection } from "./changelog";
 import { CommentsSection } from "./comments";
@@ -73,6 +74,8 @@ function IssuePanel({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const scrollRef = useRef<HTMLDivElement | null>(null);
+  // A handed-off task just ended, and its result is a new comment.
+  const [finished, setFinished] = useState(0);
   const { toast } = useUI();
   // H-COLLAB-13: reload the task when another member changes something.
   const live = useLiveTick();
@@ -94,7 +97,7 @@ function IssuePanel({
 
   // The panel is remounted per issue id, so loading state starts clean without resets here.
   useEffect(() => {
-    if (live === 0) return;
+    if (live === 0 && finished === 0) return;
     let cancelled = false;
     fetch(`/api/internal/${workspaceId}/issues/${encodeURIComponent(id)}`)
       .then(async (res) => {
@@ -111,7 +114,7 @@ function IssuePanel({
     return () => {
       cancelled = true;
     };
-  }, [live, id, workspaceId]);
+  }, [live, finished, id, workspaceId]);
 
   useEffect(() => {
     let cancelled = false;
@@ -188,11 +191,11 @@ function IssuePanel({
   }
 
   if (notFound) {
-    return <div className="flex-1 p-5 text-[13px] text-muted">{t("Loading…")}</div>;
+    return <div className="flex-1 p-5 text-body text-muted">{t("Loading…")}</div>;
   }
 
   if (!detail) {
-    return <div className="flex-1 p-5 text-[13px] text-muted">{t("Loading…")}</div>;
+    return <div className="flex-1 p-5 text-body text-muted">{t("Loading…")}</div>;
   }
 
   const comments = [...detail.comments].sort((a, b) =>
@@ -235,7 +238,7 @@ function IssuePanel({
               e.currentTarget.blur();
             }
           }}
-          className="w-full bg-transparent text-[17px] font-semibold text-text"
+          className="w-full bg-transparent text-title font-semibold text-text"
         />
 
         <PropertiesRow
@@ -262,6 +265,13 @@ function IssuePanel({
           onError={setError}
         />
 
+        <HandoffRow
+          workspaceId={workspaceId}
+          detail={detail}
+          currentUserId={currentUserId}
+          onFinished={() => setFinished((count) => count + 1)}
+        />
+
         <SourceChatRow workspaceId={workspaceId} threadId={detail.sourceThreadId} />
 
         <DueRow detail={detail} onUpdate={update} />
@@ -285,7 +295,7 @@ function IssuePanel({
           />
         </div>
 
-        {error && <div className="text-[12px] text-danger">{t(error)}</div>}
+        {error && <div className="text-small text-danger">{t(error)}</div>}
       </div>
     </div>
   );

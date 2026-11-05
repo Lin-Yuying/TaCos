@@ -148,4 +148,47 @@ form.addEventListener("submit", async (event) => {
   }
 });
 
+const sshForm = document.getElementById("ssh-form");
+const sshTarget = document.getElementById("ssh-target");
+const sshPort = document.getElementById("ssh-port");
+const sshError = document.getElementById("ssh-error");
+const sshSubmit = document.getElementById("ssh-submit");
+const sshKeyButton = document.getElementById("ssh-key");
+const sshKeyText = document.getElementById("ssh-key-text");
+
+async function initSsh() {
+  const saved = await window.tacosDesktop.getSshConfig();
+  if (!saved) return;
+  sshTarget.value = saved.target;
+  sshPort.value = String(saved.remotePort);
+}
+
+sshForm.addEventListener("submit", async (event) => {
+  event.preventDefault();
+  if (sshSubmit.disabled) return;
+  sshError.textContent = "";
+  sshSubmit.disabled = true;
+  sshSubmit.textContent = "Connecting…";
+  try {
+    const result = await window.tacosDesktop.connectSsh({ target: sshTarget.value, remotePort: sshPort.value });
+    if (!result.ok) sshError.textContent = result.error;
+  } catch {
+    sshError.textContent = "Something went wrong while connecting.";
+  }
+  sshSubmit.disabled = false;
+  sshSubmit.textContent = "Connect over SSH";
+});
+
+sshKeyButton.addEventListener("click", async () => {
+  const result = await window.tacosDesktop.getSshPublicKey();
+  if (!result.ok) {
+    sshError.textContent = result.error;
+    return;
+  }
+  sshKeyText.hidden = false;
+  sshKeyText.value = result.publicKey;
+  sshKeyText.select();
+});
+
+void initSsh();
 void init();

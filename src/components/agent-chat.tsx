@@ -131,12 +131,12 @@ function StepList({ steps, live }: { steps: AgentStepFrame[]; live: boolean }) {
         const running = run.some((step) => step.status === "running");
         return (
           <details key={run[0].key} className="group/run" open={live && index === runs.length - 1 ? true : undefined}>
-            <summary className="flex cursor-pointer list-none items-center gap-1.5 rounded px-1 py-0.5 text-[12px] text-muted transition-colors hover:bg-elevated hover:text-text">
+            <summary className="flex cursor-pointer list-none items-center gap-1.5 rounded px-1 py-0.5 text-small text-muted transition-colors hover:bg-elevated hover:text-text">
               <ChevronRight size={12} className="shrink-0 text-faint transition-transform group-open/run:rotate-90" />
               <span>{t("{count} steps", { count: String(run.length) })}</span>
               {running && <Loader2 size={11} className="shrink-0 animate-spin text-faint" />}
               {failed > 0 && (
-                <span className="shrink-0 text-[10.5px] text-danger">
+                <span className="shrink-0 text-caption text-danger">
                   {t("{count} failed", { count: String(failed) })}
                 </span>
               )}
@@ -172,9 +172,9 @@ function TurnError({ error }: { error: string }) {
   const t = useT();
   const [message, log] = error.split(" Log: ");
   return (
-    <div className="mb-2 px-1 text-[12px]" data-testid="turn-error">
+    <div className="mb-2 px-1 text-small" data-testid="turn-error">
       <p className="text-danger">{t(message)}</p>
-      {log && <p className="mt-0.5 break-all text-[11px] text-faint">{t("Log: {path}", { path: log })}</p>}
+      {log && <p className="mt-0.5 break-all text-caption text-faint">{t("Log: {path}", { path: log })}</p>}
     </div>
   );
 }
@@ -184,12 +184,12 @@ function StepLine({ step }: { step: AgentStepFrame }) {
   if (step.kind === "thinking") {
     return (
       <details className="group/step" data-testid="thinking-step">
-        <summary className="flex cursor-pointer list-none items-center gap-1.5 rounded px-1 py-0.5 text-[12px] text-muted transition-colors hover:bg-elevated hover:text-text">
+        <summary className="flex cursor-pointer list-none items-center gap-1.5 rounded px-1 py-0.5 text-small text-muted transition-colors hover:bg-elevated hover:text-text">
           <Sparkles size={12} className="shrink-0 text-faint" />
           <span className="shrink-0">{t("Thinking")}</span>
           <span className="min-w-0 truncate text-faint">{step.title}</span>
         </summary>
-        <div className="mb-1 ml-5 mt-1 border-l border-border pl-3 text-[12.5px] text-muted">
+        <div className="mb-1 ml-5 mt-1 border-l border-border pl-3 text-small text-muted">
           <Markdown source={step.detail ?? step.title} />
         </div>
       </details>
@@ -201,13 +201,13 @@ function StepLine({ step }: { step: AgentStepFrame }) {
   const failed = step.status === "error" || step.status === "denied";
   return (
     <details className="group/step">
-      <summary className="flex cursor-pointer list-none items-center gap-1.5 rounded px-1 py-0.5 text-[12px] text-muted transition-colors hover:bg-elevated [&::-webkit-details-marker]:hidden">
+      <summary className="flex cursor-pointer list-none items-center gap-1.5 rounded px-1 py-0.5 text-small text-muted transition-colors hover:bg-elevated [&::-webkit-details-marker]:hidden">
         <Icon size={12} className="shrink-0 text-faint" />
-        <span className="min-w-0 truncate font-mono text-[11.5px]">{step.title}</span>
+        <span className="min-w-0 truncate font-mono text-small">{step.title}</span>
         {step.status === "running" ? (
           <Loader2 size={11} className="shrink-0 animate-spin text-faint" />
         ) : failed ? (
-          <span className="shrink-0 text-[10.5px] text-danger">
+          <span className="shrink-0 text-caption text-danger">
             {t(step.status === "denied" ? "denied" : "failed")}
           </span>
         ) : (
@@ -215,7 +215,7 @@ function StepLine({ step }: { step: AgentStepFrame }) {
         )}
       </summary>
       {detail && (
-        <pre className="mt-1 max-h-56 overflow-auto whitespace-pre-wrap rounded-md border border-border bg-surface p-2 font-mono text-[11px] leading-relaxed text-muted">
+        <pre className="mt-1 max-h-56 overflow-auto whitespace-pre-wrap rounded-md border border-border bg-surface p-2 font-mono text-caption leading-relaxed text-muted">
           {detail}
         </pre>
       )}
@@ -235,17 +235,17 @@ function ApprovalPanel({
   const t = useT();
   return (
     <div className="rounded-xl border border-border-strong bg-surface p-3">
-      <div className="flex items-center gap-2 text-[12.5px] font-medium">
+      <div className="flex items-center gap-2 text-small font-medium">
         <Lock size={13} />
         {t("Permission needed")}
-        <span className="ml-auto rounded-full border border-border bg-bg px-2 py-0.5 font-mono text-[11px] text-muted">
+        <span className="ml-auto rounded-full border border-border bg-bg px-2 py-0.5 font-mono text-caption text-muted">
           {card.tool}
         </span>
       </div>
-      <p className="mt-1.5 text-[12.5px] leading-relaxed text-muted">{card.message}</p>
-      {card.description && <p className="mt-1 text-[12px] leading-relaxed text-faint">{card.description}</p>}
+      <p className="mt-1.5 text-small leading-relaxed text-muted">{card.message}</p>
+      {card.description && <p className="mt-1 text-small leading-relaxed text-faint">{card.description}</p>}
       {card.params && (
-        <pre className="mt-2 max-h-40 overflow-auto whitespace-pre-wrap rounded-md border border-border bg-bg p-2 font-mono text-[11px] leading-relaxed text-muted">
+        <pre className="mt-2 max-h-40 overflow-auto whitespace-pre-wrap rounded-md border border-border bg-bg p-2 font-mono text-caption leading-relaxed text-muted">
           {card.params}
         </pre>
       )}
@@ -254,7 +254,7 @@ function ApprovalPanel({
           type="button"
           onClick={() => onAnswer(card.requestId, "decline")}
           disabled={busy}
-          className="rounded-md border border-border px-2.5 py-1 text-[12px] text-muted transition-colors hover:border-border-strong hover:text-text disabled:opacity-50"
+          className="rounded-md border border-border px-2.5 py-1 text-small text-muted transition-colors hover:border-border-strong hover:text-text disabled:opacity-50"
         >
           {t("Deny")}
         </button>
@@ -263,7 +263,7 @@ function ApprovalPanel({
           onClick={() => onAnswer(card.requestId, "accept-turn")}
           disabled={busy}
           title={t("Stop asking for the rest of this turn")}
-          className="rounded-md border border-border px-2.5 py-1 text-[12px] text-muted transition-colors hover:border-border-strong hover:text-text disabled:opacity-50"
+          className="rounded-md border border-border px-2.5 py-1 text-small text-muted transition-colors hover:border-border-strong hover:text-text disabled:opacity-50"
         >
           {t("Allow for this turn")}
         </button>
@@ -271,7 +271,7 @@ function ApprovalPanel({
           type="button"
           onClick={() => onAnswer(card.requestId, "accept")}
           disabled={busy}
-          className="rounded-md bg-accent px-2.5 py-1 text-[12px] font-medium text-white transition-opacity hover:opacity-90 disabled:opacity-50"
+          className="rounded-md bg-accent px-2.5 py-1 text-small font-medium text-white transition-opacity hover:opacity-90 disabled:opacity-50"
         >
           {t("Allow once")}
         </button>
@@ -299,7 +299,7 @@ function ProjectChip({
     <Menu
       width={240}
       align="left"
-      triggerClassName="flex items-center gap-1.5 rounded-full px-2 py-1 text-[12.5px] text-text transition-colors hover:bg-elevated disabled:opacity-50"
+      triggerClassName="flex items-center gap-1.5 rounded-full px-2 py-1 text-small text-text transition-colors hover:bg-elevated disabled:opacity-50"
       trigger={
         <>
           <Folder size={13} className="shrink-0" />
@@ -310,7 +310,7 @@ function ProjectChip({
     >
       {(close) => (
         <>
-          {projects.length === 0 && <p className="px-2 py-2 text-[12px] text-faint">{t("No projects yet.")}</p>}
+          {projects.length === 0 && <p className="px-2 py-2 text-small text-faint">{t("No projects yet.")}</p>}
           {projects.map((project) => (
             <MenuItem
               key={project.id}
@@ -351,7 +351,7 @@ function ProjectChip({
 
 function SectionLabel({ children }: { children: ReactNode }) {
   return (
-    <p className="px-2 pb-1 pt-2 text-[10.5px] font-semibold uppercase tracking-[0.06em] text-faint">
+    <p className="px-2 pb-1 pt-2 text-caption font-semibold uppercase tracking-[0.06em] text-faint">
       {children}
     </p>
   );
@@ -469,7 +469,7 @@ function HarnessChip({
       className="shrink-0"
       width={300}
       align="right"
-      triggerClassName={`flex items-center gap-1 rounded-full px-2 py-1 text-[12.5px] text-text transition-colors hover:bg-elevated ${
+      triggerClassName={`flex items-center gap-1 rounded-full px-2 py-1 text-small text-text transition-colors hover:bg-elevated ${
         disabled ? "pointer-events-none opacity-50" : ""
       }`}
       trigger={
@@ -528,7 +528,7 @@ function ModelChip({
       <span
         data-testid="composer-model"
         title={t("Could not read this harness's model list. It runs on its own setting.")}
-        className="flex items-center rounded-full px-2 py-1 text-[12.5px] text-muted"
+        className="flex items-center rounded-full px-2 py-1 text-small text-muted"
       >
         {t("Default model")}
       </span>
@@ -548,7 +548,7 @@ function ModelChip({
       width={330}
       align="right"
       className="min-w-0"
-      triggerClassName={`flex max-w-full items-center gap-1 rounded-full px-2 py-1 text-[12.5px] text-text transition-colors hover:bg-elevated ${
+      triggerClassName={`flex max-w-full items-center gap-1 rounded-full px-2 py-1 text-small text-text transition-colors hover:bg-elevated ${
         disabled ? "pointer-events-none opacity-50" : ""
       }`}
       trigger={
@@ -570,12 +570,12 @@ function ModelChip({
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
                 placeholder={t("Search models")}
-                className="w-full rounded-md border border-border bg-transparent px-2 py-1 text-[12.5px] outline-none placeholder:text-faint focus:border-border-strong"
+                className="w-full rounded-md border border-border bg-transparent px-2 py-1 text-small outline-none placeholder:text-faint focus:border-border-strong"
               />
             </div>
           )}
           <SectionLabel>{t("Model")}</SectionLabel>
-          {shown.length === 0 && <p className="px-2 py-2 text-[12px] text-faint">{t("No matching models.")}</p>}
+          {shown.length === 0 && <p className="px-2 py-2 text-small text-faint">{t("No matching models.")}</p>}
           {shown.map((entry) => (
             <MenuItem
               key={entry.slug}
@@ -586,7 +586,7 @@ function ModelChip({
               <span className="min-w-0 flex-1 text-left">
                 <span className="block truncate">{modelName(entry)}</span>
                 {entry.description && (
-                  <span className="block truncate text-[11px] text-faint">
+                  <span className="block truncate text-caption text-faint">
                     {entry.slug ? entry.description : t(entry.description)}
                   </span>
                 )}
@@ -599,15 +599,15 @@ function ModelChip({
               {/* Pinned so effort stays reachable while the model list scrolls. */}
               <div className="sticky -bottom-1 -mx-1 -mb-1 border-t border-border bg-overlay px-1 pb-1">
                 <div className="px-2 pt-2 text-center">
-                  <p className="text-[15px] font-semibold leading-5 text-text">{effortLabel || t("Default")}</p>
-                  <p className="mt-0.5 text-[11.5px] text-muted">{modelName(picked)}</p>
+                  <p className="text-lead font-semibold leading-5 text-text">{effortLabel || t("Default")}</p>
+                  <p className="mt-0.5 text-small text-muted">{modelName(picked)}</p>
                 </div>
                 <EffortSlider
                   levels={efforts}
                   value={effort}
                   onChange={(id) => onModel(picked.slug, id)}
                 />
-                <div className="flex justify-between px-3.5 pb-0.5 text-[10.5px] text-faint">
+                <div className="flex justify-between px-3.5 pb-0.5 text-caption text-faint">
                   <span>{efforts[0]?.label}</span>
                   <span>{efforts[efforts.length - 1]?.label}</span>
                 </div>
@@ -637,7 +637,7 @@ function ApprovalChip({
       className="shrink-0"
       width={300}
       align="right"
-      triggerClassName={`flex items-center gap-1 rounded-full px-2 py-1 text-[12.5px] transition-colors hover:bg-elevated ${
+      triggerClassName={`flex items-center gap-1 rounded-full px-2 py-1 text-small transition-colors hover:bg-elevated ${
         value === "full" ? "text-danger" : "text-text"
       } ${disabled ? "pointer-events-none opacity-50" : ""}`}
       trigger={
@@ -660,7 +660,7 @@ function ApprovalChip({
             >
               <span className="min-w-0 flex-1 text-left">
                 <span className="block">{t(entry.label)}</span>
-                <span className="block whitespace-normal break-words text-[11px] text-faint">{t(entry.detail)}</span>
+                <span className="block whitespace-normal break-words text-caption text-faint">{t(entry.detail)}</span>
               </span>
             </MenuItem>
           ))}
@@ -684,7 +684,7 @@ function VisibilityChip({
       type="button"
       onClick={() => onChange(value === "shared" ? "private" : "shared")}
       title={t(value === "shared" ? "Anyone in this workspace can open it" : "Only you can open it")}
-      className="flex items-center gap-1.5 rounded-full px-2 py-1 text-[12.5px] text-text transition-colors hover:bg-elevated"
+      className="flex items-center gap-1.5 rounded-full px-2 py-1 text-small text-text transition-colors hover:bg-elevated"
     >
       <Icon size={12} /> {t(value === "shared" ? "Shared" : "Private")}
     </button>
@@ -789,7 +789,7 @@ function SkillManager({
     <>
       <div className="fixed inset-0 z-50 bg-black/40" onClick={onClose} />
       <div className="fixed inset-x-0 top-[12vh] z-[60] mx-auto flex max-h-[72vh] w-[600px] max-w-[94vw] flex-col overflow-hidden rounded-xl border border-border bg-overlay shadow-2xl shadow-black/15">
-        <div className="flex items-center justify-between border-b border-border px-4 py-2 text-[12px] text-faint">
+        <div className="flex items-center justify-between border-b border-border px-4 py-2 text-small text-faint">
           <span>
             {interpolate(t("{skills} on this machine"), { skills: <span className="text-muted">{t("Skills")}</span> })}
           </span>
@@ -805,7 +805,7 @@ function SkillManager({
 
         <div className="min-h-0 flex-1 overflow-y-auto p-1.5">
           {skills.length === 0 ? (
-            <div className="px-2 py-3 text-[12.5px] text-faint">{t("No skills found on this machine.")}</div>
+            <div className="px-2 py-3 text-small text-faint">{t("No skills found on this machine.")}</div>
           ) : (
             skills.map((skill) => (
               <div
@@ -813,12 +813,12 @@ function SkillManager({
                 className="flex items-start gap-2 rounded-lg px-2 py-1.5 transition-colors hover:bg-elevated"
               >
                 <span className="min-w-0 flex-1">
-                  <span className="block truncate text-[13px] text-text">@{skillToken(skill)}</span>
-                  <span className="mt-0.5 block truncate text-[11.5px] text-muted" title={skill.description}>
+                  <span className="block truncate text-body text-text">@{skillToken(skill)}</span>
+                  <span className="mt-0.5 block truncate text-small text-muted" title={skill.description}>
                     {skill.description}
                   </span>
                 </span>
-                <span className="mt-1 shrink-0 rounded-full border border-border px-1.5 text-[10px] leading-4 text-faint">
+                <span className="mt-1 shrink-0 rounded-full border border-border px-1.5 text-caption leading-4 text-faint">
                   {skill.name.includes(":") ? "plugin" : skill.scope}
                 </span>
                 {/* Only plain folders TaCos owns can be removed; plugins and .system stay. */}
@@ -845,19 +845,19 @@ function SkillManager({
 
         {canManage ? (
           <div className="border-t border-border px-4 py-3">
-            <div className="text-[11px] uppercase tracking-wide text-faint">{t("New skill")}</div>
+            <div className="text-caption uppercase tracking-wide text-faint">{t("New skill")}</div>
             <div className="mt-2 grid grid-cols-2 gap-2">
               <input
                 value={name}
                 onChange={(event) => setName(event.target.value)}
                 placeholder={t("Name, e.g. release-notes")}
-                className="min-w-0 rounded-md border border-border bg-surface px-2 py-1.5 text-[13px] outline-none placeholder:text-faint focus:border-border-strong"
+                className="min-w-0 rounded-md border border-border bg-surface px-2 py-1.5 text-body outline-none placeholder:text-faint focus:border-border-strong"
               />
               <input
                 value={description}
                 onChange={(event) => setDescription(event.target.value)}
                 placeholder={t("What it does, when to use it")}
-                className="min-w-0 rounded-md border border-border bg-surface px-2 py-1.5 text-[13px] outline-none placeholder:text-faint focus:border-border-strong"
+                className="min-w-0 rounded-md border border-border bg-surface px-2 py-1.5 text-body outline-none placeholder:text-faint focus:border-border-strong"
               />
             </div>
             <textarea
@@ -865,13 +865,13 @@ function SkillManager({
               onChange={(event) => setInstructions(event.target.value)}
               rows={4}
               placeholder={t("Instructions the agent follows when this skill is attached (Markdown)")}
-              className="mt-2 w-full resize-none rounded-md border border-border bg-surface px-2 py-1.5 text-[13px] leading-relaxed outline-none placeholder:text-faint focus:border-border-strong"
+              className="mt-2 w-full resize-none rounded-md border border-border bg-surface px-2 py-1.5 text-body leading-relaxed outline-none placeholder:text-faint focus:border-border-strong"
             />
             <div className="mt-2 flex items-center gap-2">
               {error ? (
-                <span className="mr-auto min-w-0 text-[12px] text-danger">{t(error)}</span>
+                <span className="mr-auto min-w-0 text-small text-danger">{t(error)}</span>
               ) : (
-                <span className="mr-auto min-w-0 truncate text-[11px] text-faint">
+                <span className="mr-auto min-w-0 truncate text-caption text-faint">
                   {t("Saved to ~/.codex/skills/<name>/SKILL.md")}
                 </span>
               )}
@@ -879,14 +879,14 @@ function SkillManager({
                 type="button"
                 onClick={() => void submit()}
                 disabled={!name.trim() || !description.trim() || busy}
-                className="shrink-0 rounded-md bg-accent px-3 py-1.5 text-[13px] font-medium text-white transition-colors hover:bg-accent-hover disabled:opacity-40"
+                className="shrink-0 rounded-md bg-accent px-3 py-1.5 text-body font-medium text-white transition-colors hover:bg-accent-hover disabled:opacity-40"
               >
                 {t(busy ? "Adding…" : "Add skill")}
               </button>
             </div>
           </div>
         ) : (
-          <div className="border-t border-border px-4 py-3 text-[12px] text-faint">
+          <div className="border-t border-border px-4 py-3 text-small text-faint">
             {t("Only workspace admins can add or remove skills on this machine.")}
           </div>
         )}
@@ -1012,7 +1012,7 @@ function Composer({
           ref={panel}
           className="absolute inset-x-0 bottom-full z-50 mb-2 overflow-hidden rounded-xl border border-border bg-overlay shadow-xl shadow-black/10"
         >
-          <div className="flex items-center justify-between px-3 pb-1 pt-2 text-[11px] text-faint">
+          <div className="flex items-center justify-between px-3 pb-1 pt-2 text-caption text-faint">
             <span className="font-medium uppercase tracking-wide">{t("Skills")}</span>
             <span>↑↓ Enter</span>
           </div>
@@ -1035,12 +1035,12 @@ function Composer({
                 }`}
               >
                 <span className="min-w-0 flex-1">
-                  <span className="block truncate text-[13px] text-text">@{token}</span>
-                  <span className="mt-0.5 block truncate text-[11.5px] text-muted" title={skill.description}>
+                  <span className="block truncate text-body text-text">@{token}</span>
+                  <span className="mt-0.5 block truncate text-small text-muted" title={skill.description}>
                     {skill.description}
                   </span>
                 </span>
-                <span className="mt-1 shrink-0 rounded-full border border-border px-1.5 text-[10px] leading-4 text-faint">
+                <span className="mt-1 shrink-0 rounded-full border border-border px-1.5 text-caption leading-4 text-faint">
                   {skill.name.includes(":") ? "plugin" : skill.scope}
                 </span>
               </button>
@@ -1092,7 +1092,7 @@ function Composer({
             if (!busy) onSubmit();
           }
         }}
-        className="max-h-[220px] min-h-[30px] w-full resize-none bg-transparent px-2.5 pt-2 text-[14px] leading-relaxed outline-none placeholder:text-faint"
+        className="max-h-[220px] min-h-[30px] w-full resize-none bg-transparent px-2.5 pt-2 text-body leading-relaxed outline-none placeholder:text-faint"
       />
       {/* One row, the model name truncating first. Only a card too narrow for that wraps, so
           the send button never leaves it. z-10 keeps open menus above the row under the card. */}
@@ -1125,7 +1125,7 @@ function Composer({
                   {/* The same skills "@" offers, without having to remember a name. */}
                   {visibleSkills.length > 0 ? (
                     <>
-                      <div className="px-2 pb-1 pt-1 text-[11px] uppercase tracking-wide text-faint">
+                      <div className="px-2 pb-1 pt-1 text-caption uppercase tracking-wide text-faint">
                         {t("Skills")}
                       </div>
                       {visibleSkills.map((skill) => (
@@ -1139,7 +1139,7 @@ function Composer({
                           <span className="min-w-0 flex-1">
                             <span className="block truncate">@{skillToken(skill)}</span>
                             <span
-                              className="block truncate text-[11px] text-faint"
+                              className="block truncate text-caption text-faint"
                               title={skill.description}
                             >
                               {skill.description}
@@ -1149,7 +1149,7 @@ function Composer({
                       ))}
                     </>
                   ) : (
-                    <div className="px-2 py-1.5 text-[12px] text-faint">
+                    <div className="px-2 py-1.5 text-small text-faint">
                       {t("No skills found on this machine.")}
                     </div>
                   )}
@@ -1245,7 +1245,7 @@ function ThreadRenameInput({
           onCancel();
         }
       }}
-      className="h-[24px] w-full min-w-0 rounded border border-border-strong bg-bg px-1.5 text-[13px] outline-none"
+      className="h-[24px] w-full min-w-0 rounded border border-border-strong bg-bg px-1.5 text-body outline-none"
     />
   );
 }
@@ -1446,7 +1446,7 @@ function ThreadSidebar({
           event.preventDefault();
           openMenu(thread, event.clientX, event.clientY);
         }}
-        className={`group relative flex h-[30px] items-center rounded-md text-[13px] transition-colors ${
+        className={`group relative flex h-[30px] items-center rounded-md text-body transition-colors ${
           indent ? "pl-7" : "pl-2"
         } ${thread.id === activeId || menu?.thread.id === thread.id ? "bg-elevated text-text" : "text-text/85 hover:bg-elevated"}`}
       >
@@ -1502,7 +1502,7 @@ function ThreadSidebar({
       {/* The workspace switcher and Inbox live in the app sidebar now, so this column
           only has to frame the conversation list. */}
       <div className="flex h-12 shrink-0 items-center gap-1 px-3">
-        <span className="min-w-0 flex-1 truncate text-[13px] font-semibold">{t("Conversations")}</span>
+        <span className="min-w-0 flex-1 truncate text-body font-semibold">{t("Conversations")}</span>
         <button
           type="button"
           onClick={() => {
@@ -1529,7 +1529,7 @@ function ThreadSidebar({
               }
             }}
             placeholder={t("Search conversations")}
-            className="h-[30px] w-full rounded-md border border-border bg-bg px-2 text-[12.5px] outline-none placeholder:text-faint focus:border-border-strong"
+            className="h-[30px] w-full rounded-md border border-border bg-bg px-2 text-small outline-none placeholder:text-faint focus:border-border-strong"
           />
         </div>
       )}
@@ -1539,7 +1539,7 @@ function ThreadSidebar({
         <Link
           href={`/${workspaceId}/agent`}
           onClick={onNavigate}
-          className="flex h-[30px] items-center gap-2 rounded-md px-2 text-[13px] text-text/85 transition-colors hover:bg-elevated"
+          className="flex h-[30px] items-center gap-2 rounded-md px-2 text-body text-text/85 transition-colors hover:bg-elevated"
           data-testid="agent-new-chat"
         >
           <Pencil size={13} className="shrink-0 text-faint" /> {t("New chat")}
@@ -1551,13 +1551,13 @@ function ThreadSidebar({
           matches.length > 0 ? (
             <div className="pt-1">{matches.map((thread) => row(thread))}</div>
           ) : (
-            <p className="px-2 py-2 text-[12px] text-faint">{t("No matches.")}</p>
+            <p className="px-2 py-2 text-small text-faint">{t("No matches.")}</p>
           )
         ) : (
           <>
             {pinned.length > 0 && (
               <div className="pb-2">
-                <div className="flex items-center gap-1.5 px-2 pb-1 pt-2 text-[12px] text-faint">
+                <div className="flex items-center gap-1.5 px-2 pb-1 pt-2 text-small text-faint">
                   <Pin size={12} className="shrink-0" />
                   <span className="min-w-0 flex-1 truncate">{t("Pinned")}</span>
                 </div>
@@ -1570,7 +1570,7 @@ function ThreadSidebar({
               const shown = open ? items : items.slice(0, 3);
               return (
                 <div key={project.id} className="pb-2">
-                  <div className="flex items-center gap-1.5 px-2 pb-1 pt-2 text-[12px] text-faint">
+                  <div className="flex items-center gap-1.5 px-2 pb-1 pt-2 text-small text-faint">
                     <Folder size={12} className="shrink-0" />
                     <span className="min-w-0 flex-1 truncate">{project.name}</span>
                   </div>
@@ -1579,7 +1579,7 @@ function ThreadSidebar({
                     <button
                       type="button"
                       onClick={() => setExpanded((prev) => ({ ...prev, [project.id]: true }))}
-                      className="ml-7 mt-0.5 rounded px-2 py-0.5 text-[12px] text-faint transition-colors hover:text-text"
+                      className="ml-7 mt-0.5 rounded px-2 py-0.5 text-small text-faint transition-colors hover:text-text"
                     >
                       {t("Show more")}
                     </button>
@@ -1590,7 +1590,7 @@ function ThreadSidebar({
 
             {loose.length > 0 && (
               <div className="pb-2">
-                <div className="flex items-center gap-1.5 px-2 pb-1 pt-2 text-[12px] text-faint">
+                <div className="flex items-center gap-1.5 px-2 pb-1 pt-2 text-small text-faint">
                   <Folder size={12} className="shrink-0" />
                   <span className="min-w-0 flex-1 truncate">{t("No project")}</span>
                 </div>
@@ -1599,7 +1599,7 @@ function ThreadSidebar({
                   <button
                     type="button"
                     onClick={() => setExpanded((prev) => ({ ...prev, "no-project": true }))}
-                    className="ml-7 mt-0.5 rounded px-2 py-0.5 text-[12px] text-faint transition-colors hover:text-text"
+                    className="ml-7 mt-0.5 rounded px-2 py-0.5 text-small text-faint transition-colors hover:text-text"
                   >
                     {t("Show more")}
                   </button>
@@ -1607,9 +1607,9 @@ function ThreadSidebar({
               </div>
             )}
 
-            <div className="px-2 pb-1 pt-3 text-[12px] text-muted">{t("Recents")}</div>
+            <div className="px-2 pb-1 pt-3 text-small text-muted">{t("Recents")}</div>
             {recents.length === 0 ? (
-              <p className="px-2 py-1 text-[12px] text-faint">{t("No conversations yet.")}</p>
+              <p className="px-2 py-1 text-small text-faint">{t("No conversations yet.")}</p>
             ) : (
               recents.map((thread) => row(thread))
             )}
@@ -1636,7 +1636,7 @@ function ThreadSidebar({
                 <button
                   type="button"
                   onClick={() => setPane("root")}
-                  className="mb-1 flex w-full items-center gap-1.5 rounded-md px-2 py-1.5 text-left text-[12px] text-muted transition-colors hover:bg-elevated hover:text-text"
+                  className="mb-1 flex w-full items-center gap-1.5 rounded-md px-2 py-1.5 text-left text-small text-muted transition-colors hover:bg-elevated hover:text-text"
                 >
                   <ChevronLeft size={13} /> {t("Project")}
                 </button>
@@ -1772,7 +1772,7 @@ function StartComposer({
     <div className="flex min-h-0 flex-1 flex-col overflow-y-auto">
       <div className="flex flex-1 flex-col items-center justify-center px-6 pb-16 pt-6">
         <div className="w-full max-w-[720px]">
-          <h1 className="text-center text-[32px] font-normal leading-tight tracking-[-0.015em] text-text">
+          <h1 className="text-center text-display font-normal leading-tight tracking-[-0.015em] text-text">
             {t("What should we work on?")}
           </h1>
           <div className="mt-7">
@@ -1806,20 +1806,20 @@ function StartComposer({
               <VisibilityChip value={visibility} onChange={onVisibility} />
             </ComposerContext>
           </div>
-          {error && <div className="mt-2 px-2 text-[12px] text-danger">{t(error)}</div>}
+          {error && <div className="mt-2 px-2 text-small text-danger">{t(error)}</div>}
           <div className="mt-3 flex flex-wrap justify-center gap-2">
             {WORK_SUGGESTIONS.map((suggestion) => (
               <button
                 key={suggestion}
                 type="button"
                 onClick={() => setText(t(suggestion))}
-                className="rounded-full border border-border px-3 py-1 text-[12px] text-muted transition-colors hover:bg-elevated hover:text-text"
+                className="rounded-full border border-border px-3 py-1 text-small text-muted transition-colors hover:bg-elevated hover:text-text"
               >
                 {t(suggestion)}
               </button>
             ))}
           </div>
-          <p className="mt-5 text-center text-[11.5px] text-faint">
+          <p className="mt-5 text-center text-small text-faint">
             {approval === "ask"
               ? t("The agent can change this project's tasks, comments and docs. Every change waits for your Allow.")
               : t(AGENT_APPROVALS.find((entry) => entry.id === approval)?.detail ?? "")}
@@ -2016,15 +2016,15 @@ export function AgentWorkspace({
         data-testid="agent-harness-gate"
       >
         <div className="max-w-md rounded-xl border border-border bg-surface p-6">
-          <div className="flex items-center gap-2 text-[14px] font-semibold">
+          <div className="flex items-center gap-2 text-body font-semibold">
             <Bot size={16} /> {t("Agent needs a ready harness")}
           </div>
-          <p className="mt-2 text-[13px] leading-relaxed text-muted">
+          <p className="mt-2 text-body leading-relaxed text-muted">
             {t("Enable at least one local harness that is installed and ready. Open Settings to turn a harness on, install it, or sign in.")}
           </p>
           <ul className="mt-3 space-y-2">
             {engines.map((option) => (
-              <li key={option.id} className="text-[12.5px] leading-relaxed">
+              <li key={option.id} className="text-small leading-relaxed">
                 <span className="font-medium text-text">{option.label}</span>
                 <span className="text-muted"> — {option.hint ? t(option.hint) : t("Available")}</span>
               </li>
@@ -2032,7 +2032,7 @@ export function AgentWorkspace({
           </ul>
           <Link
             href={`/${workspaceId}/settings`}
-            className="mt-4 inline-flex items-center gap-1.5 rounded-md bg-accent px-3 py-1.5 text-[12.5px] font-medium text-white transition-opacity hover:opacity-90"
+            className="mt-4 inline-flex items-center gap-1.5 rounded-md bg-accent px-3 py-1.5 text-small font-medium text-white transition-opacity hover:opacity-90"
           >
             <Settings2 size={13} /> {t("Open Settings")}
           </Link>
@@ -2414,7 +2414,7 @@ function Conversation({
   return (
     <div className="flex min-h-0 min-w-0 flex-1 flex-col">
       <header className="relative flex h-12 shrink-0 items-center justify-between gap-2 px-3">
-        <div className="flex min-w-0 items-center gap-1.5 text-[12px] text-muted">
+        <div className="flex min-w-0 items-center gap-1.5 text-small text-muted">
           <button
             type="button"
             onClick={onOpenSidebar}
@@ -2481,10 +2481,10 @@ function Conversation({
         <div className="mx-auto flex w-full max-w-3xl flex-col gap-6 px-5 pb-8 pt-4">
           {messages.length === 0 && (
             <div className="pt-16 text-center">
-              <h1 className="text-[28px] font-normal leading-tight tracking-[-0.015em]">
+              <h1 className="text-display font-normal leading-tight tracking-[-0.015em]">
                 {t("What should we work on?")}
               </h1>
-              <p className="mt-2 text-[13px] text-muted">
+              <p className="mt-2 text-body text-muted">
                 {active.projectId
                   ? t("Work in {project} — every change waits for your Allow.", { project: active.projectName })
                   : t("Ask about any project in this workspace, or have the agent draft a task for you.")}
@@ -2495,7 +2495,7 @@ function Conversation({
                     key={suggestion}
                     type="button"
                     onClick={() => void send(suggestion)}
-                    className="rounded-full border border-border px-3 py-1 text-[12px] text-muted transition-colors hover:bg-elevated hover:text-text"
+                    className="rounded-full border border-border px-3 py-1 text-small text-muted transition-colors hover:bg-elevated hover:text-text"
                   >
                     {t(suggestion)}
                   </button>
@@ -2508,16 +2508,16 @@ function Conversation({
             message.role === "user" ? (
               <div key={message.id} className="flex flex-col items-end gap-1">
                 {message.author && (
-                  <span className="px-1 text-[11.5px] text-faint" data-testid="message-author">
+                  <span className="px-1 text-small text-faint" data-testid="message-author">
                     {message.author}
                   </span>
                 )}
-                <div className="max-w-[85%] whitespace-pre-wrap rounded-2xl rounded-br-md bg-elevated px-3.5 py-2 text-[13.5px] leading-relaxed">
+                <div className="max-w-[85%] whitespace-pre-wrap rounded-2xl rounded-br-md bg-elevated px-3.5 py-2 text-body leading-relaxed">
                   {message.content}
                 </div>
               </div>
             ) : (
-              <div key={message.id} className="min-w-0 text-[13.5px] leading-relaxed">
+              <div key={message.id} className="min-w-0 text-body leading-relaxed">
                 {message.steps.length > 0 && <StepList steps={message.steps} live={busy && index === messages.length - 1} />}
                 {message.content ? (
                   <Markdown source={message.content} />
@@ -2587,13 +2587,13 @@ function Conversation({
                 onChange={(projectId) => void changeProject(projectId)}
               />
             ) : (
-              <span className="flex min-w-0 items-center gap-1.5 px-2 text-[12.5px] text-muted">
+              <span className="flex min-w-0 items-center gap-1.5 px-2 text-small text-muted">
                 <Folder size={13} className="shrink-0" />
                 <span className="max-w-[170px] truncate">{active.projectName || t("No project")}</span>
               </span>
             )}
           </ComposerContext>
-          <p className="mt-1.5 text-center text-[11px] text-faint">
+          <p className="mt-1.5 text-center text-caption text-faint">
             {active.mine
               ? approvalMode === "ask"
                 ? t("The agent can create and edit tasks, comments, docs and the overview. Every change waits for your Allow.")
