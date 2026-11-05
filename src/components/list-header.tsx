@@ -88,7 +88,7 @@ export function ListHeader({
           so switching between the two lists doesn't shift the heading sideways. */}
       {/* Shrinks last: the person's name and the count stay readable while the search
           field gives up width as the detail panel eats into the list. */}
-      <h1 className="min-w-0 shrink-[0.25] truncate text-body font-semibold">{heading}</h1>
+      <h1 className="min-w-[72px] shrink-[0.25] truncate text-body font-semibold">{heading}</h1>
       <span className="shrink-0 rounded-full bg-elevated px-2 py-0.5 text-caption text-muted">
         {count}
       </span>
