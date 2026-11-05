@@ -1011,6 +1011,25 @@ const zh: Record<string, string> = {
   "Only the page owner or the workspace owner can delete it forever": "只有文档所有者或工作空间所有者可以永久删除",
   "Deleted issues, documents and projects wait here. Restore puts one back exactly as it was; deleting it for good cannot be undone.":
     "删除的任务、文档和项目会留在这里。恢复后和删除前一样；永久删除后无法恢复。",
+  "Your Agent is about to start": "Agent 马上开始",
+  "Waiting for your computer to come online": "等你的电脑上线",
+  "Waiting for your approval": "等你批准",
+  "Your Agent is working": "Agent 正在处理",
+  "Your Agent finished": "Agent 已处理完",
+  "Cancelled": "已取消",
+  "Your Agent could not finish: {reason}": "Agent 没能处理完：{reason}",
+  "Open conversation": "打开对话",
+  "Allow": "允许",
+  "Hand to my Agent": "交给我的 Agent",
+  "Anything your Agent should know (optional)": "有什么要告诉 Agent（可不填）",
+  "Hand over": "交出去",
+  "Your Agent finished {task}": "Agent 处理完了 {task}",
+  "Your Agent could not finish {task}": "Agent 没能处理完 {task}",
+  "Your Agent needs your approval on {task}": "{task} 上的 Agent 在等你批准",
+  "Unknown error": "未知错误",
+  "The server restarted during this run": "这次运行中服务器重启了",
+  "This task is no longer available to you": "你已经看不到这个任务了",
+  "This task was closed while it waited": "这个任务在等待时被关闭了",
 };
 
 export default zh;

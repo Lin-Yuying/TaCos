@@ -84,7 +84,10 @@ export async function POST(request: Request) {
       params: body.arguments,
     };
     publishToolApproval(grant.threadId, card);
-    const decision = await waitForAgentApproval(requestId);
+    const decision = await waitForAgentApproval(requestId, {
+      signal: request.signal,
+      timeoutMs: grant.approvalWaitMs,
+    });
     if (decision !== "accept") {
       return denied(`The person denied tool "${name}".`);
     }

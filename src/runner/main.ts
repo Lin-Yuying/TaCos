@@ -186,6 +186,7 @@ async function* turnEvents(run: ClaimedRun, payload: TurnPayload, abort: AbortCo
     signal: abort.signal,
     proxy: config.proxy || payload.proxy,
     keys,
+    timeoutMs: payload.timeoutMs,
     mcp: run.toolToken ? mcpShim(run.toolToken) : null,
   });
 }

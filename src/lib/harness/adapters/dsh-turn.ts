@@ -220,7 +220,7 @@ export async function* openDshTurn(input: TurnInput, log?: TurnLog): AsyncGenera
 
   child?.stdin?.end(promptText);
 
-  const timer = setTimeout(() => finish("DeepSeek Harness took longer than five minutes."), TURN_TIMEOUT_MS);
+  const timer = setTimeout(() => finish("DeepSeek Harness took longer than its time limit."), input.timeoutMs ?? TURN_TIMEOUT_MS);
 
   if (child?.stdout) {
     let buffer = "";

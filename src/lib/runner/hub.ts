@@ -1,13 +1,15 @@
 import crypto from "node:crypto";
-import { and, asc, eq, inArray, lt } from "drizzle-orm";
+import { and, asc, eq, isNotNull, isNull, lt, or } from "drizzle-orm";
 import { getDb } from "@/db/client";
 import { agentRuns, projects, runnerStatus, runnerTokens } from "@/db/schema";
 import {
+  answerAgentApproval,
   issueAgentToolGrant,
   resolveAgentToolGrant,
   revokeAgentToolGrant,
   subscribeToolApprovals,
   waitForAgentApproval,
+  type ToolApprovalCard,
 } from "@/lib/agent-sessions";
 import type { TurnEvent } from "@/lib/harness/types";
 import { TacosError } from "@/lib/tacos-error";
@@ -24,6 +26,7 @@ type LiveRun = {
   cancelled: boolean;
   toolToken?: string;
   lastContact: number;
+  pending: Map<string, ToolApprovalCard>;
 };
 
 type Hub = {
@@ -126,6 +129,7 @@ async function grantFor(row: typeof agentRuns.$inferSelect, payload: RunPayload)
     approval: payload.approval,
     autoApproveTools: payload.autoApproveTools,
     neverAutoApproveTools: payload.neverAutoApproveTools,
+    approvalWaitMs: payload.approvalWaitMs,
   });
   return grant.token;
 }
@@ -141,7 +145,14 @@ export async function claimRun(userId: string, signal: AbortSignal): Promise<Cla
         .set({ status: "running" })
         .where(and(eq(agentRuns.id, row.id), eq(agentRuns.status, "queued")));
       if (taken.changes === 0) continue;
-      const payload = JSON.parse(row.payload) as RunPayload;
+      // A handed-off task has been waiting for this moment, so its prompt reads the task as it is now.
+      let payload = JSON.parse(row.payload) as RunPayload;
+      if (row.issueId && !hub().live.has(row.id)) {
+        const { beginHandoff } = await import("@/lib/agent-handoff");
+        const started = await beginHandoff(row);
+        if (!started) continue;
+        payload = started;
+      }
       const toolToken = await grantFor(row, payload);
       const live = hub().live.get(row.id);
       if (live) {
@@ -169,7 +180,7 @@ export async function claimRun(userId: string, signal: AbortSignal): Promise<Cla
   return null;
 }
 
-async function finishRun(runId: string, status: string, error?: string): Promise<void> {
+export async function finishRun(runId: string, status: string, error?: string): Promise<void> {
   await getDb()
     .update(agentRuns)
     .set({ status, error: error ?? null, finishedAt: new Date().toISOString() })
@@ -190,15 +201,7 @@ export async function startRun(input: {
   signal?: AbortSignal;
 }): Promise<AsyncGenerator<TurnEvent>> {
   const runId = crypto.randomUUID();
-  const queue: TurnEvent[] = [];
-  let notify: (() => void) | null = null;
-  const push = (event: TurnEvent) => {
-    queue.push(event);
-    notify?.();
-  };
-  const live: LiveRun = { push, cancelled: false, lastContact: Date.now() };
-  hub().live.set(runId, live);
-
+  const events = followRun(runId, input);
   await getDb().insert(agentRuns).values({
     id: runId,
     userId: input.userId,
@@ -210,6 +213,35 @@ export async function startRun(input: {
     createdAt: new Date().toISOString(),
   });
   wake(input.userId);
+  return events;
+}
+
+/** A task handed to the Agent waits here, with nobody following it, until this person's computer asks. */
+export async function queueHandoffRun(input: {
+  userId: string;
+  workspaceId: string;
+  threadId: string;
+  issueId: string;
+  payload: string;
+}): Promise<string> {
+  const id = crypto.randomUUID();
+  await getDb().insert(agentRuns).values({ id, ...input, status: "queued", createdAt: new Date().toISOString() });
+  wake(input.userId);
+  return id;
+}
+
+export function followRun(
+  runId: string,
+  input: { threadId?: string | null; signal?: AbortSignal; approvalWaitMs?: number }
+): AsyncGenerator<TurnEvent> {
+  const queue: TurnEvent[] = [];
+  let notify: (() => void) | null = null;
+  const push = (event: TurnEvent) => {
+    queue.push(event);
+    notify?.();
+  };
+  const live: LiveRun = { push, cancelled: false, lastContact: Date.now(), pending: new Map() };
+  hub().live.set(runId, live);
 
   const unsubscribe = input.threadId
     ? subscribeToolApprovals(input.threadId, (card) => {
@@ -221,7 +253,7 @@ export async function startRun(input: {
           description: card.description,
           params: card.params,
         });
-        void waitForAgentApproval(card.requestId, { signal: input.signal }).then((raw) => {
+        void waitForAgentApproval(card.requestId, { signal: input.signal, timeoutMs: input.approvalWaitMs }).then((raw) => {
           push({ type: "approval_done", requestId: card.requestId, decision: raw === "accept" ? "allow" : "deny" });
         });
       })
@@ -247,6 +279,8 @@ export async function startRun(input: {
         while (queue.length > 0) {
           const event = queue.shift()!;
           if (event.type === "error") failure = event.message;
+          if (event.type === "approval") live.pending.set(event.requestId, event);
+          if (event.type === "approval_done") live.pending.delete(event.requestId);
           yield event;
           if (event.type === "done" || event.type === "error") return;
         }
@@ -260,6 +294,8 @@ export async function startRun(input: {
       unsubscribe();
       input.signal?.removeEventListener("abort", onAbort);
       if (live.toolToken) revokeAgentToolGrant(live.toolToken);
+      // Nothing can use the answer now, so no write stays waiting for one.
+      for (const requestId of live.pending.keys()) answerAgentApproval(requestId, "decline");
       if (live.cancelled) {
         // Stays long enough for the computer to read the cancel on its next check.
         setTimeout(() => hub().live.delete(runId), POLL_MS);
@@ -302,10 +338,34 @@ export function runTurnApproved(runId: string): boolean {
   return Boolean(token && resolveAgentToolGrant(token)?.autoApproveTurn);
 }
 
-/** A run still open when the server starts has lost the person following it. */
+export function pendingRunApprovals(runId: string): ToolApprovalCard[] {
+  return [...(hub().live.get(runId)?.pending.values() ?? [])];
+}
+
+/** Ends a running turn; the computer reads the cancel on its next check. */
+export function cancelLiveRun(runId: string): boolean {
+  const live = hub().live.get(runId);
+  if (!live) return false;
+  live.cancelled = true;
+  live.push({ type: "done" });
+  return true;
+}
+
+/**
+ * A run still open when the server starts has lost the person following it. A handed-off task
+ * that no computer has taken yet has lost nothing: it keeps waiting.
+ */
 export async function failInterruptedRuns(): Promise<void> {
-  await getDb()
+  const db = getDb();
+  const handoffs = await db
+    .select()
+    .from(agentRuns)
+    .where(and(eq(agentRuns.status, "running"), isNotNull(agentRuns.issueId)));
+  await db
     .update(agentRuns)
     .set({ status: "failed", error: "The server restarted during this run", finishedAt: new Date().toISOString() })
-    .where(inArray(agentRuns.status, ["queued", "running"]));
+    .where(or(eq(agentRuns.status, "running"), and(eq(agentRuns.status, "queued"), isNull(agentRuns.issueId))));
+  if (handoffs.length === 0) return;
+  const { noticeHandoffFailed } = await import("@/lib/agent-handoff");
+  for (const row of handoffs) await noticeHandoffFailed(row);
 }

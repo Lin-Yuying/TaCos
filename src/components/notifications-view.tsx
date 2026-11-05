@@ -183,6 +183,9 @@ function noticeText(type: string, body: string, t: ReturnType<typeof useT>): str
   if (type === "mentioned") return t("{name} mentioned you", { name: body });
   if (type === "doc_mentioned") return t("{name} mentioned you in a document", { name: body });
   if (type === "doc_commented") return t("{name} commented on your document", { name: body });
+  if (type === "handoff_done") return t("Your Agent finished {task}", { task: body });
+  if (type === "handoff_failed") return t("Your Agent could not finish {task}", { task: body });
+  if (type === "handoff_waiting") return t("Your Agent needs your approval on {task}", { task: body });
   if (type === "claim_transferred") return t("{name} handed a task to you", { name: body });
   return body;
 }

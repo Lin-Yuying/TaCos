@@ -181,7 +181,7 @@ export async function* openCodebuddyTurn(input: TurnInput, log?: TurnLog): Async
   }
   child?.once("close", removeConfig);
 
-  const timer = setTimeout(() => finish("WorkBuddy took longer than five minutes."), TURN_TIMEOUT_MS);
+  const timer = setTimeout(() => finish("WorkBuddy took longer than its time limit."), input.timeoutMs ?? TURN_TIMEOUT_MS);
 
   if (child?.stdout) {
     let buffer = "";

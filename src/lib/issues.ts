@@ -2031,11 +2031,11 @@ export async function getIssueDetail(
   };
 }
 
-async function notify(input: {
+export async function notify(input: {
   workspaceId: string;
   userId: string;
   issueId: string;
-  type: "assigned" | "commented" | "mentioned" | "due_soon" | ClaimNotice;
+  type: "assigned" | "commented" | "mentioned" | "due_soon" | "handoff_done" | "handoff_failed" | "handoff_waiting" | ClaimNotice;
   body: string;
 }) {
   await getDb().insert(notifications).values({
@@ -2796,7 +2796,9 @@ export async function addComment(
   workspaceId: string,
   idOrIdentifier: string,
   body: string,
-  actor: MutationActor
+  actor: MutationActor,
+  // This person hears about the comment another way.
+  options: { exceptUser?: string } = {}
 ): Promise<IssueDetail> {  const text = typeof body === "string" ? body.trim() : "";
   if (!text) throw new TacosError("Comment body is required");
   const row = await findIssueRow(workspaceId, idOrIdentifier);
@@ -2825,6 +2827,7 @@ export async function addComment(
   if (row.createdBy && row.createdBy !== actorUserId) {
     targets.add(row.createdBy);
   }
+  if (options.exceptUser) targets.delete(options.exceptUser);
   const who = actor.kind === "user" ? actor.displayName : `Agent (${actor.label})`;
   // A mentioned member gets one "mentioned" notice instead of the "commented" one.
   const mentioned = await notifyMentions(workspaceId, row.id, text, actor);

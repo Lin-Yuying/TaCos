@@ -11,6 +11,7 @@ import { DueRow } from "./due-row";
 import { ClaimRow } from "./claim-row";
 import { SourceChatRow } from "./source-chat-row";
 import { AdvanceButton } from "./advance-button";
+import { HandoffRow } from "./handoff-row";
 import { DescriptionSection } from "./description";
 import { ChangelogSection } from "./changelog";
 import { CommentsSection } from "./comments";
@@ -73,6 +74,8 @@ function IssuePanel({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const scrollRef = useRef<HTMLDivElement | null>(null);
+  // A handed-off task just ended, and its result is a new comment.
+  const [finished, setFinished] = useState(0);
   const { toast } = useUI();
   // H-COLLAB-13: reload the task when another member changes something.
   const live = useLiveTick();
@@ -94,7 +97,7 @@ function IssuePanel({
 
   // The panel is remounted per issue id, so loading state starts clean without resets here.
   useEffect(() => {
-    if (live === 0) return;
+    if (live === 0 && finished === 0) return;
     let cancelled = false;
     fetch(`/api/internal/${workspaceId}/issues/${encodeURIComponent(id)}`)
       .then(async (res) => {
@@ -111,7 +114,7 @@ function IssuePanel({
     return () => {
       cancelled = true;
     };
-  }, [live, id, workspaceId]);
+  }, [live, finished, id, workspaceId]);
 
   useEffect(() => {
     let cancelled = false;
@@ -260,6 +263,13 @@ function IssuePanel({
           currentUserId={currentUserId}
           onClaimed={() => setDetail({ ...detail, claimedBy: currentUserId })}
           onError={setError}
+        />
+
+        <HandoffRow
+          workspaceId={workspaceId}
+          detail={detail}
+          currentUserId={currentUserId}
+          onFinished={() => setFinished((count) => count + 1)}
         />
 
         <SourceChatRow workspaceId={workspaceId} threadId={detail.sourceThreadId} />

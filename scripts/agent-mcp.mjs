@@ -7,6 +7,8 @@
 //
 // TACOS_AGENT_URL    base URL of the TaCos server, e.g. http://127.0.0.1:3000
 // TACOS_AGENT_TOKEN  short-lived token issued for this turn
+import { request as httpRequest } from "node:http";
+import { request as httpsRequest } from "node:https";
 
 const baseUrl = (process.env.TACOS_AGENT_URL || "").replace(/\/+$/, "");
 const token = process.env.TACOS_AGENT_TOKEN || "";
@@ -28,19 +30,40 @@ async function callServer(path, body) {
   if (!baseUrl || !token) {
     throw new Error("TaCos did not hand this session a tool grant.");
   }
-  const response = await fetch(`${baseUrl}/api/agent/tools${path}`, {
+  const response = await request(`${baseUrl}/api/agent/tools${path}`, {
     method: body ? "POST" : "GET",
     headers: {
       Authorization: `Bearer ${token}`,
       ...(body ? { "Content-Type": "application/json" } : {}),
     },
-    ...(body ? { body: JSON.stringify(body) } : {}),
+    body: body ? JSON.stringify(body) : undefined,
   });
-  const payload = await response.json().catch(() => null);
-  if (!response.ok) {
+  let payload = null;
+  try {
+    payload = JSON.parse(response.text);
+  } catch {
+    /* the status below says what went wrong */
+  }
+  if (response.status < 200 || response.status >= 300) {
     throw new Error(payload?.error || `TaCos answered ${response.status}`);
   }
   return payload;
+}
+
+// A write can wait a long time for the person's answer, and fetch gives up on a silent server
+// after five minutes.
+function request(url, { method, headers, body }) {
+  return new Promise((resolve, reject) => {
+    const send = url.startsWith("https:") ? httpsRequest : httpRequest;
+    const req = send(url, { method, headers }, (res) => {
+      const chunks = [];
+      res.on("data", (chunk) => chunks.push(chunk));
+      res.on("end", () => resolve({ status: res.statusCode ?? 0, text: Buffer.concat(chunks).toString("utf8") }));
+      res.on("error", reject);
+    });
+    req.on("error", reject);
+    req.end(body);
+  });
 }
 
 async function handle(message) {

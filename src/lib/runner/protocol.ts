@@ -27,6 +27,9 @@ export type TurnPayload = {
   autoApproveTools: string[];
   neverAutoApproveTools: string[];
   proxy: string;
+  // A task handed to the Agent runs with nobody watching, so it gets longer than a chat turn.
+  timeoutMs?: number;
+  approvalWaitMs?: number;
 };
 
 export type EditPayload = {

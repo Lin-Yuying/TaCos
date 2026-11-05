@@ -160,7 +160,7 @@ export async function* openPiTurn(input: TurnInput, log?: TurnLog): AsyncGenerat
     finish(err instanceof Error ? err.message : "Could not start Pi.");
   }
 
-  const timer = setTimeout(() => finish("Pi took longer than five minutes."), TURN_TIMEOUT_MS);
+  const timer = setTimeout(() => finish("Pi took longer than its time limit."), input.timeoutMs ?? TURN_TIMEOUT_MS);
 
   if (child?.stdout) {
     let buffer = "";

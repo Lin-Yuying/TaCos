@@ -6,6 +6,13 @@ import { clearSkillCache } from "@/lib/cli-agents";
 import { createSkillFile, deleteSkillFile } from "@/lib/skill-files";
 import type { AgentSkill } from "@/lib/ai-constants";
 import {
+  answerHandoff,
+  cancelHandoff,
+  handoffPanel,
+  handTaskToAgent,
+  type HandoffPanel,
+} from "@/lib/agent-handoff";
+import {
   deleteAgentThread,
   renameAgentThread,
   setAgentThreadApproval,
@@ -240,5 +247,52 @@ export async function startTaskChatAction(workspaceId: string, issueId: string):
     const thread = await startTaskChat(workspaceId, issueId, user.id);
     refresh(workspaceId);
     return thread;
+  });
+}
+
+// Hands a task to this person's own Agent, which runs on their computer whenever it is on.
+export async function getHandoffAction(workspaceId: string, issueId: string): Promise<ActionResult<HandoffPanel>> {
+  return run(async () => {
+    const { user } = await requireWorkspace(workspaceId);
+    return handoffPanel(workspaceId, issueId, user.id);
+  });
+}
+
+export async function handTaskToAgentAction(
+  workspaceId: string,
+  issueId: string,
+  input: { harness: string; approval: string; note: string }
+): Promise<ActionResult<HandoffPanel>> {
+  return run(async () => {
+    const { user } = await requireWorkspace(workspaceId);
+    await handTaskToAgent(workspaceId, issueId, user.id, input);
+    refresh(workspaceId);
+    return handoffPanel(workspaceId, issueId, user.id);
+  });
+}
+
+export async function answerHandoffAction(
+  workspaceId: string,
+  issueId: string,
+  runId: string,
+  requestId: string,
+  allow: boolean
+): Promise<ActionResult<HandoffPanel>> {
+  return run(async () => {
+    const { user } = await requireWorkspace(workspaceId);
+    await answerHandoff(runId, requestId, user.id, allow);
+    return handoffPanel(workspaceId, issueId, user.id);
+  });
+}
+
+export async function cancelHandoffAction(
+  workspaceId: string,
+  issueId: string,
+  runId: string
+): Promise<ActionResult<HandoffPanel>> {
+  return run(async () => {
+    const { user } = await requireWorkspace(workspaceId);
+    await cancelHandoff(runId, user.id);
+    return handoffPanel(workspaceId, issueId, user.id);
   });
 }

@@ -33,7 +33,7 @@ Item-level checks stay cheap (types, check scripts). End-to-end tests and screen
 | 10 | Database on tasks: custom fields, table, board, calendar views, filter, sort | done | Check script for field and filter logic; screenshots in item 15 |
 | 11 | Agent partial edit and undo, shown in updates panel | done | Check script: partial edit leaves other text unchanged; undo restores |
 | 12 | Agent workspace-level read and search, cross-workspace read; writes name a target | done | Check script: write without target refused; no read outside joined workspaces |
-| 13 | Hand a task to own Agent, queue while computer is off, write back comment and notify | todo | Check script: queued turn runs when runner returns; write asks for approval by default |
+| 13 | Hand a task to own Agent, queue while computer is off, write back comment and notify | done | Check script: queued turn runs when runner returns; write asks for approval by default |
 | 14 | Realtime co-editing, presence avatars, cursors | todo | Two clients converge in a check script; if unstable, `blocked` and 2.2 ships without it |
 | 15 | Batch E2E and screenshots with real models and new data dirs; fresh-context review; fix findings | todo | Report lists tested and untested |
 | 16 | Deploy to the server without touching morula or Caddy; add this Mac's public key | todo | `curl` through the tunnel returns the app; memory measured |
@@ -85,3 +85,12 @@ Levels are view, comment and edit (`src/lib/page-level.ts`). A shared page has o
 - Every write tool requires `workspace`. A write without it is refused before any approval card appears. A write to another workspace also needs `project`, except document edits, and always shows a card, whatever the approval level.
 - The refusal for an unjoined workspace reads the same as for one that does not exist.
 - The Agent can read custom fields through `get_task`. It cannot write them.
+
+### Item 13: Hand a task to own Agent
+
+- Team server only. The desktop app on its own keeps the existing chat, where the Agent runs in the open conversation.
+- The run is a row in `agent_runs` with `issue_id` set. It survives a server restart while queued, and its prompt is built when the computer takes it, so it reads the task as it is then. A restart during the run fails it and notifies the person.
+- Handing over claims the task for that person, and refuses a task someone else claimed. It reuses the task's conversation, and a chat turn on that conversation is refused while the handoff is open.
+- A handed-off turn may run 30 minutes instead of five. An approval card waits up to 25 minutes, then counts as denied, and the Agent reports what it could not do. The tool token also lasts 30 minutes.
+- The MCP bridge moved from `fetch` to `node:http`, because `fetch` gives up on a silent server after five minutes. A harness's own MCP client may still cut a long wait shorter; if it does, the wait ends as denied, because the route watches the connection.
+- The result is one comment by the Agent and one notification. Partial text from a failed turn stays in the conversation and is not posted.

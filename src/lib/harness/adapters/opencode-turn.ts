@@ -154,7 +154,7 @@ export async function* openOpencodeTurn(input: TurnInput, log?: TurnLog): AsyncG
     finish(err instanceof Error ? err.message : "Could not start OpenCode.");
   }
 
-  const timer = setTimeout(() => finish("OpenCode took longer than five minutes."), TURN_TIMEOUT_MS);
+  const timer = setTimeout(() => finish("OpenCode took longer than its time limit."), input.timeoutMs ?? TURN_TIMEOUT_MS);
 
   if (child?.stdout) {
     let buffer = "";

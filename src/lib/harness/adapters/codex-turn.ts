@@ -211,8 +211,8 @@ export async function* openCodexTurn(input: TurnInput, log?: TurnLog): AsyncGene
   };
 
   timer = setTimeout(
-    () => finish("This work turn took longer than five minutes and was stopped."),
-    TURN_TIMEOUT_MS
+    () => finish("This work turn took longer than its time limit and was stopped."),
+    input.timeoutMs ?? TURN_TIMEOUT_MS
   );
 
   const args = ["app-server", "-c", "notify=[]", "-c", "plugins={}"];
