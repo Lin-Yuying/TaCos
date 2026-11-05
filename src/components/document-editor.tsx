@@ -3,6 +3,8 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { EditorContent, useEditor, type Editor, type Range } from "@tiptap/react";
+import { DragHandle } from "@tiptap/extension-drag-handle-react";
+import type { EditorState } from "@tiptap/pm/state";
 import { BubbleMenu } from "@tiptap/react/menus";
 import { Extension } from "@tiptap/core";
 import { Plugin, PluginKey } from "@tiptap/pm/state";
@@ -15,6 +17,7 @@ import {
   Bold,
   CheckSquare,
   Code,
+  GripVertical,
   Heading1,
   Heading2,
   Heading3,
@@ -33,6 +36,7 @@ import {
 import { AssigneeAvatar } from "@/components/issue-table";
 import { DocMention, documentExtensions } from "@/lib/editor/extensions";
 import type { Member } from "@/lib/issues";
+import { BLOCK_TURNS, canTurnBlock, turnBlock } from "@/lib/editor/block-turn";
 import { documentMarkdown, markdownToDocument } from "@/lib/editor/document-markdown";
 import { anchorFromSelection, anchorRanges } from "@/lib/editor/anchors";
 import type { DocAnchor } from "@/lib/doc-anchor";
@@ -127,6 +131,11 @@ function TableEditButtons({ editor }: { editor: Editor }) {
       ))}
     </>
   );
+}
+
+function dispatchTurn(editor: Editor, next: EditorState) {
+  const size = editor.state.doc.content.size;
+  editor.view.dispatch(editor.state.tr.replaceWith(0, size, next.doc.content));
 }
 
 const NO_MEMBERS: Member[] = [];
@@ -231,6 +240,8 @@ export function DocumentEditor({
   const onChangeRef = useRef(onChange);
   const pagesRef = useRef(pages);
   const [menu, setMenu] = useState<MenuState | null>(null);
+  const [handleBlock, setHandleBlock] = useState<{ pos: number; name: string } | null>(null);
+  const [turnMenu, setTurnMenu] = useState<{ x: number; y: number; pos: number } | null>(null);
   const menuRef = useRef<MenuState | null>(null);
   const [mentionMenu, setMentionMenu] = useState<MenuState<Member> | null>(null);
   const mentionMenuRef = useRef<MenuState<Member> | null>(null);
@@ -460,6 +471,57 @@ export function DocumentEditor({
       onMouseMove={trackBlock}
       onMouseLeave={() => setHovered(null)}
     >
+      {editor && editable && (
+        <DragHandle
+          editor={editor}
+          className="drag-handle"
+          onNodeChange={({ node, pos }) => {
+            setHandleBlock(node ? { pos, name: node.type.name } : null);
+            if (!node) setTurnMenu(null);
+          }}
+          onElementDragStart={() => setTurnMenu(null)}
+        >
+          <button
+            type="button"
+            data-testid="doc-block-handle"
+            title={t(handleBlock && canTurnBlock(handleBlock.name) ? "Drag to move. Click to turn into." : "Drag to move.")}
+            aria-label={t(handleBlock && canTurnBlock(handleBlock.name) ? "Drag to move. Click to turn into." : "Drag to move.")}
+            onClick={(event) => {
+              if (!handleBlock || !canTurnBlock(handleBlock.name)) return;
+              const rect = event.currentTarget.getBoundingClientRect();
+              setTurnMenu({ x: rect.right + 4, y: rect.top, pos: handleBlock.pos });
+            }}
+            className="cursor-grab rounded p-0.5 text-faint hover:bg-elevated hover:text-text active:cursor-grabbing"
+          >
+            <GripVertical size={14} />
+          </button>
+        </DragHandle>
+      )}
+      {editor && turnMenu && (
+        <div
+          role="menu"
+          data-testid="doc-turn-into"
+          style={{ position: "fixed", left: turnMenu.x, top: turnMenu.y }}
+          className="z-50 max-h-72 w-48 overflow-y-auto rounded-md border border-border bg-overlay p-1 shadow-md"
+        >
+          {BLOCK_TURNS.map((item) => (
+            <button
+              key={item.turn}
+              type="button"
+              role="menuitem"
+              onMouseDown={(event) => event.preventDefault()}
+              onClick={() => {
+                const next = turnBlock(editor.state, turnMenu.pos, item.turn);
+                if (next) dispatchTurn(editor, next);
+                setTurnMenu(null);
+              }}
+              className="flex w-full rounded px-2 py-1 text-left text-body text-muted hover:bg-elevated hover:text-text"
+            >
+              {t(item.label)}
+            </button>
+          ))}
+        </div>
+      )}
       {editor && (
         <BubbleMenu
           editor={editor}

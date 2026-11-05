@@ -913,6 +913,8 @@ const zh: Record<string, string> = {
   "Delete this row": "删除这一行",
   "Add a column to the right": "在右边加一列",
   "Delete this column": "删除这一列",
+  "Drag to move.": "拖动来移动。",
+  "Drag to move. Click to turn into.": "拖动来移动。点击后换成别的类型。",
   "Your computer is not connected": "你的电脑没有连上",
   "Your computer stopped responding during this turn.": "这一轮进行中，你的电脑没有响应了。",
   "Open TaCos on your computer, then try again.": "在你的电脑上打开 TaCos，再试一次。",
