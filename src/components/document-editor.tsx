@@ -46,6 +46,7 @@ import { anchorFromSelection, anchorRanges } from "@/lib/editor/anchors";
 import type { DocAnchor } from "@/lib/doc-anchor";
 import type { PageContext } from "@/components/markdown";
 import type { DocCollab } from "@/components/use-doc-collab";
+import { CodeLanguageMenu } from "@/components/code-block-controls";
 import { useT } from "@/components/i18n-context";
 
 type SlashCommand = {
@@ -630,8 +631,10 @@ export function DocumentEditor({
       {editor && (
         <BubbleMenu
           editor={editor}
-          shouldShow={({ state, view, element }) =>
-            !state.selection.empty && (view.hasFocus() || element.contains(document.activeElement))
+          shouldShow={({ editor: current, state, view, element }) =>
+            !state.selection.empty &&
+            !current.isActive("codeBlock") &&
+            (view.hasFocus() || element.contains(document.activeElement))
           }
           className="flex max-w-[360px] flex-wrap items-center gap-0.5 rounded-md border border-border bg-overlay p-0.5 shadow-md"
         >
@@ -684,6 +687,24 @@ export function DocumentEditor({
           data-testid="doc-table-menu"
         >
           <TableEditButtons editor={editor} />
+        </BubbleMenu>
+      )}
+      {editor && editable && (
+        <BubbleMenu
+          editor={editor}
+          pluginKey="docCodeMenu"
+          shouldShow={({ editor: current, view, element }) =>
+            current.isActive("codeBlock") && (view.hasFocus() || element.contains(document.activeElement))
+          }
+          className="flex items-center rounded-md border border-border bg-overlay px-1 py-0.5 shadow-md"
+          data-testid="doc-code-menu"
+        >
+          <CodeLanguageMenu
+            lang={String(editor.getAttributes("codeBlock").language ?? "")}
+            onChange={(lang) =>
+              editor.chain().focus().updateAttributes("codeBlock", { language: lang || null }).run()
+            }
+          />
         </BubbleMenu>
       )}
       <input

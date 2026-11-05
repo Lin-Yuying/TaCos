@@ -256,6 +256,19 @@ html[data-desktop] .app-auth-menu {
 .document-editor .ProseMirror div[data-type="details"] div[data-type="detailsContent"] { grid-column: 1 / -1; grid-row: 2; }
 .document-editor .ProseMirror aside[data-callout] { border-left: 2px solid var(--color-accent); background: var(--color-surface); padding: 8px 12px; }
 .document-editor .ProseMirror pre { border: 1px solid var(--color-border); border-radius: 8px; background: var(--color-surface); padding: 12px; font-family: var(--font-mono); font-size: 12.5px; }
+.document-editor .ProseMirror pre .hljs-keyword,
+.document-editor .ProseMirror pre .hljs-selector-tag,
+.document-editor .ProseMirror pre .hljs-literal { color: var(--color-code-keyword); }
+.document-editor .ProseMirror pre .hljs-built_in,
+.document-editor .ProseMirror pre .hljs-type,
+.document-editor .ProseMirror pre .hljs-title,
+.document-editor .ProseMirror pre .hljs-title.function_,
+.document-editor .ProseMirror pre .hljs-function { color: var(--color-code-builtin); }
+.document-editor .ProseMirror pre .hljs-string,
+.document-editor .ProseMirror pre .hljs-attr { color: var(--color-code-string); }
+.document-editor .ProseMirror pre .hljs-number { color: var(--color-code-number); }
+.document-editor .ProseMirror pre .hljs-comment,
+.document-editor .ProseMirror pre .hljs-doctag { color: var(--color-code-comment); }
 .document-editor .ProseMirror :not(pre) > code { border-radius: 4px; background: var(--color-elevated); padding: 2px 4px; font-family: var(--font-mono); font-size: 12.5px; }
 .document-editor .ProseMirror a { color: var(--color-accent); text-decoration: underline; text-underline-offset: 2px; }
 .document-editor .ProseMirror a[data-page-ref],

@@ -40,7 +40,7 @@ Item-level checks stay cheap (types, check scripts). End-to-end tests and screen
 | 14 | Drag blocks; turn a block into another type | done | `node --import tsx scripts/check-doc-block-turn.ts`; screenshots in item 26 |
 | 15 | Link and color in the selection toolbar | done | `node --import tsx scripts/check-doc-color-syntax.ts` |
 | 16 | Toggle and callout blocks | done | `node --import tsx scripts/check-doc-toggle-callout.ts` |
-| 17 | Code highlighting in the document editor | todo | Round-trip check keeps the language |
+| 17 | Code highlighting in the document editor | done | `node --import tsx scripts/check-doc-code-highlight.ts` |
 | 18 | Comment count in the page margin | todo | Screenshots in item 26 |
 | 19 | Embedded page content shows in the editor | todo | Confirm current behaviour, then check script or screenshots |
 | 20 | Agent view for tasks | todo | Check script for the query; screenshots in item 26 |

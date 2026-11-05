@@ -10,6 +10,8 @@ import StarterKit from "@tiptap/starter-kit";
 import Color from "@tiptap/extension-color";
 import { TextStyle } from "@tiptap/extension-text-style";
 import { Details, DetailsContent, DetailsSummary } from "@tiptap/extension-details";
+import { CodeBlockLowlight } from "@tiptap/extension-code-block-lowlight";
+import { documentLowlight } from "@/lib/editor/lowlight";
 import { TaskItem, TaskList } from "@tiptap/extension-list";
 import { Table, TableCell, TableHeader, TableRow, renderTableToMarkdown } from "@tiptap/extension-table";
 import Image from "@tiptap/extension-image";
@@ -266,9 +268,11 @@ export function documentExtensions(
     StarterKit.configure({
       link: { openOnClick: false, autolink: true },
       underline: false,
+      codeBlock: false,
       // A shared document undoes through its own history, one person's changes at a time.
       ...(options.sharedHistory ? { undoRedo: false as const } : {}),
     }),
+    CodeBlockLowlight.configure({ lowlight: documentLowlight, defaultLanguage: null }),
     TaskList,
     TaskItem.configure({ nested: true }),
     // The stock table writes a leading blank line, which the reader takes as an empty block.
