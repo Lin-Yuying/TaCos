@@ -2,7 +2,6 @@
 
 # TaCos
 
-**AI agent is now implemented in version 2.0.0!**
 
 A task tracker built for teams that work alongside AI agents. 
 
