@@ -878,7 +878,7 @@ export function taskChatOpeningMessage(identifier: string): string {
 
 export type TaskChatStart = {
   thread: AgentThread;
-  /** First user turn for a brand-new task chat; null when reopening an existing one. */
+  /** First user turn for a task chat with no messages yet; null when it already has some. */
   openingMessage: string | null;
 };
 
@@ -916,7 +916,12 @@ export async function startTaskChat(
     .limit(1);
   if (existing) {
     const thread = await getAgentThread(workspaceId, userId, existing.id);
-    if (thread) return { thread, openingMessage: null };
+    if (thread) {
+      return {
+        thread,
+        openingMessage: thread.messages.length === 0 ? taskChatOpeningMessage(task.identifier) : null,
+      };
+    }
   }
 
   const thread = await startAgentThread({

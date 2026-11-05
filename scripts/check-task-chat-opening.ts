@@ -1,6 +1,6 @@
 /**
- * docs/plans/team-2.3.md item 6: "Work on it in chat" sends the opening turn once on a new
- * empty task chat; reopening sends nothing.
+ * docs/plans/team-2.3.md item 6: "Work on it in chat" sends the opening turn on a task chat with
+ * no messages, including one the old button left empty; reopening a chat with messages sends nothing.
  *   node --import tsx scripts/check-task-chat-opening.ts
  */
 import fs from "node:fs";
@@ -25,7 +25,7 @@ async function main() {
   const { getDb } = await import("../src/db/client");
   const { projects, users, workspaceMembers } = await import("../src/db/schema");
   const { createIssue } = await import("../src/lib/issues");
-  const { startTaskChat, taskChatOpeningMessage } = await import("../src/lib/agent-threads");
+  const { appendAgentMessage, startTaskChat, taskChatOpeningMessage } = await import("../src/lib/agent-threads");
 
   const db = getDb();
   const [project] = await db.select().from(projects).limit(1);
@@ -50,7 +50,12 @@ async function main() {
 
   const second = await startTaskChat(ws, task.id, me.id);
   assert(second.thread.id === first.thread.id, "a second open must reuse the same chat");
-  assert(second.openingMessage === null, "an existing task chat must not send an opening message again");
+  assert(second.openingMessage === expected, "a chat that never got its first turn must still get it");
+
+  await appendAgentMessage({ threadId: first.thread.id, role: "user", content: expected, authorId: me.id });
+  const third = await startTaskChat(ws, task.id, me.id);
+  assert(third.thread.id === first.thread.id, "a third open must reuse the same chat");
+  assert(third.openingMessage === null, "a task chat with messages must not send an opening message again");
 
   console.log("check-task-chat-opening: pass");
 }
