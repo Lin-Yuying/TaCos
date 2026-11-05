@@ -37,7 +37,7 @@ Item-level checks stay cheap (types, check scripts). End-to-end tests and screen
 | 14 | Realtime co-editing, presence avatars, cursors | done | Two clients converge in a check script; if unstable, `blocked` and 2.2 ships without it |
 | 15 | Batch E2E and screenshots with real models and new data dirs; fresh-context review; fix findings | done | Report lists tested and untested |
 | 15b | Type scale from the golden ratio, user request 2026-11-04; font family unchanged | done | `check-type-scale` passes; screenshots at 1440 and 1100 wide |
-| 16 | Deploy to the server without touching morula or Caddy; add this Mac's public key | todo | `curl` through the tunnel returns the app; memory measured |
+| 16 | Deploy to the server without touching morula or Caddy; add this Mac's public key | done | `curl` through the tunnel returns the app; memory measured |
 | 17 | Push, open PR; after the user merges by hand, tag `v2.2.0` and publish "TaCos 2.2" | todo | Release has its assets; title set |
 
 ## Notes
@@ -118,3 +118,7 @@ Levels are view, comment and edit (`src/lib/page-level.ts`). A shared page has o
 - Before: 20 sizes from 9 to 32 px. After: 7 steps. 11, 14, 18, 23, 29 step by the square root of 1.618, so every second step is 1.618. 12.5 and 16 are half steps for dense text; a plain 1.618 between neighbors leaves too few sizes for a dense interface.
 - Sidebar section labels moved from 11 to 12.5. Document body keeps 14 with line height 1.618.
 - Narrow task lists hide assignee and labels below `@4xl`, priority below `@xl`.
+
+### Item 16: server deploy
+
+Installed on 2026-11-05 (server time) from a local linux-x64 bundle built before the type scale commit; the release tarball replaces it after merge. morula and Caddy keep their PIDs (703994, 16862), and the Caddyfile hash is unchanged. Through the SSH tunnel with this Mac's key, `/` and `/login` return 200 and the realtime socket opens. The key opens no shell. Next.js uses about 99 MB of resident memory when idle, including the realtime socket, on a server with about 1.3 GB available.
