@@ -318,7 +318,7 @@ function SidebarNav({
               active={active({ view: "agent" })}
               icon={<Bot size={14} />}
             >
-              {t("Agent")}
+              {t("Agent tasks")}
             </NavItem>
             <NavItem
               href={`/${workspaceId}/review`}
@@ -1017,7 +1017,7 @@ function SidebarRail({
               icon={<Bot size={14} />}
               onSelect={close}
             >
-              {t("Agent")}
+              {t("Agent tasks")}
             </RailFlyoutLink>,
             <RailFlyoutLink
               key="review"
@@ -1419,7 +1419,7 @@ function tabMeta(
     if (status)
       return { label: t(STATUS_META[status].label), icon: <StatusIcon status={status} size={13} /> };
     if (view === "active") return { label: t("Active"), icon: <Activity size={13} /> };
-    if (view === "agent") return { label: t("Agent"), icon: <Bot size={13} /> };
+    if (view === "agent") return { label: t("Agent tasks"), icon: <Bot size={13} /> };
     if (view === "open") return { label: t("Open Tasks"), icon: <Hand size={13} /> };
     return { label: t("All Tasks"), icon: <List size={13} /> };
   }

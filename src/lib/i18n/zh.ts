@@ -851,6 +851,7 @@ const zh: Record<string, string> = {
   "{name} released a task you follow": "{name} 释放了你关注的任务",
   "{name} handed a task to you": "{name} 把任务转交给了你",
   "Report a blocker": "报告阻塞",
+  "Agent tasks": "Agent 任务",
   "What is blocking this task?": "是什么卡住了这个任务？",
   Report: "报告",
   "reported a blocker": "报告了阻塞",
