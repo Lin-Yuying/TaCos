@@ -33,7 +33,8 @@ import { ModelKeysSection } from "@/components/model-keys-section";
 import { AssigneeAvatar } from "@/components/issue-table";
 import { ProjectIcon, WorkspaceMark } from "@/components/icons";
 import { WorkspaceTrashList } from "@/components/workspace-trash-list";
-import type { ApiKeyRecord, DeletedWorkspace, Member, Project } from "@/lib/issues";
+import { LabelsManager } from "@/components/labels-manager";
+import type { ApiKeyRecord, DeletedWorkspace, Label, Member, Project } from "@/lib/issues";
 import type { HarnessSettingsView } from "@/lib/harness/types";
 import { BUILTIN_AVATARS, BUILTIN_AVATAR_LABELS, builtinAvatarId } from "@/lib/avatars";
 import { formatDate, timeAgo } from "@/lib/format";
@@ -121,6 +122,7 @@ export function SettingsView({
   currentUser,
   members,
   projects,
+  labels,
   keys,
   joinCode,
   membersSeeAllTasks,
@@ -138,6 +140,7 @@ export function SettingsView({
   currentUser: { id: string; username: string; displayName: string; avatar: string | null };
   members: Member[];
   projects: Project[];
+  labels: Array<Label & { issueCount: number }>;
   keys: ApiKeyRecord[];
   joinCode: string | null;
   membersSeeAllTasks: boolean;
@@ -898,6 +901,14 @@ export function SettingsView({
             </button>
           </div>
           {projError && <div className="text-small text-danger">{t(projError)}</div>}
+        </section>
+
+        <section id="labels" className="scroll-mt-6 space-y-3">
+          <h2 className="text-body font-semibold">{t("Labels")}</h2>
+          <p className="text-small leading-relaxed text-faint">
+            {t("Create and delete labels for tasks in this workspace.")}
+          </p>
+          <LabelsManager workspaceId={workspace.id} initialLabels={labels} embedded />
         </section>
 
         <section className="space-y-3" data-testid="harness-settings">

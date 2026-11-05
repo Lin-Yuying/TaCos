@@ -459,7 +459,7 @@ export function NewIssueDialog({ workspaceId }: { workspaceId: string }) {
                     })}
                     {labels.length === 0 && (
                       <div className="px-2 py-1.5 text-small text-faint">
-                        {t("No labels yet — create some on the Labels page.")}
+                        {t("No labels yet — create some in Settings.")}
                       </div>
                     )}
                   </>

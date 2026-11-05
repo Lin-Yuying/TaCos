@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { ChevronRight, FileText, Lock, Plus, Users } from "lucide-react";
+import { ChevronRight, FileText, Loader2, Lock, Plus, Users } from "lucide-react";
 import {
   draggable,
   dropTargetForElements,
@@ -148,6 +148,8 @@ function DocSection({
   label,
   icon,
   roots,
+  creating,
+  createBusy,
   onCreate,
   rowProps,
 }: {
@@ -156,6 +158,8 @@ function DocSection({
   label: string;
   icon: React.ReactNode;
   roots: PageSummary[];
+  creating: boolean;
+  createBusy: boolean;
   onCreate: () => void;
   rowProps: Pick<
     React.ComponentProps<typeof DocRow>,
@@ -191,10 +195,13 @@ function DocSection({
         <button
           type="button"
           title={t("New document")}
+          aria-label={t("New document")}
+          aria-busy={creating}
+          disabled={createBusy}
           onClick={onCreate}
-          className="flex h-4 w-4 items-center justify-center rounded text-faint hover:text-text"
+          className="rounded p-1 text-faint transition-colors hover:bg-elevated hover:text-text disabled:opacity-50"
         >
-          <Plus size={11} />
+          {creating ? <Loader2 size={13} className="animate-spin" /> : <Plus size={13} />}
         </button>
       </div>
       {roots.length === 0 ? (
@@ -226,6 +233,7 @@ export function DocTree({ workspaceId, pages }: { workspaceId: string; pages: Pa
   const pathname = usePathname();
   const [expanded, setExpanded] = useStoredJson(EXPANDED_KEY, NO_EXPANDED);
   const [error, setError] = useState<string | null>(null);
+  const [creating, setCreating] = useState<"shared" | "private" | null>(null);
   const active = pathname.match(new RegExp(`^/${workspaceId}/docs/([^/]+)$`))?.[1] ?? null;
 
   const { byId, byParent } = useMemo(() => {
@@ -318,14 +326,17 @@ export function DocTree({ workspaceId, pages }: { workspaceId: string; pages: Pa
   );
 
   async function create(shared: boolean) {
+    setCreating(shared ? "shared" : "private");
     const result = await createPageAction(workspaceId);
     if (!result.ok) {
+      setCreating(null);
       setError(result.error);
       return;
     }
     if (shared) await setPageSharedAction(workspaceId, result.data.id, true);
     router.push(`/${workspaceId}/docs/${result.data.id}`);
     router.refresh();
+    setCreating(null);
   }
 
   const roots = byParent.get(null) ?? [];
@@ -339,6 +350,8 @@ export function DocTree({ workspaceId, pages }: { workspaceId: string; pages: Pa
         label={t("Shared")}
         icon={<Users size={11} />}
         roots={roots.filter((page) => page.shared)}
+        creating={creating === "shared"}
+        createBusy={creating !== null}
         onCreate={() => void create(true)}
         rowProps={rowProps}
       />
@@ -348,6 +361,8 @@ export function DocTree({ workspaceId, pages }: { workspaceId: string; pages: Pa
         label={t("Private")}
         icon={<Lock size={11} />}
         roots={roots.filter((page) => !page.shared)}
+        creating={creating === "private"}
+        createBusy={creating !== null}
         onCreate={() => void create(false)}
         rowProps={rowProps}
       />

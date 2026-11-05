@@ -383,8 +383,10 @@ const zh: Record<string, string> = {
   "Assignee…": "负责人…",
   Assignee: "负责人",
   "{count} assignees": "{count} 位负责人",
-  "No labels yet — create some on the Labels page.":
-    "还没有标签，可以在标签页创建。",
+  "No labels yet — create some in Settings.":
+    "还没有标签，可以在设置里创建。",
+  "Create and delete labels for tasks in this workspace.":
+    "在此工作区创建和删除任务标签。",
   "Issue title": "任务标题",
   "Add description…": "添加描述…",
   "Describe the task, e.g. 修复微信登录回调偶发失败":
@@ -741,7 +743,6 @@ const zh: Record<string, string> = {
   // workspace-shell
   "My Tasks": "我的任务",
   Favorites: "收藏",
-  Workspace: "工作区",
   "No projects yet — create one": "还没有项目，新建一个",
   "Your team": "你的团队",
   "Customize sidebar": "自定义侧边栏",

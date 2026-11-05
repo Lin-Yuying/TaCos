@@ -172,6 +172,7 @@ function SidebarNav({
   unread,
   hidden,
   width,
+  agentAllowed,
   onToggleSection,
   onInvite,
 }: {
@@ -187,6 +188,7 @@ function SidebarNav({
   // The column's current width: the Customize menu is as wide as the sidebar itself,
   // so it has to follow a drag rather than guess a number.
   width: number;
+  agentAllowed: boolean;
   onToggleSection: (key: string) => void;
   onInvite: () => void;
 }) {
@@ -247,8 +249,7 @@ function SidebarNav({
     (params.project ?? "") === projectId;
 
   return (
-    <nav className="flex-1 overflow-y-auto px-2 py-2 text-body">
-      {/* Inbox stays first; the star group only exists once you have starred something. */}
+    <nav data-sidebar-nav className="flex-1 overflow-y-auto px-2 py-2 text-body">
       <div className="pb-1">
         <NavItem
           href={`/${workspaceId}/notifications`}
@@ -259,26 +260,68 @@ function SidebarNav({
           {t("Inbox")}
         </NavItem>
       </div>
-      {/* The two places a working day starts: your own tasks, then the docs library.
-          Both used to sit inside groups; they stay pinned here instead. */}
-      <div className="space-y-0.5 pb-1">
+      <div className="pb-1">
         <NavItem
-          href={link({ view: "all", assignee: "me" })}
-          active={active({ view: "all", assignee: "me" })}
-          icon={<User size={14} />}
+          href={`/${workspaceId}/agent`}
+          active={pathname.endsWith("/agent")}
+          icon={<Bot size={14} />}
+          disabled={!agentAllowed}
+          title={
+            agentAllowed ? undefined : "Agent is disabled. Enable a ready harness in Settings."
+          }
         >
-          {t("My Tasks")}
+          {t("Agent")}
         </NavItem>
-        <NavItem href={link({ view: "open" })} active={active({ view: "open" })} icon={<Hand size={14} />}>
-          {t("Open Tasks")}
-        </NavItem>
-        <NavItem
-          href={`/${workspaceId}/docs`}
-          active={pathname.startsWith(`/${workspaceId}/docs`)}
-          icon={<FileText size={14} />}
-        >
-          {t("Documents")}
-        </NavItem>
+      </div>
+      <div className="pb-1">
+        <SectionHeader
+          label={t("Tasks")}
+          icon={<LayoutList size={11} />}
+          open={open("tasks")}
+          onToggle={() => toggleSection("tasks")}
+        />
+        {open("tasks") && (
+          <div className="space-y-0.5">
+            <NavItem
+              href={link({ view: "all", assignee: "me" })}
+              active={active({ view: "all", assignee: "me" })}
+              icon={<User size={14} />}
+            >
+              {t("My Tasks")}
+            </NavItem>
+            <NavItem
+              href={link({ view: "open" })}
+              active={active({ view: "open" })}
+              icon={<Hand size={14} />}
+            >
+              {t("Open Tasks")}
+            </NavItem>
+            <NavItem href={link({ view: "all" })} active={active({ view: "all" })} icon={<List size={14} />}>
+              {t("All Tasks")}
+            </NavItem>
+            <NavItem
+              href={link({ view: "active" })}
+              active={active({ view: "active" })}
+              icon={<Activity size={14} />}
+            >
+              {t("Active")}
+            </NavItem>
+            <NavItem
+              href={link({ view: "all", assignee: "none" })}
+              active={active({ view: "all", assignee: "none" })}
+              icon={<UserRoundX size={14} />}
+            >
+              {t("Unassigned")}
+            </NavItem>
+            <NavItem
+              href={`/${workspaceId}/review`}
+              active={pathname.endsWith("/review")}
+              icon={<ShieldCheck size={14} />}
+            >
+              {t("Review")}
+            </NavItem>
+          </div>
+        )}
       </div>
       {(favorites.length > 0 || favoritePages.length > 0) && (
         <div className="pb-1">
@@ -314,39 +357,6 @@ function SidebarNav({
           )}
         </div>
       )}
-      <DocTree workspaceId={workspaceId} pages={pages} />
-      {!hidden.includes("workspace") && (
-        <>
-          <SectionHeader
-            label={t("Workspace")}
-            icon={<LayoutList size={11} />}
-            open={open("workspace")}
-            onToggle={() => toggleSection("workspace")}
-          />
-          {open("workspace") && (
-            <div className="space-y-0.5">
-              <NavItem href={link({ view: "all" })} active={active({ view: "all" })} icon={<List size={14} />}>
-                {t("All Tasks")}
-              </NavItem>
-              <NavItem
-                href={link({ view: "active" })}
-                active={active({ view: "active" })}
-                icon={<Activity size={14} />}
-              >
-                {t("Active")}
-              </NavItem>
-              <NavItem
-                href={link({ view: "all", assignee: "none" })}
-                active={active({ view: "all", assignee: "none" })}
-                icon={<UserRoundX size={14} />}
-              >
-                {t("Unassigned")}
-              </NavItem>
-            </div>
-          )}
-        </>
-      )}
-
       <div className="mt-2">
         <SectionHeader
           label={t("Projects")}
@@ -391,6 +401,16 @@ function SidebarNav({
             ))}
           </div>
         )}
+      </div>
+
+      <div className="mt-2">
+        <SectionHeader
+          label={t("Documents")}
+          icon={<FileText size={11} />}
+          open={open("documents")}
+          onToggle={() => toggleSection("documents")}
+        />
+        {open("documents") && <DocTree workspaceId={workspaceId} pages={pages} />}
       </div>
 
       <div className="mt-2">
@@ -858,6 +878,7 @@ function SidebarRail({
   projects,
   favorites,
   favoritePages,
+  pages,
   members,
   viewerId,
   width,
@@ -870,6 +891,7 @@ function SidebarRail({
   projects: Project[];
   favorites: Project[];
   favoritePages: PageRef[];
+  pages: PageSummary[];
   members: Member[];
   viewerId: string;
   width: number;
@@ -881,11 +903,14 @@ function SidebarRail({
   const workspaceId = workspace.id;
   const view = searchParams.get("view") ?? "all";
   const assignee = searchParams.get("assignee") ?? "";
-  const mine =
+  const taskActive = (params: Record<string, string | undefined>) =>
     pathname === `/${workspaceId}` &&
     !searchParams.get("project") &&
-    view === "all" &&
-    assignee === "me";
+    (params.view ?? "all") === view &&
+    (params.assignee ?? "") === assignee;
+  const docRoots = pages.filter((page) => !page.parentId);
+  const sharedDocs = docRoots.filter((page) => page.shared);
+  const privateDocs = docRoots.filter((page) => !page.shared);
   // Dragging the rail wider turns it into a compact sidebar: labels appear, the
   // workspace chip regains its name, and everything lines up from the left edge.
   const labeled = width >= SIDEBAR_RAIL_LABEL_MIN;
@@ -924,19 +949,71 @@ function SidebarRail({
           labeled={labeled}
         />
         <RailLink
-          href={`/${workspaceId}/?view=all&assignee=me`}
-          active={mine}
-          label={t("My Tasks")}
-          icon={<User size={16} />}
+          href={`/${workspaceId}/agent`}
+          active={pathname.endsWith("/agent")}
+          label={t("Agent")}
+          icon={<Bot size={16} />}
           labeled={labeled}
+          disabled={!agentAllowed}
         />
-        <RailLink
-          href={`/${workspaceId}/docs`}
-          active={pathname.startsWith(`/${workspaceId}/docs`)}
-          label={t("Documents")}
-          icon={<FileText size={16} />}
-          labeled={labeled}
-        />
+        <RailFlyout label={t("Tasks")} icon={<LayoutList size={15} />} labeled={labeled}>
+          {(close) => [
+            <RailFlyoutLink
+              key="mine"
+              href={`/${workspaceId}/?view=all&assignee=me`}
+              active={taskActive({ view: "all", assignee: "me" })}
+              icon={<User size={14} />}
+              onSelect={close}
+            >
+              {t("My Tasks")}
+            </RailFlyoutLink>,
+            <RailFlyoutLink
+              key="open"
+              href={`/${workspaceId}/?view=open`}
+              active={taskActive({ view: "open" })}
+              icon={<Hand size={14} />}
+              onSelect={close}
+            >
+              {t("Open Tasks")}
+            </RailFlyoutLink>,
+            <RailFlyoutLink
+              key="all"
+              href={`/${workspaceId}/?view=all`}
+              active={taskActive({ view: "all" })}
+              icon={<List size={14} />}
+              onSelect={close}
+            >
+              {t("All Tasks")}
+            </RailFlyoutLink>,
+            <RailFlyoutLink
+              key="active"
+              href={`/${workspaceId}/?view=active`}
+              active={taskActive({ view: "active" })}
+              icon={<Activity size={14} />}
+              onSelect={close}
+            >
+              {t("Active")}
+            </RailFlyoutLink>,
+            <RailFlyoutLink
+              key="unassigned"
+              href={`/${workspaceId}/?view=all&assignee=none`}
+              active={taskActive({ view: "all", assignee: "none" })}
+              icon={<UserRoundX size={14} />}
+              onSelect={close}
+            >
+              {t("Unassigned")}
+            </RailFlyoutLink>,
+            <RailFlyoutLink
+              key="review"
+              href={`/${workspaceId}/review`}
+              active={pathname.endsWith("/review")}
+              icon={<ShieldCheck size={14} />}
+              onSelect={close}
+            >
+              {t("Review")}
+            </RailFlyoutLink>,
+          ]}
+        </RailFlyout>
         {/* Only the groups survive the fold, not their rows: each glyph raises a
             flyout with the group's names, leaving the column's width alone. */}
         {(favorites.length > 0 || favoritePages.length > 0 || projects.length > 0 || teamShown) && divider}
@@ -968,9 +1045,11 @@ function SidebarRail({
             ]}
           </RailFlyout>
         )}
-        {projects.length > 0 && (
-          <RailFlyout label={t("Projects")} icon={<Boxes size={15} />} labeled={labeled}>
-            {(close) =>
+        <RailFlyout label={t("Projects")} icon={<Boxes size={15} />} labeled={labeled}>
+          {(close) =>
+            projects.length === 0 ? (
+              <div className="px-2 py-1.5 text-small text-faint">{t("No projects yet.")}</div>
+            ) : (
               projects.map((project) => (
                 <RailFlyoutLink
                   key={project.id}
@@ -982,9 +1061,58 @@ function SidebarRail({
                   {project.name}
                 </RailFlyoutLink>
               ))
-            }
-          </RailFlyout>
-        )}
+            )
+          }
+        </RailFlyout>
+        <RailFlyout label={t("Documents")} icon={<FileText size={15} />} labeled={labeled}>
+          {(close) => [
+            <RailFlyoutLink
+              key="library"
+              href={`/${workspaceId}/docs`}
+              active={pathname === `/${workspaceId}/docs`}
+              icon={<FileText size={14} />}
+              onSelect={close}
+            >
+              {t("Documents")}
+            </RailFlyoutLink>,
+            ...(sharedDocs.length > 0
+              ? [
+                  <div key="shared-head" className="px-2 pb-0.5 pt-1 text-caption uppercase tracking-wide text-faint">
+                    {t("Shared")}
+                  </div>,
+                  ...sharedDocs.map((page) => (
+                    <RailFlyoutLink
+                      key={page.id}
+                      href={`/${workspaceId}/docs/${page.id}`}
+                      active={pathname === `/${workspaceId}/docs/${page.id}`}
+                      icon={page.icon ?? <FileText size={13} />}
+                      onSelect={close}
+                    >
+                      {page.title || t("Untitled")}
+                    </RailFlyoutLink>
+                  )),
+                ]
+              : []),
+            ...(privateDocs.length > 0
+              ? [
+                  <div key="private-head" className="px-2 pb-0.5 pt-1 text-caption uppercase tracking-wide text-faint">
+                    {t("Private")}
+                  </div>,
+                  ...privateDocs.map((page) => (
+                    <RailFlyoutLink
+                      key={page.id}
+                      href={`/${workspaceId}/docs/${page.id}`}
+                      active={pathname === `/${workspaceId}/docs/${page.id}`}
+                      icon={page.icon ?? <FileText size={13} />}
+                      onSelect={close}
+                    >
+                      {page.title || t("Untitled")}
+                    </RailFlyoutLink>
+                  )),
+                ]
+              : []),
+          ]}
+        </RailFlyout>
         {teamShown && (
           <RailFlyout label={t("Your team")} icon={<Users size={15} />} labeled={labeled}>
             {(close) =>
@@ -1017,14 +1145,6 @@ function SidebarRail({
             : "flex flex-col items-center gap-1 border-t border-border px-1.5 py-2"
         }
       >
-        <RailLink
-          href={`/${workspaceId}/agent`}
-          active={pathname.endsWith("/agent")}
-          label={t("Agent")}
-          icon={<Bot size={16} />}
-          labeled={labeled}
-          disabled={!agentAllowed}
-        />
         {!hidden.includes("help") && (
           <RailLink
             href={`/${workspaceId}/help`}
@@ -1034,22 +1154,6 @@ function SidebarRail({
             labeled={labeled}
           />
         )}
-        {!hidden.includes("labels") && (
-          <RailLink
-            href={`/${workspaceId}/labels`}
-            active={pathname.endsWith("/labels")}
-            label={t("Labels")}
-            icon={<Tag size={16} />}
-            labeled={labeled}
-          />
-        )}
-        <RailLink
-          href={`/${workspaceId}/review`}
-          active={pathname.endsWith("/review")}
-          label={t("Review")}
-          icon={<ShieldCheck size={16} />}
-          labeled={labeled}
-        />
         <RailLink
           href={`/${workspaceId}/trash`}
           active={pathname.endsWith("/trash")}
@@ -1077,14 +1181,9 @@ const SIDEBAR_RAIL_WIDTH_KEY = "tacos.sidebar.railwidth";
 const HIDDEN_KEY = "tacos.sidebar.hidden";
 // Pre-rail key: it listed the extras that were ON. Kept only to carry old choices over.
 const LEGACY_OPTIONAL_KEY = "tacos.sidebar.optional";
-const SIDEBAR_SECTIONS = [
-  { key: "workspace", label: "Workspace", icon: List },
-  { key: "labels", label: "Labels", icon: Tag },
-  { key: "help", label: "Help", icon: CircleHelp },
-] as const;
-// Workspace and Labels stay hidden for new accounts; Help is part of the sidebar until
-// someone takes it out.
-const DEFAULT_HIDDEN = ["workspace", "labels"];
+const SIDEBAR_SECTIONS = [{ key: "help", label: "Help", icon: CircleHelp }] as const;
+// Help is part of the sidebar until someone takes it out.
+const DEFAULT_HIDDEN: string[] = [];
 const SIDEBAR_DEFAULT = 216;
 // The one drag runs the whole way: SIDEBAR_MIN is where the full sidebar gives up and
 // the column turns into the icon rail, so pulling it in from a normal sidebar folds it
@@ -1629,7 +1728,12 @@ export function WorkspaceShell({
       if (raw) {
         const saved = JSON.parse(raw);
         if (Array.isArray(saved)) {
-          setHiddenSections(saved.filter((key) => typeof key === "string"));
+          setHiddenSections(
+            saved.filter(
+              (key) =>
+                typeof key === "string" && key !== "labels" && key !== "workspace" && key !== "tasks"
+            )
+          );
         }
       } else {
         // Carry over the pre-rail list, which named the extras that were visible. No
@@ -1695,6 +1799,7 @@ export function WorkspaceShell({
               projects={projects}
               favorites={favorites}
               favoritePages={favoritePages}
+              pages={pages}
               members={members}
               viewerId={user.id}
               width={sidebarWidth}
@@ -1719,25 +1824,13 @@ export function WorkspaceShell({
                   unread={unread}
                   hidden={hiddenSections}
                   width={sidebarWidth}
+                  agentAllowed={agentAllowed}
                   onToggleSection={toggleSection}
                   onInvite={() => setInviteOpen(true)}
                 />
               </Suspense>
 
-              <div className="space-y-0.5 border-t border-border px-2 py-2">
-                <NavItem
-                  href={`/${workspace.id}/agent`}
-                  active={pathname.endsWith("/agent")}
-                  icon={<Bot size={14} />}
-                  disabled={!agentAllowed}
-                  title={
-                    agentAllowed
-                      ? undefined
-                      : "Agent is disabled. Enable a ready harness in Settings."
-                  }
-                >
-                  {t("Agent")}
-                </NavItem>
+              <div data-sidebar-footer className="space-y-0.5 border-t border-border px-2 py-2">
                 {!hiddenSections.includes("help") && (
                   <NavItem
                     href={`/${workspace.id}/help`}
@@ -1747,22 +1840,6 @@ export function WorkspaceShell({
                     {t("Help")}
                   </NavItem>
                 )}
-                {!hiddenSections.includes("labels") && (
-                  <NavItem
-                    href={`/${workspace.id}/labels`}
-                    active={pathname.endsWith("/labels")}
-                    icon={<Tag size={14} />}
-                  >
-                    {t("Labels")}
-                  </NavItem>
-                )}
-                <NavItem
-                  href={`/${workspace.id}/review`}
-                  active={pathname.endsWith("/review")}
-                  icon={<ShieldCheck size={14} />}
-                >
-                  {t("Review")}
-                </NavItem>
                 <NavItem
                   href={`/${workspace.id}/trash`}
                   active={pathname.endsWith("/trash")}
