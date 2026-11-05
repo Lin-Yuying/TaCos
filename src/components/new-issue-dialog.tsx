@@ -22,7 +22,8 @@ import { useT } from "@/components/i18n-context";
 
 export function NewIssueDialog({ workspaceId }: { workspaceId: string }) {
   const t = useT();
-  const { composerOpen, composerStatus, composerSeed, setComposerOpen, openIssue, aiReady } = useUI();
+  const { composerOpen, composerStatus, composerSeed, setComposerOpen, openIssue, aiReady, projectComposerOpen, setProjectComposerOpen } =
+    useUI();
   const searchParams = useSearchParams();
   const pathname = usePathname();
   // Opened from a project's Overview page, the composer should stay in that project.
@@ -36,6 +37,7 @@ export function NewIssueDialog({ workspaceId }: { workspaceId: string }) {
   const [labelNames, setLabelNames] = useState<string[]>([]);
   const [projectId, setProjectId] = useState<string>("");
   const [projects, setProjects] = useState<Project[]>([]);
+  const [projectsLoaded, setProjectsLoaded] = useState(false);
   const [labels, setLabels] = useState<Label[]>([]);
   const [members, setMembers] = useState<Member[]>([]);
   const [error, setError] = useState<string | null>(null);
@@ -59,6 +61,7 @@ export function NewIssueDialog({ workspaceId }: { workspaceId: string }) {
     setAiPrompt("");
     setAiBusy(false);
     setAiError(null);
+    setProjectsLoaded(false);
     fetch(`/api/internal/${workspaceId}/projects`)
       .then((res) => res.json())
       .then((data: Project[]) => {
@@ -67,7 +70,8 @@ export function NewIssueDialog({ workspaceId }: { workspaceId: string }) {
           data.find((p) => p.id === activeProjectId)?.id ?? data[0]?.id ?? ""
         );
       })
-      .catch(() => setProjects([]));
+      .catch(() => setProjects([]))
+      .finally(() => setProjectsLoaded(true));
     fetch(`/api/internal/${workspaceId}/labels`)
       .then((res) => res.json())
       .then((data) => setLabels(data as Label[]))
@@ -81,16 +85,24 @@ export function NewIssueDialog({ workspaceId }: { workspaceId: string }) {
   useEffect(() => {
     if (!composerOpen) return;
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") {
+      // The new project dialog opens on top of this one and closes first.
+      if (e.key === "Escape" && !projectComposerOpen) {
         e.preventDefault();
         setComposerOpen(false);
       }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [composerOpen, setComposerOpen]);
+  }, [composerOpen, projectComposerOpen, setComposerOpen]);
 
   if (!composerOpen) return null;
+
+  function newProject() {
+    setProjectComposerOpen(true, (created) => {
+      setProjects((current) => [...current, created as Project]);
+      setProjectId(created.id);
+    });
+  }
 
   async function submit() {
     const project = projects.find((p) => p.id === projectId);
@@ -274,11 +286,14 @@ export function NewIssueDialog({ workspaceId }: { workspaceId: string }) {
                         {option.name}
                       </MenuItem>
                     ))}
-                    {projects.length === 0 && (
-                      <div className="px-2 py-1.5 text-small text-faint">
-                        {t("No projects yet — create one in Settings.")}
-                      </div>
-                    )}
+                    <MenuItem
+                      onSelect={() => {
+                        close();
+                        newProject();
+                      }}
+                    >
+                      {t("New project")}
+                    </MenuItem>
                   </>
                 )}
               </Menu>
@@ -453,6 +468,11 @@ export function NewIssueDialog({ workspaceId }: { workspaceId: string }) {
 
               <div className="ml-auto flex items-center gap-2">
                 {error && <span className="text-small text-danger">{t(error)}</span>}
+                {projectsLoaded && projects.length === 0 && (
+                  <button type="button" onClick={newProject} className="text-small text-accent hover:underline">
+                    {t("A task needs a project. Create one")}
+                  </button>
+                )}
                 <button
                   type="button"
                   onClick={() => void submit()}
