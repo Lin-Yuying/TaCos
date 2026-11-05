@@ -176,7 +176,7 @@ export function IssueBoard({
       {columns.map(({ status, items }) => {
         let slot = 0;
         return (
-          <section key={status} className="flex min-h-0 min-w-[100px] flex-1 flex-col">
+          <section key={status} className="flex min-h-0 min-w-[180px] flex-1 flex-col">
             <header className="flex shrink-0 items-center gap-2 px-1 pb-2">
               <StatusIcon status={status} size={13} />
               <span className="truncate text-small font-medium text-muted">
@@ -213,7 +213,7 @@ export function IssueBoard({
               {over?.status === status && over.index === slot && !!drag && <DropLine />}
               {items.length === 0 && (
                 <div className="rounded-lg border border-dashed border-border px-3 py-4 text-center text-small text-faint">
-                  {t("No {status} issues", { status: t(STATUS_META[status].label) })}
+                  {t("No {status} tasks", { status: t(STATUS_META[status].label) })}
                 </div>
               )}
             </div>

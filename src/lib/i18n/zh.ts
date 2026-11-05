@@ -412,7 +412,7 @@ const zh: Record<string, string> = {
     "调整筛选条件，或按 {key} 新建一个。",
   "New issue": "新建任务",
   "New {status} task": "新建「{status}」任务",
-  "No {status} issues": "没有「{status}」的任务",
+  "No {status} tasks": "没有「{status}」的任务",
   "All Tasks": "全部任务",
   Active: "未完成",
   Unassigned: "未分配",
