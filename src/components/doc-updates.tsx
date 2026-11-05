@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { History, X } from "lucide-react";
 import { AssigneeAvatar } from "@/components/issue-table";
 import { useLocale, useT } from "@/components/i18n-context";
@@ -10,39 +10,12 @@ import {
   restorePageVersionAction,
   undoAgentEditAction,
 } from "@/app/pages-actions";
-import { docDiffRows } from "@/lib/doc-diff";
+import { DocDiffRendered } from "@/components/doc-diff-rendered";
 import { timeAgo } from "@/lib/format";
 import type { DocPage, PageVersion, PageVersionChange } from "@/lib/pages";
 
 export function DiffLines({ before, after }: { before: string; after: string }) {
-  const t = useT();
-  const rows = useMemo(() => docDiffRows(before, after), [before, after]);
-  if (before === after) return <p className="text-small text-faint">{t("No text changed.")}</p>;
-  return (
-    <div data-doc-diff className="space-y-px font-mono text-small leading-[1.55]">
-      {rows.map((row, index) =>
-        row.kind === "gap" ? (
-          <div key={index} className="px-1 py-0.5 text-faint">
-            {t("{count} unchanged lines", { count: row.count })}
-          </div>
-        ) : (
-          <div
-            key={index}
-            data-diff={row.kind}
-            className={`whitespace-pre-wrap break-words px-1 ${
-              row.kind === "add"
-                ? "bg-code-string/10 text-text"
-                : row.kind === "del"
-                  ? "bg-danger/10 text-muted line-through"
-                  : "text-muted"
-            }`}
-          >
-            {row.text || " "}
-          </div>
-        )
-      )}
-    </div>
-  );
+  return <DocDiffRendered before={before} after={after} />;
 }
 
 // Who did what, one line per version: a restore and kept text say so instead of a name.

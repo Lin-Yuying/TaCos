@@ -945,6 +945,7 @@ const zh: Record<string, string> = {
   "No text changed.": "文字没有变化。",
   "Title: {before} → {after}": "标题：{before} → {after}",
   "{count} unchanged lines": "{count} 行没变",
+  "{count} unchanged blocks": "{count} 段没变",
   "Someone": "有人",
   Collapse: "收起",
   Calendar: "日历",
