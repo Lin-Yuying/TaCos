@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
+import { type RefObject, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { useRouter } from "next/navigation";
 import { EditorContent, NodeViewWrapper, ReactNodeViewRenderer, useEditor, type Editor, type Range } from "@tiptap/react";
 import type { NodeViewProps } from "@tiptap/react";
@@ -300,6 +300,9 @@ function PageEmbedNode({ node, extension }: NodeViewProps) {
 
 export type EditorAnchor = DocAnchor & { id: string };
 
+/** Text from outside the editor, for a shared document where the page state cannot carry it. */
+export type OutsideEdit = { at: "start" | "end" | "all"; text: string };
+
 const NO_ANCHORS: EditorAnchor[] = [];
 
 const anchorsKey = new PluginKey<DecorationSet>("commentAnchors");
@@ -371,6 +374,7 @@ export function DocumentEditor({
   onAnchorsLocated,
   onUpload,
   collab,
+  outsideEditRef,
 }: {
   value: string;
   onChange: (next: string) => void;
@@ -390,6 +394,8 @@ export function DocumentEditor({
   onUpload?: (file: File) => Promise<string | null>;
   // A shared document; its text comes from here and not from `value`. Fixed for the editor's life.
   collab?: Extract<DocCollab, { doc: unknown }>;
+  // Filled with the call that puts outside text into the editor and so into a shared document.
+  outsideEditRef?: RefObject<((edit: OutsideEdit) => void) | null>;
 }) {
   const t = useT();
   const router = useRouter();
@@ -591,6 +597,18 @@ export function DocumentEditor({
     dom.addEventListener(PICK_FILE_EVENT, pick);
     return () => dom.removeEventListener(PICK_FILE_EVENT, pick);
   }, [editor]);
+
+  useEffect(() => {
+    if (!editor || !outsideEditRef) return;
+    outsideEditRef.current = ({ at, text }) => {
+      const content = markdownToDocument(markdown, text);
+      if (at === "all") editor.commands.setContent(content);
+      else editor.commands.insertContentAt(at === "start" ? 0 : editor.state.doc.content.size, content.content ?? []);
+    };
+    return () => {
+      outsideEditRef.current = null;
+    };
+  }, [editor, markdown, outsideEditRef]);
 
   // A change from outside the editor (a linked page, an accepted AI edit) replaces the text.
   // Typing never lands here because `emitted` already holds it. A shared document takes outside

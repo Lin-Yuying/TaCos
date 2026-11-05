@@ -20,7 +20,7 @@ import {
 } from "lucide-react";
 import { Menu, MenuItem } from "@/components/menu";
 import type { PageContext, PageRefEntry } from "@/components/markdown";
-import { DocumentEditor, type EditorAnchor } from "@/components/document-editor";
+import { DocumentEditor, type EditorAnchor, type OutsideEdit } from "@/components/document-editor";
 import { useDocCollab } from "@/components/use-doc-collab";
 import { DocCommentsPanel } from "@/components/doc-comments";
 import { DocShareMenu } from "@/components/doc-share";
@@ -185,6 +185,8 @@ export function DocPageView({
 
   // Typing schedules a write; the unmount path writes whatever is still pending so
   // leaving the page never costs the last keystrokes.
+  const outsideEdit = useRef<((edit: OutsideEdit) => void) | null>(null);
+
   function editDoc(next: string) {
     setDoc(next);
     // The socket stores a shared document.
@@ -368,6 +370,10 @@ export function DocPageView({
   // "insert at cursor" API, and a page reference is usually added as its own block.
   function insertRef(reference: PageRefEntry, embed: boolean) {
     const syntax = embed ? `![[${reference.title}|${reference.id}]]` : `[[${reference.title}|${reference.id}]]`;
+    if (sharing) {
+      outsideEdit.current?.({ at: "end", text: syntax });
+      return;
+    }
     const next = doc.trim() ? `${doc.replace(/\s+$/, "")}\n\n${syntax}` : syntax;
     editDoc(next);
   }
@@ -376,6 +382,10 @@ export function DocPageView({
   // it; from there it is an ordinary line the editor can move anywhere.
   function placeSubpage(child: PageSummary) {
     const syntax = `[[${child.title}|${child.id}]]`;
+    if (sharing) {
+      outsideEdit.current?.({ at: "start", text: syntax });
+      return;
+    }
     editDoc(doc.trim() ? `${syntax}\n\n${doc}` : syntax);
   }
 
@@ -388,6 +398,10 @@ export function DocPageView({
   }
 
   function acceptAi(text: string, action: string) {
+    if (sharing) {
+      outsideEdit.current?.({ at: action === "continue" ? "end" : "all", text });
+      return;
+    }
     const next = action === "continue" && doc.trim() ? `${doc.replace(/\s+$/, "")}\n\n${text}` : text;
     editDoc(next);
     setAiPanel(null);
@@ -800,6 +814,7 @@ export function DocPageView({
                 collab={sharing ? collab : undefined}
                 value={doc}
                 onChange={editDoc}
+                outsideEditRef={outsideEdit}
                 pages={pageCtx}
                 editable={canEdit && collab.status !== "connecting"}
                 placeholder={t("Write something, or type / for commands…")}
