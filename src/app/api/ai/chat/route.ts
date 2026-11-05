@@ -1,4 +1,5 @@
 import fs from "node:fs";
+import os from "node:os";
 import path from "node:path";
 import { DATA_DIR } from "@/db/client";
 import { requireWorkspace } from "@/lib/auth";
@@ -39,13 +40,9 @@ import { harnessKeysFor, harnessesWithKeys, modelAccessFor } from "@/lib/model-k
 import { readyWithKeys } from "@/lib/harness/gate";
 import type { ApprovalDecision as HarnessApprovalDecision } from "@/lib/harness";
 import { TacosError } from "@/lib/issues";
-import {
-  buildLocalAgentTurnAttachments,
-  buildRemoteAgentTurnAttachments,
-  parseWireAttachments,
-  turnInputAttachments,
-  turnPayloadAttachments,
-} from "@/lib/agent-composer-attachments";
+import { bindTurnAttachments, copyTurnFiles, parseAttachmentIds } from "@/lib/agent-attachments";
+import { messageWithAttachments } from "@/lib/agent-attachments.shared";
+import { attachTurnFiles } from "@/lib/harness/turn-files";
 import { requireRunnerOnline, startRun } from "@/lib/runner/hub";
 import { isServerMode } from "@/lib/server-mode";
 
@@ -158,14 +155,15 @@ export async function POST(request: Request) {
       if (thread.engine !== engine) await setThreadEngine(threadId, engine);
 
       const message = text.trim();
-      const wires = parseWireAttachments(body.attachments);
-      if (!message && wires.length === 0) {
+      const attachmentIds = parseAttachmentIds(body.attachments);
+      if (!message && attachmentIds.length === 0) {
         throw new TacosError("Type a message or attach a file", 400);
       }
-      const storedMessage = message || wires.map((wire) => wire.name).join(", ");
       const actorId = access.user.id;
       await claimSharedChatTurn(threadId, actorId);
       try {
+      const turnFiles = await bindTurnAttachments(workspaceId, actorId, threadId, attachmentIds);
+      const storedMessage = messageWithAttachments(message, turnFiles);
       await appendAgentMessage({ threadId, role: "user", content: storedMessage, authorId: actorId });
       const assistantId = await appendAgentMessage({ threadId, role: "assistant", content: "" });
 
@@ -189,7 +187,11 @@ export async function POST(request: Request) {
 
       const turn = { threadId, messageId: assistantId };
       const flatPrompt = flattenMessages(messages);
-      const finishSharedTurn = () => void releaseSharedChatTurn(threadId, actorId);
+      const fileDir = path.join(os.tmpdir(), `tacos-attached-${assistantId}`);
+      const finishSharedTurn = () => {
+        fs.rmSync(fileDir, { recursive: true, force: true });
+        void releaseSharedChatTurn(threadId, actorId);
+      };
       const endTurn = (also?: () => void) => () => {
         also?.();
         finishSharedTurn();
@@ -197,7 +199,6 @@ export async function POST(request: Request) {
 
       // On a server the turn runs on this person's own computer, with their keys and logins.
       if (isServerMode()) {
-        const remoteAttachments = buildRemoteAgentTurnAttachments(flatPrompt, wires);
         const events = await startRun({
           userId: access.user.id,
           workspaceId,
@@ -207,7 +208,7 @@ export async function POST(request: Request) {
             harness: engine,
             threadId,
             projectId: thread.projectId,
-            prompt: remoteAttachments.prompt,
+            prompt: flatPrompt,
             message: storedMessage,
             model: thread.model,
             effort: thread.effort,
@@ -215,7 +216,7 @@ export async function POST(request: Request) {
             autoApproveTools: AGENT_TOOLS.filter((tool) => !tool.write).map((tool) => tool.name),
             neverAutoApproveTools: AGENT_TOOLS.filter((tool) => tool.delete).map((tool) => tool.name),
             proxy: runtime.proxy,
-            ...turnPayloadAttachments(remoteAttachments.payloadAttachments),
+            ...(turnFiles.length ? { attachments: turnFiles.map(({ id, name }) => ({ id, name })) } : {}),
           },
           signal: request.signal,
         });
@@ -242,9 +243,7 @@ export async function POST(request: Request) {
       const cwd = path.join(DATA_DIR, "agent", workspaceId, thread.projectId || "general");
       // A missing cwd makes spawn report ENOENT for the binary, on every harness's first turn here.
       fs.mkdirSync(cwd, { recursive: true });
-      const localAttachments = buildLocalAgentTurnAttachments(cwd, flatPrompt, wires);
-      const prompt = localAttachments.prompt;
-      const composerAttachments = turnInputAttachments(localAttachments.refs);
+      const { prompt, images } = attachTurnFiles(engine, flatPrompt, copyTurnFiles(turnFiles, fileDir));
       const isTurnApproved = () =>
         Boolean(grant && (grant.autoApproveTurn || thread.approval !== "ask"));
 
@@ -265,7 +264,7 @@ export async function POST(request: Request) {
           sessionId: threadId,
           cwd,
           prompt,
-          ...composerAttachments,
+          images,
           model: turnModel.model || defaults.model || null,
           effort: turnModel.effort || defaults.effort || null,
           approval: thread.approval,
@@ -313,7 +312,7 @@ export async function POST(request: Request) {
           sessionId: threadId,
           cwd,
           prompt,
-          ...composerAttachments,
+          images,
           model: turnModel.model,
           effort: turnModel.effort,
           approval: thread.approval,
@@ -361,7 +360,7 @@ export async function POST(request: Request) {
           sessionId: threadId,
           cwd,
           prompt,
-          ...composerAttachments,
+          images,
           model: turnModel.model,
           effort: turnModel.effort,
           approval: thread.approval,
@@ -409,7 +408,7 @@ export async function POST(request: Request) {
           sessionId: threadId,
           cwd,
           prompt,
-          ...composerAttachments,
+          images,
           model: turnModel.model,
           effort: turnModel.effort,
           approval: thread.approval,
@@ -457,7 +456,7 @@ export async function POST(request: Request) {
           sessionId: threadId,
           cwd,
           prompt,
-          ...composerAttachments,
+          images,
           model: turnModel.model,
           effort: turnModel.effort,
           approval: thread.approval,

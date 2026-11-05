@@ -784,7 +784,6 @@ const zh: Record<string, string> = {
   "Attach files": "添加文件",
   "Attach files…": "添加文件…",
   "Remove attachment": "移除附件",
-  '"{name}" is too large (max {max} MB)': "「{name}」太大（最多 {max} MB）",
   "At most {n} files per message": "每条消息最多 {n} 个文件",
   "Type a message or attach a file": "输入消息或添加文件",
   "The agent can change this project's tasks, comments and docs. Every change waits for your Allow.": "智能体可以修改此项目的任务、评论和文档。每项修改都要等你点「允许」。",

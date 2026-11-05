@@ -1,6 +1,5 @@
 /** Multi-harness adapter contract (H-P1-05). Authority: docs/harness-contracts.md */
 
-import type { AgentAttachmentRef } from "@/lib/agent-composer-attachments.shared";
 
 export type HarnessId = "codex" | "pi" | "opencode" | "dsh" | "codebuddy";
 
@@ -47,10 +46,14 @@ export type HarnessKeys = {
   endpoints: { id: string; label: string; baseUrl: string; envVar: string; models: string[] }[];
 };
 
+export type TurnImage = { name: string; path: string; mime: string };
+
 export type TurnInput = {
   sessionId: string;
   cwd: string;
   prompt: { system: string; body: string };
+  /** Attached images; each adapter hands them over in its own way. */
+  images?: TurnImage[];
   model: string | null;
   effort?: string | null;
   approval: ApprovalMode;
@@ -67,8 +70,6 @@ export type TurnInput = {
   keys?: HarnessKeys | null;
   /** Replaces the adapter's five-minute limit on this turn. */
   timeoutMs?: number;
-  /** Files materialized under `cwd` for this turn (composer attachments). */
-  attachments?: AgentAttachmentRef[];
 };
 
 export type TurnEvent =

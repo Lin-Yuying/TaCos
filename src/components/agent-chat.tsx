@@ -41,10 +41,13 @@ import { useUI } from "@/components/ui-context";
 import { ThreadTaskChips } from "@/components/thread-task-chips";
 import { Markdown } from "@/components/markdown";
 import {
-  AGENT_ATTACHMENT_MAX_BYTES,
   AGENT_ATTACHMENT_MAX_COUNT,
-  type AgentAttachmentWire,
-} from "@/lib/agent-composer-attachments.shared";
+  AGENT_DRAFT_PAGE,
+  messageWithAttachments,
+  splitAttachments,
+  type AgentAttachment,
+} from "@/lib/agent-attachments.shared";
+import { uploadPageFile } from "@/lib/upload-client";
 import { rememberHarness, streamAiEdit, type AgentApprovalCard, type AgentStepFrame } from "@/lib/ai-client";
 import {
   createAgentSkillAction,
@@ -914,35 +917,40 @@ function SkillManager({
   );
 }
 
-type ComposerAttachment = AgentAttachmentWire & { id: string; previewUrl?: string };
-
-async function filesToAttachments(
-  files: FileList | File[],
-  t: (key: string, vars?: Record<string, string | number>) => string
-): Promise<{ items: ComposerAttachment[]; error: string | null }> {
-  const list = Array.from(files);
-  const items: ComposerAttachment[] = [];
-  const maxMb = Math.round(AGENT_ATTACHMENT_MAX_BYTES / (1024 * 1024));
-  for (const file of list) {
-    if (file.size > AGENT_ATTACHMENT_MAX_BYTES) {
-      return { items: [], error: t('"{name}" is too large (max {max} MB)', { name: file.name, max: maxMb }) };
-    }
-    const buffer = await file.arrayBuffer();
-    const bytes = new Uint8Array(buffer);
-    let binary = "";
-    for (let i = 0; i < bytes.length; i += 1) binary += String.fromCharCode(bytes[i]!);
-    items.push({
-      id: `${file.name}-${file.size}-${file.lastModified}`,
-      name: file.name,
-      mimeType: file.type || undefined,
-      data: btoa(binary),
-      previewUrl: file.type.startsWith("image/") ? URL.createObjectURL(file) : undefined,
-    });
-  }
-  return { items, error: null };
+function UserMessageBody({ content, bubbleClass }: { content: string; bubbleClass: string }) {
+  const { text, files } = splitAttachments(content);
+  return (
+    <>
+      {text && <div className={bubbleClass}>{text}</div>}
+      {files.length > 0 && (
+        <div className="flex max-w-[85%] flex-wrap justify-end gap-1.5" data-testid="message-files">
+          {files.map((file) =>
+            file.image ? (
+              <a key={file.id} href={`/api/files/${file.id}`} target="_blank" rel="noreferrer" title={file.name}>
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src={`/api/files/${file.id}`} alt={file.name} className="max-h-40 rounded-lg border border-border object-contain" />
+              </a>
+            ) : (
+              <a
+                key={file.id}
+                href={`/api/files/${file.id}`}
+                className="flex max-w-[220px] items-center gap-1 rounded-full border border-border bg-elevated px-2 py-0.5 text-small text-muted hover:text-text"
+              >
+                <FileText size={14} className="shrink-0 text-faint" />
+                <span className="truncate">{file.name}</span>
+              </a>
+            )
+          )}
+        </div>
+      )}
+    </>
+  );
 }
 
+type ComposerAttachment = { key: string; name: string; image: boolean; previewUrl?: string; id?: string };
+
 function Composer({
+  workspaceId,
   value,
   onChange,
   onSubmit,
@@ -958,9 +966,10 @@ function Composer({
   onCreateSkill,
   onDeleteSkill,
 }: {
+  workspaceId: string;
   value: string;
   onChange: (value: string) => void;
-  onSubmit: (text: string, attachments: AgentAttachmentWire[]) => void;
+  onSubmit: (text: string, attachments: AgentAttachment[]) => void;
   busy?: boolean;
   onStop?: () => void;
   placeholder: string;
@@ -1055,63 +1064,69 @@ function Composer({
     writeToken(at, at, `${needsSpace ? " " : ""}@${skillToken(skill)} `);
   }
 
+  // Previews stay valid while their chips are up, so they are revoked only on the way out.
+  const previews = useRef(new Set<string>());
   useEffect(
     () => () => {
-      for (const item of attachments) {
-        if (item.previewUrl) URL.revokeObjectURL(item.previewUrl);
-      }
+      for (const url of previews.current) URL.revokeObjectURL(url);
     },
-    [attachments]
+    []
   );
 
-  async function addFiles(files: FileList | File[] | null | undefined) {
+  function forgetPreview(item: ComposerAttachment) {
+    if (!item.previewUrl) return;
+    URL.revokeObjectURL(item.previewUrl);
+    previews.current.delete(item.previewUrl);
+  }
+
+  function addFiles(files: FileList | File[] | null | undefined) {
     if (!files?.length || busy) return;
     setAttachError(null);
-    const { items, error } = await filesToAttachments(files, t);
-    if (error) {
-      setAttachError(error);
-      return;
-    }
-    setAttachments((prev) => {
-      const next = [...prev];
-      for (const item of items) {
-        if (next.some((existing) => existing.id === item.id)) continue;
-        if (next.length >= AGENT_ATTACHMENT_MAX_COUNT) {
-          setAttachError(t("At most {n} files per message", { n: AGENT_ATTACHMENT_MAX_COUNT }));
-          break;
+    const room = AGENT_ATTACHMENT_MAX_COUNT - attachments.length;
+    const list = Array.from(files);
+    if (list.length > room) setAttachError(t("At most {n} files per message", { n: AGENT_ATTACHMENT_MAX_COUNT }));
+    for (const file of list.slice(0, Math.max(room, 0))) {
+      const image = file.type.startsWith("image/");
+      const item: ComposerAttachment = {
+        key: crypto.randomUUID(),
+        name: file.name,
+        image,
+        previewUrl: image ? URL.createObjectURL(file) : undefined,
+      };
+      if (item.previewUrl) previews.current.add(item.previewUrl);
+      setAttachments((prev) => [...prev, item]);
+      uploadPageFile(workspaceId, AGENT_DRAFT_PAGE, file).then(
+        ({ id }) => setAttachments((prev) => prev.map((entry) => (entry.key === item.key ? { ...entry, id } : entry))),
+        (err: unknown) => {
+          forgetPreview(item);
+          setAttachments((prev) => prev.filter((entry) => entry.key !== item.key));
+          setAttachError(`${file.name}: ${t(err instanceof Error ? err.message : "Upload failed")}`);
         }
-        next.push(item);
-      }
-      return next;
-    });
+      );
+    }
   }
 
-  function removeAttachment(id: string) {
-    setAttachments((prev) => {
-      const item = prev.find((entry) => entry.id === id);
-      if (item?.previewUrl) URL.revokeObjectURL(item.previewUrl);
-      return prev.filter((entry) => entry.id !== id);
-    });
+  function removeAttachment(item: ComposerAttachment) {
+    forgetPreview(item);
+    setAttachments((prev) => prev.filter((entry) => entry.key !== item.key));
   }
+
+  const uploading = attachments.some((item) => !item.id);
 
   function submitComposer() {
-    if (busy) return;
+    if (busy || uploading) return;
     const text = value.trim();
     if (!text && attachments.length === 0) return;
     onSubmit(
       text,
-      attachments.map(({ name, mimeType, data }) => ({ name, mimeType, data }))
+      attachments.map(({ id, name, image }) => ({ id: id!, name, image }))
     );
-    setAttachments((prev) => {
-      for (const item of prev) {
-        if (item.previewUrl) URL.revokeObjectURL(item.previewUrl);
-      }
-      return [];
-    });
+    attachments.forEach(forgetPreview);
+    setAttachments([]);
     setAttachError(null);
   }
 
-  const canSend = Boolean(value.trim() || attachments.length);
+  const canSend = Boolean(value.trim() || attachments.length) && !uploading;
 
   return (
     <div
@@ -1122,7 +1137,7 @@ function Composer({
       }}
       onDrop={(event) => {
         event.preventDefault();
-        void addFiles(event.dataTransfer.files);
+        addFiles(event.dataTransfer.files);
       }}
     >
       {mention && matches.length > 0 && (
@@ -1170,8 +1185,8 @@ function Composer({
         <div className="mb-1 flex flex-wrap gap-1.5 px-1.5 pt-1">
           {attachments.map((item) => (
             <span
-              key={item.id}
-              className="flex max-w-full items-center gap-1 rounded-full border border-border bg-elevated py-0.5 pl-1 pr-1.5 text-small text-muted"
+              key={item.key}
+              className={`flex max-w-full items-center gap-1 rounded-full border border-border bg-elevated py-0.5 pl-1 pr-1.5 text-small text-muted ${item.id ? "" : "opacity-60"}`}
             >
               {item.previewUrl ? (
                 // eslint-disable-next-line @next/next/no-img-element
@@ -1179,12 +1194,12 @@ function Composer({
               ) : (
                 <FileText size={14} className="shrink-0 text-faint" />
               )}
-              <span className="max-w-[160px] truncate" title={item.name}>
+              <span className="max-w-[160px] truncate" title={item.id ? item.name : t("Uploading…")}>
                 {item.name}
               </span>
               <button
                 type="button"
-                onClick={() => removeAttachment(item.id)}
+                onClick={() => removeAttachment(item)}
                 className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-faint transition-colors hover:bg-surface hover:text-text"
                 aria-label={t("Remove attachment")}
               >
@@ -1194,14 +1209,14 @@ function Composer({
           ))}
         </div>
       )}
-      {attachError && <p className="px-2 pb-1 text-small text-danger">{t(attachError)}</p>}
+      {attachError && <p className="px-2 pb-1 text-small text-danger">{attachError}</p>}
       <input
         ref={fileInput}
         type="file"
         multiple
         className="hidden"
         onChange={(event) => {
-          void addFiles(event.target.files);
+          addFiles(event.target.files);
           event.target.value = "";
         }}
       />
@@ -1217,7 +1232,7 @@ function Composer({
           const files = event.clipboardData?.files;
           if (files?.length) {
             event.preventDefault();
-            void addFiles(files);
+            addFiles(files);
           }
         }}
         onChange={(event) => {
@@ -1920,7 +1935,9 @@ function StartComposer({
   onModel,
   onApproval,
   onStart,
+  workspaceId,
 }: {
+  workspaceId: string;
   projects: ProjectOption[];
   options: AgentHarnessOption[];
   models: CodexModel[];
@@ -1942,11 +1959,11 @@ function StartComposer({
   onEngine: (engine: AgentHarnessId) => void;
   onModel: (model: string, effort: string) => void;
   onApproval: (approval: AgentApproval) => void;
-  onStart: (text: string, attachments: AgentAttachmentWire[]) => void;
+  onStart: (text: string, attachments: AgentAttachment[]) => void;
 }) {
   const t = useT();
   const [text, setText] = useState("");
-  const submit = (message: string, attachments: AgentAttachmentWire[]) => {
+  const submit = (message: string, attachments: AgentAttachment[]) => {
     if ((!message.trim() && attachments.length === 0) || busy) return;
     onStart(message.trim(), attachments);
   };
@@ -1959,6 +1976,7 @@ function StartComposer({
           </h1>
           <div className="mt-7">
             <Composer
+              workspaceId={workspaceId}
               value={text}
               onChange={setText}
               onSubmit={(message, attachments) => {
@@ -2162,7 +2180,7 @@ export function AgentWorkspace({
     }
   }
 
-  async function start(text: string, attachments: AgentAttachmentWire[] = []) {
+  async function start(text: string, attachments: AgentAttachment[] = []) {
     setStarting(true);
     setStartError(null);
     let result: Awaited<ReturnType<typeof startAgentThreadAction>>;
@@ -2336,6 +2354,7 @@ export function AgentWorkspace({
                 rememberPrefs({ visibility });
               }}
               onEngine={chooseEngine}
+              workspaceId={workspaceId}
               onStart={(text, attachments) => void start(text, attachments)}
             />
           </>
@@ -2474,13 +2493,13 @@ function Conversation({
     pendingSent.current = true;
     const key = `tacos:agent:pending:${active.id}`;
     let pendingText = "";
-    let pendingAttachments: AgentAttachmentWire[] = [];
+    let pendingAttachments: AgentAttachment[] = [];
     try {
       const raw = sessionStorage.getItem(key);
       if (raw) {
         sessionStorage.removeItem(key);
         try {
-          const parsed = JSON.parse(raw) as { text?: string; attachments?: AgentAttachmentWire[] };
+          const parsed = JSON.parse(raw) as { text?: string; attachments?: AgentAttachment[] };
           if (parsed && typeof parsed === "object" && ("text" in parsed || "attachments" in parsed)) {
             pendingText = typeof parsed.text === "string" ? parsed.text : "";
             pendingAttachments = Array.isArray(parsed.attachments) ? parsed.attachments : [];
@@ -2523,7 +2542,7 @@ function Conversation({
     }
   }
 
-  async function send(text: string, attachments: AgentAttachmentWire[] = []) {
+  async function send(text: string, attachments: AgentAttachment[] = []) {
     const message = text.trim();
     if ((!message && attachments.length === 0) || busy || turnTaken) return;
     setInput("");
@@ -2536,7 +2555,7 @@ function Conversation({
       {
         id: `local-${startedAt}`,
         role: "user",
-        content: message || attachments.map((file) => file.name).join(", "),
+        content: messageWithAttachments(message, attachments),
         steps: [],
       },
       { id: `streaming-${startedAt}`, role: "assistant", content: "", steps: [] },
@@ -2551,7 +2570,7 @@ function Conversation({
           threadId: active.id,
           engine,
           text: message,
-          attachments: attachments.length ? attachments : undefined,
+          attachments: attachments.length ? attachments.map((file) => file.id) : undefined,
         },
         (delta) => patchLastAssistant((last) => ({ ...last, content: last.content + delta })),
         controller.signal,
@@ -2766,9 +2785,7 @@ function Conversation({
                     {message.author}
                   </span>
                 )}
-                <div className="max-w-[85%] whitespace-pre-wrap rounded-2xl rounded-br-md bg-elevated px-3.5 py-2 text-body leading-relaxed">
-                  {message.content}
-                </div>
+                <UserMessageBody content={message.content} bubbleClass={"max-w-[85%] whitespace-pre-wrap rounded-2xl rounded-br-md bg-elevated px-3.5 py-2 text-body leading-relaxed"} />
                 {forkButton}
               </div>
             ) : (
@@ -2804,6 +2821,7 @@ function Conversation({
           )}
           {error && <TurnError error={error} />}
           <Composer
+            workspaceId={workspaceId}
             value={input}
             onChange={setInput}
             onSubmit={(text, attachments) => void send(text, attachments)}

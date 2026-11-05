@@ -12,10 +12,10 @@ import { clearHarnessDetectCache } from "@/lib/harness/detect-bin";
 import { readyWithKeys, signedInHarnesses } from "@/lib/harness/gate";
 import { listComposerModels, resolveTurnModel, type ModelAccess } from "@/lib/harness/models";
 import { FIRST_CLASS_HARNESS_IDS, getHarnessAdapter, listHarnessDetect } from "@/lib/harness/registry";
+import { attachTurnFiles, fileName, type TurnFile } from "@/lib/harness/turn-files";
 import { turnTimer, writeTurnTiming, type TurnTimer } from "@/lib/harness/turn-timing";
 import type { TurnEvent } from "@/lib/harness/types";
 import { keysForHarness } from "@/lib/model-endpoint";
-import { materializePayloadAttachments, turnInputAttachments } from "@/lib/agent-composer-attachments";
 import type { ClaimedRun, EditPayload, RunnerCapabilities, TurnPayload } from "@/lib/runner/protocol";
 import { readConfig } from "./keys";
 
@@ -141,6 +141,21 @@ function mcpShim(toolToken: string, timingFile: string) {
   };
 }
 
+async function fetchTurnFiles(payload: TurnPayload, dir: string, signal: AbortSignal): Promise<TurnFile[]> {
+  const files: TurnFile[] = [];
+  for (const attachment of payload.attachments ?? []) {
+    const response = await serverFetch(`/api/runner/files/${encodeURIComponent(attachment.id)}`, { signal });
+    if (!response.ok) throw new Error(`Could not fetch the attached file ${attachment.name}`);
+    // Two files may share a name; the id keeps them apart.
+    const folder = path.join(dir, safeName(attachment.id, "file"));
+    fs.mkdirSync(folder, { recursive: true });
+    const file = path.join(folder, fileName(attachment.name, attachment.id));
+    fs.writeFileSync(file, Buffer.from(await response.arrayBuffer()));
+    files.push({ name: attachment.name, path: file });
+  }
+  return files;
+}
+
 async function* turnEvents(
   run: ClaimedRun,
   payload: TurnPayload,
@@ -159,9 +174,6 @@ async function* turnEvents(
   );
   // A missing cwd makes spawn report ENOENT for the binary, on every harness's first turn here.
   fs.mkdirSync(cwd, { recursive: true });
-  const attachmentRefs = payload.attachments?.length
-    ? materializePayloadAttachments(cwd, payload.attachments)
-    : [];
   const keys = keysForHarness(config.endpoints, payload.harness);
   const access = accessFor(keysForHarness(config.endpoints, "pi"));
   const turnModel = await resolveTurnModel(payload.harness, payload.model, payload.effort, access);
@@ -172,11 +184,14 @@ async function* turnEvents(
   const defaults = payload.harness === "codex" ? codexDefaults() : { model: "", effort: "" };
   let turnApproved = false;
 
+  const fileDir = path.join(os.tmpdir(), `tacos-attached-${safeName(run.id, "run")}`);
+  try {
+  const attached = attachTurnFiles(payload.harness, payload.prompt, await fetchTurnFiles(payload, fileDir, abort.signal));
   yield* adapter.openTurn({
     sessionId: payload.threadId,
     cwd,
-    prompt: payload.prompt,
-    ...turnInputAttachments(attachmentRefs),
+    prompt: attached.prompt,
+    images: attached.images,
     model: turnModel.model || defaults.model || null,
     effort: turnModel.effort || defaults.effort || null,
     approval: payload.approval,
@@ -205,6 +220,9 @@ async function* turnEvents(
     timeoutMs: payload.timeoutMs,
     mcp: run.toolToken ? mcpShim(run.toolToken, timingFile) : null,
   });
+  } finally {
+    fs.rmSync(fileDir, { recursive: true, force: true });
+  }
 }
 
 async function* sseDeltas(stream: ReadableStream<Uint8Array>): AsyncGenerator<TurnEvent> {

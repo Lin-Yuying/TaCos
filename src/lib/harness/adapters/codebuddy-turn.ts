@@ -84,6 +84,17 @@ function messageText(input: TurnInput): string {
 }
 
 
+function imageMessage(input: TurnInput, images: NonNullable<TurnInput["images"]>): string {
+  const content = [
+    { type: "text", text: messageText(input) },
+    ...images.map((image) => ({
+      type: "image",
+      source: { type: "base64", media_type: image.mime, data: fs.readFileSync(image.path).toString("base64") },
+    })),
+  ];
+  return JSON.stringify({ type: "user", message: { role: "user", content } });
+}
+
 export async function* openCodebuddyTurn(input: TurnInput, log?: TurnLog): AsyncGenerator<TurnEvent> {
   const binary = findHarnessBinary("codebuddy");
   if (!binary) {
@@ -123,7 +134,10 @@ export async function* openCodebuddyTurn(input: TurnInput, log?: TurnLog): Async
   if (input.prompt.system?.trim()) {
     args.push("--system-prompt", input.prompt.system.trim());
   }
-  args.push(messageText(input));
+  // Only stdin takes images.
+  const images = input.images ?? [];
+  if (images.length) args.push("--input-format", "stream-json");
+  else args.push(messageText(input));
 
   const queue: TurnEvent[] = [];
   let wake: (() => void) | null = null;
@@ -173,8 +187,10 @@ export async function* openCodebuddyTurn(input: TurnInput, log?: TurnLog): Async
     child = spawn(binary, args, {
       cwd: input.cwd,
       env: buildEnv(input.proxy, input.mcp?.env ?? {}, own, configDir),
-      stdio: ["ignore", "pipe", "pipe"],
+      stdio: [images.length ? "pipe" : "ignore", "pipe", "pipe"],
     });
+    child.stdin?.on("error", () => {});
+    child.stdin?.end(images.length ? `${imageMessage(input, images)}\n` : undefined);
   } catch (err) {
     removeConfig();
     finish(err instanceof Error ? err.message : "Could not start WorkBuddy.");

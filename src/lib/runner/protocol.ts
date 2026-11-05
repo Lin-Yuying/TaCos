@@ -1,5 +1,4 @@
 import type { AgentSkill, CodexModel } from "@/lib/ai-constants";
-import type { TurnAttachmentPayload } from "@/lib/agent-composer-attachments";
 import type { DetectResult, HarnessId, TurnEvent } from "@/lib/harness/types";
 
 // What travels between the server and a member's computer. Nothing here holds a model key.
@@ -32,7 +31,7 @@ export type TurnPayload = {
   timeoutMs?: number;
   approvalWaitMs?: number;
   /** File bytes for the member runner to write into the turn folder before `openTurn`. */
-  attachments?: TurnAttachmentPayload[];
+  attachments?: { id: string; name: string }[];
 };
 
 export type EditPayload = {

@@ -1,6 +1,5 @@
 "use client";
 
-import type { AgentAttachmentWire } from "./agent-composer-attachments.shared";
 import {
   AGENT_HARNESS_IDS,
   ENGINE_COOKIE,
@@ -72,7 +71,7 @@ export type AiEditRequest = {
   context?: string;
   history?: AiChatTurn[];
   engine?: AiEngine | AgentHarnessId | string;
-  attachments?: AgentAttachmentWire[];
+  attachments?: string[];
 };
 
 // Reads the OpenAI-compatible SSE stream from /api/ai/chat. The route sends the

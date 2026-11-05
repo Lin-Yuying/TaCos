@@ -1,3 +1,4 @@
+import { removePageAttachments } from "./attachments";
 import crypto from "node:crypto";
 import { and, asc, desc, eq, inArray, isNull, lt, or } from "drizzle-orm";
 import { getDb } from "@/db/client";
@@ -509,6 +510,13 @@ export async function setAgentThreadUnread(
   return threadOnly(await getAgentThread(workspaceId, userId, threadId));
 }
 
+export async function canSeeThread(workspaceId: string, userId: string, threadId: string): Promise<boolean> {
+  return requireThreadRow(workspaceId, userId, threadId).then(
+    () => true,
+    () => false
+  );
+}
+
 export async function deleteAgentThread(
   workspaceId: string,
   userId: string,
@@ -521,6 +529,7 @@ export async function deleteAgentThread(
   await db.delete(agentMessages).where(eq(agentMessages.threadId, threadId));
   await db.delete(agentThreadFlags).where(eq(agentThreadFlags.threadId, threadId));
   await db.delete(agentThreads).where(eq(agentThreads.id, threadId));
+  await removePageAttachments([`thread:${threadId}`]);
 }
 
 // --- turn accounting -------------------------------------------------------
