@@ -98,9 +98,14 @@ export const PageEmbed = Node.create({
     node.attrs?.pageId ? `![[${node.attrs.title}|${node.attrs.pageId}]]` : `![[${node.attrs?.title}]]`,
 });
 
-export function documentExtensions(): AnyExtension[] {
+export function documentExtensions(options: { sharedHistory?: boolean } = {}): AnyExtension[] {
   return [
-    StarterKit.configure({ link: { openOnClick: false, autolink: true }, underline: false }),
+    StarterKit.configure({
+      link: { openOnClick: false, autolink: true },
+      underline: false,
+      // A shared document undoes through its own history, one person's changes at a time.
+      ...(options.sharedHistory ? { undoRedo: false as const } : {}),
+    }),
     TaskList,
     TaskItem.configure({ nested: true }),
     // The stock table writes a leading blank line, which the reader takes as an empty block.

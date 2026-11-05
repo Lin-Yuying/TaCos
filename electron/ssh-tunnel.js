@@ -19,6 +19,9 @@ function sshArgs({ user, host, localPort, remotePort, identityFile }) {
     "-N",
     "-L",
     `127.0.0.1:${localPort}:127.0.0.1:${remotePort}`,
+    // The realtime document socket sits one port above the app, here and on the server.
+    "-L",
+    `127.0.0.1:${localPort + 1}:127.0.0.1:${remotePort + 1}`,
     "-o",
     "BatchMode=yes",
     "-o",

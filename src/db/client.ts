@@ -220,7 +220,13 @@ CREATE TABLE IF NOT EXISTS page_comments (
 );
 CREATE INDEX IF NOT EXISTS page_comments_page_idx ON page_comments (page_id);
 
-CREATE TABLE IF NOT EXISTS page_versions (
+CREATE TABLE IF NOT EXISTS page_collab (
+    page_id TEXT PRIMARY KEY,
+    state BLOB NOT NULL,
+    revision INTEGER NOT NULL,
+    updated_at TEXT NOT NULL
+  );
+  CREATE TABLE IF NOT EXISTS page_versions (
   id TEXT PRIMARY KEY,
   page_id TEXT NOT NULL,
   workspace_id TEXT NOT NULL,

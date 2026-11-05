@@ -7,6 +7,8 @@ import { BubbleMenu } from "@tiptap/react/menus";
 import { Extension } from "@tiptap/core";
 import { Plugin, PluginKey } from "@tiptap/pm/state";
 import { Decoration, DecorationSet } from "@tiptap/pm/view";
+import Collaboration from "@tiptap/extension-collaboration";
+import CollaborationCaret from "@tiptap/extension-collaboration-caret";
 import Placeholder from "@tiptap/extension-placeholder";
 import Suggestion, { type SuggestionProps } from "@tiptap/suggestion";
 import {
@@ -32,6 +34,7 @@ import { documentMarkdown, markdownToDocument } from "@/lib/editor/document-mark
 import { anchorFromSelection, anchorRanges } from "@/lib/editor/anchors";
 import type { DocAnchor } from "@/lib/doc-anchor";
 import type { PageContext } from "@/components/markdown";
+import type { DocCollab } from "@/components/use-doc-collab";
 import { useT } from "@/components/i18n-context";
 
 type SlashCommand = {
@@ -140,6 +143,7 @@ export function DocumentEditor({
   onAnchorClick,
   onAnchorsLocated,
   onUpload,
+  collab,
 }: {
   value: string;
   onChange: (next: string) => void;
@@ -154,6 +158,8 @@ export function DocumentEditor({
   onAnchorsLocated?: (ids: Set<string>) => void;
   // Sends a pasted, dropped or picked file and returns its address, or null when it failed.
   onUpload?: (file: File) => Promise<string | null>;
+  // A shared document; its text comes from here and not from `value`. Fixed for the editor's life.
+  collab?: Extract<DocCollab, { doc: unknown }>;
 }) {
   const t = useT();
   const router = useRouter();
@@ -238,8 +244,17 @@ export function DocumentEditor({
 
   const editor = useEditor({
     immediatelyRender: false,
-    extensions: [...documentExtensions(), Placeholder.configure({ placeholder: placeholder ?? "" }), slash, CommentAnchors.configure({ store: anchorStore })],
-    content: markdownToDocument(markdown, value),
+    extensions: [
+      ...documentExtensions({ sharedHistory: Boolean(collab) }),
+      Placeholder.configure({ placeholder: placeholder ?? "" }), slash, CommentAnchors.configure({ store: anchorStore }),
+      ...(collab
+        ? [
+            Collaboration.configure({ document: collab.doc }),
+            CollaborationCaret.configure({ provider: collab.provider, user: collab.user }),
+          ]
+        : []),
+    ],
+    ...(collab ? {} : { content: markdownToDocument(markdown, value) }),
     editable,
     editorProps: {
       handlePaste: (_view, event) => dropFiles(event.clipboardData?.files),

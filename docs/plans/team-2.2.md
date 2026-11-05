@@ -34,7 +34,7 @@ Item-level checks stay cheap (types, check scripts). End-to-end tests and screen
 | 11 | Agent partial edit and undo, shown in updates panel | done | Check script: partial edit leaves other text unchanged; undo restores |
 | 12 | Agent workspace-level read and search, cross-workspace read; writes name a target | done | Check script: write without target refused; no read outside joined workspaces |
 | 13 | Hand a task to own Agent, queue while computer is off, write back comment and notify | done | Check script: queued turn runs when runner returns; write asks for approval by default |
-| 14 | Realtime co-editing, presence avatars, cursors | todo | Two clients converge in a check script; if unstable, `blocked` and 2.2 ships without it |
+| 14 | Realtime co-editing, presence avatars, cursors | done | Two clients converge in a check script; if unstable, `blocked` and 2.2 ships without it |
 | 15 | Batch E2E and screenshots with real models and new data dirs; fresh-context review; fix findings | todo | Report lists tested and untested |
 | 16 | Deploy to the server without touching morula or Caddy; add this Mac's public key | todo | `curl` through the tunnel returns the app; memory measured |
 | 17 | Push, open PR; after the user merges by hand, tag `v2.2.0` and publish "TaCos 2.2" | todo | Release has its assets; title set |
@@ -94,3 +94,12 @@ Levels are view, comment and edit (`src/lib/page-level.ts`). A shared page has o
 - A handed-off turn may run 30 minutes instead of five. An approval card waits up to 25 minutes, then counts as denied, and the Agent reports what it could not do. The tool token also lasts 30 minutes.
 - The MCP bridge moved from `fetch` to `node:http`, because `fetch` gives up on a silent server after five minutes. A harness's own MCP client may still cut a long wait shorter; if it does, the wait ends as denied, because the route watches the connection.
 - The result is one comment by the Agent and one notification. Partial text from a failed turn stays in the conversation and is not posted.
+
+### Item 14: realtime co-editing
+
+- `@hocuspocus/server` runs inside the Next server process on the team server only, on `127.0.0.1`, one port above the app (`TACOS_COLLAB_PORT` overrides it). The SSH tunnel forwards both ports, and a member key may open only those two. The desktop app on its own has no socket and saves the way it did.
+- The plan named Hocuspocus's SQLite extension. It needs the `sqlite3` native package, so the hooks keep the state in a `page_collab` table on the existing better-sqlite3 database.
+- `pages.doc` stays the Markdown everything else reads. The socket stores to it at most 2 s after typing stops, and within 10 s during continuous typing, through `updatePage`, so versions and permissions apply as for any save. Text written some other way (an Agent edit, a restore, an old-path save) is applied to the Yjs history as a diff, so open clients merge it instead of doubling text.
+- A short-lived signed token names the workspace, page and person. The socket checks it, the membership and the page level when a client connects. A reader's connection is read-only on the server.
+- If the socket does not sync within 5 s, the page falls back to the old save path.
+- Limits: the last person to type gets the version's attribution; a permission change reaches an open connection only when it reconnects; an outside write can overwrite up to about 2 s of typing that was not stored yet; leaving the page during a lost connection loses text not yet synced.

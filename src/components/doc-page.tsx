@@ -21,6 +21,7 @@ import {
 import { Menu, MenuItem } from "@/components/menu";
 import type { PageContext, PageRefEntry } from "@/components/markdown";
 import { DocumentEditor, type EditorAnchor } from "@/components/document-editor";
+import { useDocCollab } from "@/components/use-doc-collab";
 import { DocCommentsPanel } from "@/components/doc-comments";
 import { DocShareMenu } from "@/components/doc-share";
 import { AssigneeAvatar } from "@/components/issue-table";
@@ -128,6 +129,8 @@ export function DocPageView({
   const [activeComment, setActiveComment] = useState<string | null>(null);
   const [commentBusy, setCommentBusy] = useState(false);
   const [conflict, setConflict] = useState<{ doc: string; revision: number; by: string | null } | null>(null);
+  const collab = useDocCollab(workspaceId, page.id);
+  const sharing = collab.status === "live" || collab.status === "reconnecting";
   const pending = useRef<string | null>(null);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
   // Saves run one at a time: each one names the revision the one before it produced.
@@ -182,6 +185,8 @@ export function DocPageView({
   // leaving the page never costs the last keystrokes.
   function editDoc(next: string) {
     setDoc(next);
+    // The socket stores a shared document.
+    if (sharing) return;
     pending.current = next;
     if (timer.current) clearTimeout(timer.current);
     timer.current = setTimeout(flushDoc, 700);
@@ -212,7 +217,8 @@ export function DocPageView({
     conflicted.current = false;
     pending.current = null;
     setConflict(null);
-    setDoc(next.doc);
+    // A shared document already took the restored text from the server.
+    if (!sharing) setDoc(next.doc);
     setTitle(next.title);
     router.refresh();
   }
@@ -445,6 +451,25 @@ export function DocPageView({
           )}
         </span>
         <div className="ml-auto flex shrink-0 items-center gap-2">
+          {collab.status === "reconnecting" && (
+            <span data-doc-reconnecting className="text-[11.5px] text-faint">
+              {t("Reconnecting…")}
+            </span>
+          )}
+          {sharing && collab.peers.length > 0 && (
+            <span data-doc-presence className="flex items-center -space-x-1">
+              {collab.peers.slice(0, 5).map((peer) => (
+                <span
+                  key={peer.clientId}
+                  title={peer.name}
+                  style={{ backgroundColor: peer.color }}
+                  className="flex size-[18px] items-center justify-center rounded-full border border-surface text-[10px] font-medium text-white"
+                >
+                  {peer.name.slice(0, 1).toUpperCase()}
+                </span>
+              ))}
+            </span>
+          )}
           <span
             className={`text-[11.5px] text-faint transition-opacity duration-300 ${
               saved ? "opacity-100" : "opacity-0"
@@ -755,10 +780,12 @@ export function DocPageView({
             {!canEdit && !doc.trim() && <p className="text-[13.5px] text-faint">{t("This page is empty.")}</p>}
             {(canEdit || doc.trim()) && (
               <DocumentEditor
+                key={sharing ? "shared" : "alone"}
+                collab={sharing ? collab : undefined}
                 value={doc}
                 onChange={editDoc}
                 pages={pageCtx}
-                editable={canEdit}
+                editable={canEdit && collab.status !== "connecting"}
                 placeholder={t("Write something, or type / for commands…")}
                 anchors={anchors}
                 activeAnchor={activeComment}

@@ -3,6 +3,7 @@ import { and, desc, eq, inArray, isNotNull, isNull, lt, or } from "drizzle-orm";
 import { getDb } from "../db/client";
 import { notifications, pageAccess, pageComments, pageFavorites, pageVersions, pages, users } from "../db/schema";
 import { attachmentImageType, getAttachment, removePageAttachments } from "./attachments";
+import { collabDocWritten } from "./collab/live";
 import { isPageLevel, levelAllows, type PageLevel } from "./page-level";
 import { TacosError, getProject, nowIso } from "./issues";
 
@@ -593,7 +594,7 @@ export async function updatePage(
   pageId: string,
   viewerId: string,
   patch: { title?: string; doc?: string; icon?: string | null; baseRevision?: number },
-  options: { via?: string } = {}
+  options: { via?: string; fromCollab?: boolean } = {}
 ): Promise<DocPage> {
   const page = await getPage(workspaceId, pageId, viewerId);
   if (!page) throw new TacosError("Page not found", 404);
@@ -642,6 +643,7 @@ export async function updatePage(
   }
   const updated = await findPage(workspaceId, pageId);
   if (!updated) throw new TacosError("Page not found", 404);
+  if (next.doc !== undefined && !options.fromCollab) collabDocWritten(pageId, updated.doc, updated.revision);
   return updated;
 }
 
@@ -774,6 +776,7 @@ async function writeBack(page: DocPage, write: VersionWrite): Promise<DocPage> {
   await recordVersion(page, write);
   const updated = await findPage(page.workspaceId, page.id);
   if (!updated) throw new TacosError("Page not found", 404);
+  collabDocWritten(page.id, updated.doc, updated.revision);
   return updated;
 }
 

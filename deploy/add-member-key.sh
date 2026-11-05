@@ -16,5 +16,6 @@ if grep -qF "$BODY" "$FILE"; then
   echo "Already added."
   exit 0
 fi
-printf 'restrict,port-forwarding,permitopen="127.0.0.1:%s" %s\n' "$PORT" "$KEY" >> "$FILE"
+# The realtime document socket sits one port above the app.
+printf 'restrict,port-forwarding,permitopen="127.0.0.1:%s",permitopen="127.0.0.1:%s" %s\n' "$PORT" "$((PORT + 1))" "$KEY" >> "$FILE"
 echo "Added."

@@ -2,9 +2,12 @@
 
 import { revalidatePath } from "next/cache";
 import { requireWorkspace } from "@/lib/auth";
+import { collabRunning } from "@/lib/collab/live";
+import { issueCollabToken } from "@/lib/collab/token";
 import {
   createPage,
   deletePage,
+  getPage,
   getPageVersionChange,
   importMarkdownPage,
   keepUnsavedText,
@@ -327,5 +330,22 @@ export async function setPageCoverAction(
     const { user } = await requireWorkspace(workspaceId);
     await setPageCover(workspaceId, pageId, user.id, attachmentId);
     refresh(workspaceId);
+  });
+}
+
+// Null means this page saves the old way: the desktop app on its own has no socket.
+export async function getCollabSessionAction(
+  workspaceId: string,
+  pageId: string
+): Promise<ActionResult<{ token: string; user: { name: string; color: string } } | null>> {
+  return run(async () => {
+    const { user } = await requireWorkspace(workspaceId);
+    if (!collabRunning()) return null;
+    if (!(await getPage(workspaceId, pageId, user.id))) return null;
+    const hue = [...user.id].reduce((sum, char) => (sum * 31 + char.charCodeAt(0)) % 360, 7);
+    return {
+      token: issueCollabToken({ workspaceId, pageId, userId: user.id }),
+      user: { name: user.displayName, color: `hsl(${hue} 55% 45%)` },
+    };
   });
 }

@@ -706,11 +706,21 @@ async function localPortFree(port) {
   });
 }
 
+// The tunnel holds this port and the next one.
+async function freeTunnelPort() {
+  let port = TUNNEL_LOCAL_PORT;
+  for (let tries = 0; tries < 20; tries += 1) {
+    if ((await localPortFree(port)) && (await localPortFree(port + 1))) return port;
+    port = await freePort();
+  }
+  throw new Error("Could not find two free local ports for the SSH connection.");
+}
+
 async function startTunnel(config) {
   stopTunnel();
   const target = parseTarget(config.target);
   if (!target) throw new Error("Enter the SSH address like tacos@203.0.113.7");
-  const localPort = (await localPortFree(TUNNEL_LOCAL_PORT)) ? TUNNEL_LOCAL_PORT : await freePort();
+  const localPort = await freeTunnelPort();
   tunnel = createTunnel({
     ...target,
     localPort,

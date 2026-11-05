@@ -1,4 +1,4 @@
-import { index, integer, primaryKey, real, sqliteTable, text, uniqueIndex } from "drizzle-orm/sqlite-core";
+import { blob,index, integer, primaryKey, real, sqliteTable, text, uniqueIndex } from "drizzle-orm/sqlite-core";
 
 export const users = sqliteTable("users", {
   id: text("id").primaryKey(),
@@ -647,4 +647,13 @@ export const agentRuns = sqliteTable("agent_runs", {
   error: text("error"),
   createdAt: text("created_at").notNull(),
   finishedAt: text("finished_at"),
+});
+
+// A document's shared editing state; pages.doc stays the text everything else reads.
+export const pageCollab = sqliteTable("page_collab", {
+  pageId: text("page_id").primaryKey(),
+  state: blob("state", { mode: "buffer" }).notNull(),
+  // The page revision this state matches. If the page moved on, the state takes in its text.
+  revision: integer("revision").notNull(),
+  updatedAt: text("updated_at").notNull(),
 });

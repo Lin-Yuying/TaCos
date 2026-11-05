@@ -1030,6 +1030,7 @@ const zh: Record<string, string> = {
   "The server restarted during this run": "这次运行中服务器重启了",
   "This task is no longer available to you": "你已经看不到这个任务了",
   "This task was closed while it waited": "这个任务在等待时被关闭了",
+  "Reconnecting…": "正在重新连接…",
 };
 
 export default zh;

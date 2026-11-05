@@ -16,7 +16,7 @@ The installer adds the `tacos` account, `/opt/tacos`, `/var/lib/tacos`, `/etc/ta
 2. On the server, add the line the member sends: `sudo /opt/tacos/deploy/add-member-key.sh "<line>"`.
 3. Have the member enter `tacos@<server>` under **Team server over SSH** and connect.
 
-The key can only forward to the TaCos port. It opens no shell.
+The key can only forward to the TaCos port and the realtime document socket one port above it, which also listens on `127.0.0.1`. It opens no shell.
 
 ## Backup
 
