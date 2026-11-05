@@ -19,6 +19,11 @@ async function main() {
     JSON.stringify(mentions.parseMentions("hi @Alex and @sam.r, mail a@b.com @alex")) === JSON.stringify(["alex", "sam.r"]),
     "parseMentions must find unique usernames and skip emails"
   );
+  assert(
+    JSON.stringify(mentions.parseMentions("请@[张三 丰]看，@李四 也看，@[Mary Ann]、a@[x]")) ===
+      JSON.stringify(["张三 丰", "李四", "mary ann"]),
+    "parseMentions must read any username in brackets and a hand-typed one"
+  );
   const { createIssue, addComment, updateIssue } = await import("../src/lib/issues");
   const db = getDb();
   const [project] = await db.select().from(projects).limit(1);

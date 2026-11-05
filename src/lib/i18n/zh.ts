@@ -259,6 +259,8 @@ const zh: Record<string, string> = {
   "Open registration. Join an existing workspace with a code, or create your own.":
     "开放注册。可以用邀请码加入已有的工作区，也可以自己创建。",
   Username: "用户名",
+  "Username must be 1-40 characters without @, [, ] or line breaks": "用户名要 1 到 40 个字符，不能包含 @、[、] 或换行。",
+  "Username is already taken": "这个用户名已经有人用了，换一个吧。",
   "e.g. alex": "例如 alex",
   "Display name": "显示名称",
   "e.g. Alex Chen": "例如 陈小明",

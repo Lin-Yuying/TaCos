@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { AssigneeAvatar } from "@/components/issue-table";
 import type { Member } from "@/lib/issues";
 import { useT } from "@/components/i18n-context";
+import { mentionText } from "@/lib/mentions";
 
 /** The comment composer: "@" opens a member list, Cmd or Ctrl + Enter submits. */
 export function MentionBox({
@@ -44,7 +45,7 @@ export function MentionBox({
           .slice(0, 6);
 
   function track(next: string, caret: number) {
-    const found = /(^|[^A-Za-z0-9_.+\-/@])@([A-Za-z0-9_.-]*)$/.exec(next.slice(0, caret));
+    const found = /(^|[^A-Za-z0-9_.+\-/@])@([^\s@[\]]*)$/.exec(next.slice(0, caret));
     setQuery(found ? found[2] : null);
     setPick(0);
   }
@@ -52,7 +53,7 @@ export function MentionBox({
   function insert(member: Member) {
     const el = box.current;
     const caret = el?.selectionStart ?? value.length;
-    const head = value.slice(0, caret).replace(/@([A-Za-z0-9_.-]*)$/, `@${member.username} `);
+    const head = value.slice(0, caret).replace(/@([^\s@[\]]*)$/, () => `${mentionText(member.username)} `);
     const next = head + value.slice(caret);
     onChange(next);
     setQuery(null);

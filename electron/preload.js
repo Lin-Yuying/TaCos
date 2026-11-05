@@ -4,7 +4,13 @@ const { contextBridge, ipcRenderer } = require("electron");
 // without causing a hydration attribute mismatch.
 window.addEventListener("load", () => {
   setTimeout(() => {
-    document.documentElement.dataset.desktop = "true";
+    const root = document.documentElement;
+    root.dataset.desktop = "true";
+    // When React takes <html> over again it clears the attribute, and the window's buttons
+    // would then sit on top of the page.
+    new MutationObserver(() => {
+      if (root.dataset.desktop !== "true") root.dataset.desktop = "true";
+    }).observe(root, { attributes: true, attributeFilter: ["data-desktop"] });
   }, 0);
 });
 

@@ -17,6 +17,8 @@ Second line of the same paragraph.
 
 Ask @sam.r and **@bold** here, 请@alice 看一下, but not a@b or foo/@bar or \`@code\`.
 
+请@[张三 丰]看一下，@[李四] 也看。
+
 - bullet one
 - bullet two
   - nested bullet

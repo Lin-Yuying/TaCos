@@ -15,6 +15,7 @@ const nodeNet = require("node:net");
 const { spawn, spawnSync } = require("node:child_process");
 const { initAppUpdater, getAppUpdateMenuItem } = require("./updater");
 const { createTunnel, parseTarget } = require("./ssh-tunnel");
+const { adoptShellPath } = require("./shell-path");
 
 const DEFAULT_SERVER = "http://localhost:3000";
 const isMac = process.platform === "darwin";
@@ -1029,6 +1030,8 @@ if (!app.requestSingleInstanceLock()) {
     nativeTheme.themeSource = "light";
     Menu.setApplicationMenu(buildMenu());
     logLine(`app ready ${app.getVersion()} on ${process.platform}-${process.arch}`);
+    // Before anything starts that looks for an Agent CLI or runs one.
+    await adoptShellPath({ log: logLine });
     // Packaged builds only. Dev stays idle. No UI / timers in H-DESKTOP-UPDATE-01.
     initAppUpdater({ log: logLine, getServerUrl: () => serverUrl });
     // Windows and Linux pass the opened file on the command line instead of sending

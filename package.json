@@ -1,7 +1,7 @@
 {
   "name": "tacos",
   "productName": "TaCos",
-  "version": "2.2.1",
+  "version": "2.2.2",
   "private": true,
   "description": "TaCos — self-hosted issue tracker for teams and their agents",
   "license": "MIT",

@@ -1,6 +1,7 @@
 import type { JSONContent } from "@tiptap/core";
 import { MarkdownManager } from "@tiptap/markdown";
 import { documentExtensions } from "./extensions";
+import { mentionText } from "@/lib/mentions";
 
 type TextEncoder = {
   encodeTextForMarkdown: (text: string, node: { marks?: unknown[] }, parent?: { type?: string }) => string;
@@ -29,7 +30,7 @@ export function documentMarkdown(): MarkdownManager {
   target.applyMarkToContent = (mark, content, attrs) =>
     applyMark(
       mark,
-      content.map((node) => (node.type === "mention" ? { type: "text", text: `@${node.attrs?.id}` } : node)),
+      content.map((node) => (node.type === "mention" ? { type: "text", text: mentionText(String(node.attrs?.id)) } : node)),
       attrs
     );
   return manager;

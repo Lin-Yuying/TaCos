@@ -4,6 +4,7 @@ import { TaskItem, TaskList } from "@tiptap/extension-list";
 import { Table, TableCell, TableHeader, TableRow, renderTableToMarkdown } from "@tiptap/extension-table";
 import Image from "@tiptap/extension-image";
 import Mention from "@tiptap/extension-mention";
+import { mentionText } from "@/lib/mentions";
 
 // Stored documents stay Markdown. These nodes carry the three things TaCos adds to it,
 // so `[[page]]`, `![[page]]` and `[PROJ-1](issue:id)` come back from the editor unchanged.
@@ -99,8 +100,8 @@ export const PageEmbed = Node.create({
     node.attrs?.pageId ? `![[${node.attrs.title}|${node.attrs.pageId}]]` : `![[${node.attrs?.title}]]`,
 });
 
-// The stored form is plain `@username`, the same words a comment uses, so anything reading
-// the Markdown sees who is meant. An address such as a@b.com stays text.
+// The stored form is plain `@username` or `@[any other name]`, the same words a comment uses,
+// so anything reading the Markdown sees who is meant. An address such as a@b.com stays text.
 const MENTION_BOUNDARY = /[A-Za-z0-9_.+\-/@]/;
 
 export const DocMention = Mention.extend({
@@ -117,13 +118,13 @@ export const DocMention = Mention.extend({
     tokenize: (src: string, tokens: Array<{ raw?: string }>) => {
       const before = tokens?.at(-1)?.raw?.at(-1);
       if (before && MENTION_BOUNDARY.test(before)) return undefined;
-      const match = /^@([A-Za-z0-9][A-Za-z0-9_.-]*[A-Za-z0-9_]|[A-Za-z0-9])/.exec(src);
+      const match = /^@(?:\[([^\]\n]+)\]|([A-Za-z0-9][A-Za-z0-9_.-]*[A-Za-z0-9_]|[A-Za-z0-9]))/.exec(src);
       if (!match) return undefined;
-      return { type: "docMention", raw: match[0], username: match[1] };
+      return { type: "docMention", raw: match[0], username: match[1] ?? match[2] };
     },
   },
   parseMarkdown: (token) => ({ type: "mention", attrs: { id: token.username, label: null } }),
-  renderMarkdown: (node) => `@${node.attrs?.id}`,
+  renderMarkdown: (node) => mentionText(String(node.attrs?.id)),
 }).configure({ HTMLAttributes: { class: "doc-mention", "data-testid": "mention-chip" } });
 
 export function documentExtensions(
