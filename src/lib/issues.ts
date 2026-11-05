@@ -1831,6 +1831,8 @@ export type ListFilters = {
   viewerId?: string;
   // Tasks that one agent chat published (H-COLLAB-07).
   sourceThreadId?: string;
+  // Tasks an agent created (API or MCP), not ones a person opened in the app.
+  agent?: boolean;
 };
 
 // Totals for a project's Overview page; grouped in SQL so the count stays right
@@ -1880,6 +1882,9 @@ export async function listIssues(
 
   if (filters.sourceThreadId) {
     conditions.push(eq(issues.sourceThreadId, filters.sourceThreadId));
+  }
+  if (filters.agent) {
+    conditions.push(inArray(issues.createdVia, ["api", "mcp"]));
   }
   if (filters.status === "active") {
     conditions.push(inArray(issues.status, ["todo", "in_progress"]));

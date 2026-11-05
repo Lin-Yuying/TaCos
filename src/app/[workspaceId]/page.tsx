@@ -7,7 +7,7 @@ import { ListHeader } from "@/components/list-header";
 import { IssueLayout } from "@/components/issue-layout";
 import { listFieldValues, listTaskFields } from "@/lib/task-fields";
 
-type View = "all" | "active" | "open" | "my" | "unassigned" | Status;
+type View = "all" | "active" | "open" | "my" | "unassigned" | "agent" | Status;
 
 export default async function WorkspaceIssuesPage({
   params,
@@ -72,6 +72,7 @@ async function IssuesView({
         : assigneeParam === "none"
           ? null
           : (assigneeMember?.id ?? undefined),
+    agent: view === "agent",
   });
 
   const [fields, values] = await Promise.all([
@@ -82,7 +83,7 @@ async function IssuesView({
   return (
     <div className="flex min-h-0 min-w-0 flex-1 flex-col">
       <ListHeader
-        view={view === "all" || view === "active" || view === "open" ? view : (view as Status)}
+        view={view === "all" || view === "active" || view === "open" || view === "agent" ? view : (view as Status)}
         q={q}
         label={label}
         count={issues.length}

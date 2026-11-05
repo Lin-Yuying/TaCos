@@ -43,7 +43,7 @@ Item-level checks stay cheap (types, check scripts). End-to-end tests and screen
 | 17 | Code highlighting in the document editor | done | `node --import tsx scripts/check-doc-code-highlight.ts` |
 | 18 | Comment count in the page margin | done | `node --import tsx scripts/check-doc-comment-count.ts`; screenshots in item 26 |
 | 19 | Embedded page content shows in the editor | done | Confirmed the editor drew only the title. `node --import tsx scripts/check-doc-page-embed.ts`; screenshots in item 26 |
-| 20 | Agent view for tasks | todo | Check script for the query; screenshots in item 26 |
+| 20 | Agent view for tasks | done | `node --import tsx scripts/check-agent-task-view.ts`; screenshots in item 26 |
 | 21 | Blocker report from a task, notifying the right person | todo | Check script: report creates a record and a notification |
 | 22 | Sub-tasks | todo | Check script: parent and child rules across UI, REST, MCP |
 | 23 | Task dependencies | todo | Check script: cycle refused; blocked state shown |

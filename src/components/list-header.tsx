@@ -9,12 +9,13 @@ import type { Status } from "@/lib/constants";
 import { useT } from "@/components/i18n-context";
 import { PAGE_INSET } from "@/lib/page-chrome";
 
-type View = "all" | "active" | "open" | Status;
+type View = "all" | "active" | "open" | "agent" | Status;
 
 const TITLES: Record<string, string> = {
   all: "All Tasks",
   active: "Active",
   open: "Open Tasks",
+  agent: "Agent",
 };
 for (const status of ["in_progress", "todo", "done", "canceled"] as const) {
   TITLES[status] = STATUS_META[status].label;
