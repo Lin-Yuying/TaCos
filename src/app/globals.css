@@ -247,6 +247,14 @@ html[data-desktop] .app-auth-menu {
 .document-editor .ProseMirror li[data-checked] > div { flex: 1; min-width: 0; }
 .document-editor .ProseMirror li[data-checked="true"] > div { color: var(--color-faint); text-decoration: line-through; }
 .document-editor .ProseMirror blockquote { border-left: 2px solid var(--color-border-strong); padding-left: 12px; color: var(--color-muted); }
+.document-editor .ProseMirror div[data-type="details"] { display: grid; grid-template-columns: 16px minmax(0, 1fr); column-gap: 4px; border: 1px solid var(--color-border); border-radius: 8px; padding: 8px 12px; }
+.document-editor .ProseMirror div[data-type="details"] > button { grid-column: 1; grid-row: 1; align-self: center; width: 16px; height: 16px; color: var(--color-muted); }
+.document-editor .ProseMirror div[data-type="details"] > button::before { content: "▸"; font-size: 14px; }
+.document-editor .ProseMirror div[data-type="details"].is-open > button::before { content: "▾"; }
+.document-editor .ProseMirror div[data-type="details"] > div { display: contents; }
+.document-editor .ProseMirror div[data-type="details"] summary { grid-column: 2; grid-row: 1; font-weight: 600; }
+.document-editor .ProseMirror div[data-type="details"] div[data-type="detailsContent"] { grid-column: 1 / -1; grid-row: 2; }
+.document-editor .ProseMirror aside[data-callout] { border-left: 2px solid var(--color-accent); background: var(--color-surface); padding: 8px 12px; }
 .document-editor .ProseMirror pre { border: 1px solid var(--color-border); border-radius: 8px; background: var(--color-surface); padding: 12px; font-family: var(--font-mono); font-size: 12.5px; }
 .document-editor .ProseMirror :not(pre) > code { border-radius: 4px; background: var(--color-elevated); padding: 2px 4px; font-family: var(--font-mono); font-size: 12.5px; }
 .document-editor .ProseMirror a { color: var(--color-accent); text-decoration: underline; text-underline-offset: 2px; }

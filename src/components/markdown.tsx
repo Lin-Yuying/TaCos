@@ -442,6 +442,27 @@ export function MarkdownBlock({
         </Tag>
       );
     }
+    case "toggle":
+      return (
+        <details className="my-2 rounded-md border border-border px-3 py-2" open={block.open}>
+          <summary className="cursor-pointer text-body font-medium">{inline(block.summary, "sum")}</summary>
+          {block.body.length > 0 && (
+            <div className="mt-2">
+              {block.body.map((child, i) => (
+                <MarkdownBlock key={i} block={child} pages={pages} issues={issues} />
+              ))}
+            </div>
+          )}
+        </details>
+      );
+    case "callout":
+      return (
+        <aside className="my-2 border-l-2 border-accent bg-surface px-3 py-2 text-body">
+          {block.body.map((child, i) => (
+            <MarkdownBlock key={i} block={child} pages={pages} issues={issues} />
+          ))}
+        </aside>
+      );
     case "quote":
       return (
         <blockquote

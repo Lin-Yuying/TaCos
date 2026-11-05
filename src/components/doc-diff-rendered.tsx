@@ -102,6 +102,25 @@ function DiffBlock({ block, tone }: { block: Block; tone: "same" | "add" | "del"
           ))}
         </p>
       );
+    case "toggle":
+      return (
+        <div className={`my-1 ${frame}`} data-diff={tone}>
+          <div className="text-body font-medium">
+            <DiffInlines nodes={block.summary} />
+          </div>
+          {block.body.map((child, i) => (
+            <DiffBlock key={i} block={child} tone={tone} />
+          ))}
+        </div>
+      );
+    case "callout":
+      return (
+        <aside className={`my-1 border-l-2 border-accent pl-3 ${frame}`} data-diff={tone}>
+          {block.body.map((child, i) => (
+            <DiffBlock key={i} block={child} tone={tone} />
+          ))}
+        </aside>
+      );
     case "quote":
       return (
         <blockquote

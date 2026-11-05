@@ -34,7 +34,11 @@ export type Block =
   // ![alt](https://…) on its own line — a picture block, the way Notion imports one
   | { kind: "image"; alt: string; src: string; depth: number }
   // ![[Page title]] on its own line — the target document is inlined here
-  | { kind: "embed"; text: string; pageId?: string; depth: number };
+  | { kind: "embed"; text: string; pageId?: string; depth: number }
+  // :::toggle {open} Summary \n body \n ::: — a section that opens
+  | { kind: "toggle"; open: boolean; summary: Inline[]; body: Block[] }
+  // :::callout \n body \n ::: — a note set apart from the paragraph
+  | { kind: "callout"; body: Block[] };
 
 const HEADING = /^\s*(#{1,6})\s+(.*)$/;
 const BULLET = /^\s*[-*+]\s+/;
@@ -89,6 +93,12 @@ export function splitBlocks(src: string): string[] {
       // blank lines stay ignored — there is nothing above them for a separator to mean.
       const placed = start > 0 ? i - start - 1 : 0;
       for (let n = 0; n < placed; n += 1) blocks.push("");
+      continue;
+    }
+    const fenceEnd = consumeCustomFence(lines, i);
+    if (fenceEnd !== null) {
+      blocks.push(lines.slice(i, fenceEnd).join("\n"));
+      i = fenceEnd;
       continue;
     }
     if (FENCE.test(line)) {
@@ -435,9 +445,42 @@ function parseTable(lines: string[]): Block | null {
   };
 }
 
+function consumeCustomFence(lines: string[], start: number): number | null {
+  if (!/^:::(?:toggle|callout)\b/.test(lines[start] ?? "")) return null;
+  let depth = 1;
+  for (let i = start + 1; i < lines.length; i += 1) {
+    if (/^:::(?:toggle|callout)\b/.test(lines[i])) depth += 1;
+    else if (/^:::\s*$/.test(lines[i])) {
+      depth -= 1;
+      if (depth === 0) return i + 1;
+    }
+  }
+  return null;
+}
+
+function fenceBody(lines: string[]): string {
+  const body = lines.slice(1);
+  if (/^:::\s*$/.test(body[body.length - 1] ?? "")) body.pop();
+  return body.join("\n").replace(/^\n+/, "").replace(/\n+$/, "");
+}
+
 export function parseBlock(raw: string): Block {
   const lines = raw.split("\n");
   const first = lines[0] ?? "";
+
+  const toggle = /^:::toggle(?:\s+(\{open\}))?(?:\s+(.*))?$/.exec(first);
+  if (toggle && /^:::\s*$/.test(lines[lines.length - 1] ?? "")) {
+    return {
+      kind: "toggle",
+      open: toggle[1] === "{open}",
+      summary: parseInline((toggle[2] ?? "").trim()),
+      body: parseBlocks(fenceBody(lines)),
+    };
+  }
+
+  if (/^:::callout\s*$/.test(first) && /^:::\s*$/.test(lines[lines.length - 1] ?? "")) {
+    return { kind: "callout", body: parseBlocks(fenceBody(lines)) };
+  }
 
   const fence = FENCE.exec(first);
   if (fence) {
@@ -595,6 +638,8 @@ const BLOCK_PREFIXES = [
   /^\s*[-*+]\s+/,
   /^\s*\d+[.)]\s+/,
   /^\s*>\s?/,
+  /^:::toggle(?:\s+\{open\})?\s?/,
+  /^:::callout\s*/,
 ];
 
 function blockPrefixLength(line: string): number {
@@ -639,6 +684,10 @@ function passageText(source: string): PassageMap {
   for (const line of source.split("\n")) {
     if (/^\s*```/.test(line)) {
       fenced = !fenced;
+      offset += line.length + 1;
+      continue;
+    }
+    if (!fenced && /^:::\s*$/.test(line)) {
       offset += line.length + 1;
       continue;
     }

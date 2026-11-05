@@ -16,8 +16,10 @@ import Suggestion, { type SuggestionProps } from "@tiptap/suggestion";
 import {
   Bold,
   CheckSquare,
+  ChevronRight,
   Code,
   GripVertical,
+  Info,
   Heading1,
   Heading2,
   Heading3,
@@ -65,6 +67,8 @@ const COMMANDS: SlashCommand[] = [
   { label: "Numbered list", hint: "Ordered items", keywords: "ordered ol number list", icon: ListOrdered, run: (e, r) => e.chain().focus().deleteRange(r).toggleOrderedList().run() },
   { label: "To-do list", hint: "Checkable items", keywords: "todo task checkbox check", icon: CheckSquare, run: (e, r) => e.chain().focus().deleteRange(r).toggleTaskList().run() },
   { label: "Quote", hint: "Set text apart", keywords: "blockquote citation", icon: Quote, run: (e, r) => e.chain().focus().deleteRange(r).toggleBlockquote().run() },
+  { label: "Toggle", hint: "A section that opens", keywords: "toggle details collapse disclosure", icon: ChevronRight, run: (e, r) => e.chain().focus().deleteRange(r).setDetails().run() },
+  { label: "Callout", hint: "Set a note apart", keywords: "callout note aside banner", icon: Info, run: (e, r) => e.chain().focus().insertContentAt(r, { type: "callout", content: [{ type: "paragraph" }] }).run() },
   { label: "Code", hint: "Fenced block", keywords: "code block pre", icon: Code, run: (e, r) => e.chain().focus().deleteRange(r).toggleCodeBlock().run() },
   { label: "Table", hint: "Rows and columns", keywords: "table grid", icon: TableIcon, run: (e, r) => e.chain().focus().deleteRange(r).insertTable({ rows: 3, cols: 3, withHeaderRow: true }).run() },
   { label: "Image or file", hint: "Upload to this document", keywords: "image picture photo attachment upload file", icon: ImageIcon, run: (e, r) => {
