@@ -23,7 +23,7 @@ Item-level checks stay cheap (types, check scripts). End-to-end tests and screen
 
 | # | Item | Status | Pass |
 |---|---|---|---|
-| 1 | New chat composer can send again after a chat was started | todo | Check script or E2E in item 26: second chat sends |
+| 1 | New chat composer can send again after a chat was started | done | Check script or E2E in item 26: second chat sends |
 | 2 | Per-turn timing log: model, tool requests with bytes, output upload, approval wait; try the CodeBuddy tool-loading setting | todo | Check script: a turn writes every segment |
 | 3 | Members change their own display name in Settings | todo | Check script: own name changes; empty and over-long names refused |
 | 4 | Paste and upload images and files in the Agent composer, handed to the harness on the member's computer | todo | Check script: attachment reaches the turn payload; real-model check in item 26 |

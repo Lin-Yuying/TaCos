@@ -1872,6 +1872,8 @@ export function AgentWorkspace({
   const router = useRouter();
   const [starting, setStarting] = useState(false);
   const [startError, setStartError] = useState<string | null>(null);
+  // This component stays mounted across threads, so New chat would come back still busy.
+  if (starting && active) setStarting(false);
   const [drawer, setDrawer] = useState(false);
   const [draftProject, setDraftProject] = useState(projects[0]?.id ?? "");
   const [draftVisibility, setDraftVisibility] = useState<"private" | "shared">("private");
