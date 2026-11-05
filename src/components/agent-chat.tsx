@@ -947,6 +947,8 @@ function UserMessageBody({ content, bubbleClass }: { content: string; bubbleClas
   );
 }
 
+const SHARED_TURN_POLL_MS = 4000;
+
 type ComposerAttachment = { key: string; name: string; image: boolean; previewUrl?: string; id?: string };
 
 function Composer({
@@ -1114,7 +1116,7 @@ function Composer({
   const uploading = attachments.some((item) => !item.id);
 
   function submitComposer() {
-    if (busy || uploading) return;
+    if (busy || uploading || submitDisabled) return;
     const text = value.trim();
     if (!text && attachments.length === 0) return;
     onSubmit(
@@ -2482,6 +2484,13 @@ function Conversation({
   const box = useRef<HTMLTextAreaElement | null>(null);
   const pendingSent = useRef(false);
 
+  // Nothing tells this viewer when the other person's turn ends, so ask while it lasts.
+  useEffect(() => {
+    if (!turnTaken) return;
+    const timer = setInterval(() => router.refresh(), SHARED_TURN_POLL_MS);
+    return () => clearInterval(timer);
+  }, [turnTaken, router]);
+
   useEffect(() => {
     bottom.current?.scrollIntoView({ block: "end" });
   }, [messages, approval]);
@@ -2825,7 +2834,8 @@ function Conversation({
             value={input}
             onChange={setInput}
             onSubmit={(text, attachments) => void send(text, attachments)}
-            busy={busy || turnTaken}
+            busy={busy}
+            submitDisabled={turnTaken}
             onStop={() => abort.current?.abort()}
             placeholder={t("Message TaCos")}
             inputRef={box}

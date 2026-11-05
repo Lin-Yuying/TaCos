@@ -1,6 +1,6 @@
 import { removePageAttachments } from "./attachments";
 import crypto from "node:crypto";
-import { and, asc, desc, eq, inArray, isNull, lt, or } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, isNotNull, isNull, lt, or } from "drizzle-orm";
 import { getDb } from "@/db/client";
 import { agentMessages, agentSteps, agentThreadFlags, agentThreads, issues, projects, users } from "@/db/schema";
 import { claimIssue, listIssues, TacosError, type Status } from "./issues";
@@ -644,6 +644,14 @@ export async function releaseSharedChatTurn(threadId: string, userId: string): P
     .update(agentThreads)
     .set({ turnUserId: null, turnStartedAt: null, updatedAt: now })
     .where(and(eq(agentThreads.id, threadId), eq(agentThreads.turnUserId, userId)));
+}
+
+/** Every turn ended with the process, so no shared chat may stay locked after a restart. */
+export async function clearSharedChatTurns(): Promise<void> {
+  await getDb()
+    .update(agentThreads)
+    .set({ turnUserId: null, turnStartedAt: null })
+    .where(isNotNull(agentThreads.turnUserId));
 }
 
 // Copy everything up to and including one message into a new private chat; the source stays as it was.
