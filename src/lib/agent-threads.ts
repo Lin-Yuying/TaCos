@@ -2,6 +2,7 @@ import { removePageAttachments } from "./attachments";
 import crypto from "node:crypto";
 import { and, asc, desc, eq, inArray, isNotNull, isNull, lt, or } from "drizzle-orm";
 import { getDb } from "@/db/client";
+import { issueRef } from "@/lib/format";
 import { agentMessages, agentSteps, agentThreadFlags, agentThreads, issues, projects, users } from "@/db/schema";
 import { claimIssue, listIssues, TacosError, type Status } from "./issues";
 
@@ -858,7 +859,7 @@ export async function getSourceThread(
   return row ?? null;
 }
 
-export type ThreadTask = { id: string; identifier: string; title: string; status: Status };
+export type ThreadTask = { id: string; ref: string; title: string; status: Status };
 
 // Tasks that a chat published. Task visibility rules apply to the viewer.
 export async function listThreadTasks(
@@ -867,16 +868,24 @@ export async function listThreadTasks(
   viewerId: string
 ): Promise<ThreadTask[]> {
   const rows = await listIssues(workspaceId, { sourceThreadId: threadId, viewerId, status: "all", limit: 50 });
-  const out = rows.map((r) => ({ id: r.id, identifier: r.identifier, title: r.title, status: r.status }));
+  const out = rows.map((r) => ({ id: r.id, ref: issueRef(r), title: r.title, status: r.status }));
   // H-COLLAB-08: a chat opened for a task also shows that task.
   const focus = await focusIssueOf(threadId);
   if (focus && !out.some((r) => r.id === focus)) {
     const [row] = await getDb()
-      .select({ id: issues.id, identifier: issues.identifier, title: issues.title, status: issues.status })
+      .select({
+        id: issues.id,
+        identifier: issues.identifier,
+        number: issues.number,
+        projectName: projects.name,
+        title: issues.title,
+        status: issues.status,
+      })
       .from(issues)
+      .leftJoin(projects, eq(projects.id, issues.projectId))
       .where(and(eq(issues.workspaceId, workspaceId), eq(issues.id, focus)))
       .limit(1);
-    if (row) out.unshift({ ...row, status: row.status as Status });
+    if (row) out.unshift({ id: row.id, ref: issueRef(row), title: row.title, status: row.status as Status });
   }
   return out;
 }
