@@ -1095,6 +1095,7 @@ const SIDEBAR_DEFAULT = 216;
 // column is the full sidebar again.
 const SIDEBAR_MIN = 180;
 const SIDEBAR_MAX = 420;
+const SIDEBAR_CONTENT_MIN = 480;
 // The rail only holds 32px targets, so 48px is enough and 44px is the floor.
 const SIDEBAR_RAIL = 48;
 const SIDEBAR_RAIL_MIN = 44;
@@ -1216,7 +1217,9 @@ function SidebarResizer({
     if (!dragging) return;
     const move = (e: PointerEvent) => {
       const next = origin.current.width + e.clientX - origin.current.x;
-      latest.current = Math.min(max, Math.max(min, next));
+      // Whatever the sidebar takes, the content card keeps room to work in.
+      const room = Math.max(min, Math.min(max, window.innerWidth - SIDEBAR_CONTENT_MIN));
+      latest.current = Math.min(room, Math.max(min, next));
       onWidth(latest.current);
     };
     const stop = () => {
@@ -1251,14 +1254,14 @@ function SidebarResizer({
         onWidth(resetTo);
         onDone(resetTo);
       }}
-      className="group absolute -right-[3px] top-0 z-20 h-full w-1.5 cursor-col-resize"
+      className="group absolute -right-[11px] top-0 z-20 flex h-full w-[15px] cursor-col-resize touch-none justify-end"
     >
-      {/* The edge already sits next to the content card's own border, so a strong line
-          here read as a second, darker divider running the full height. Hover only
-          hints at the boundary; the line belongs to the drag itself. */}
+      {/* The line people see is the content card's border, across the gutter from this
+          column, so the handle reaches over to it. Hover only hints at the boundary; the
+          strong line belongs to the drag itself. */}
       <div
-        className={`mx-auto h-full transition-colors ${
-          dragging ? "w-0.5 bg-accent/45" : "w-px group-hover:bg-border"
+        className={`mr-[2px] h-full w-0.5 transition-colors ${
+          dragging ? "bg-accent/45" : "group-hover:bg-accent/25"
         }`}
       />
     </div>

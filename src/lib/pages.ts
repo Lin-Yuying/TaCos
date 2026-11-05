@@ -5,7 +5,8 @@ import { notifications, pageAccess, pageCollab, pageComments, pageFavorites, pag
 import { attachmentImageType, getAttachment, removePageAttachments } from "./attachments";
 import { collabDocWritten } from "./collab/live";
 import { isPageLevel, levelAllows, type PageLevel } from "./page-level";
-import { TacosError, getProject, nowIso } from "./issues";
+import { TacosError, getProject, listMembers, nowIso } from "./issues";
+import { parseDocMentions } from "./mentions";
 
 export type DocPage = {
   id: string;
@@ -586,6 +587,30 @@ async function recordVersion(page: DocPage, write: VersionWrite): Promise<void> 
     .where(and(eq(pageVersions.pageId, page.id), lt(pageVersions.seq, seq - MAX_VERSIONS_PER_PAGE + 1)));
 }
 
+// One notice to each member newly mentioned in the text who can read the page. The person
+// who wrote it gets none, and a save that keeps an old mention does not send it again.
+async function notifyDocMentions(page: DocPage, doc: string, authorId: string): Promise<void> {
+  const before = new Set(parseDocMentions(page.doc));
+  const added = parseDocMentions(doc).filter((name) => !before.has(name));
+  if (added.length === 0) return;
+  const members = await listMembers(page.workspaceId);
+  const who = members.find((member) => member.id === authorId)?.displayName ?? "";
+  for (const member of members) {
+    if (!added.includes(member.username.toLowerCase())) continue;
+    if (member.id === authorId || !pageVisible(page, member.id)) continue;
+    await getDb().insert(notifications).values({
+      id: crypto.randomUUID(),
+      workspaceId: page.workspaceId,
+      userId: member.id,
+      issueId: "",
+      pageId: page.id,
+      type: "doc_mentioned",
+      body: who,
+      createdAt: nowIso(),
+    });
+  }
+}
+
 /** Someone else changed the body after this save's text was loaded. */
 export const PAGE_CONFLICT = "This document changed while you were editing it";
 
@@ -643,6 +668,7 @@ export async function updatePage(
   }
   const updated = await findPage(workspaceId, pageId);
   if (!updated) throw new TacosError("Page not found", 404);
+  if (next.doc !== undefined) await notifyDocMentions(page, updated.doc, viewerId);
   if (next.doc !== undefined && !options.fromCollab) collabDocWritten(pageId, updated.doc, updated.revision);
   return updated;
 }

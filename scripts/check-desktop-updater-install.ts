@@ -130,12 +130,14 @@ async function main() {
     // H-DESKTOP-UPDATE-07: force trusted so this check still covers silent install.
     mod.setTrustedSignatureForTests?.(true);
 
-    // Simulate download-ready → auto confirm path
+    // A finished download asks nothing until the person clicks.
     dialogResponse = 0;
     handlers["update-downloaded"]?.({ version: "2.0.1" });
-    // allow setImmediate + async dialog
     await new Promise((r) => setTimeout(r, 30));
-    assert(dialogCalls >= 1, "update-downloaded must open confirm dialog");
+    assert(dialogCalls === 0, "update-downloaded must not open a dialog by itself");
+    assert(quitCalls === 0, "update-downloaded must not restart by itself");
+    await mod.confirmAndInstall({ force: true });
+    assert(dialogCalls >= 1, "clicking update must open the confirm dialog");
     await new Promise((r) => setImmediate(r));
     await new Promise((r) => setTimeout(r, 30));
     assert(quitCalls >= 1, "confirm must call quitAndInstall");

@@ -1,7 +1,7 @@
 // H-COLLAB-10: "@username" mentions in comments and task descriptions.
-// A mention starts at the line start or after a space or an opening bracket, so an
-// email address such as a@b.com is not a mention.
-export const MENTION_RE = /(^|[\s(（[，,。:：])@([A-Za-z0-9][A-Za-z0-9_.-]*[A-Za-z0-9_]|[A-Za-z0-9])/g;
+// A mention cannot follow a character of an address or a path, so an email address such
+// as a@b.com is not a mention. It can follow Chinese text, which has no spaces.
+export const MENTION_RE = /(^|[^A-Za-z0-9_.+\-/@])@([A-Za-z0-9][A-Za-z0-9_.-]*[A-Za-z0-9_]|[A-Za-z0-9])/g;
 
 // Unique usernames in the text, in lowercase, in the order that they appear.
 export function parseMentions(text: string): string[] {
@@ -11,6 +11,11 @@ export function parseMentions(text: string): string[] {
     if (!out.includes(name)) out.push(name);
   }
   return out;
+}
+
+// The usernames a document's Markdown mentions. Code is quoted text, not an address to anyone.
+export function parseDocMentions(markdown: string): string[] {
+  return parseMentions(markdown.replace(/```[\s\S]*?```/g, " ").replace(/`[^`\n]*`/g, " "));
 }
 
 // Splits text into plain parts and mention parts for display.

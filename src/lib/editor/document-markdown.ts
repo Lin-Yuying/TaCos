@@ -4,6 +4,7 @@ import { documentExtensions } from "./extensions";
 
 type TextEncoder = {
   encodeTextForMarkdown: (text: string, node: { marks?: unknown[] }, parent?: { type?: string }) => string;
+  applyMarkToContent: (mark: string, content: JSONContent[], attrs?: unknown) => JSONContent[];
 };
 
 // The stock manager writes `&` as `&amp;` for readers that decode HTML entities. The TaCos
@@ -22,6 +23,15 @@ export function documentMarkdown(): MarkdownManager {
       .replaceAll(placeholders[1], "<")
       .replaceAll(placeholders[2], ">");
   };
+  // The manager marks only text, so `**@sam**` would lose its bold as a chip. It stays text,
+  // and a notice still goes out because the stored words are the same.
+  const applyMark = target.applyMarkToContent.bind(manager);
+  target.applyMarkToContent = (mark, content, attrs) =>
+    applyMark(
+      mark,
+      content.map((node) => (node.type === "mention" ? { type: "text", text: `@${node.attrs?.id}` } : node)),
+      attrs
+    );
   return manager;
 }
 

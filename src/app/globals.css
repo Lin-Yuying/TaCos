@@ -253,6 +253,7 @@ html[data-desktop] .app-auth-menu {
 .document-editor .ProseMirror a[data-page-ref],
 .document-editor .ProseMirror a[data-issue-ref] { cursor: pointer; }
 .document-editor .ProseMirror div[data-page-embed] { cursor: pointer; border: 1px solid var(--color-border); border-radius: 8px; background: var(--color-surface); padding: 8px 12px; font-size: 14px; color: var(--color-muted); }
+.document-editor .doc-mention { border-radius: 4px; padding: 1px 4px; font-weight: 500; color: var(--color-accent); background: color-mix(in srgb, var(--color-accent) 10%, transparent); }
 .document-editor .doc-comment-anchor { background: color-mix(in srgb, var(--color-code-number) 16%, transparent); border-bottom: 1px solid color-mix(in srgb, var(--color-code-number) 60%, transparent); }
 .document-editor .doc-comment-anchor.is-active { background: color-mix(in srgb, var(--color-code-number) 32%, transparent); }
 .document-editor .ProseMirror hr { margin: 16px 0; border-color: var(--color-border); }

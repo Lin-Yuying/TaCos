@@ -788,6 +788,8 @@ export function DocPageView({
                 editable={canEdit && collab.status !== "connecting"}
                 placeholder={t("Write something, or type / for commands…")}
                 anchors={anchors}
+                members={members}
+                viewerId={viewerId}
                 activeAnchor={activeComment}
                 onComment={
                   canComment

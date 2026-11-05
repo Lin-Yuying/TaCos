@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { AssigneeAvatar } from "@/components/issue-table";
 import type { Member } from "@/lib/issues";
 import { useT } from "@/components/i18n-context";
@@ -12,18 +12,26 @@ export function MentionBox({
   busy,
   onChange,
   onSubmit,
+  focusOn,
 }: {
   value: string;
   members?: Member[];
   busy: boolean;
   onChange: (value: string) => void;
   onSubmit: () => void;
+  // The caret comes here each time this changes to something.
+  focusOn?: unknown;
 }) {
   const t = useT();
   const box = useRef<HTMLTextAreaElement>(null);
   // H-COLLAB-10: "@" opens a member list. The query is the text after "@" up to the caret.
   const [query, setQuery] = useState<string | null>(null);
   const [pick, setPick] = useState(0);
+
+  useEffect(() => {
+    if (focusOn) box.current?.focus();
+  }, [focusOn]);
+
   const matches =
     query === null
       ? []
@@ -36,7 +44,7 @@ export function MentionBox({
           .slice(0, 6);
 
   function track(next: string, caret: number) {
-    const found = /(^|\s)@([A-Za-z0-9_.-]*)$/.exec(next.slice(0, caret));
+    const found = /(^|[^A-Za-z0-9_.+\-/@])@([A-Za-z0-9_.-]*)$/.exec(next.slice(0, caret));
     setQuery(found ? found[2] : null);
     setPick(0);
   }
