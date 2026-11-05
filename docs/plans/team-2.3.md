@@ -35,7 +35,7 @@ Item-level checks stay cheap (types, check scripts). End-to-end tests and screen
 | 9 | One left edge for title, toolbar and content on every page; board fills the width and stays readable with the task panel open; board column order; line icon for documents; Documents page groups match the sidebar; read items in Inbox stay legible | done | `node --import tsx scripts/check-team-2.3-layout.ts`; screenshots at 1440 and 1100 wide deferred to item 26 |
 | 10 | Sidebar order per Decisions; one word for workspace; the document + matches the project + and shows it is working | done | `check-agents-md` glossary; screenshots in item 26 |
 | 11 | Updates panel shows rendered inline changes, tables as tables | done | Check script over text and table diffs |
-| 12 | Updates by several editors merge into one entry that collapses | todo | Check script: grouping rule |
+| 12 | Updates by several editors merge into one entry that collapses | done | `node --import tsx scripts/check-doc-update-groups.ts` |
 | 13 | Table: add and delete rows and columns | todo | Round-trip check on an edited table |
 | 14 | Drag blocks; turn a block into another type | todo | Round-trip check; screenshots in item 26 |
 | 15 | Link and color in the selection toolbar | todo | Round-trip check on color syntax |

@@ -6,6 +6,7 @@ import { attachmentImageType, getAttachment, removePageAttachments } from "./att
 import { collabDocWritten } from "./collab/live";
 import { isPageLevel, levelAllows, type PageLevel } from "./page-level";
 import { TacosError, getProject, listMembers, nowIso } from "./issues";
+import { DOC_UPDATE_MERGE_MS } from "./doc-update-groups";
 import { parseDocMentions } from "./mentions";
 
 export type DocPage = {
@@ -507,9 +508,10 @@ export async function setPageMemberLevel(
   if (level) await db.insert(pageAccess).values(ids.map((id) => ({ pageId: id, userId, level })));
 }
 
-// Edits by the same person within this window are one version, so typing does not fill
-// the Updates panel. An Agent's edits are never merged: each one can be undone by itself.
-const VERSION_MERGE_MS = 10 * 60 * 1000;
+// Edits by the same person within DOC_UPDATE_MERGE_MS are one version, so typing does not
+// fill the Updates panel. Edits by several people in that window stay separate versions
+// and collapse into one panel entry. An Agent's edits stay separate so each one can be
+// undone by itself.
 const MAX_VERSIONS_PER_PAGE = 200;
 
 type VersionWrite = {
@@ -559,7 +561,7 @@ async function recordVersion(page: DocPage, write: VersionWrite): Promise<void> 
     latest.reason === "edit" &&
     latest.via === "you" &&
     latest.actorId === write.actorId &&
-    Date.now() - Date.parse(latest.createdAt) < VERSION_MERGE_MS
+    Date.now() - Date.parse(latest.createdAt) < DOC_UPDATE_MERGE_MS
   ) {
     await db
       .update(pageVersions)
@@ -701,6 +703,7 @@ export type PageVersion = {
   via: string;
   reason: string;
   restoredFrom: number | null;
+  createdAt: string;
   updatedAt: string;
 };
 
@@ -719,6 +722,7 @@ export async function listPageVersions(
       via: pageVersions.via,
       reason: pageVersions.reason,
       restoredFrom: pageVersions.restoredFrom,
+      createdAt: pageVersions.createdAt,
       updatedAt: pageVersions.updatedAt,
       actorId: users.id,
       displayName: users.displayName,
@@ -736,12 +740,15 @@ export async function listPageVersions(
 
 export type PageVersionChange = { title: string; doc: string; beforeTitle: string; beforeDoc: string };
 
-/** One version with the text it replaced. Kept unsaved text never counts as the page's past. */
+/** The text a version replaced. `spanFromId` is the oldest version in a collapsed run of
+ *  editors and `versionId` is the newest, so the diff covers the whole run. Kept unsaved
+ *  text never counts as the page's past. */
 export async function getPageVersionChange(
   workspaceId: string,
   pageId: string,
   viewerId: string,
-  versionId: string
+  versionId: string,
+  spanFromId?: string
 ): Promise<PageVersionChange> {
   const page = await getPage(workspaceId, pageId, viewerId);
   if (!page) throw new TacosError("Page not found", 404);
@@ -752,16 +759,26 @@ export async function getPageVersionChange(
     .where(and(eq(pageVersions.pageId, pageId), eq(pageVersions.id, versionId)))
     .limit(1);
   if (!version) throw new TacosError("Version not found", 404);
+  let from = version;
+  if (spanFromId && spanFromId !== versionId) {
+    const [spanFrom] = await db
+      .select()
+      .from(pageVersions)
+      .where(and(eq(pageVersions.pageId, pageId), eq(pageVersions.id, spanFromId)))
+      .limit(1);
+    if (!spanFrom || spanFrom.seq > version.seq) throw new TacosError("Version not found", 404);
+    from = spanFrom;
+  }
   const [before] = await db
     .select({ title: pageVersions.title, doc: pageVersions.doc, reason: pageVersions.reason })
     .from(pageVersions)
-    .where(and(eq(pageVersions.pageId, pageId), lt(pageVersions.seq, version.seq), inArray(pageVersions.reason, PAGE_TEXT_REASONS)))
+    .where(and(eq(pageVersions.pageId, pageId), lt(pageVersions.seq, from.seq), inArray(pageVersions.reason, PAGE_TEXT_REASONS)))
     .orderBy(desc(pageVersions.seq))
     .limit(1);
   return {
     title: version.title,
     doc: version.doc,
-    beforeTitle: before?.title ?? version.title,
+    beforeTitle: before?.title ?? from.title,
     beforeDoc: before?.doc ?? "",
   };
 }

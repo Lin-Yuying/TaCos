@@ -137,11 +137,12 @@ export async function listPageVersionsAction(
 export async function getPageVersionChangeAction(
   workspaceId: string,
   pageId: string,
-  versionId: string
+  versionId: string,
+  spanFromId?: string
 ): Promise<ActionResult<PageVersionChange>> {
   return run(async () => {
     const { user } = await requireWorkspace(workspaceId);
-    return getPageVersionChange(workspaceId, pageId, user.id, versionId);
+    return getPageVersionChange(workspaceId, pageId, user.id, versionId, spanFromId);
   });
 }
 

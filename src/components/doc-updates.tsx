@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { History, X } from "lucide-react";
 import { AssigneeAvatar } from "@/components/issue-table";
 import { useLocale, useT } from "@/components/i18n-context";
@@ -11,8 +11,9 @@ import {
   undoAgentEditAction,
 } from "@/app/pages-actions";
 import { DocDiffRendered } from "@/components/doc-diff-rendered";
+import { groupDocUpdates } from "@/lib/doc-update-groups";
 import { timeAgo } from "@/lib/format";
-import type { DocPage, PageVersion, PageVersionChange } from "@/lib/pages";
+import type { DocPage, PageAuthor, PageVersion, PageVersionChange } from "@/lib/pages";
 
 export function DiffLines({ before, after }: { before: string; after: string }) {
   return <DocDiffRendered before={before} after={after} />;
@@ -26,6 +27,41 @@ function versionLabel(version: PageVersion, t: ReturnType<typeof useT>): string 
   if (version.reason === "undo") return `${name} · ${t("Undid version {n}", { n: version.restoredFrom ?? 0 })}`;
   if (version.reason === "restore") return `${name} · ${t("Restored version {n}", { n: version.restoredFrom ?? 0 })}`;
   return name;
+}
+
+function editorsOf(versions: PageVersion[]): PageAuthor[] {
+  const seen = new Set<string>();
+  const people: PageAuthor[] = [];
+  for (const version of versions) {
+    const actor = version.actor;
+    if (!actor || seen.has(actor.id)) continue;
+    seen.add(actor.id);
+    people.push(actor);
+  }
+  return people;
+}
+
+function personName(person: PageAuthor, t: ReturnType<typeof useT>): string {
+  return person.displayName || t("Someone");
+}
+
+function editorsLabel(people: PageAuthor[], t: ReturnType<typeof useT>): string {
+  if (people.length === 0) return t("Someone");
+  if (people.length === 1) return personName(people[0], t);
+  if (people.length === 2) return t("{a} and {b}", { a: personName(people[0], t), b: personName(people[1], t) });
+  return t("{name} and {count} others", { name: personName(people[0], t), count: people.length - 1 });
+}
+
+function EditorFaces({ people }: { people: PageAuthor[] }) {
+  const shown = people.slice(0, 3);
+  if (shown.length === 0) return null;
+  return (
+    <span className="flex shrink-0 items-center gap-0.5">
+      {shown.map((person) => (
+        <AssigneeAvatar key={person.id} displayName={person.displayName} avatar={person.avatar} size={16} />
+      ))}
+    </span>
+  );
 }
 
 export function DocUpdatesPanel({
@@ -52,6 +88,7 @@ export function DocUpdatesPanel({
   const [selected, setSelected] = useState<string | null>(null);
   const [change, setChange] = useState<PageVersionChange | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const groups = useMemo(() => (versions ? groupDocUpdates(versions) : null), [versions]);
 
   async function load() {
     const result = await listPageVersionsAction(workspaceId, pageId);
@@ -71,10 +108,10 @@ export function DocUpdatesPanel({
     };
   }, [workspaceId, pageId]);
 
-  async function open(id: string) {
-    setSelected(id);
+  async function open(newestId: string, oldestId: string) {
+    setSelected(newestId);
     setChange(null);
-    const result = await getPageVersionChangeAction(workspaceId, pageId, id);
+    const result = await getPageVersionChangeAction(workspaceId, pageId, newestId, oldestId);
     if (result.ok) setChange(result.data);
     else setError(result.error);
   }
@@ -116,61 +153,104 @@ export function DocUpdatesPanel({
       </div>
       <div className="min-h-0 flex-1 overflow-y-auto p-2">
         {error && <div className="px-1 pb-2 text-small text-danger">{t(error)}</div>}
-        {versions?.length === 0 && <p className="px-1 py-2 text-body text-faint">{t("No updates yet.")}</p>}
-        {versions?.map((version) => (
-          <div key={version.id} className="rounded-md">
-            <button
-              type="button"
-              onClick={() => void (selected === version.id ? setSelected(null) : open(version.id))}
-              aria-expanded={selected === version.id}
-              className={`flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-small transition-colors hover:bg-elevated/60 ${
-                selected === version.id ? "bg-elevated/60" : ""
-              }`}
-            >
-              {version.actor && (
-                <AssigneeAvatar displayName={version.actor.displayName} avatar={version.actor.avatar} size={16} />
-              )}
-              <span className="min-w-0 flex-1 truncate text-text">{versionLabel(version, t)}</span>
-              {version.via === "mcp" && (
-                <span className="shrink-0 rounded border border-border px-1 text-caption text-muted">Agent</span>
-              )}
-              <span className="shrink-0 text-caption text-faint">{timeAgo(version.updatedAt, locale)}</span>
-            </button>
-            {selected === version.id && change && (
-              <div className="px-2 pb-3 pt-1">
-                {change.beforeTitle !== change.title && (
-                  <p className="pb-1 text-small text-muted">
-                    {t("Title: {before} → {after}", { before: change.beforeTitle, after: change.title })}
-                  </p>
+        {groups?.length === 0 && <p className="px-1 py-2 text-body text-faint">{t("No updates yet.")}</p>}
+        {groups?.map((group) => {
+          const newest = group.versions[0];
+          if (!newest) return null;
+          const oldest = group.versions[group.versions.length - 1] ?? newest;
+          const multiple = group.versions.length > 1;
+          const people = editorsOf(group.versions);
+          return (
+            <div key={group.id} className="rounded-md">
+              <button
+                type="button"
+                onClick={() => void (selected === group.id ? setSelected(null) : open(newest.id, oldest.id))}
+                aria-expanded={selected === group.id}
+                className={`flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-small transition-colors hover:bg-elevated/60 ${
+                  selected === group.id ? "bg-elevated/60" : ""
+                }`}
+              >
+                {multiple ? (
+                  <EditorFaces people={people} />
+                ) : (
+                  newest.actor && (
+                    <AssigneeAvatar displayName={newest.actor.displayName} avatar={newest.actor.avatar} size={16} />
+                  )
                 )}
-                <DiffLines before={change.beforeDoc} after={change.doc} />
-                <div className="mt-2 flex items-center gap-2 text-small text-faint">
-                  {t("Version {n}", { n: version.seq })}
-                  {version.id === current && <span>· {t("Current")}</span>}
-                  {canEdit && version.id === current && version.via === "mcp" && version.reason === "edit" && (
-                    <button
-                      type="button"
-                      data-doc-undo-agent
-                      onClick={() => void restore(version.id, undoAgentEditAction)}
-                      className="ml-auto rounded-md border border-border px-2 py-1 text-small font-medium text-muted hover:border-border-strong hover:text-text"
-                    >
-                      {t("Undo this Agent edit")}
-                    </button>
+                <span className="min-w-0 flex-1 truncate text-text">
+                  {multiple ? editorsLabel(people, t) : versionLabel(newest, t)}
+                </span>
+                {!multiple && newest.via === "mcp" && (
+                  <span className="shrink-0 rounded border border-border px-1 text-caption text-muted">Agent</span>
+                )}
+                <span className="shrink-0 text-caption text-faint">{timeAgo(group.updatedAt, locale)}</span>
+              </button>
+              {selected === group.id && change && (
+                <div className="px-2 pb-3 pt-1">
+                  {change.beforeTitle !== change.title && (
+                    <p className="pb-1 text-small text-muted">
+                      {t("Title: {before} → {after}", { before: change.beforeTitle, after: change.title })}
+                    </p>
                   )}
-                  {canEdit && version.id !== current && (
-                    <button
-                      type="button"
-                      onClick={() => void restore(version.id)}
-                      className="ml-auto rounded-md border border-border px-2 py-1 text-small font-medium text-muted hover:border-border-strong hover:text-text"
-                    >
-                      {t("Restore this version")}
-                    </button>
+                  <DiffLines before={change.beforeDoc} after={change.doc} />
+                  <div className="mt-2 flex items-center gap-2 text-small text-faint">
+                    {multiple
+                      ? t("Versions {from} to {to}", { from: oldest.seq, to: newest.seq })
+                      : t("Version {n}", { n: newest.seq })}
+                    {newest.id === current && <span>· {t("Current")}</span>}
+                    {canEdit && !multiple && newest.id === current && newest.via === "mcp" && newest.reason === "edit" && (
+                      <button
+                        type="button"
+                        data-doc-undo-agent
+                        onClick={() => void restore(newest.id, undoAgentEditAction)}
+                        className="ml-auto rounded-md border border-border px-2 py-1 text-small font-medium text-muted hover:border-border-strong hover:text-text"
+                      >
+                        {t("Undo this Agent edit")}
+                      </button>
+                    )}
+                    {canEdit && !multiple && newest.id !== current && (
+                      <button
+                        type="button"
+                        onClick={() => void restore(newest.id)}
+                        className="ml-auto rounded-md border border-border px-2 py-1 text-small font-medium text-muted hover:border-border-strong hover:text-text"
+                      >
+                        {t("Restore this version")}
+                      </button>
+                    )}
+                  </div>
+                  {multiple && (
+                    <ul className="mt-2 flex flex-col gap-1">
+                      {group.versions.map((version) => (
+                        <li key={version.id} className="flex items-center gap-2 text-small text-muted">
+                          {version.actor && (
+                            <AssigneeAvatar
+                              displayName={version.actor.displayName}
+                              avatar={version.actor.avatar}
+                              size={16}
+                            />
+                          )}
+                          <span className="min-w-0 flex-1 truncate text-text">
+                            {version.actor?.displayName || t("Someone")}
+                          </span>
+                          <span className="shrink-0 text-caption text-faint">{t("Version {n}", { n: version.seq })}</span>
+                          {canEdit && version.id !== current && (
+                            <button
+                              type="button"
+                              onClick={() => void restore(version.id)}
+                              className="shrink-0 rounded-md border border-border px-2 py-1 text-small font-medium text-muted hover:border-border-strong hover:text-text"
+                            >
+                              {t("Restore this version")}
+                            </button>
+                          )}
+                        </li>
+                      ))}
+                    </ul>
                   )}
                 </div>
-              </div>
-            )}
-          </div>
-        ))}
+              )}
+            </div>
+          );
+        })}
       </div>
     </aside>
   );
