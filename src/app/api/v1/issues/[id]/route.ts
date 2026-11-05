@@ -1,6 +1,7 @@
 import { errorResponse, readJsonBody, requireApiKey } from "@/lib/api-auth";
 import { parseLabelNames, parsePriority, parseStatus } from "@/lib/api-input";
 import {
+  assertSeesIssue,
   deleteIssue,
   getIssueDetail,
   PRIORITY_NAMES,
@@ -29,7 +30,7 @@ export async function GET(req: Request, ctx: Ctx) {
   try {
     const key = await requireApiKey(req);
     const { id } = await ctx.params;
-    const detail = await getIssueDetail(key.workspaceId, id);
+    const detail = await getIssueDetail(key.workspaceId, id, key.createdBy);
     if (!detail) throw new TacosError(`Issue "${id}" not found`, 404);
     return Response.json(flatDetail(detail));
   } catch (err) {
@@ -56,6 +57,7 @@ export async function PATCH(req: Request, ctx: Ctx) {
           ? await resolveAssigneeIds(key.workspaceId, [body.assignee])
           : [];
     }
+    await assertSeesIssue(key.workspaceId, id, key.createdBy);
     const detail = await updateIssue(
       key.workspaceId,
       id,
@@ -97,6 +99,7 @@ export async function DELETE(req: Request, ctx: Ctx) {
   try {
     const key = await requireApiKey(req);
     const { id } = await ctx.params;
+    await assertSeesIssue(key.workspaceId, id, key.createdBy);
     const deleted = await deleteIssue(key.workspaceId, id);
     return Response.json({
       deleted: { id: deleted.id, identifier: deleted.identifier, title: deleted.title },

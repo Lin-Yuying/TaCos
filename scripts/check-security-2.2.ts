@@ -27,6 +27,9 @@ async function main() {
   const { apiKeys, users, workspaceMembers, workspaces } = await import("../src/db/schema");
   const { eq } = await import("drizzle-orm");
   const {
+    assertSeesIssue,
+    assertSeesProject,
+    verifyApiKey,
     createApiKey,
     createIssue,
     createProject,
@@ -68,6 +71,22 @@ async function main() {
   assert(ownerList.some((row) => row.id === task.issue.id), "the owner still sees the task");
   const board = fs.readFileSync(new URL("../src/app/[workspaceId]/page.tsx", import.meta.url), "utf8");
   assert(board.includes("viewerId: user.id"), "the task board applies the viewer's projects");
+
+  const refused = (run: () => Promise<unknown>) => throws(`Issue "${task.issue.id}" not found`, run);
+  await refused(() => assertSeesIssue(ws, task.issue.id, outsider.id));
+  await assertSeesIssue(ws, task.issue.id, ownerId);
+  await assertSeesIssue(ws, "no-such-task", outsider.id);
+  await throws(`Project "${hidden.id}" not found`, () => assertSeesProject(ws, hidden.id, outsider.id));
+  await assertSeesProject(ws, hidden.id, ownerId);
+  const actions = fs.readFileSync(new URL("../src/app/actions.ts", import.meta.url), "utf8");
+  for (const name of ["updateIssueAction", "moveIssueAction", "deleteIssueAction", "addCommentAction", "updateProjectAction", "trashProjectAction"]) {
+    const start = actions.indexOf(`export async function ${name}(`);
+    assert(actions.slice(start, start + 400).includes("await assertSees"), `${name} checks visibility`);
+  }
+  const outsiderKey = await createApiKey(ws, "outsider-key", outsider.id);
+  const verified = await verifyApiKey(outsiderKey.key);
+  assert(verified?.createdBy === outsider.id, "a key carries the person it stands for");
+  await revokeApiKey(ws, outsiderKey.record.id, outsider.id);
 
   const { record } = await createApiKey(ws, "member-key", ownerId);
   await throws("Only the key's owner or an admin can revoke it", () => revokeApiKey(ws, record.id, outsider.id));

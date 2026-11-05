@@ -772,6 +772,32 @@ export async function listProjects(workspaceId: string, viewerId?: string): Prom
     .orderBy(projects.createdAt);
 }
 
+/** Writes obey the same rule as reads: a member outside a project cannot reach it by id. */
+export async function assertSeesProject(workspaceId: string, idOrKey: string, viewerId: string): Promise<void> {
+  if (await seesAllTasks(workspaceId, viewerId)) return;
+  const row = await findProjectRow(workspaceId, idOrKey);
+  // A missing project keeps the error of the operation that names it.
+  if (row && !(await getProject(workspaceId, row.id, viewerId))) {
+    throw new TacosError(`Project "${idOrKey}" not found`, 404);
+  }
+}
+
+export async function assertSeesIssue(workspaceId: string, idOrIdentifier: string, viewerId: string): Promise<void> {
+  if (await seesAllTasks(workspaceId, viewerId)) return;
+  const live = await findIssueRow(workspaceId, idOrIdentifier);
+  // Restoring and purging name a task that findIssueRow no longer returns.
+  const [row] = live
+    ? [live]
+    : await getDb()
+        .select({ projectId: issues.projectId })
+        .from(issues)
+        .where(and(eq(issues.workspaceId, workspaceId), eq(issues.id, idOrIdentifier)))
+        .limit(1);
+  if (row && !(await getProject(workspaceId, row.projectId, viewerId))) {
+    throw new TacosError(`Issue "${idOrIdentifier}" not found`, 404);
+  }
+}
+
 export type TrashedProject = Project & { deletedAt: string; issueCount: number };
 
 export async function listTrashedProjects(workspaceId: string): Promise<TrashedProject[]> {
@@ -3380,6 +3406,7 @@ export type ApiKeyRecord = {
   id: string;
   workspaceId: string;
   name: string;
+  createdBy: string;
   createdAt: string;
   lastUsedAt: string | null;
   revokedAt: string | null;
@@ -3405,11 +3432,12 @@ export async function createApiKey(
     id: crypto.randomUUID(),
     workspaceId,
     name: trimmed,
+    createdBy,
     createdAt: nowIso(),
     lastUsedAt: null,
     revokedAt: null,
   };
-  await getDb().insert(apiKeys).values({ ...record, keyHash: sha256(key), createdBy });
+  await getDb().insert(apiKeys).values({ ...record, keyHash: sha256(key) });
   return { key, record };
 }
 
@@ -3437,6 +3465,7 @@ export async function verifyApiKey(rawKey: string): Promise<ApiKeyRecord | null>
     id: record.id,
     workspaceId: record.workspaceId,
     name: record.name,
+    createdBy: record.createdBy,
     createdAt: record.createdAt,
     lastUsedAt: record.lastUsedAt,
     revokedAt: record.revokedAt,
@@ -3446,6 +3475,7 @@ export async function verifyApiKey(rawKey: string): Promise<ApiKeyRecord | null>
 export async function listApiKeys(workspaceId: string): Promise<ApiKeyRecord[]> {
   return getDb()
     .select({
+      createdBy: apiKeys.createdBy,
       id: apiKeys.id,
       workspaceId: apiKeys.workspaceId,
       name: apiKeys.name,

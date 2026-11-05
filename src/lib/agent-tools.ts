@@ -758,7 +758,7 @@ export async function executeAgentTool(
     case "get_overview": {
       const scope = await readScope(ctx, args);
       if (!scope.projectId) throw new TacosError("Name the project too, with project.");
-      const project = await getProject(scope.workspaceId, scope.projectId);
+      const project = await getProject(scope.workspaceId, scope.projectId, ctx.userId);
       if (!project) throw new TacosError("Project not found", 404);
       return {
         text: JSON.stringify(

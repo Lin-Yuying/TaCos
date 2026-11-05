@@ -1,6 +1,6 @@
 import crypto from "node:crypto";
 import { cookies } from "next/headers";
-import { and, asc, eq, gt, isNull } from "drizzle-orm";
+import { and, asc, eq, gt, isNull, lt } from "drizzle-orm";
 import { getDb, verifyPassword } from "../db/client";
 import { deviceAccounts, loginAttempts, sessions, users, workspaceMembers, workspaces } from "../db/schema";
 import { TacosError } from "./issues";
@@ -41,6 +41,8 @@ export async function signIn(
   }
   const [user] = await db.select().from(users).where(eq(users.username, name)).limit(1);
   if (!user || !verifyPassword(password, user.passwordHash)) {
+    // Misses for names nobody signs in with would otherwise stay forever.
+    await db.delete(loginAttempts).where(lt(loginAttempts.createdAt, since));
     await db.insert(loginAttempts).values({
       id: crypto.randomUUID(),
       username: name,

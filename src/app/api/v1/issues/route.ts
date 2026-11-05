@@ -1,6 +1,7 @@
 import { errorResponse, readJsonBody, requireApiKey } from "@/lib/api-auth";
 import { parseLabelNames, parsePriority, parseStatus } from "@/lib/api-input";
 import {
+  assertSeesProject,
   createIssue,
   listIssues,
   listProjects,
@@ -36,6 +37,7 @@ export async function GET(req: Request) {
     const limit = limitParam ? Math.min(Math.max(parseInt(limitParam, 10) || 100, 1), 200) : 100;
 
     const issues = await listIssues(key.workspaceId, {
+      viewerId: key.createdBy,
       status,
       priority,
       q: params.get("q") ?? undefined,
@@ -82,6 +84,7 @@ export async function POST(req: Request) {
       : typeof body.assignee === "string" && body.assignee.trim()
         ? [body.assignee]
         : [];
+    if (typeof body.project === "string") await assertSeesProject(key.workspaceId, body.project, key.createdBy);
     const detail = await createIssue(
       key.workspaceId,
       {
