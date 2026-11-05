@@ -69,13 +69,13 @@ export function MentionBox({
                 e.preventDefault();
                 insert(m);
               }}
-              className={`flex w-full items-center gap-2 px-2 py-1 text-left text-[12.5px] ${
+              className={`flex w-full items-center gap-2 px-2 py-1 text-left text-small ${
                 i === pick ? "bg-elevated text-text" : "text-muted"
               }`}
             >
               <AssigneeAvatar displayName={m.displayName} avatar={m.avatar} size={16} />
               <span className="truncate">{m.displayName}</span>
-              <span className="ml-auto text-[11px] text-faint">@{m.username}</span>
+              <span className="ml-auto text-caption text-faint">@{m.username}</span>
             </button>
           ))}
         </div>
@@ -112,14 +112,14 @@ export function MentionBox({
         }}
         placeholder={t("Leave a comment… Type @ to mention someone")}
         rows={2}
-        className="w-full resize-none bg-transparent text-[13px] text-text placeholder:text-faint"
+        className="w-full resize-none bg-transparent text-body text-text placeholder:text-faint"
       />
       <div className="flex justify-end pt-1">
         <button
           type="button"
           disabled={!value.trim() || busy}
           onClick={onSubmit}
-          className="rounded-md bg-accent px-2.5 py-1 text-[12px] font-medium text-white transition-colors hover:bg-accent-hover disabled:opacity-40"
+          className="rounded-md bg-accent px-2.5 py-1 text-small font-medium text-white transition-colors hover:bg-accent-hover disabled:opacity-40"
         >
           {t("Comment")}
         </button>

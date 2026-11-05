@@ -32,7 +32,7 @@ function LevelSelect({
       value={value}
       aria-label={label}
       onChange={(event) => onChange(event.target.value)}
-      className="shrink-0 rounded border border-border bg-bg px-1 py-0.5 text-[12px] text-muted"
+      className="shrink-0 rounded border border-border bg-bg px-1 py-0.5 text-small text-muted"
     >
       {extra && <option value="">{extra}</option>}
       {PAGE_LEVELS.map((level) => (
@@ -105,7 +105,7 @@ export function DocShareMenu({
     <Menu
       width={300}
       align="right"
-      triggerClassName="flex items-center gap-1 rounded-md border border-border px-2 py-1 text-[12px] font-medium text-muted transition-colors hover:border-border-strong hover:text-text"
+      triggerClassName="flex items-center gap-1 rounded-md border border-border px-2 py-1 text-small font-medium text-muted transition-colors hover:border-border-strong hover:text-text"
       trigger={
         <>
           {shared ? <Users size={12} /> : <Lock size={12} />}
@@ -114,7 +114,7 @@ export function DocShareMenu({
       }
     >
       {() => (
-        <div data-doc-share className="space-y-2 p-2 text-[12.5px]">
+        <div data-doc-share className="space-y-2 p-2 text-small">
           <div className="flex items-center gap-2">
             <span className="min-w-0 flex-1 text-text">
               {shared ? t("Every member can see this document") : t("Only you can see this document")}
@@ -122,7 +122,7 @@ export function DocShareMenu({
             <button
               type="button"
               onClick={onToggleShared}
-              className="shrink-0 rounded-md border border-border px-2 py-0.5 text-[12px] text-muted hover:border-border-strong hover:text-text"
+              className="shrink-0 rounded-md border border-border px-2 py-0.5 text-small text-muted hover:border-border-strong hover:text-text"
             >
               {shared ? t("Make private") : t("Share with the workspace")}
             </button>
@@ -153,7 +153,7 @@ export function DocShareMenu({
                 ))}
             </>
           )}
-          {error && <div className="text-[12px] text-danger">{t(error)}</div>}
+          {error && <div className="text-small text-danger">{t(error)}</div>}
         </div>
       )}
     </Menu>

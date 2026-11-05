@@ -106,20 +106,20 @@ export function DocsIndex({
 
   const section = (title: string, items: DocPage[], empty: string) => (
     <section className="mt-6 first:mt-0">
-      <h2 className="mb-2 text-[12px] font-medium uppercase tracking-wider text-faint">{title}</h2>
+      <h2 className="mb-2 text-small font-medium uppercase tracking-wider text-faint">{title}</h2>
       {items.length === 0 ? (
-        <p className="text-[13px] text-faint">{empty}</p>
+        <p className="text-body text-faint">{empty}</p>
       ) : (
         <div className="space-y-0.5">
           {items.map((page) => (
             <Link
               key={page.id}
               href={`/${workspaceId}/docs/${page.id}`}
-              className="flex items-center gap-2 rounded-md px-2 py-1.5 text-[13.5px] text-text transition-colors hover:bg-elevated/60"
+              className="flex items-center gap-2 rounded-md px-2 py-1.5 text-body text-text transition-colors hover:bg-elevated/60"
             >
               <span className="shrink-0">{page.icon ?? "📄"}</span>
               <span className="truncate">{page.title}</span>
-              <span className="ml-auto flex shrink-0 items-center gap-1 text-[11px] text-faint">
+              <span className="ml-auto flex shrink-0 items-center gap-1 text-caption text-faint">
                 {page.shared ? <Users size={11} /> : <Lock size={11} />}
                 {page.shared ? t("Shared") : t("Private")}
               </span>
@@ -135,8 +135,8 @@ export function DocsIndex({
       <div className="w-full px-10 py-6 lg:px-20 xl:px-32">
         <div className="flex items-center justify-between gap-3">
           <div>
-            <h1 className="text-[20px] font-semibold tracking-tight">{t("Docs")}</h1>
-            <p className="mt-0.5 text-[12.5px] text-muted">
+            <h1 className="text-heading font-semibold tracking-tight">{t("Docs")}</h1>
+            <p className="mt-0.5 text-small text-muted">
               {t("Markdown documents stored with your TaCos data. Private until you share them.")}
             </p>
           </div>
@@ -144,7 +144,7 @@ export function DocsIndex({
             <Menu
               align="right"
               width={220}
-              triggerClassName="flex items-center gap-1 rounded-md border border-border px-2.5 py-1.5 text-[12.5px] font-medium text-muted transition-colors hover:border-border-strong hover:text-text"
+              triggerClassName="flex items-center gap-1 rounded-md border border-border px-2.5 py-1.5 text-small font-medium text-muted transition-colors hover:border-border-strong hover:text-text"
               trigger={
                 <>
                   <Upload size={13} />
@@ -176,7 +176,7 @@ export function DocsIndex({
             <button
               type="button"
               onClick={() => void createPage()}
-              className="flex shrink-0 items-center gap-1 rounded-md border border-border px-2.5 py-1.5 text-[12.5px] font-medium text-muted transition-colors hover:border-border-strong hover:text-text"
+              className="flex shrink-0 items-center gap-1 rounded-md border border-border px-2.5 py-1.5 text-small font-medium text-muted transition-colors hover:border-border-strong hover:text-text"
             >
               <Plus size={13} /> {t("New page")}
             </button>
@@ -208,8 +208,8 @@ export function DocsIndex({
             void importFiles(list, true);
           }}
         />
-        {error && <div className="mt-3 text-[12px] text-danger">{t(error)}</div>}
-        {!error && note && <div className="mt-3 text-[12px] text-muted">{note}</div>}
+        {error && <div className="mt-3 text-small text-danger">{t(error)}</div>}
+        {!error && note && <div className="mt-3 text-small text-muted">{note}</div>}
         {section(t("My pages"), mine, t("No pages yet — create one."))}
         {section(t("Shared with the workspace"), shared, t("Nothing has been shared with you yet."))}
       </div>

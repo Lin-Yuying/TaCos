@@ -412,13 +412,13 @@ export function DocumentEditor({
                 event.preventDefault();
                 menu.pick(command);
               }}
-              className={`flex w-full items-center gap-2 rounded px-2 py-1 text-left text-[13px] ${
+              className={`flex w-full items-center gap-2 rounded px-2 py-1 text-left text-body ${
                 index === menu.selected ? "bg-elevated text-text" : "text-muted"
               }`}
             >
               <command.icon size={14} />
               <span className="min-w-0 flex-1 truncate">{t(command.label)}</span>
-              <span className="truncate text-[11.5px] text-faint">{t(command.hint)}</span>
+              <span className="truncate text-small text-faint">{t(command.hint)}</span>
             </button>
           ))}
         </div>

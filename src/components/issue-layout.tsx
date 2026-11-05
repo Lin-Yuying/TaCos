@@ -57,16 +57,16 @@ function Empty() {
   const { setComposerOpen } = useUI();
   return (
     <div className="flex flex-1 flex-col items-center justify-center gap-3 text-center">
-      <div className="text-[15px] font-medium text-muted">{t("No issues found")}</div>
-      <div className="text-[13px] text-faint">
+      <div className="text-lead font-medium text-muted">{t("No issues found")}</div>
+      <div className="text-body text-faint">
         {interpolate(t("Adjust your filters, or press {key} to create one."), {
-          key: <kbd className="rounded border border-border px-1 font-mono text-[11px]">C</kbd>,
+          key: <kbd className="rounded border border-border px-1 font-mono text-caption">C</kbd>,
         })}
       </div>
       <button
         type="button"
         onClick={() => setComposerOpen(true)}
-        className="flex items-center gap-1 rounded-md bg-accent px-3 py-1.5 text-[13px] font-medium text-white hover:bg-accent-hover"
+        className="flex items-center gap-1 rounded-md bg-accent px-3 py-1.5 text-body font-medium text-white hover:bg-accent-hover"
       >
         <Plus size={13} /> {t("New issue")}
       </button>
@@ -107,7 +107,7 @@ export function IssueLayout({
         onFieldsChanged={() => router.refresh()}
       />
       {shown.length === 0 ? (
-        <div className="flex flex-1 items-center justify-center text-[13px] text-faint">
+        <div className="flex flex-1 items-center justify-center text-body text-faint">
           {t("No tasks match this filter")}
         </div>
       ) : layout === "board" ? (

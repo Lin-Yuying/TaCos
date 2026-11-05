@@ -92,7 +92,7 @@ function MetaLabel({ label, onHide }: { label: string; onHide: () => void }) {
       onClick={onHide}
       aria-label={t("Hide {section}", { section: label.toLowerCase() })}
       title={t("Hide {section}", { section: label.toLowerCase() })}
-      className="flex w-20 shrink-0 items-center gap-1 rounded text-left text-[12.5px] leading-[22px] text-faint transition-colors hover:text-muted"
+      className="flex w-20 shrink-0 items-center gap-1 rounded text-left text-small leading-[22px] text-faint transition-colors hover:text-muted"
     >
       <ChevronDown size={11} className="shrink-0" />
       {label}
@@ -303,14 +303,14 @@ export function ProjectMeta({
   if (!showProperties && !showResources) return null;
 
   return (
-    <div className="mt-3 flex min-w-0 flex-col gap-2 text-[13px]">
+    <div className="mt-3 flex min-w-0 flex-col gap-2 text-body">
       {showProperties && (
         <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5">
           <MetaLabel label={t("Properties")} onHide={() => rows.toggle("properties")} />
           <div className="flex min-w-0 flex-1 flex-wrap items-center gap-x-3 gap-y-1.5">
             {lead && (
               <span
-                className="flex h-6 shrink-0 items-center gap-1.5 rounded-full border border-border bg-elevated/40 py-0.5 pl-0.5 pr-2 text-[12px] text-text"
+                className="flex h-6 shrink-0 items-center gap-1.5 rounded-full border border-border bg-elevated/40 py-0.5 pl-0.5 pr-2 text-small text-text"
                 title={t("Project lead")}
               >
                 <AssigneeAvatar displayName={lead.displayName} avatar={lead.avatar} size={18} />
@@ -331,7 +331,7 @@ export function ProjectMeta({
                 return (
                   <span
                     key={entry.id}
-                    className="flex h-6 shrink-0 items-center gap-1.5 rounded-full border border-border py-0.5 pl-0.5 pr-2 text-[12px] text-muted"
+                    className="flex h-6 shrink-0 items-center gap-1.5 rounded-full border border-border py-0.5 pl-0.5 pr-2 text-small text-muted"
                   >
                     {name}
                   </span>
@@ -341,7 +341,7 @@ export function ProjectMeta({
                 <Menu
                   key={entry.id}
                   width={200}
-                  triggerClassName="group flex h-6 shrink-0 items-center gap-1.5 rounded-full border border-border py-0.5 pl-0.5 pr-2 text-[12px] text-muted transition-colors hover:border-border-strong hover:text-text"
+                  triggerClassName="group flex h-6 shrink-0 items-center gap-1.5 rounded-full border border-border py-0.5 pl-0.5 pr-2 text-small text-muted transition-colors hover:border-border-strong hover:text-text"
                   trigger={
                     <>
                       {name}
@@ -385,14 +385,14 @@ export function ProjectMeta({
             <span className="flex shrink-0 items-center text-faint" title={t("Overview access")}>
               <Lock size={11} />
             </span>
-            {grants.length === 0 && <span className="text-[12px] text-faint">{t("Owner only")}</span>}
+            {grants.length === 0 && <span className="text-small text-faint">{t("Owner only")}</span>}
             {access.manage && (
               <Menu
                 width={280}
                 // Last item in the row: a left-anchored panel would run past the card's
                 // right edge and be clipped, so it opens inward instead.
                 align="right"
-                triggerClassName="flex h-[22px] shrink-0 items-center gap-1 rounded-full border border-dashed border-border px-2 text-[12px] text-muted transition-colors hover:border-border-strong hover:text-text"
+                triggerClassName="flex h-[22px] shrink-0 items-center gap-1 rounded-full border border-dashed border-border px-2 text-small text-muted transition-colors hover:border-border-strong hover:text-text"
                 trigger={
                   <>
                     <span className="sr-only">{t("Add person")}</span>
@@ -405,7 +405,7 @@ export function ProjectMeta({
                     {candidates.map((member) => (
                       <div
                         key={member.id}
-                        className="flex items-center gap-2 rounded-md px-2 py-1.5 text-[13px] hover:bg-elevated"
+                        className="flex items-center gap-2 rounded-md px-2 py-1.5 text-body hover:bg-elevated"
                       >
                         <AssigneeAvatar
                           displayName={member.displayName}
@@ -421,7 +421,7 @@ export function ProjectMeta({
                               close();
                               void addPerson(member.id, level);
                             }}
-                            className="rounded border border-border px-1.5 py-0.5 text-[11px] text-muted hover:border-border-strong hover:text-text"
+                            className="rounded border border-border px-1.5 py-0.5 text-caption text-muted hover:border-border-strong hover:text-text"
                           >
                             {t(label)}
                           </button>
@@ -429,7 +429,7 @@ export function ProjectMeta({
                       </div>
                     ))}
                     {candidates.length === 0 && (
-                      <div className="px-2 py-1.5 text-[12px] text-faint">
+                      <div className="px-2 py-1.5 text-small text-faint">
                         {t("Everyone in the workspace is already here.")}
                       </div>
                     )}
@@ -447,7 +447,7 @@ export function ProjectMeta({
             {resources.map((resource) => {
               const icon =
                 resource.kind === "doc" && resource.icon ? (
-                  <span className="text-[12px] leading-none">{resource.icon}</span>
+                  <span className="text-small leading-none">{resource.icon}</span>
                 ) : resource.kind === "doc" ? (
                   <FileText size={12} className="text-muted" />
                 ) : (
@@ -456,7 +456,7 @@ export function ProjectMeta({
               return (
                 <span
                   key={resource.id}
-                  className="group flex h-[22px] min-w-0 items-center rounded-full border border-border text-[12px] text-muted transition-colors hover:border-border-strong hover:text-text"
+                  className="group flex h-[22px] min-w-0 items-center rounded-full border border-border text-small text-muted transition-colors hover:border-border-strong hover:text-text"
                 >
                   {resource.kind === "doc" && resource.pageId ? (
                     <Link
@@ -502,7 +502,7 @@ export function ProjectMeta({
                 // Sits at the row's right end once resources are in place, so it opens
                 // toward the card instead of past its edge.
                 align="right"
-                triggerClassName="flex h-[22px] shrink-0 items-center gap-1 rounded-full border border-dashed border-border px-2 text-[12px] text-muted transition-colors hover:border-border-strong hover:text-text"
+                triggerClassName="flex h-[22px] shrink-0 items-center gap-1 rounded-full border border-dashed border-border px-2 text-small text-muted transition-colors hover:border-border-strong hover:text-text"
                 trigger={
                   <>
                     <span className="sr-only">{t("Add resource")}</span>
@@ -534,7 +534,7 @@ export function ProjectMeta({
                     {attachableDocs.length > 0 && (
                       <>
                         <div className="my-1 border-t border-border" />
-                        <div className="px-2 py-1 text-[11px] font-medium text-faint">
+                        <div className="px-2 py-1 text-caption font-medium text-faint">
                           {t("Project documents")}
                         </div>
                         {attachableDocs.map((page) => (
@@ -546,7 +546,7 @@ export function ProjectMeta({
                             }}
                           >
                             {page.icon ? (
-                              <span className="text-[13px] leading-none">{page.icon}</span>
+                              <span className="text-body leading-none">{page.icon}</span>
                             ) : (
                               <FileText size={13} className="text-muted" />
                             )}
@@ -562,11 +562,11 @@ export function ProjectMeta({
               </Menu>
             )}
             {resources.length === 0 && !access.canEdit && (
-              <span className="text-[12px] text-faint">{t("None yet")}</span>
+              <span className="text-small text-faint">{t("None yet")}</span>
             )}
           </div>
           {resourceError && (
-            <span className="w-full pl-[5.75rem] text-[11.5px] text-danger">{t(resourceError)}</span>
+            <span className="w-full pl-[5.75rem] text-small text-danger">{t(resourceError)}</span>
           )}
           {linkOpen && access.canEdit && (
             <form
@@ -578,13 +578,13 @@ export function ProjectMeta({
                 value={linkUrl}
                 onChange={(event) => setLinkUrl(event.target.value)}
                 placeholder={t("Paste a link")}
-                className="w-full rounded-md border border-border bg-bg px-2.5 py-1.5 text-[13px] text-text placeholder:text-faint focus:border-border-strong focus:outline-none"
+                className="w-full rounded-md border border-border bg-bg px-2.5 py-1.5 text-body text-text placeholder:text-faint focus:border-border-strong focus:outline-none"
               />
               <input
                 value={linkTitle}
                 onChange={(event) => setLinkTitle(event.target.value)}
                 placeholder={t("Title (optional)")}
-                className="w-full rounded-md border border-border bg-bg px-2.5 py-1.5 text-[13px] text-text placeholder:text-faint focus:border-border-strong focus:outline-none"
+                className="w-full rounded-md border border-border bg-bg px-2.5 py-1.5 text-body text-text placeholder:text-faint focus:border-border-strong focus:outline-none"
               />
               <div className="flex items-center justify-end gap-2">
                 <button
@@ -595,14 +595,14 @@ export function ProjectMeta({
                     setLinkTitle("");
                     setResourceError(null);
                   }}
-                  className="rounded-md px-2 py-1 text-[12px] text-muted transition-colors hover:bg-elevated hover:text-text"
+                  className="rounded-md px-2 py-1 text-small text-muted transition-colors hover:bg-elevated hover:text-text"
                 >
                   {t("Cancel")}
                 </button>
                 <button
                   type="submit"
                   disabled={!linkUrl.trim() || resourceBusy}
-                  className="rounded-md bg-accent px-2.5 py-1 text-[12px] font-medium text-white transition-opacity hover:opacity-90 disabled:opacity-40"
+                  className="rounded-md bg-accent px-2.5 py-1 text-small font-medium text-white transition-opacity hover:opacity-90 disabled:opacity-40"
                 >
                   {resourceBusy ? t("Adding…") : t("Add link")}
                 </button>
@@ -611,7 +611,7 @@ export function ProjectMeta({
           )}
         </div>
       )}
-      {error && <span className="pl-[5.75rem] text-[11.5px] text-danger">{t(error)}</span>}
+      {error && <span className="pl-[5.75rem] text-small text-danger">{t(error)}</span>}
     </div>
   );
 }

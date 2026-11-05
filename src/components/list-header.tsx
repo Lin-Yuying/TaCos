@@ -86,12 +86,12 @@ export function ListHeader({
           so switching between the two lists doesn't shift the heading sideways. */}
       {/* Shrinks last: the person's name and the count stay readable while the search
           field gives up width as the detail panel eats into the list. */}
-      <h1 className="min-w-0 shrink-[0.25] truncate text-[14px] font-semibold">{heading}</h1>
-      <span className="shrink-0 rounded-full bg-elevated px-2 py-0.5 text-[11px] text-muted">
+      <h1 className="min-w-0 shrink-[0.25] truncate text-body font-semibold">{heading}</h1>
+      <span className="shrink-0 rounded-full bg-elevated px-2 py-0.5 text-caption text-muted">
         {count}
       </span>
       {projectName && (
-        <span className="hidden max-w-[140px] shrink-0 truncate rounded-full bg-elevated px-2 py-0.5 text-[11px] text-muted @min-[420px]:inline">
+        <span className="hidden max-w-[140px] shrink-0 truncate rounded-full bg-elevated px-2 py-0.5 text-caption text-muted @min-[420px]:inline">
           {projectName}
         </span>
       )}
@@ -99,7 +99,7 @@ export function ListHeader({
         <button
           type="button"
           onClick={() => router.replace(buildUrl({ label: undefined }), { scroll: false })}
-          className="hidden max-w-[140px] shrink-0 items-center gap-1 truncate rounded-full bg-elevated px-2 py-0.5 text-[11px] text-muted hover:text-text @min-[420px]:flex"
+          className="hidden max-w-[140px] shrink-0 items-center gap-1 truncate rounded-full bg-elevated px-2 py-0.5 text-caption text-muted hover:text-text @min-[420px]:flex"
         >
           {t("label: {label}", { label })} <X size={11} className="shrink-0" />
         </button>
@@ -111,7 +111,7 @@ export function ListHeader({
             value={value}
             onChange={(e) => setValue(e.target.value)}
             placeholder={t("Search tasks…")}
-            className="min-w-0 w-full bg-transparent text-[13px] text-text placeholder:text-faint"
+            className="min-w-0 w-full bg-transparent text-body text-text placeholder:text-faint"
           />
           {value && (
             <button

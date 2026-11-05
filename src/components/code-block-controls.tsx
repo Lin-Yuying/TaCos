@@ -166,7 +166,7 @@ export function CodeCopyButton({ code }: { code: string }) {
       }}
       title={t("Copy code")}
       aria-label={t("Copy code")}
-      className="flex items-center gap-1 rounded px-1.5 py-0.5 text-[11px] text-faint transition-colors hover:bg-elevated hover:text-text"
+      className="flex items-center gap-1 rounded px-1.5 py-0.5 text-caption text-faint transition-colors hover:bg-elevated hover:text-text"
     >
       {copied ? <Check size={11} /> : <Copy size={11} />}
       {copied ? t("Copied") : t("Copy")}
@@ -242,7 +242,7 @@ export function CodeLanguageMenu({
   useOutsideClose(open, rootRef, () => setOpen(false));
 
   const label = languageLabel(lang);
-  if (!onChange) return <span className="font-mono text-[11px] text-faint">{label}</span>;
+  if (!onChange) return <span className="font-mono text-caption text-faint">{label}</span>;
 
   // A code block opens for editing on a plain click, and in edit mode a mousedown
   // outside the textarea would blur — and so close — the line. The picker is neither.
@@ -256,7 +256,7 @@ export function CodeLanguageMenu({
         aria-expanded={open}
         onMouseDown={(event) => event.preventDefault()}
         onClick={() => setOpen((value) => !value)}
-        className={`group/lang flex items-center gap-1 rounded px-1.5 py-0.5 font-mono text-[11px] text-faint transition-colors hover:bg-elevated hover:text-text ${
+        className={`group/lang flex items-center gap-1 rounded px-1.5 py-0.5 font-mono text-caption text-faint transition-colors hover:bg-elevated hover:text-text ${
           open ? "bg-elevated text-text" : ""
         }`}
       >
@@ -282,7 +282,7 @@ export function CodeLanguageMenu({
                 setOpen(false);
                 onChange(option.id);
               }}
-              className="flex w-full items-center justify-between gap-2 rounded-md px-2 py-1 text-left text-[12.5px] hover:bg-elevated"
+              className="flex w-full items-center justify-between gap-2 rounded-md px-2 py-1 text-left text-small hover:bg-elevated"
             >
               <span className="truncate">{option.label}</span>
               {option.id === lang ? <Check size={11} className="shrink-0 text-accent" /> : null}
@@ -327,7 +327,7 @@ export function CodeOptionsMenu() {
             aria-checked={showNumbers}
             onMouseDown={(event) => event.preventDefault()}
             onClick={() => setLineNumbers(!showNumbers)}
-            className="flex w-full items-center justify-between gap-4 rounded-md px-2 py-1.5 text-left text-[13px] hover:bg-elevated"
+            className="flex w-full items-center justify-between gap-4 rounded-md px-2 py-1.5 text-left text-body hover:bg-elevated"
           >
             {t("Show line numbers")}
             <span

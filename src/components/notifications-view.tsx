@@ -95,8 +95,8 @@ export function NotificationsView({
   return (
     <div className="flex-1 overflow-y-auto">
       <header className="flex h-12 shrink-0 items-center gap-3 border-b border-border px-4">
-        <h1 className="text-[14px] font-semibold">{t("Inbox")}</h1>
-        <span className="rounded-full bg-elevated px-2 py-0.5 text-[11px] text-muted">
+        <h1 className="text-body font-semibold">{t("Inbox")}</h1>
+        <span className="rounded-full bg-elevated px-2 py-0.5 text-caption text-muted">
           {t("{count} unread", { count: unread })}
         </span>
         <div className="ml-auto flex items-center gap-2">
@@ -104,7 +104,7 @@ export function NotificationsView({
             type="button"
             onClick={() => void markAll()}
             disabled={marking}
-            className="rounded-md border border-border px-2.5 py-1 text-[12px] text-muted transition-colors hover:text-text"
+            className="rounded-md border border-border px-2.5 py-1 text-small text-muted transition-colors hover:text-text"
           >
             {t("Mark all read")}
           </button>
@@ -113,7 +113,7 @@ export function NotificationsView({
               type="button"
               onClick={() => void clearAll()}
               disabled={clearing}
-              className="rounded-md border border-border px-2.5 py-1 text-[12px] text-muted transition-colors hover:border-danger/40 hover:text-danger"
+              className="rounded-md border border-border px-2.5 py-1 text-small text-muted transition-colors hover:border-danger/40 hover:text-danger"
             >
               {t("Clear all")}
             </button>
@@ -122,7 +122,7 @@ export function NotificationsView({
       </header>
       <div className="divide-y divide-border px-10 pb-8 lg:px-20 xl:px-32">
         {visible.length === 0 && (
-          <div className="p-6 text-[13px] text-faint">
+          <div className="p-6 text-body text-faint">
             {t("Nothing yet — you'll see mentions, assignments, and comments here.")}
           </div>
         )}
@@ -143,8 +143,8 @@ export function NotificationsView({
                 style={{ background: isUnread(item) ? "var(--color-accent)" : "transparent" }}
               />
               <span className="min-w-0 flex-1">
-                <span className="block truncate text-[13px] text-text">{noticeText(item.type, item.body, t)}</span>
-                <span className="block text-[11px] text-faint">
+                <span className="block truncate text-body text-text">{noticeText(item.type, item.body, t)}</span>
+                <span className="block text-caption text-faint">
                   {item.type === "workspace_deleted"
                     ? t("Workspace deleted")
                     : item.pageId
@@ -157,7 +157,7 @@ export function NotificationsView({
                 </span>
               </span>
             </button>
-            <span suppressHydrationWarning className="shrink-0 text-[11px] text-faint">
+            <span suppressHydrationWarning className="shrink-0 text-caption text-faint">
               {timeAgo(item.createdAt, locale)}
             </span>
             <button

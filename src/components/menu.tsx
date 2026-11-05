@@ -122,7 +122,7 @@ export function Menu({
         }}
         className={
           (typeof triggerClassName === "function" ? triggerClassName(open) : triggerClassName) ??
-          "flex items-center gap-1.5 rounded-md border border-border px-2 py-1 text-[13px] text-muted transition-colors hover:border-border-strong hover:text-text"
+          "flex items-center gap-1.5 rounded-md border border-border px-2 py-1 text-body text-muted transition-colors hover:border-border-strong hover:text-text"
         }
       >
         {typeof trigger === "function" ? trigger(open) : trigger}
@@ -166,7 +166,7 @@ export function MenuItem({
       type="button"
       onClick={onSelect}
       disabled={disabled}
-      className={`flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-[13px] transition-colors hover:bg-elevated disabled:cursor-not-allowed disabled:text-faint disabled:hover:bg-transparent ${
+      className={`flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-body transition-colors hover:bg-elevated disabled:cursor-not-allowed disabled:text-faint disabled:hover:bg-transparent ${
         danger ? "text-danger" : "text-text"
       }`}
     >

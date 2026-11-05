@@ -249,7 +249,7 @@ export function UIProvider({
           <div
             key={entry.id}
             role="status"
-            className="rounded-lg bg-text px-3.5 py-2 text-[12.5px] font-medium text-bg shadow-[0_6px_20px_rgba(0,0,0,0.18)]"
+            className="rounded-lg bg-text px-3.5 py-2 text-small font-medium text-bg shadow-[0_6px_20px_rgba(0,0,0,0.18)]"
           >
             {entry.message}
           </div>

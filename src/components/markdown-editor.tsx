@@ -112,12 +112,12 @@ const DIVIDER = /^(-{3,}|\*{3,}|_{3,})$/;
 const TODO_SHORTHAND = /^\[([ xX]?)\]\s?(.*)$/;
 
 const HEADING_SIZE = [
-  "text-[20px]",
-  "text-[17px]",
-  "text-[15px]",
-  "text-[14px]",
-  "text-[13px]",
-  "text-[13px]",
+  "text-heading",
+  "text-title",
+  "text-lead",
+  "text-body",
+  "text-body",
+  "text-body",
 ];
 
 const MAX_DEPTH = 4;
@@ -553,10 +553,10 @@ const PLACEHOLDER: Record<Marker["kind"], string> = {
 const TEXT_BASE = "m-0 border-0 p-0";
 
 function textClass(marker: Marker): string {
-  if (marker.kind === "code") return `${TEXT_BASE} font-mono text-[12.5px] leading-relaxed`;
+  if (marker.kind === "code") return `${TEXT_BASE} font-mono text-small leading-relaxed`;
   if (marker.kind === "heading")
     return `${TEXT_BASE} leading-[1.5] font-semibold tracking-tight ${HEADING_SIZE[marker.level - 1]}`;
-  return `${TEXT_BASE} text-[13.5px] leading-relaxed`;
+  return `${TEXT_BASE} text-body leading-relaxed`;
 }
 
 // A finished line draws its own vertical margins — a paragraph sits in a `my-1.5` <p>,
@@ -614,11 +614,11 @@ function PagePickerMenu({
   const t = useT();
   return (
     <div className="absolute left-2 top-full z-20 mt-1 max-h-[min(60vh,360px)] w-72 max-w-[calc(100%-1rem)] overflow-y-auto rounded-lg border border-border bg-overlay shadow-lg shadow-black/10">
-      <div className="border-b border-border px-2.5 py-1.5 text-[11px] uppercase tracking-wide text-faint">
+      <div className="border-b border-border px-2.5 py-1.5 text-caption uppercase tracking-wide text-faint">
         {t("Documents")}
       </div>
       {docs.length === 0 ? (
-        <div className="px-2.5 py-2 text-[12px] text-faint">{emptyHint}</div>
+        <div className="px-2.5 py-2 text-small text-faint">{emptyHint}</div>
       ) : (
         docs.map((entry, i) => (
           <button
@@ -630,11 +630,11 @@ function PagePickerMenu({
               onPick(entry);
             }}
             onMouseEnter={() => onHover(i)}
-            className={`flex w-full items-center gap-2.5 px-2.5 py-1.5 text-left text-[13px] ${
+            className={`flex w-full items-center gap-2.5 px-2.5 py-1.5 text-left text-body ${
               selected === i ? "bg-elevated" : ""
             }`}
           >
-            <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md border border-border text-[15px] text-muted">
+            <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md border border-border text-lead text-muted">
               {entry.icon || <FileText size={14} />}
             </span>
             <span className="min-w-0 truncate">{entry.title}</span>
@@ -2136,7 +2136,7 @@ export const MarkdownEditor = forwardRef<
               ref={menuRef}
               className="absolute left-2 top-full z-20 mt-1 max-h-[min(70vh,540px)] w-72 max-w-[calc(100%-1rem)] overflow-y-auto rounded-lg border border-border bg-overlay shadow-lg shadow-black/10"
             >
-              <div className="border-b border-border px-2.5 py-1.5 text-[11px] uppercase tracking-wide text-faint">
+              <div className="border-b border-border px-2.5 py-1.5 text-caption uppercase tracking-wide text-faint">
                 {t("Basic blocks")}
               </div>
               {visible.map((command, i) => (
@@ -2150,7 +2150,7 @@ export const MarkdownEditor = forwardRef<
                     applyCommand(command);
                   }}
                   onMouseEnter={() => setMenu((m) => (m ? { ...m, selected: i } : m))}
-                  className={`flex w-full items-center gap-2.5 px-2.5 py-1 text-left text-[13px] ${
+                  className={`flex w-full items-center gap-2.5 px-2.5 py-1 text-left text-body ${
                     menu.selected === i ? "bg-elevated" : ""
                   }`}
                 >
@@ -2159,7 +2159,7 @@ export const MarkdownEditor = forwardRef<
                   </span>
                   <span className="min-w-0">
                     <span className="block truncate">{t(command.label)}</span>
-                    <span className="block truncate text-[12px] text-faint">{t(command.hint)}</span>
+                    <span className="block truncate text-small text-faint">{t(command.hint)}</span>
                   </span>
                 </button>
               ))}
@@ -2202,7 +2202,7 @@ export const MarkdownEditor = forwardRef<
                       <div
                         ref={gutterRef}
                         aria-hidden
-                        className="relative w-10 shrink-0 select-none font-mono text-[12.5px] leading-relaxed text-faint tabular-nums"
+                        className="relative w-10 shrink-0 select-none font-mono text-small leading-relaxed text-faint tabular-nums"
                       >
                         {draft.split("\n").map((_, line) => (
                           <span key={line} data-code-line className="absolute right-4 top-0">
@@ -2259,7 +2259,7 @@ export const MarkdownEditor = forwardRef<
                 // row is finished.
                 <span
                   data-md-glyph
-                  className={`flex w-4 shrink-0 select-none text-[13.5px] leading-relaxed ${
+                  className={`flex w-4 shrink-0 select-none text-body leading-relaxed ${
                     marker.kind === "todo" ? "pt-[9px]" : "pt-[6px]"
                   } ${marker.kind === "ordered" ? "justify-end text-muted" : "justify-start text-faint"}`}
                 >
@@ -2277,7 +2277,7 @@ export const MarkdownEditor = forwardRef<
                         list[index] = joinMarker(next, draft);
                         commit(list);
                       }}
-                      className={`flex h-3.5 w-3.5 items-center justify-center rounded border text-[9px] transition-colors hover:border-accent ${
+                      className={`flex h-3.5 w-3.5 items-center justify-center rounded border text-caption transition-colors hover:border-accent ${
                         marker.checked ? "border-accent bg-accent text-white" : "border-border-strong bg-bg"
                       }`}
                     >
@@ -2312,7 +2312,7 @@ export const MarkdownEditor = forwardRef<
               onKeyDown={(e) => {
                 if (e.key === "Enter" || e.key === " ") startEdit(index, "");
               }}
-              className={`my-1.5 w-full min-h-[22px] cursor-text rounded-md px-2 py-0.5 text-left text-[13.5px] text-faint transition-colors ${
+              className={`my-1.5 w-full min-h-[22px] cursor-text rounded-md px-2 py-0.5 text-left text-body text-faint transition-colors ${
                 selected(index) ? "md-block-selected" : "hover:bg-elevated/40"
               }`}
             >

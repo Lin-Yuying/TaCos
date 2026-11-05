@@ -15,7 +15,7 @@ import { fieldKey, type FieldValues, type TaskField, type TaskView } from "@/lib
 
 const FEATURES = tableFeatures({ columnSizingFeature });
 const ROW_HEIGHT = 34;
-const CELL_INPUT = "w-full min-w-0 rounded border border-transparent bg-transparent px-1 py-0.5 text-[12.5px] text-text hover:border-border focus:border-border focus:outline-none";
+const CELL_INPUT = "w-full min-w-0 rounded border border-transparent bg-transparent px-1 py-0.5 text-small text-text hover:border-border focus:border-border focus:outline-none";
 
 function FieldCell({
   field,
@@ -117,7 +117,7 @@ export function TaskGrid({
         id: "ref",
         header: t("ID"),
         size: 110,
-        cell: ({ row }) => <span className="truncate font-mono text-[12px] text-faint">{issueRef(row.original)}</span>,
+        cell: ({ row }) => <span className="truncate font-mono text-small text-faint">{issueRef(row.original)}</span>,
       }),
       column.accessor("title", {
         id: "title",
@@ -199,8 +199,8 @@ export function TaskGrid({
   }
 
   return (
-    <div data-task-grid ref={scroller} className="min-h-0 flex-1 overflow-auto text-[12.5px]">
-      {error && <div className="sticky left-0 px-4 py-1 text-[12px] text-danger">{t(error)}</div>}
+    <div data-task-grid ref={scroller} className="min-h-0 flex-1 overflow-auto text-small">
+      {error && <div className="sticky left-0 px-4 py-1 text-small text-danger">{t(error)}</div>}
       <div style={{ width, minWidth: "100%" }}>
         {table.getHeaderGroups().map((group) => (
           <div key={group.id} className="sticky top-0 z-10 flex border-b border-border bg-bg">
@@ -214,7 +214,7 @@ export function TaskGrid({
                   disabled={!key}
                   onClick={() => toggleSort(header.id)}
                   style={{ width: header.getSize() }}
-                  className="flex shrink-0 items-center gap-1 truncate px-2 py-1.5 text-left text-[12px] font-medium text-muted enabled:hover:text-text"
+                  className="flex shrink-0 items-center gap-1 truncate px-2 py-1.5 text-left text-small font-medium text-muted enabled:hover:text-text"
                 >
                   <span className="truncate"><table.FlexRender header={header} /></span>
                   {sort && (sort.dir === "asc" ? <ArrowUp size={11} /> : <ArrowDown size={11} />)}

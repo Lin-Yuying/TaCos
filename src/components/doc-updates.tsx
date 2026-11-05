@@ -17,9 +17,9 @@ import type { DocPage, PageVersion, PageVersionChange } from "@/lib/pages";
 export function DiffLines({ before, after }: { before: string; after: string }) {
   const t = useT();
   const rows = useMemo(() => docDiffRows(before, after), [before, after]);
-  if (before === after) return <p className="text-[12px] text-faint">{t("No text changed.")}</p>;
+  if (before === after) return <p className="text-small text-faint">{t("No text changed.")}</p>;
   return (
-    <div data-doc-diff className="space-y-px font-mono text-[12px] leading-[1.55]">
+    <div data-doc-diff className="space-y-px font-mono text-small leading-[1.55]">
       {rows.map((row, index) =>
         row.kind === "gap" ? (
           <div key={index} className="px-1 py-0.5 text-faint">
@@ -128,7 +128,7 @@ export function DocUpdatesPanel({
         compact ? "absolute inset-0 z-10 border-l-0" : "w-[340px] shrink-0"
       }`}
     >
-      <div className="flex h-10 shrink-0 items-center gap-1.5 border-b border-border px-3 text-[13px] font-medium text-text">
+      <div className="flex h-10 shrink-0 items-center gap-1.5 border-b border-border px-3 text-body font-medium text-text">
         <History size={13} />
         {t("Updates")}
         <button
@@ -142,15 +142,15 @@ export function DocUpdatesPanel({
         </button>
       </div>
       <div className="min-h-0 flex-1 overflow-y-auto p-2">
-        {error && <div className="px-1 pb-2 text-[12px] text-danger">{t(error)}</div>}
-        {versions?.length === 0 && <p className="px-1 py-2 text-[13px] text-faint">{t("No updates yet.")}</p>}
+        {error && <div className="px-1 pb-2 text-small text-danger">{t(error)}</div>}
+        {versions?.length === 0 && <p className="px-1 py-2 text-body text-faint">{t("No updates yet.")}</p>}
         {versions?.map((version) => (
           <div key={version.id} className="rounded-md">
             <button
               type="button"
               onClick={() => void (selected === version.id ? setSelected(null) : open(version.id))}
               aria-expanded={selected === version.id}
-              className={`flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-[12.5px] transition-colors hover:bg-elevated/60 ${
+              className={`flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-small transition-colors hover:bg-elevated/60 ${
                 selected === version.id ? "bg-elevated/60" : ""
               }`}
             >
@@ -159,19 +159,19 @@ export function DocUpdatesPanel({
               )}
               <span className="min-w-0 flex-1 truncate text-text">{versionLabel(version, t)}</span>
               {version.via === "mcp" && (
-                <span className="shrink-0 rounded border border-border px-1 text-[10.5px] text-muted">Agent</span>
+                <span className="shrink-0 rounded border border-border px-1 text-caption text-muted">Agent</span>
               )}
-              <span className="shrink-0 text-[11px] text-faint">{timeAgo(version.updatedAt, locale)}</span>
+              <span className="shrink-0 text-caption text-faint">{timeAgo(version.updatedAt, locale)}</span>
             </button>
             {selected === version.id && change && (
               <div className="px-2 pb-3 pt-1">
                 {change.beforeTitle !== change.title && (
-                  <p className="pb-1 text-[12px] text-muted">
+                  <p className="pb-1 text-small text-muted">
                     {t("Title: {before} → {after}", { before: change.beforeTitle, after: change.title })}
                   </p>
                 )}
                 <DiffLines before={change.beforeDoc} after={change.doc} />
-                <div className="mt-2 flex items-center gap-2 text-[11.5px] text-faint">
+                <div className="mt-2 flex items-center gap-2 text-small text-faint">
                   {t("Version {n}", { n: version.seq })}
                   {version.id === current && <span>· {t("Current")}</span>}
                   {canEdit && version.id === current && version.via === "mcp" && version.reason === "edit" && (
@@ -179,7 +179,7 @@ export function DocUpdatesPanel({
                       type="button"
                       data-doc-undo-agent
                       onClick={() => void restore(version.id, undoAgentEditAction)}
-                      className="ml-auto rounded-md border border-border px-2 py-1 text-[12px] font-medium text-muted hover:border-border-strong hover:text-text"
+                      className="ml-auto rounded-md border border-border px-2 py-1 text-small font-medium text-muted hover:border-border-strong hover:text-text"
                     >
                       {t("Undo this Agent edit")}
                     </button>
@@ -188,7 +188,7 @@ export function DocUpdatesPanel({
                     <button
                       type="button"
                       onClick={() => void restore(version.id)}
-                      className="ml-auto rounded-md border border-border px-2 py-1 text-[12px] font-medium text-muted hover:border-border-strong hover:text-text"
+                      className="ml-auto rounded-md border border-border px-2 py-1 text-small font-medium text-muted hover:border-border-strong hover:text-text"
                     >
                       {t("Restore this version")}
                     </button>

@@ -43,7 +43,7 @@ export function ThreadTaskChips({
           key={task.id}
           type="button"
           onClick={() => openIssue(task.id)}
-          className="flex max-w-[160px] items-center gap-1 rounded-full border border-border px-2 py-0.5 text-[11px] text-muted transition-colors hover:text-text"
+          className="flex max-w-[160px] items-center gap-1 rounded-full border border-border px-2 py-0.5 text-caption text-muted transition-colors hover:text-text"
         >
           <StatusIcon status={task.status} size={11} />
           <span className="shrink-0">{task.identifier}</span>
@@ -51,7 +51,7 @@ export function ThreadTaskChips({
         </button>
       ))}
       {tasks.length > MAX_CHIPS && (
-        <span className="text-[11px] text-faint">{t("+{count} more", { count: tasks.length - MAX_CHIPS })}</span>
+        <span className="text-caption text-faint">{t("+{count} more", { count: tasks.length - MAX_CHIPS })}</span>
       )}
     </div>
   );

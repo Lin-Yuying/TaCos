@@ -11,7 +11,7 @@ import { resolveLocale } from "@/lib/locale";
 // back here. Joining needs a click, so a link preview cannot add anyone.
 export default function JoinPage({ params }: { params: Promise<{ code: string }> }) {
   return (
-    <Suspense fallback={<div className="flex h-full items-center justify-center text-[13px] text-muted">Loading…</div>}>
+    <Suspense fallback={<div className="flex h-full items-center justify-center text-body text-muted">Loading…</div>}>
       <JoinView params={params} />
     </Suspense>
   );

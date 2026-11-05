@@ -20,7 +20,7 @@ export function ChangelogSection({ events }: { events: ActivityEvent[] }) {
         type="button"
         onClick={() => setOpen((current) => !current)}
         aria-expanded={open}
-        className="flex w-full items-center gap-2 px-3 py-2 text-left text-[12px] text-muted transition-colors hover:text-text"
+        className="flex w-full items-center gap-2 px-3 py-2 text-left text-small text-muted transition-colors hover:text-text"
       >
         <History size={13} className="text-faint" />
         <span>{t("Changelog")}</span>
@@ -39,10 +39,10 @@ export function ChangelogSection({ events }: { events: ActivityEvent[] }) {
             if (!text) return null;
             return (
               <div key={event.id} className="flex items-baseline gap-2">
-                <span className="text-[12px] text-faint">
+                <span className="text-small text-faint">
                   <span className="text-muted">{actorName(event, t)}</span> {text}
                 </span>
-                <span suppressHydrationWarning className="text-[11px] text-faint">
+                <span suppressHydrationWarning className="text-caption text-faint">
                   {timeAgo(event.createdAt, locale)}
                 </span>
               </div>

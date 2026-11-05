@@ -87,13 +87,13 @@ export function TrashView({
   return (
     <div className="flex-1 overflow-y-auto px-10 pb-10 pt-6 lg:px-20 xl:px-32">
       <div className="space-y-4">
-        <p className="text-[13px] leading-relaxed text-muted">
+        <p className="text-body leading-relaxed text-muted">
           {t(
             "Deleted issues, documents and projects wait here. Restore puts one back exactly as it was; deleting it for good cannot be undone."
           )}
         </p>
         {empty && (
-          <div className="rounded-lg border border-border p-4 text-[13px] text-faint">
+          <div className="rounded-lg border border-border p-4 text-body text-faint">
             {t("Trash is empty.")}
           </div>
         )}
@@ -106,10 +106,10 @@ export function TrashView({
                 </span>
                 <div className="min-w-0 flex-1">
                   <div className="flex min-w-0 items-baseline gap-2">
-                    <span className="shrink-0 text-[12px] text-faint">{issueRef(issue)}</span>
-                    <span className="truncate text-[13px]">{issue.title}</span>
+                    <span className="shrink-0 text-small text-faint">{issueRef(issue)}</span>
+                    <span className="truncate text-body">{issue.title}</span>
                   </div>
-                  <div className="mt-0.5 flex min-w-0 items-center gap-1.5 text-[12px] text-faint">
+                  <div className="mt-0.5 flex min-w-0 items-center gap-1.5 text-small text-faint">
                     <span className="flex shrink-0 items-center">
                       <ProjectIcon color={issue.projectColor} size={12} />
                     </span>
@@ -145,10 +145,10 @@ export function TrashView({
           <div className="divide-y divide-border rounded-lg border border-border">
             {docs.map((doc) => (
               <div key={doc.id} data-trashed-doc className="flex items-start gap-3 px-4 py-2.5">
-                <span className="mt-[1px] shrink-0 text-[14px] leading-none">{doc.icon ?? "📄"}</span>
+                <span className="mt-[1px] shrink-0 text-body leading-none">{doc.icon ?? "📄"}</span>
                 <div className="min-w-0 flex-1">
-                  <div className="truncate text-[13px]">{doc.title}</div>
-                  <div className="mt-0.5 text-[12px] text-faint">
+                  <div className="truncate text-body">{doc.title}</div>
+                  <div className="mt-0.5 text-small text-faint">
                     {doc.subpageCount > 0 && <>{t("{count} subpages", { count: doc.subpageCount })} · </>}
                     {t("deleted {date}", { date: formatDate(doc.deletedAt, locale) })}
                   </div>
@@ -187,8 +187,8 @@ export function TrashView({
                   <ProjectIcon color={project.color} icon={project.icon} size={15} />
                 </span>
                 <div className="min-w-0 flex-1">
-                  <div className="truncate text-[13px]">{project.name}</div>
-                  <div className="mt-0.5 text-[12px] text-faint">
+                  <div className="truncate text-body">{project.name}</div>
+                  <div className="mt-0.5 text-small text-faint">
                     {t(project.issueCount === 1 ? "{count} task" : "{count} tasks", {
                       count: project.issueCount,
                     })}{" "}

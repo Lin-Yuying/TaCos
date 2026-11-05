@@ -73,8 +73,8 @@ export function DocCommentsPanel({
           {comment.author && (
             <AssigneeAvatar displayName={comment.author.displayName} avatar={comment.author.avatar} size={16} />
           )}
-          <span className="min-w-0 truncate text-[12px] font-medium text-muted">{comment.author?.displayName}</span>
-          <span suppressHydrationWarning className="text-[11px] text-faint">
+          <span className="min-w-0 truncate text-small font-medium text-muted">{comment.author?.displayName}</span>
+          <span suppressHydrationWarning className="text-caption text-faint">
             {timeAgo(comment.createdAt, locale)}
           </span>
           <span className="ml-auto flex shrink-0 items-center gap-0.5 opacity-0 transition-opacity focus-within:opacity-100 group-hover:opacity-100">
@@ -107,14 +107,14 @@ export function DocCommentsPanel({
           </span>
         </div>
         {comment.quote && (
-          <blockquote className="mt-1 line-clamp-2 border-l-2 border-border-strong pl-2 text-[12px] text-muted">
+          <blockquote className="mt-1 line-clamp-2 border-l-2 border-border-strong pl-2 text-small text-muted">
             {comment.quote}
           </blockquote>
         )}
         {comment.quote && !comment.resolvedAt && !located.has(comment.id) && (
-          <p className="mt-1 text-[11.5px] text-faint">{t("The quoted text has changed.")}</p>
+          <p className="mt-1 text-small text-faint">{t("The quoted text has changed.")}</p>
         )}
-        <div className="mt-1 text-[13px] leading-relaxed text-text">
+        <div className="mt-1 text-body leading-relaxed text-text">
           <Markdown source={comment.body} />
         </div>
       </div>
@@ -128,7 +128,7 @@ export function DocCommentsPanel({
         compact ? "absolute inset-0 z-10 border-l-0" : "w-[340px] shrink-0"
       }`}
     >
-      <div className="flex h-10 shrink-0 items-center gap-1.5 border-b border-border px-3 text-[13px] font-medium text-text">
+      <div className="flex h-10 shrink-0 items-center gap-1.5 border-b border-border px-3 text-body font-medium text-text">
         <MessageSquare size={13} />
         {t("Comments")}
         <button
@@ -142,13 +142,13 @@ export function DocCommentsPanel({
         </button>
       </div>
       <div className="min-h-0 flex-1 overflow-y-auto p-2">
-        {comments.length === 0 && <p className="px-2 py-2 text-[13px] text-faint">{t("No comments yet.")}</p>}
+        {comments.length === 0 && <p className="px-2 py-2 text-body text-faint">{t("No comments yet.")}</p>}
         {open.map(row)}
         {resolved.length > 0 && (
           <button
             type="button"
             onClick={() => setShowResolved((value) => !value)}
-            className="mt-2 px-2 text-[12px] text-faint hover:text-text"
+            className="mt-2 px-2 text-small text-faint hover:text-text"
           >
             {t(showResolved ? "Hide {count} resolved" : "Show {count} resolved", { count: resolved.length })}
           </button>
@@ -158,7 +158,7 @@ export function DocCommentsPanel({
       {canComment && <div className="shrink-0 border-t border-border p-2">
         {draftAnchor && (
           <div className="mb-1.5 flex items-start gap-1">
-            <blockquote className="line-clamp-2 min-w-0 flex-1 border-l-2 border-border-strong pl-2 text-[12px] text-muted">
+            <blockquote className="line-clamp-2 min-w-0 flex-1 border-l-2 border-border-strong pl-2 text-small text-muted">
               {draftAnchor.quote}
             </blockquote>
             <button

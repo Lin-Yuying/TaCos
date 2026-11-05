@@ -43,10 +43,10 @@ export function ClaimRow({
   }
 
   const button =
-    "rounded-md border border-border px-2 py-0.5 text-[12px] text-muted transition-colors hover:text-text disabled:opacity-50";
+    "rounded-md border border-border px-2 py-0.5 text-small text-muted transition-colors hover:text-text disabled:opacity-50";
 
   return (
-    <div className="flex items-center gap-2 text-[13px] text-muted" data-testid="claim-row">
+    <div className="flex items-center gap-2 text-body text-muted" data-testid="claim-row">
       <Hand size={13} className="shrink-0 text-faint" />
       {detail.reviewStatus !== "approved" ? (
         <span>{t("Waiting for review — no one can claim it yet")}</span>

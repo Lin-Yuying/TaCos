@@ -31,9 +31,9 @@ export default function TaskCalendar({
   const undated = issues.filter((issue) => !issue.dueDate).length;
 
   return (
-    <div data-task-calendar className="task-calendar min-h-0 flex-1 overflow-auto px-4 py-3 text-[12.5px]">
+    <div data-task-calendar className="task-calendar min-h-0 flex-1 overflow-auto px-4 py-3 text-small">
       {(undated > 0 || error) && (
-        <div className="mb-2 text-[12px] text-faint">
+        <div className="mb-2 text-small text-faint">
           {error ? <span className="text-danger">{t(error)}</span> : t("{count} tasks have no due date", { count: undated })}
         </div>
       )}

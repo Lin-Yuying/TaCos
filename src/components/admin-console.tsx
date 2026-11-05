@@ -19,9 +19,9 @@ import { formatDate } from "@/lib/format";
 import { useLocale, useT } from "@/components/i18n-context";
 
 const inputClass =
-  "w-full rounded-md border border-border bg-bg px-2 py-1 text-[13px] text-text outline-none transition-colors focus:border-border-strong";
+  "w-full rounded-md border border-border bg-bg px-2 py-1 text-body text-text outline-none transition-colors focus:border-border-strong";
 const buttonClass =
-  "inline-flex items-center gap-1 rounded-md border border-border px-2 py-1 text-[12px] text-muted transition-colors hover:border-border-strong hover:text-text";
+  "inline-flex items-center gap-1 rounded-md border border-border px-2 py-1 text-small text-muted transition-colors hover:border-border-strong hover:text-text";
 
 export function AdminConsole({
   currentUser,
@@ -114,13 +114,13 @@ export function AdminConsole({
     <div className="flex h-full flex-col bg-bg">
       <header className="app-titlebar flex h-12 shrink-0 items-center gap-2 border-b border-border px-4">
         <OtterMark className="h-6 w-6" />
-        <h1 className="text-[14px] font-semibold">{t("Admin console")}</h1>
-        <span className="inline-flex items-center gap-1 rounded-full bg-elevated px-2 py-0.5 text-[11px] text-muted">
+        <h1 className="text-body font-semibold">{t("Admin console")}</h1>
+        <span className="inline-flex items-center gap-1 rounded-full bg-elevated px-2 py-0.5 text-caption text-muted">
           <ShieldCheck size={11} /> {t("site admin")}
         </span>
         <Link
           href={homeUrl}
-          className="ml-auto inline-flex items-center gap-1 rounded-md px-2 py-1 text-[12px] text-muted transition-colors hover:bg-elevated hover:text-text"
+          className="ml-auto inline-flex items-center gap-1 rounded-md px-2 py-1 text-small text-muted transition-colors hover:bg-elevated hover:text-text"
         >
           <ArrowLeft size={13} />
           {t(homeUrl === "/onboarding" ? "Create / join a workspace" : "Back")}
@@ -130,13 +130,13 @@ export function AdminConsole({
       <main className="flex-1 overflow-y-auto px-10 pb-10 pt-6 lg:px-20 xl:px-32">
         <div className="space-y-8">
           {(notice || error) && (
-            <div className={`text-[12px] ${error ? "text-danger" : "text-muted"}`}>
+            <div className={`text-small ${error ? "text-danger" : "text-muted"}`}>
               {error ? t(error) : notice}
             </div>
           )}
 
           <section className="space-y-3">
-            <h2 className="text-[13px] font-semibold">{t("Members ({count})", { count: members.length })}</h2>
+            <h2 className="text-body font-semibold">{t("Members ({count})", { count: members.length })}</h2>
             <div className="divide-y divide-border rounded-lg border border-border">
               {members.map((member) => {
                 const isSelf = member.id === currentUser.id;
@@ -151,11 +151,11 @@ export function AdminConsole({
                         size={24}
                       />
                       <div className="min-w-0">
-                        <div className="text-[13px]">
+                        <div className="text-body">
                           {member.displayName}
-                          {isSelf && <span className="ml-1 text-[11px] text-faint">{t("(you)")}</span>}
+                          {isSelf && <span className="ml-1 text-caption text-faint">{t("(you)")}</span>}
                         </div>
-                        <div className="text-[11px] text-faint">
+                        <div className="text-caption text-faint">
                           @{member.username} ·{" "}
                           {t(
                             member.workspaceCount === 1
@@ -178,7 +178,7 @@ export function AdminConsole({
                               else router.refresh();
                             });
                           }}
-                          className="rounded-md border border-border bg-elevated px-1.5 py-1 text-[12px] text-muted disabled:opacity-50"
+                          className="rounded-md border border-border bg-elevated px-1.5 py-1 text-small text-muted disabled:opacity-50"
                           title={t(
                             isBuiltIn
                               ? "The built-in superuser always keeps site admin"
@@ -253,7 +253,7 @@ export function AdminConsole({
                         <button
                           type="button"
                           onClick={() => setEditing(null)}
-                          className="shrink-0 rounded-md px-2 py-1 text-[12px] text-faint transition-colors hover:text-text"
+                          className="shrink-0 rounded-md px-2 py-1 text-small text-faint transition-colors hover:text-text"
                         >
                           {t("Cancel")}
                         </button>
@@ -263,7 +263,7 @@ export function AdminConsole({
                 );
               })}
             </div>
-            <p className="text-[12px] leading-relaxed text-faint">
+            <p className="text-small leading-relaxed text-faint">
               {t(
                 "Site admins can manage every account on this server and switch into any of them from the avatar menu. Per-workspace roles are still handled in workspace settings."
               )}
@@ -271,10 +271,10 @@ export function AdminConsole({
           </section>
 
           <section className="space-y-3">
-            <h2 className="text-[13px] font-semibold">{t("Add a member")}</h2>
+            <h2 className="text-body font-semibold">{t("Add a member")}</h2>
             <div className="flex flex-wrap items-end gap-2 rounded-lg border border-border bg-surface/60 p-4">
               <label className="min-w-[150px] flex-1 space-y-1">
-                <span className="text-[11px] text-faint">{t("Username")}</span>
+                <span className="text-caption text-faint">{t("Username")}</span>
                 <input
                   value={form.username}
                   onChange={(e) => setForm({ ...form, username: e.target.value })}
@@ -283,7 +283,7 @@ export function AdminConsole({
                 />
               </label>
               <label className="min-w-[150px] flex-1 space-y-1">
-                <span className="text-[11px] text-faint">{t("Display name")}</span>
+                <span className="text-caption text-faint">{t("Display name")}</span>
                 <input
                   value={form.displayName}
                   onChange={(e) => setForm({ ...form, displayName: e.target.value })}
@@ -292,7 +292,7 @@ export function AdminConsole({
                 />
               </label>
               <label className="min-w-[170px] flex-1 space-y-1">
-                <span className="text-[11px] text-faint">{t("Password")}</span>
+                <span className="text-caption text-faint">{t("Password")}</span>
                 <input
                   value={form.password}
                   onChange={(e) => setForm({ ...form, password: e.target.value })}
@@ -309,7 +309,7 @@ export function AdminConsole({
                 <UserPlus size={12} /> {t("Create")}
               </button>
             </div>
-            <p className="text-[12px] leading-relaxed text-faint">
+            <p className="text-small leading-relaxed text-faint">
               {t(
                 "New accounts join the server but start with no workspaces — hand them a join code from workspace settings, or open their workspace as this member and add them there."
               )}

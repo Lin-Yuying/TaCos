@@ -36,6 +36,7 @@ Item-level checks stay cheap (types, check scripts). End-to-end tests and screen
 | 13 | Hand a task to own Agent, queue while computer is off, write back comment and notify | done | Check script: queued turn runs when runner returns; write asks for approval by default |
 | 14 | Realtime co-editing, presence avatars, cursors | done | Two clients converge in a check script; if unstable, `blocked` and 2.2 ships without it |
 | 15 | Batch E2E and screenshots with real models and new data dirs; fresh-context review; fix findings | done | Report lists tested and untested |
+| 15b | Type scale from the golden ratio, user request 2026-11-04; font family unchanged | done | `check-type-scale` passes; screenshots at 1440 and 1100 wide |
 | 16 | Deploy to the server without touching morula or Caddy; add this Mac's public key | todo | `curl` through the tunnel returns the app; memory measured |
 | 17 | Push, open PR; after the user merges by hand, tag `v2.2.0` and publish "TaCos 2.2" | todo | Release has its assets; title set |
 
@@ -111,3 +112,9 @@ Levels are view, comment and edit (`src/lib/page-level.ts`). A shared page has o
 - Fixes from the review: a stored state is saved when the document loads, so a quiet restart cannot double text; outside writes merge through a temporary Y.Doc; typing during Trash survives a restore; backups use `rsync --link-dest`; `/etc/tacos/env` is created under `umask 077`; the install keeps the port and waits for `/login`; restore and purge check level and clear the collab row; runner tokens honor the TTL.
 - Codex elicitations and WorkBuddy's `bypassPermissions` both leave the TaCos tool route as the only approval gate.
 - Not verified on this machine: real Pi, OpenCode and DeepSeek turns, which end with a clear error because no key is configured for them.
+
+### Item 15b: type scale
+
+- Before: 20 sizes from 9 to 32 px. After: 7 steps. 11, 14, 18, 23, 29 step by the square root of 1.618, so every second step is 1.618. 12.5 and 16 are half steps for dense text; a plain 1.618 between neighbors leaves too few sizes for a dense interface.
+- Sidebar section labels moved from 11 to 12.5. Document body keeps 14 with line height 1.618.
+- Narrow task lists hide assignee and labels below `@4xl`, priority below `@xl`.

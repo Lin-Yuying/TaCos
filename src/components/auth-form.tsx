@@ -39,12 +39,12 @@ export function AuthForm({ mode, invite }: { mode: "login" | "register"; invite?
       <div className="w-[360px] max-w-[92vw]">
         <div className="mb-6 flex items-center gap-3">
           <OtterMark className="h-10 w-10" />
-          <span className="text-[15px] font-semibold tracking-tight">TaCos</span>
+          <span className="text-lead font-semibold tracking-tight">TaCos</span>
         </div>
-        <h1 className="text-[22px] font-semibold tracking-tight">
+        <h1 className="text-heading font-semibold tracking-tight">
           {mode === "login" ? t("Sign in") : t("Create your account")}
         </h1>
-        <p className="mb-6 mt-1 text-[13px] text-muted">
+        <p className="mb-6 mt-1 text-body text-muted">
           {mode === "login"
             ? t("Welcome back — your team's issues await.")
             : t("Open registration. Join an existing workspace with a code, or create your own.")}
@@ -58,51 +58,51 @@ export function AuthForm({ mode, invite }: { mode: "login" | "register"; invite?
           }}
         >
           <label className="block">
-            <span className="mb-1 block text-[12px] font-medium text-muted">{t("Username")}</span>
+            <span className="mb-1 block text-small font-medium text-muted">{t("Username")}</span>
             <input
               autoFocus
               value={username}
               onChange={(e) => setUsername(e.target.value)}
               autoComplete="username"
-              className="w-full rounded-md border border-border bg-elevated/50 px-2.5 py-2 text-[13px] placeholder:text-faint focus:border-border-strong"
+              className="w-full rounded-md border border-border bg-elevated/50 px-2.5 py-2 text-body placeholder:text-faint focus:border-border-strong"
               placeholder={t("e.g. alex")}
             />
           </label>
           {mode === "register" && (
             <label className="block">
-              <span className="mb-1 block text-[12px] font-medium text-muted">{t("Display name")}</span>
+              <span className="mb-1 block text-small font-medium text-muted">{t("Display name")}</span>
               <input
                 value={displayName}
                 onChange={(e) => setDisplayName(e.target.value)}
-                className="w-full rounded-md border border-border bg-elevated/50 px-2.5 py-2 text-[13px] placeholder:text-faint focus:border-border-strong"
+                className="w-full rounded-md border border-border bg-elevated/50 px-2.5 py-2 text-body placeholder:text-faint focus:border-border-strong"
                 placeholder={t("e.g. Alex Chen")}
               />
             </label>
           )}
           <label className="block">
-            <span className="mb-1 block text-[12px] font-medium text-muted">{t("Password")}</span>
+            <span className="mb-1 block text-small font-medium text-muted">{t("Password")}</span>
             <input
               type="password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               autoComplete={mode === "login" ? "current-password" : "new-password"}
-              className="w-full rounded-md border border-border bg-elevated/50 px-2.5 py-2 text-[13px] placeholder:text-faint focus:border-border-strong"
+              className="w-full rounded-md border border-border bg-elevated/50 px-2.5 py-2 text-body placeholder:text-faint focus:border-border-strong"
               placeholder={mode === "register" ? t("At least 8 characters") : ""}
             />
           </label>
 
-          {error && <div className="text-[12px] text-danger">{t(error)}</div>}
+          {error && <div className="text-small text-danger">{t(error)}</div>}
 
           <button
             type="submit"
             disabled={busy || !username.trim() || !password}
-            className="w-full rounded-md bg-accent px-3 py-2 text-[13px] font-medium text-white transition-colors hover:bg-accent-hover disabled:opacity-40"
+            className="w-full rounded-md bg-accent px-3 py-2 text-body font-medium text-white transition-colors hover:bg-accent-hover disabled:opacity-40"
           >
             {mode === "login" ? t("Sign in") : t("Create account")}
           </button>
         </form>
 
-        <div className="mt-4 text-center text-[13px] text-muted">
+        <div className="mt-4 text-center text-body text-muted">
           {mode === "login" ? (
             <>
               {t("No account yet?")}{" "}

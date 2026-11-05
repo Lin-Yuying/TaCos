@@ -44,11 +44,11 @@ function BoardCard({
         opened ? "border-accent" : "border-border hover:border-border-strong"
       } ${dragging ? "opacity-40" : ""}`}
     >
-      <div className="flex items-center gap-1.5 text-[11.5px] text-faint">
+      <div className="flex items-center gap-1.5 text-small text-faint">
         <StatusIcon status={issue.status} size={12} />
         <span className="truncate font-mono">{issueRef(issue)}</span>
       </div>
-      <h3 className="mt-1.5 line-clamp-2 text-[13px] font-medium leading-snug text-text">
+      <h3 className="mt-1.5 line-clamp-2 text-body font-medium leading-snug text-text">
         {issue.title}
       </h3>
       {/* Narrow cards (four columns on a laptop, panel open) drop labels entirely and
@@ -62,7 +62,7 @@ function BoardCard({
             <LabelPill key={label.id} name={label.name} color={label.color} small />
           ))}
           {issue.labels.length > 2 && (
-            <span className="shrink-0 text-[11px] text-faint">+{issue.labels.length - 2}</span>
+            <span className="shrink-0 text-caption text-faint">+{issue.labels.length - 2}</span>
           )}
         </div>
         {/* ml-auto keeps people pinned to the card's right edge even when the label
@@ -178,10 +178,10 @@ export function IssueBoard({
           <section key={status} className="flex min-h-0 min-w-[100px] flex-1 flex-col">
             <header className="flex shrink-0 items-center gap-2 px-1 pb-2">
               <StatusIcon status={status} size={13} />
-              <span className="truncate text-[12px] font-medium text-muted">
+              <span className="truncate text-small font-medium text-muted">
                 {t(STATUS_META[status].label)}
               </span>
-              <span className="text-[12px] text-faint">{items.length}</span>
+              <span className="text-small text-faint">{items.length}</span>
               <AddIssueButton status={status} />
             </header>
             <div
@@ -211,7 +211,7 @@ export function IssueBoard({
               })}
               {over?.status === status && over.index === slot && !!drag && <DropLine />}
               {items.length === 0 && (
-                <div className="rounded-lg border border-dashed border-border px-3 py-4 text-center text-[12px] text-faint">
+                <div className="rounded-lg border border-dashed border-border px-3 py-4 text-center text-small text-faint">
                   {t("No {status} issues", { status: t(STATUS_META[status].label) })}
                 </div>
               )}

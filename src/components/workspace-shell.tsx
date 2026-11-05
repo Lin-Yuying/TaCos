@@ -112,12 +112,12 @@ function NavItem({
       <span className="flex w-4 shrink-0 items-center justify-center text-faint">{icon}</span>
       <span className="truncate">{children}</span>
       {tag ? (
-        <span className="ml-auto shrink-0 rounded-full border border-border px-1.5 py-px text-[10px] text-faint">
+        <span className="ml-auto shrink-0 rounded-full border border-border px-1.5 py-px text-caption text-faint">
           {tag}
         </span>
       ) : null}
       {badge ? (
-        <span className="ml-auto flex h-[15px] min-w-[15px] shrink-0 items-center justify-center rounded-full bg-accent px-1 text-[10px] font-semibold text-white">
+        <span className="ml-auto flex h-[15px] min-w-[15px] shrink-0 items-center justify-center rounded-full bg-accent px-1 text-caption font-semibold text-white">
           {badge > 9 ? "9+" : badge}
         </span>
       ) : null}
@@ -146,7 +146,7 @@ function SectionHeader({
         type="button"
         onClick={onToggle}
         aria-expanded={open}
-        className="flex min-w-0 items-center gap-1 rounded px-1.5 py-0.5 text-[11px] font-medium uppercase tracking-wider text-faint transition-colors hover:text-muted"
+        className="flex min-w-0 items-center gap-1 rounded px-1.5 py-0.5 text-small font-medium uppercase tracking-wider text-faint transition-colors hover:text-muted"
       >
         <ChevronRight
           size={11}
@@ -248,7 +248,7 @@ function SidebarNav({
     (params.project ?? "") === projectId;
 
   return (
-    <nav className="flex-1 overflow-y-auto px-2 py-2 text-[13px]">
+    <nav className="flex-1 overflow-y-auto px-2 py-2 text-body">
       {/* Inbox stays first; the star group only exists once you have starred something. */}
       <div className="pb-1">
         <NavItem
@@ -442,7 +442,7 @@ function SidebarNav({
           // Undo the nav's px-2 and this row's px-1 so the panel's edges are the
           // sidebar's edges, not the trigger's.
           offset={-12}
-          triggerClassName="flex w-full items-center gap-2 rounded-md px-1 py-1 text-left text-[12px] text-faint transition-colors hover:bg-elevated/60 hover:text-text"
+          triggerClassName="flex w-full items-center gap-2 rounded-md px-1 py-1 text-left text-small text-faint transition-colors hover:bg-elevated/60 hover:text-text"
           trigger={
             <>
               <span className="flex w-4 shrink-0 items-center justify-center">
@@ -457,7 +457,7 @@ function SidebarNav({
             const available = SIDEBAR_SECTIONS.filter((section) => hidden.includes(section.key));
             return (
               <>
-                <div className="px-2 pb-1 pt-1 text-[11px] uppercase tracking-wide text-faint">
+                <div className="px-2 pb-1 pt-1 text-small uppercase tracking-wide text-faint">
                   {t("In sidebar")}
                 </div>
                 {shown.map((section) => (
@@ -470,7 +470,7 @@ function SidebarNav({
                 {available.length > 0 && (
                   <>
                     <div className="my-1 border-t border-border" />
-                    <div className="px-2 pb-1 pt-1 text-[11px] uppercase tracking-wide text-faint">
+                    <div className="px-2 pb-1 pt-1 text-small uppercase tracking-wide text-faint">
                       {t("Available")}
                     </div>
                     {available.map((section) => (
@@ -574,7 +574,7 @@ function WorkspaceSwitcher({
         ) : (
           <>
             <WorkspaceMark icon={workspace.icon} className="h-5 w-5" />
-            <span className="max-w-[110px] truncate text-[13px] font-semibold">{workspace.name}</span>
+            <span className="max-w-[110px] truncate text-body font-semibold">{workspace.name}</span>
             <ChevronRight
               size={11}
               className={`shrink-0 text-faint transition-transform ${open ? "rotate-90" : ""}`}
@@ -611,7 +611,7 @@ function WorkspaceSwitcher({
                 </span>
               </MenuItem>
               {leaveError && (
-                <div className="px-2 pb-1 text-[11px] leading-snug text-danger">{t(leaveError)}</div>
+                <div className="px-2 pb-1 text-caption leading-snug text-danger">{t(leaveError)}</div>
               )}
             </>
           )}
@@ -664,7 +664,7 @@ function RailLink({
         title={title}
         aria-label={label}
         aria-disabled={disabled || undefined}
-        className={`relative flex h-8 items-center gap-2 rounded-md px-2 text-[13px] font-medium transition-colors ${activeLook}`}
+        className={`relative flex h-8 items-center gap-2 rounded-md px-2 text-body font-medium transition-colors ${activeLook}`}
       >
         <span className="flex w-4 shrink-0 items-center justify-center">{icon}</span>
         <span className="truncate">{label}</span>
@@ -769,7 +769,7 @@ function RailFlyout({
         aria-expanded={open}
         className={
           labeled
-            ? `mt-1 flex h-6 items-center gap-2 rounded px-2 text-left text-[11px] font-medium uppercase tracking-wider transition-colors ${
+            ? `mt-1 flex h-6 items-center gap-2 rounded px-2 text-left text-small font-medium uppercase tracking-wider transition-colors ${
                 open ? "text-text" : "text-faint hover:text-muted"
               }`
             : `mt-0.5 flex h-7 w-8 items-center justify-center rounded-md transition-colors ${
@@ -801,7 +801,7 @@ function RailFlyout({
             }}
             className="fixed z-50 overflow-y-auto overflow-x-hidden rounded-lg border border-border bg-overlay p-1 shadow-xl shadow-black/10"
           >
-            <div className="px-2 pb-1 pt-1 text-[10.5px] font-medium uppercase tracking-wider text-faint">
+            <div className="px-2 pb-1 pt-1 text-small font-medium uppercase tracking-wider text-faint">
               {label}
             </div>
             {children(close)}
@@ -832,14 +832,14 @@ function RailFlyoutLink({
       href={href}
       role="menuitem"
       onClick={onSelect}
-      className={`flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-[13px] transition-colors ${
+      className={`flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-body transition-colors ${
         active ? "bg-elevated text-text" : "text-text hover:bg-elevated"
       }`}
     >
       <span className="flex w-4 shrink-0 items-center justify-center">{icon}</span>
       <span className="truncate">{children}</span>
       {tag ? (
-        <span className="ml-auto shrink-0 rounded-full border border-border px-1.5 py-px text-[10px] text-faint">
+        <span className="ml-auto shrink-0 rounded-full border border-border px-1.5 py-px text-caption text-faint">
           {tag}
         </span>
       ) : null}
@@ -1525,7 +1525,7 @@ function TabBar({
           return (
             <div
               key={key}
-              className={`app-tab group flex h-8 w-[118px] min-w-0 items-center gap-1.5 rounded-lg border px-2 text-[12.5px] transition-colors ${
+              className={`app-tab group flex h-8 w-[128px] min-w-0 items-center gap-1.5 rounded-lg border px-2 text-small transition-colors ${
                 isActive
                   ? "border-border bg-bg font-medium text-text shadow-[0_1px_2px_rgba(0,0,0,0.05)]"
                   : "border-transparent text-muted hover:bg-elevated/70 hover:text-text"

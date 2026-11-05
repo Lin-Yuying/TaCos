@@ -51,6 +51,7 @@ No migration CLI — the SQLite schema is created/updated idempotently by `src/d
 - ChatGPT-style light UI: colors/tokens in `src/app/globals.css` (`@theme`), status/priority meta in `src/lib/constants.ts`, shared row/badge glyphs in `src/components/icons.tsx`.
 - Errors: throw `TacosError(message, status, hint?)` from lib code; REST maps it to `{error, hint}` JSON, actions catch it and return `{ok:false}`.
 - Server actions return `ActionResult<T>` (`{ok:true,data} | {ok:false,error}`), never throw to the client.
+- Font sizes come only from the scale in `src/app/globals.css`: `text-caption` 11, `text-small` 12.5, `text-body` 14, `text-lead` 16, `text-title` 18, `text-heading` 23, `text-display` 29. `scripts/check-type-scale.ts` enforces it.
 
 ## Working rules
 

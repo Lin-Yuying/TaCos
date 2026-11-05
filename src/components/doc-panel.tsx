@@ -96,7 +96,7 @@ function DocPanel({
   }, [missing, toast, onClose, t]);
 
   if (missing || !detail) {
-    return <div className="flex-1 p-5 text-[13px] text-muted">{t("Loading…")}</div>;
+    return <div className="flex-1 p-5 text-body text-muted">{t("Loading…")}</div>;
   }
 
   return (

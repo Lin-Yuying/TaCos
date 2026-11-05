@@ -16,8 +16,8 @@ import type { FlatDetail } from "./types";
 
 const POLL_MS = 3000;
 const buttonClass =
-  "flex w-fit items-center gap-1.5 rounded-md border border-border px-2 py-1 text-[12px] text-muted hover:bg-elevated hover:text-text disabled:opacity-50";
-const selectClass = "rounded-md border border-border bg-bg px-1.5 py-1 text-[12px] text-text";
+  "flex w-fit items-center gap-1.5 rounded-md border border-border px-2 py-1 text-small text-muted hover:bg-elevated hover:text-text disabled:opacity-50";
+const selectClass = "rounded-md border border-border bg-bg px-1.5 py-1 text-small text-text";
 
 // Hand this task to the person's own Agent. It waits while their computer is off and reports
 // back as a comment, so they can leave. Writes ask here by default.
@@ -107,7 +107,7 @@ export function HandoffRow({
             : t("Your Agent could not finish: {reason}", { reason: t(handoff.error ?? "Unknown error") });
 
   return (
-    <div className="flex flex-col gap-1.5 text-[12px]" data-testid="handoff-row">
+    <div className="flex flex-col gap-1.5 text-small" data-testid="handoff-row">
       {handoff && (
         <div className="flex flex-wrap items-center gap-2 text-muted">
           <Bot size={13} className="shrink-0 text-faint" />
@@ -135,7 +135,7 @@ export function HandoffRow({
         <div key={card.requestId} className="flex flex-col gap-1 rounded-md border border-border p-2" data-handoff-card>
           <span className="text-text">{card.message}</span>
           {card.params !== undefined && (
-            <pre className="max-h-32 overflow-auto whitespace-pre-wrap break-words text-[11px] text-muted">
+            <pre className="max-h-32 overflow-auto whitespace-pre-wrap break-words text-caption text-muted">
               {JSON.stringify(card.params, null, 2)}
             </pre>
           )}
@@ -192,7 +192,7 @@ export function HandoffRow({
             onChange={(event) => setNote(event.target.value)}
             rows={2}
             placeholder={t("Anything your Agent should know (optional)")}
-            className="resize-y rounded-md border border-border bg-bg px-2 py-1 text-[12px] text-text"
+            className="resize-y rounded-md border border-border bg-bg px-2 py-1 text-small text-text"
           />
           <div className="flex gap-1.5">
             <button

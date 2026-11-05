@@ -244,13 +244,13 @@ function CommentComposer({
         }}
         rows={2}
         placeholder={placeholder}
-        className="min-h-[38px] flex-1 resize-y rounded-lg border border-border bg-bg px-2.5 py-2 text-[13px] text-text placeholder:text-faint focus:border-border-strong focus:outline-none"
+        className="min-h-[38px] flex-1 resize-y rounded-lg border border-border bg-bg px-2.5 py-2 text-body text-text placeholder:text-faint focus:border-border-strong focus:outline-none"
       />
       <button
         type="button"
         onClick={onPost}
         disabled={!draft.trim() || posting}
-        className="rounded-md bg-accent px-3 py-1.5 text-[12.5px] font-medium text-white transition-opacity hover:opacity-90 disabled:opacity-40"
+        className="rounded-md bg-accent px-3 py-1.5 text-small font-medium text-white transition-opacity hover:opacity-90 disabled:opacity-40"
       >
         {t("Comment")}
       </button>
@@ -1150,11 +1150,11 @@ export function ProjectOverview({
     const editedAway = Boolean(group.anchor.quote) && missing.has(key);
     return (
       <div>
-        <p className="text-[12px] font-medium leading-snug text-text">
+        <p className="text-small font-medium leading-snug text-text">
           {group.anchor.quote ? `“${group.anchor.quote}”` : t("General comment")}
         </p>
         {editedAway && (
-          <p className="mt-0.5 text-[10.5px] text-faint">{t("The highlighted text has changed.")}</p>
+          <p className="mt-0.5 text-caption text-faint">{t("The highlighted text has changed.")}</p>
         )}
         <ul className="mt-2 max-h-[260px] space-y-2.5 overflow-y-auto pr-0.5">
           {group.comments.map((comment) => (
@@ -1166,10 +1166,10 @@ export function ProjectOverview({
               />
               <div className="min-w-0 flex-1">
                 <div className="flex items-center gap-1.5">
-                  <span className="truncate text-[11.5px] font-medium text-text">
+                  <span className="truncate text-small font-medium text-text">
                     {comment.author?.displayName ?? t("Unknown")}
                   </span>
-                  <span className="shrink-0 text-[10.5px] text-faint">
+                  <span className="shrink-0 text-caption text-faint">
                     {timeAgo(comment.createdAt, locale)}
                   </span>
                   {(access.manage || comment.author?.id === currentUserId) && (
@@ -1184,7 +1184,7 @@ export function ProjectOverview({
                     </button>
                   )}
                 </div>
-                <p className="whitespace-pre-wrap text-[12.5px] leading-relaxed text-text">
+                <p className="whitespace-pre-wrap text-small leading-relaxed text-text">
                   {comment.body}
                 </p>
               </div>
@@ -1198,7 +1198,7 @@ export function ProjectOverview({
               setReplyKey(key);
               setDraft("");
             }}
-            className="mt-2 ml-7 rounded px-1.5 py-0.5 text-[11px] text-muted transition-colors hover:bg-elevated hover:text-text"
+            className="mt-2 ml-7 rounded px-1.5 py-0.5 text-caption text-muted transition-colors hover:bg-elevated hover:text-text"
           >
             {t("Reply")}
           </button>
@@ -1226,7 +1226,7 @@ export function ProjectOverview({
         {/* Properties and Resources live in the header now, so the document starts right
             under it. */}
         <div className="w-full px-10 pb-8 pt-3 lg:px-20 xl:px-32">
-          {error && <div className="mb-2 text-[12px] text-danger">{t(error)}</div>}
+          {error && <div className="mb-2 text-small text-danger">{t(error)}</div>}
           <div>
             {orphanComments > 0 && (
               <div className="mb-2 flex min-w-0 items-center gap-2">
@@ -1234,7 +1234,7 @@ export function ProjectOverview({
                   type="button"
                   onClick={openOrphans}
                   title={t("Comments on text that has changed or is no longer there")}
-                  className="flex h-[22px] items-center gap-1 rounded-full border border-[#ecd28a] bg-[#fdf3c7] px-2 text-[11px] font-medium text-[#8a6d1a] transition-colors hover:border-[#d9b64e]"
+                  className="flex h-[22px] items-center gap-1 rounded-full border border-[#ecd28a] bg-[#fdf3c7] px-2 text-caption font-medium text-[#8a6d1a] transition-colors hover:border-[#d9b64e]"
                 >
                   <MessageSquare size={11} />
                   {orphanComments}
@@ -1273,7 +1273,7 @@ export function ProjectOverview({
                       storageId={`project:${project.id}`}
                     />
                   ) : (
-                    <p className="text-[13px] text-faint">{t("Nothing has been written here yet.")}</p>
+                    <p className="text-body text-faint">{t("Nothing has been written here yet.")}</p>
                   )}
                 </div>
 
@@ -1295,7 +1295,7 @@ export function ProjectOverview({
                         setOrphansOpen(false);
                       }}
                       style={{ top: pin.top, left: pin.left }}
-                      className="absolute z-20 flex h-[22px] min-w-[22px] items-center justify-center gap-0.5 rounded-full border border-[#ecd28a] bg-[#fdf3c7] px-1 text-[10px] font-medium text-[#8a6d1a] shadow-[0_1px_2px_rgba(0,0,0,0.08)] transition-colors hover:border-[#d9b64e] hover:bg-[#fbeaa9]"
+                      className="absolute z-20 flex h-[22px] min-w-[22px] items-center justify-center gap-0.5 rounded-full border border-[#ecd28a] bg-[#fdf3c7] px-1 text-caption font-medium text-[#8a6d1a] shadow-[0_1px_2px_rgba(0,0,0,0.08)] transition-colors hover:border-[#d9b64e] hover:bg-[#fbeaa9]"
                     >
                       <MessageSquare size={11} />
                       {count > 1 && <span>{count}</span>}
@@ -1313,7 +1313,7 @@ export function ProjectOverview({
                     className="absolute z-30 w-[320px] rounded-xl border border-border bg-bg p-3 shadow-[0_10px_36px_rgba(0,0,0,0.16)]"
                   >
                     <div className="mb-2 flex items-center justify-between gap-2">
-                      <span className="text-[11px] font-semibold uppercase tracking-wider text-faint">
+                      <span className="text-caption font-semibold uppercase tracking-wider text-faint">
                         {t(openThread.comments.length === 1 ? "{count} comment" : "{count} comments", {
                           count: openThread.comments.length,
                         })}
@@ -1336,8 +1336,8 @@ export function ProjectOverview({
                 <aside className="sticky top-0 flex max-h-[calc(100vh-7rem)] w-[min(50%,460px)] shrink-0 flex-col self-start overflow-hidden rounded-xl border border-border bg-bg shadow-[0_1px_2px_rgba(0,0,0,0.05)]">
                   <header className="flex h-11 shrink-0 items-center gap-2 border-b border-border px-3">
                     <History size={14} className="text-muted" />
-                    <span className="text-[12.5px] font-semibold text-text">{t("History")}</span>
-                    <span className="text-[11px] text-faint">
+                    <span className="text-small font-semibold text-text">{t("History")}</span>
+                    <span className="text-caption text-faint">
                       {t(edits.length === 1 ? "{count} change" : "{count} changes", { count: edits.length })}
                     </span>
                     <button
@@ -1351,7 +1351,7 @@ export function ProjectOverview({
                   </header>
                   <div className="min-h-0 flex-1 overflow-y-auto p-3">
                     {edits.length === 0 ? (
-                      <p className="text-[12px] text-faint">
+                      <p className="text-small text-faint">
                         {t("No changes yet. Edits to this document will show up here.")}
                       </p>
                     ) : (
@@ -1366,13 +1366,13 @@ export function ProjectOverview({
                               />
                               <div className="min-w-0 flex-1">
                                 <div className="flex items-center gap-1.5">
-                                  <span className="truncate text-[11.5px] font-medium text-text">
+                                  <span className="truncate text-small font-medium text-text">
                                     {edit.author?.displayName ?? t("Unknown")}
                                   </span>
-                                  <span className="shrink-0 text-[10.5px] text-faint">
+                                  <span className="shrink-0 text-caption text-faint">
                                     {timeAgo(edit.createdAt, locale)}
                                   </span>
-                                  <span className="ml-auto shrink-0 text-[10.5px]">
+                                  <span className="ml-auto shrink-0 text-caption">
                                     {edit.added > 0 && (
                                       <span className="text-[#2da44e]">+{edit.added} </span>
                                     )}
@@ -1386,7 +1386,7 @@ export function ProjectOverview({
                                 </div>
 
                                 {(edit.removedLines.length > 0 || edit.addedLines.length > 0) && (
-                                  <div className="mt-1.5 space-y-0.5 rounded-md border border-border/70 bg-surface/60 px-1.5 py-1 font-mono text-[11px] leading-relaxed">
+                                  <div className="mt-1.5 space-y-0.5 rounded-md border border-border/70 bg-surface/60 px-1.5 py-1 font-mono text-caption leading-relaxed">
                                     {edit.removedLines.map((line, i) => (
                                       <div key={`r${i}`} className="flex gap-1.5 text-danger">
                                         <span className="select-none opacity-70">−</span>
@@ -1414,7 +1414,7 @@ export function ProjectOverview({
                                     ))}
                                     {(edit.added > edit.addedLines.length ||
                                       edit.removed > edit.removedLines.length) && (
-                                      <div className="pt-0.5 text-[10.5px] text-faint">
+                                      <div className="pt-0.5 text-caption text-faint">
                                         …and more
                                       </div>
                                     )}
@@ -1429,18 +1429,18 @@ export function ProjectOverview({
                                           type="button"
                                           disabled={restoring === edit.id}
                                           onClick={() => void restoreEdit(edit)}
-                                          className="rounded-md bg-accent px-2 py-0.5 text-[11px] font-medium text-white transition-opacity hover:opacity-90 disabled:opacity-50"
+                                          className="rounded-md bg-accent px-2 py-0.5 text-caption font-medium text-white transition-opacity hover:opacity-90 disabled:opacity-50"
                                         >
                                           {restoring === edit.id ? t("Restoring…") : t("Confirm restore")}
                                         </button>
                                         <button
                                           type="button"
                                           onClick={() => setConfirmRestore(null)}
-                                          className="rounded px-1.5 py-0.5 text-[11px] text-muted transition-colors hover:bg-elevated hover:text-text"
+                                          className="rounded px-1.5 py-0.5 text-caption text-muted transition-colors hover:bg-elevated hover:text-text"
                                         >
                                           {t("Cancel")}
                                         </button>
-                                        <span className="text-[10.5px] text-faint">
+                                        <span className="text-caption text-faint">
                                           {t("Replaces the current document")}
                                         </span>
                                       </>
@@ -1449,7 +1449,7 @@ export function ProjectOverview({
                                         type="button"
                                         onClick={() => setConfirmRestore(edit.id)}
                                         title={t("Restore the document to how it was before this change")}
-                                        className="flex items-center gap-1 rounded-md border border-border px-1.5 py-0.5 text-[11px] text-muted transition-colors hover:border-border-strong hover:text-text"
+                                        className="flex items-center gap-1 rounded-md border border-border px-1.5 py-0.5 text-caption text-muted transition-colors hover:border-border-strong hover:text-text"
                                       >
                                         <RotateCcw size={11} /> {t("Restore")}
                                       </button>
@@ -1590,7 +1590,7 @@ export function ProjectOverview({
               style={{ left: composer.x, top: composer.y }}
               className="fixed z-40 w-[320px] rounded-xl border border-border bg-bg p-2.5 shadow-[0_10px_36px_rgba(0,0,0,0.16)]"
             >
-              <p className="mb-1.5 line-clamp-2 px-0.5 text-[11.5px] font-medium text-text">
+              <p className="mb-1.5 line-clamp-2 px-0.5 text-small font-medium text-text">
                 “{composer.anchor.quote}”
               </p>
               <CommentComposer
@@ -1610,7 +1610,7 @@ export function ProjectOverview({
               className="fixed z-40 w-[340px] rounded-xl border border-border bg-bg p-3 shadow-[0_10px_36px_rgba(0,0,0,0.16)]"
             >
               <div className="mb-2 flex items-center justify-between gap-2">
-                <span className="text-[11px] font-semibold uppercase tracking-wider text-faint">
+                <span className="text-caption font-semibold uppercase tracking-wider text-faint">
                   {t("Comments on changed text")}
                 </span>
                 <button
@@ -1643,12 +1643,12 @@ export function ProjectOverview({
               type="button"
               onClick={toggleHistory}
               title={t("Document history")}
-              className="flex items-center gap-1.5 rounded-full border border-border bg-overlay px-3 py-1.5 text-[12px] font-medium text-muted shadow-[0_2px_10px_rgba(0,0,0,0.08)] transition-colors hover:border-border-strong hover:text-text"
+              className="flex items-center gap-1.5 rounded-full border border-border bg-overlay px-3 py-1.5 text-small font-medium text-muted shadow-[0_2px_10px_rgba(0,0,0,0.08)] transition-colors hover:border-border-strong hover:text-text"
             >
               <History size={13} /> {t("History")}
             </button>
             {unseen > 0 && (
-              <span className="pointer-events-none absolute -right-1 -top-1 flex h-[15px] min-w-[15px] items-center justify-center rounded-full bg-danger px-1 text-[9.5px] font-semibold leading-none text-white">
+              <span className="pointer-events-none absolute -right-1 -top-1 flex h-[15px] min-w-[15px] items-center justify-center rounded-full bg-danger px-1 text-caption font-semibold leading-none text-white">
                 {unseen > 9 ? "9+" : unseen}
               </span>
             )}
@@ -1658,7 +1658,7 @@ export function ProjectOverview({
               type="button"
               onClick={(event) => openAiForDocument(event.currentTarget)}
               title={t("Edit this document with AI")}
-              className="pointer-events-auto flex items-center gap-1.5 rounded-full border border-border bg-overlay px-3 py-1.5 text-[12px] font-medium text-muted shadow-[0_2px_10px_rgba(0,0,0,0.08)] transition-colors hover:border-border-strong hover:text-text"
+              className="pointer-events-auto flex items-center gap-1.5 rounded-full border border-border bg-overlay px-3 py-1.5 text-small font-medium text-muted shadow-[0_2px_10px_rgba(0,0,0,0.08)] transition-colors hover:border-border-strong hover:text-text"
             >
               <Sparkles size={13} /> AI
             </button>

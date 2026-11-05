@@ -184,7 +184,7 @@ function DocSection({
   return (
     <div ref={ref} data-doc-section={sectionShared ? "shared" : "private"} className={`rounded-md pb-1 ${over ? "ring-1 ring-accent" : ""}`}>
       <div className="flex items-center justify-between pr-1 pt-1">
-        <span className="flex min-w-0 items-center gap-1 px-1.5 py-0.5 text-[11px] font-medium uppercase tracking-wider text-faint">
+        <span className="flex min-w-0 items-center gap-1 px-1.5 py-0.5 text-small font-medium uppercase tracking-wider text-faint">
           <span className="flex shrink-0 items-center justify-center">{icon}</span>
           {label}
         </span>
@@ -198,7 +198,7 @@ function DocSection({
         </button>
       </div>
       {roots.length === 0 ? (
-        <div className="px-2 py-1 text-[12px] text-faint">{t("No documents yet")}</div>
+        <div className="px-2 py-1 text-small text-faint">{t("No documents yet")}</div>
       ) : (
         <div className="space-y-0.5">
           {roots.map((page) => (
@@ -351,7 +351,7 @@ export function DocTree({ workspaceId, pages }: { workspaceId: string; pages: Pa
         onCreate={() => void create(false)}
         rowProps={rowProps}
       />
-      {error && <div className="px-2 py-1 text-[12px] text-danger">{t(error)}</div>}
+      {error && <div className="px-2 py-1 text-small text-danger">{t(error)}</div>}
     </div>
   );
 }

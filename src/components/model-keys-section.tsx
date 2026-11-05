@@ -8,9 +8,9 @@ import { desktopRunner, type DesktopResult } from "@/components/runner-bridge";
 import { useT } from "@/components/i18n-context";
 
 const BUTTON =
-  "rounded-md border border-border px-2.5 py-1 text-[12px] font-medium text-muted transition-colors hover:border-border-strong hover:text-text disabled:opacity-40";
+  "rounded-md border border-border px-2.5 py-1 text-small font-medium text-muted transition-colors hover:border-border-strong hover:text-text disabled:opacity-40";
 const INPUT =
-  "w-full rounded-md border border-border bg-elevated/50 px-2.5 py-1.5 text-[12px] text-text placeholder:text-faint focus:border-border-strong";
+  "w-full rounded-md border border-border bg-elevated/50 px-2.5 py-1.5 text-small text-text placeholder:text-faint focus:border-border-strong";
 
 // Connected to a server, keys live in a file on this computer and the page reaches them through
 // the desktop app. They never pass through the server.
@@ -139,8 +139,8 @@ export function ModelKeysSection({
   if (onThisComputer !== true) {
     return (
       <section className="space-y-3" data-testid="model-keys-settings">
-        <h2 className="text-[13px] font-semibold">{t("Model API")}</h2>
-        <p className="text-[13px] leading-relaxed text-muted">
+        <h2 className="text-body font-semibold">{t("Model API")}</h2>
+        <p className="text-body leading-relaxed text-muted">
           {t("Your APIs stay on your own computer. Open the TaCos desktop app to add or change them.")}
         </p>
       </section>
@@ -149,15 +149,15 @@ export function ModelKeysSection({
 
   return (
     <section className="space-y-3" data-testid="model-keys-settings">
-      <h2 className="text-[13px] font-semibold">{t("Model API")}</h2>
+      <h2 className="text-body font-semibold">{t("Model API")}</h2>
       {serverMode ? (
-        <p className="text-[13px] leading-relaxed text-muted">
+        <p className="text-body leading-relaxed text-muted">
           {t(
             "Your own APIs, for you only. Each member fills in their own. They are saved on this computer, in a file only your account can read, not encrypted, and they never reach the server. Pi and DeepSeek Harness have no subscription, so they need an API, and DeepSeek Harness only runs on a DeepSeek address."
           )}
         </p>
       ) : (
-      <p className="text-[13px] leading-relaxed text-muted">
+      <p className="text-body leading-relaxed text-muted">
         {t(
           "Your own APIs, for you only. Each member fills in their own. Any service that speaks the OpenAI API works, and its models appear in every harness's model menu. A harness needs something to spend: its own subscription or your API. Pi and DeepSeek Harness have no subscription, so they need an API, and DeepSeek Harness only runs on a DeepSeek address. Other members cannot see or use your API. Keys are stored encrypted and never reach the browser."
         )}
@@ -170,13 +170,13 @@ export function ModelKeysSection({
           className="flex flex-wrap items-center gap-x-3 gap-y-1 rounded-lg border border-border px-3 py-2.5"
         >
           <div className="min-w-0 flex-1">
-            <div className="text-[13px] font-medium">{endpoint.label}</div>
-            <div className="truncate font-mono text-[11.5px] text-faint">{endpoint.baseUrl}</div>
-            <div className="truncate text-[11.5px] text-faint">
+            <div className="text-body font-medium">{endpoint.label}</div>
+            <div className="truncate font-mono text-small text-faint">{endpoint.baseUrl}</div>
+            <div className="truncate text-small text-faint">
               {t("{count} models", { count: endpoint.models.length })}: {endpoint.models.slice(0, 6).join(" · ")}
             </div>
           </div>
-          <span className="font-mono text-[12px] text-muted">{endpoint.keyHint}</span>
+          <span className="font-mono text-small text-muted">{endpoint.keyHint}</span>
           <button type="button" onClick={() => openForm(endpoint)} disabled={busy} className={BUTTON}>
             {t("Edit")}
           </button>
@@ -199,7 +199,7 @@ export function ModelKeysSection({
               { field: "label", label: t("Name"), placeholder: t("Leave blank to use the address") },
             ] as const
           ).map((input) => (
-            <label key={input.field} className="block space-y-1 text-[12px] text-muted">
+            <label key={input.field} className="block space-y-1 text-small text-muted">
               <span>{input.label}</span>
               <input
                 type={input.field === "key" ? "password" : "text"}
@@ -217,7 +217,7 @@ export function ModelKeysSection({
               type="button"
               onClick={() => void save()}
               disabled={busy || !form.baseUrl.trim() || (!formId && !form.key.trim())}
-              className="rounded-md bg-accent px-3 py-1.5 text-[12.5px] font-medium text-white transition-colors hover:bg-accent-hover disabled:opacity-40"
+              className="rounded-md bg-accent px-3 py-1.5 text-small font-medium text-white transition-colors hover:bg-accent-hover disabled:opacity-40"
             >
               {busy ? t("Saving…") : t("Save")}
             </button>
@@ -229,16 +229,16 @@ export function ModelKeysSection({
           </div>
         </div>
       )}
-      {error && <div className="text-[12px] text-danger">{t(error)}</div>}
-      {notice && <div className="text-[12px] text-muted">{notice}</div>}
+      {error && <div className="text-small text-danger">{t(error)}</div>}
+      {notice && <div className="text-small text-muted">{notice}</div>}
       {view.endpoints.length > 0 && (
-        <label className="block space-y-1 text-[12px] text-muted">
+        <label className="block space-y-1 text-small text-muted">
           <span>{t("Model for inline edits and task drafts")}</span>
           <select
             value={view.editProvider ? `${view.editProvider}/${view.editModel}` : ""}
             onChange={(event) => void pickEditModel(event.target.value)}
             disabled={busy}
-            className="block w-full rounded-md border border-border bg-elevated/50 px-2 py-1.5 text-[12.5px] text-text"
+            className="block w-full rounded-md border border-border bg-elevated/50 px-2 py-1.5 text-small text-text"
           >
             {view.endpoints.flatMap((endpoint) =>
               endpoint.models.map((model) => (

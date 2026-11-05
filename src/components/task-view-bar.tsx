@@ -46,9 +46,9 @@ const TYPE_LABEL: Record<FieldType, string> = {
   checkbox: "Checkbox",
 };
 
-const inputClass = "min-w-0 rounded border border-border bg-bg px-1 py-0.5 text-[12px] text-text";
+const inputClass = "min-w-0 rounded border border-border bg-bg px-1 py-0.5 text-small text-text";
 const triggerClass =
-  "flex items-center gap-1 rounded-md px-2 py-1 text-[12px] text-muted transition-colors hover:bg-elevated hover:text-text";
+  "flex items-center gap-1 rounded-md px-2 py-1 text-small text-muted transition-colors hover:bg-elevated hover:text-text";
 
 /** A fixed list of choices for keys that have one; everything else is typed. */
 function choicesFor(
@@ -158,7 +158,7 @@ export function TaskViewBar({
         }
       >
         {() => (
-          <div data-task-filters className="space-y-1.5 p-2 text-[12px]">
+          <div data-task-filters className="space-y-1.5 p-2 text-small">
             {view.filters.map((filter, index) => {
               const choices = choicesFor(filter.key, fields, issues, t);
               const needsValue = filter.op !== "empty" && filter.op !== "not_empty";
@@ -232,7 +232,7 @@ export function TaskViewBar({
         }
       >
         {() => (
-          <div data-task-sorts className="space-y-1.5 p-2 text-[12px]">
+          <div data-task-sorts className="space-y-1.5 p-2 text-small">
             {view.sort.map((sort, index) => (
               <div key={index} className="flex items-center gap-1">
                 {keySelect(sort.key, (key) =>
@@ -288,7 +288,7 @@ export function TaskViewBar({
           }
         >
           {() => (
-            <div data-task-fields className="space-y-1.5 p-2 text-[12px]">
+            <div data-task-fields className="space-y-1.5 p-2 text-small">
               {fields.map((field) => (
                 <div key={field.id} className="flex items-center gap-2">
                   <span className="min-w-0 flex-1 truncate text-text">{field.name}</span>

@@ -7,7 +7,7 @@ export default function ProjectPageRoute({
   params: Promise<{ workspaceId: string; projectId: string }>;
 }) {
   return (
-    <Suspense fallback={<div className="p-6 text-[13px] text-muted">Loading…</div>}>
+    <Suspense fallback={<div className="p-6 text-body text-muted">Loading…</div>}>
       <ProjectPage params={params} initialTab="overview" />
     </Suspense>
   );

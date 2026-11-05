@@ -191,11 +191,11 @@ function IssuePanel({
   }
 
   if (notFound) {
-    return <div className="flex-1 p-5 text-[13px] text-muted">{t("Loading…")}</div>;
+    return <div className="flex-1 p-5 text-body text-muted">{t("Loading…")}</div>;
   }
 
   if (!detail) {
-    return <div className="flex-1 p-5 text-[13px] text-muted">{t("Loading…")}</div>;
+    return <div className="flex-1 p-5 text-body text-muted">{t("Loading…")}</div>;
   }
 
   const comments = [...detail.comments].sort((a, b) =>
@@ -238,7 +238,7 @@ function IssuePanel({
               e.currentTarget.blur();
             }
           }}
-          className="w-full bg-transparent text-[17px] font-semibold text-text"
+          className="w-full bg-transparent text-title font-semibold text-text"
         />
 
         <PropertiesRow
@@ -295,7 +295,7 @@ function IssuePanel({
           />
         </div>
 
-        {error && <div className="text-[12px] text-danger">{t(error)}</div>}
+        {error && <div className="text-small text-danger">{t(error)}</div>}
       </div>
     </div>
   );

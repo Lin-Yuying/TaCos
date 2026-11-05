@@ -409,7 +409,7 @@ export function DocPageView({
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      <header className="flex h-11 shrink-0 items-center gap-2 border-b border-border px-4 text-[12px] text-muted">
+      <header className="flex h-11 shrink-0 items-center gap-2 border-b border-border px-4 text-small text-muted">
         <span
           className="flex shrink-0 items-center gap-1"
           title={shared ? t("Shared with the workspace") : t("Private")}
@@ -442,7 +442,7 @@ export function DocPageView({
           </nav>
           {/* A shared document says whose it is right where it says what it is. */}
           {author && (
-            <span data-doc-author className="flex shrink-0 items-center gap-1 text-[12px] text-muted">
+            <span data-doc-author className="flex shrink-0 items-center gap-1 text-small text-muted">
               <AssigneeAvatar displayName={author.displayName} avatar={author.avatar} size={14} />
               <span className="max-w-[160px] truncate">
                 {isOwner ? t("by you") : t("by {name}", { name: author.displayName })}
@@ -452,7 +452,7 @@ export function DocPageView({
         </span>
         <div className="ml-auto flex shrink-0 items-center gap-2">
           {collab.status === "reconnecting" && (
-            <span data-doc-reconnecting className="text-[11.5px] text-faint">
+            <span data-doc-reconnecting className="text-small text-faint">
               {t("Reconnecting…")}
             </span>
           )}
@@ -463,7 +463,7 @@ export function DocPageView({
                   key={peer.clientId}
                   title={peer.name}
                   style={{ backgroundColor: peer.color }}
-                  className="flex size-[18px] items-center justify-center rounded-full border border-surface text-[10px] font-medium text-white"
+                  className="flex size-[18px] items-center justify-center rounded-full border border-surface text-caption font-medium text-white"
                 >
                   {peer.name.slice(0, 1).toUpperCase()}
                 </span>
@@ -471,7 +471,7 @@ export function DocPageView({
             </span>
           )}
           <span
-            className={`text-[11.5px] text-faint transition-opacity duration-300 ${
+            className={`text-small text-faint transition-opacity duration-300 ${
               saved ? "opacity-100" : "opacity-0"
             }`}
           >
@@ -483,7 +483,7 @@ export function DocPageView({
             title={t("Comments")}
             aria-label={t("Comments")}
             aria-pressed={side === "comments"}
-            className={`flex items-center gap-1 rounded-md border px-2 py-1 text-[12px] font-medium transition-colors hover:border-border-strong hover:text-text ${
+            className={`flex items-center gap-1 rounded-md border px-2 py-1 text-small font-medium transition-colors hover:border-border-strong hover:text-text ${
               side === "comments" ? "border-border-strong text-text" : "border-border text-muted"
             }`}
           >
@@ -496,7 +496,7 @@ export function DocPageView({
             title={t("Updates")}
             aria-label={t("Updates")}
             aria-pressed={side === "updates"}
-            className={`flex items-center gap-1 rounded-md border px-2 py-1 text-[12px] font-medium transition-colors hover:border-border-strong hover:text-text ${
+            className={`flex items-center gap-1 rounded-md border px-2 py-1 text-small font-medium transition-colors hover:border-border-strong hover:text-text ${
               side === "updates" ? "border-border-strong text-text" : "border-border text-muted"
             }`}
           >
@@ -509,7 +509,7 @@ export function DocPageView({
               onClick={(event) => openAi(event.currentTarget)}
               title="AI"
               aria-label="AI"
-              className="flex items-center gap-1 rounded-md border border-border px-2 py-1 text-[12px] font-medium text-muted transition-colors hover:border-border-strong hover:text-text"
+              className="flex items-center gap-1 rounded-md border border-border px-2 py-1 text-small font-medium text-muted transition-colors hover:border-border-strong hover:text-text"
             >
               <Sparkles size={12} />
               {!compact && "AI"}
@@ -536,7 +536,7 @@ export function DocPageView({
             />
           ) : (
             !canEdit && (
-              <span data-doc-level className="shrink-0 text-[11.5px] text-faint">
+              <span data-doc-level className="shrink-0 text-small text-faint">
                 {t(canComment ? "Can comment" : "Can view")}
               </span>
             )
@@ -569,7 +569,7 @@ export function DocPageView({
               onClick={onClose}
               aria-label={t("Close document")}
               title={t("Close document")}
-              className="rounded-md px-1.5 py-1 text-[16px] leading-none text-muted transition-colors hover:bg-elevated hover:text-text"
+              className="rounded-md px-1.5 py-1 text-lead leading-none text-muted transition-colors hover:bg-elevated hover:text-text"
             >
               ×
             </button>
@@ -623,14 +623,14 @@ export function DocPageView({
                   <button
                     type="button"
                     onClick={() => coverInput.current?.click()}
-                    className="rounded border border-border bg-bg px-2 py-0.5 text-[12px] text-muted hover:text-text"
+                    className="rounded border border-border bg-bg px-2 py-0.5 text-small text-muted hover:text-text"
                   >
                     {t("Change cover")}
                   </button>
                   <button
                     type="button"
                     onClick={() => void saveCover(null)}
-                    className="rounded border border-border bg-bg px-2 py-0.5 text-[12px] text-muted hover:text-text"
+                    className="rounded border border-border bg-bg px-2 py-0.5 text-small text-muted hover:text-text"
                   >
                     {t("Remove cover")}
                   </button>
@@ -639,7 +639,7 @@ export function DocPageView({
             </div>
           )}
           {(uploading > 0 || (canEdit && !cover)) && (
-            <div className="mb-2 flex items-center gap-3 text-[12px] text-faint">
+            <div className="mb-2 flex items-center gap-3 text-small text-faint">
               {canEdit && !cover && (
                 <button
                   type="button"
@@ -656,7 +656,7 @@ export function DocPageView({
           <div className="flex items-start gap-3">
             <Menu
               width={196}
-              triggerClassName="shrink-0 rounded-md p-1 text-[26px] leading-none transition-colors hover:bg-elevated"
+              triggerClassName="shrink-0 rounded-md p-1 text-display leading-none transition-colors hover:bg-elevated"
               trigger={
                 <span title={t("Change icon")}>
                   {icon ?? "📄"}
@@ -673,7 +673,7 @@ export function DocPageView({
                         close();
                         void pickIcon(emoji);
                       }}
-                      className="rounded p-1 text-[18px] transition-colors hover:bg-elevated"
+                      className="rounded p-1 text-title transition-colors hover:bg-elevated"
                     >
                       {emoji}
                     </button>
@@ -693,23 +693,23 @@ export function DocPageView({
                 readOnly={!canEdit}
                 aria-label={t("Page title")}
                 className={`w-full rounded-md bg-transparent font-semibold leading-tight tracking-tight text-text placeholder:text-faint hover:bg-elevated/40 focus:bg-bg focus:outline-none ${
-                  compact ? "text-[22px]" : "text-[28px]"
+                  compact ? "text-heading" : "text-display"
                 }`}
                 placeholder={t("Untitled")}
               />
             </div>
           </div>
 
-          {error && <div className="mt-3 text-[12px] text-danger">{t(error)}</div>}
+          {error && <div className="mt-3 text-small text-danger">{t(error)}</div>}
 
           {conflict && (
-            <div data-doc-conflict className="mt-3 rounded-lg border border-border-strong bg-surface p-3 text-[13px]">
+            <div data-doc-conflict className="mt-3 rounded-lg border border-border-strong bg-surface p-3 text-body">
               <div className="font-medium text-text">
                 {conflict.by
                   ? t("{name} changed this document while you were editing it", { name: conflict.by })
                   : t("This document changed while you were editing it")}
               </div>
-              <div className="mt-1 text-[12px] text-muted">
+              <div className="mt-1 text-small text-muted">
                 {t("Your text is not saved yet. Keeping it adds a new version; the other text stays in Updates.")}
               </div>
               <div className="mt-2 max-h-48 overflow-y-auto rounded border border-border bg-bg p-2">
@@ -719,14 +719,14 @@ export function DocPageView({
                 <button
                   type="button"
                   onClick={keepMine}
-                  className="rounded-md bg-accent px-2 py-1 text-[12px] font-medium text-bg hover:bg-accent-hover"
+                  className="rounded-md bg-accent px-2 py-1 text-small font-medium text-bg hover:bg-accent-hover"
                 >
                   {t("Keep my text")}
                 </button>
                 <button
                   type="button"
                   onClick={useTheirs}
-                  className="rounded-md border border-border px-2 py-1 text-[12px] font-medium text-muted hover:border-border-strong hover:text-text"
+                  className="rounded-md border border-border px-2 py-1 text-small font-medium text-muted hover:border-border-strong hover:text-text"
                 >
                   {t("Use the other text")}
                 </button>
@@ -738,12 +738,12 @@ export function DocPageView({
             {unplaced.length > 0 && (
               <div className="mb-4 space-y-0.5">
                 {unplaced.length < subpages.length && (
-                  <div className="px-1 pb-0.5 text-[11.5px] text-faint">{t("Not placed in the page")}</div>
+                  <div className="px-1 pb-0.5 text-small text-faint">{t("Not placed in the page")}</div>
                 )}
                 {unplaced.map((child) => (
                   <div
                     key={child.id}
-                    className="group flex items-center gap-2 rounded px-1 py-0.5 text-[14px] text-text hover:bg-elevated/60"
+                    className="group flex items-center gap-2 rounded px-1 py-0.5 text-body text-text hover:bg-elevated/60"
                   >
                     <Link
                       href={`${base}${child.id}`}
@@ -777,7 +777,7 @@ export function DocPageView({
 
             {/* Anything you can edit opens in the editor directly — there is no
                 read/edit toggle to switch out of, so the caret is where you click. */}
-            {!canEdit && !doc.trim() && <p className="text-[13.5px] text-faint">{t("This page is empty.")}</p>}
+            {!canEdit && !doc.trim() && <p className="text-body text-faint">{t("This page is empty.")}</p>}
             {(canEdit || doc.trim()) && (
               <DocumentEditor
                 key={sharing ? "shared" : "alone"}
@@ -809,7 +809,7 @@ export function DocPageView({
               <div className="mt-4 flex items-center gap-2">
                 <Menu
                   width={240}
-                  triggerClassName="flex items-center gap-1 rounded-md border border-border px-2 py-1 text-[12px] text-muted transition-colors hover:border-border-strong hover:text-text"
+                  triggerClassName="flex items-center gap-1 rounded-md border border-border px-2 py-1 text-small text-muted transition-colors hover:border-border-strong hover:text-text"
                   trigger={
                     <>
                       <Link2 size={12} /> {t("Link a page")}
@@ -820,7 +820,7 @@ export function DocPageView({
                 </Menu>
                 <Menu
                   width={240}
-                  triggerClassName="flex items-center gap-1 rounded-md border border-border px-2 py-1 text-[12px] text-muted transition-colors hover:border-border-strong hover:text-text"
+                  triggerClassName="flex items-center gap-1 rounded-md border border-border px-2 py-1 text-small text-muted transition-colors hover:border-border-strong hover:text-text"
                   trigger={
                     <>
                       <Paperclip size={12} /> {t("Embed a page")}
@@ -838,7 +838,7 @@ export function DocPageView({
               <button
                 type="button"
                 onClick={() => void addSubpage()}
-                className="flex items-center gap-1.5 rounded px-1 py-1 text-[13px] text-muted transition-colors hover:bg-elevated/60 hover:text-text"
+                className="flex items-center gap-1.5 rounded px-1 py-1 text-body text-muted transition-colors hover:bg-elevated/60 hover:text-text"
               >
                 <Plus size={13} /> {t("Add a subpage")}
               </button>
@@ -893,7 +893,7 @@ function PagePicker({
 }) {
   const t = useT();
   if (refs.length === 0) {
-    return <div className="px-2 py-1.5 text-[12px] text-faint">{t("No pages yet.")}</div>;
+    return <div className="px-2 py-1.5 text-small text-faint">{t("No pages yet.")}</div>;
   }
   return (
     <>

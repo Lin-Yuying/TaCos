@@ -41,13 +41,13 @@ export function CommentsSection({
                 size={16}
               />
             ) : null}
-            <span className="text-[12px] font-medium text-muted">{commentAuthorName(item, t)}</span>
-            <span suppressHydrationWarning className="text-[11px] text-faint">
+            <span className="text-small font-medium text-muted">{commentAuthorName(item, t)}</span>
+            <span suppressHydrationWarning className="text-caption text-faint">
               {timeAgo(item.createdAt, locale)}
             </span>
           </div>
           {/* Comments arrive in Markdown too, so an agent's checklist keeps its ticks. */}
-          <div className="text-[13px] leading-relaxed text-text">
+          <div className="text-body leading-relaxed text-text">
             <Markdown source={item.body} />
           </div>
         </div>

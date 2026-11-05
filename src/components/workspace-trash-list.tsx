@@ -37,16 +37,16 @@ export function WorkspaceTrashList({ items }: { items: DeletedWorkspace[] }) {
   return (
     <section className="space-y-3">
       <div className="flex items-baseline gap-2">
-        <h2 className="text-[13px] font-semibold">{t("Deleted workspaces")}</h2>
-        <span className="text-[11px] text-faint">{t("Restorable for 30 days")}</span>
+        <h2 className="text-body font-semibold">{t("Deleted workspaces")}</h2>
+        <span className="text-caption text-faint">{t("Restorable for 30 days")}</span>
       </div>
       <div className="divide-y divide-border rounded-lg border border-border">
         {items.map((item) => (
           <div key={item.id} className="flex items-center gap-3 px-4 py-3">
             <WorkspaceMark icon={item.icon} className="h-6 w-6 shrink-0" />
             <div className="min-w-0 flex-1">
-              <div className="truncate text-[13px] font-medium">{item.name}</div>
-              <div className="text-[11px] text-faint">
+              <div className="truncate text-body font-medium">{item.name}</div>
+              <div className="text-caption text-faint">
                 {item.daysLeft === 0
                   ? t("Expires today")
                   : item.daysLeft === 1
@@ -59,7 +59,7 @@ export function WorkspaceTrashList({ items }: { items: DeletedWorkspace[] }) {
               type="button"
               onClick={() => void restore(item.id)}
               disabled={busyId !== null}
-              className="inline-flex shrink-0 items-center gap-1.5 rounded-md border border-border px-3 py-1.5 text-[12px] font-medium text-text transition-colors hover:bg-elevated disabled:opacity-40"
+              className="inline-flex shrink-0 items-center gap-1.5 rounded-md border border-border px-3 py-1.5 text-small font-medium text-text transition-colors hover:bg-elevated disabled:opacity-40"
             >
               <RotateCcw size={12} />
               {busyId === item.id ? t("Restoring…") : t("Restore")}
@@ -67,7 +67,7 @@ export function WorkspaceTrashList({ items }: { items: DeletedWorkspace[] }) {
           </div>
         ))}
       </div>
-      {error && <div className="text-[12px] text-danger">{t(error)}</div>}
+      {error && <div className="text-small text-danger">{t(error)}</div>}
     </section>
   );
 }

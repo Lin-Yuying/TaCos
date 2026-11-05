@@ -80,7 +80,7 @@ export function CommandPalette({ workspaceId }: { workspaceId: string }) {
           </div>
           <Command.List className="max-h-[380px] overflow-y-auto p-1 pb-2">
             <Command.Empty>
-              <div className="px-3 py-6 text-center text-[13px] text-faint">
+              <div className="px-3 py-6 text-center text-body text-faint">
                 {t("No results for “{query}”")}
               </div>
             </Command.Empty>
@@ -108,17 +108,17 @@ export function CommandPalette({ workspaceId }: { workspaceId: string }) {
                         <span className="min-w-0 flex-1">
                           <span className="flex items-center gap-2">
                             {hit.ref && (
-                              <span className="max-w-[124px] shrink-0 truncate font-mono text-[12px] text-faint">
+                              <span className="max-w-[124px] shrink-0 truncate font-mono text-small text-faint">
                                 {hit.ref}
                               </span>
                             )}
                             <span className="min-w-0 flex-1 truncate">{hit.title || t("Untitled")}</span>
                           </span>
                           {hit.snippet && (
-                            <span className="block truncate text-[12px] text-faint">{hit.snippet}</span>
+                            <span className="block truncate text-small text-faint">{hit.snippet}</span>
                           )}
                         </span>
-                        <span suppressHydrationWarning className="shrink-0 text-[11px] text-faint">
+                        <span suppressHydrationWarning className="shrink-0 text-caption text-faint">
                           {timeAgo(hit.updatedAt, locale)}
                         </span>
                       </Command.Item>
@@ -212,7 +212,7 @@ export function CommandPalette({ workspaceId }: { workspaceId: string }) {
               </Command.Item>
             </Command.Group>
           </Command.List>
-          <div className="flex items-center gap-3 border-t border-border px-3 py-2 text-[11px] text-faint">
+          <div className="flex items-center gap-3 border-t border-border px-3 py-2 text-caption text-faint">
             <span>
               <kbd className="rounded border border-border bg-elevated px-1 font-mono">↑↓</kbd>{" "}
               {t("navigate")}
