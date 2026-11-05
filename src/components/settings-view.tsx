@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { useRouter } from "next/navigation";
 import { ChevronRight, Copy, Check, Pencil, RefreshCw, Trash2, Upload } from "lucide-react";
 import {
@@ -111,6 +111,8 @@ function shellQuote(value: string): string {
   return /^[\w@%+=:,./-]+$/.test(value) ? value : `'${value.replace(/'/g, "'\\''")}'`;
 }
 
+const subscribeNever = () => () => {};
+
 export function SettingsView({
   workspace,
   role,
@@ -177,7 +179,7 @@ export function SettingsView({
   const [harnessError, setHarnessError] = useState<string | null>(null);
   const [harnessNotice, setHarnessNotice] = useState<string | null>(null);
 
-  const origin = typeof window !== "undefined" ? window.location.origin : "http://localhost:3000";
+  const origin = useSyncExternalStore(subscribeNever, () => window.location.origin, () => "http://localhost:3000");
 
   async function toggleHarness(id: string, enabled: boolean) {
     if (!isAdmin) return;

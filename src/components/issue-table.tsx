@@ -205,10 +205,10 @@ export function IssueTable({ issues }: { issues: IssueWithLabels[] }) {
   let flatIndex = -1;
 
   return (
-    <div className="flex-1 overflow-y-auto">
+    <div className="@container flex-1 overflow-y-auto">
       {groups.map((group) => (
         <div key={group.status}>
-          <div className="sticky top-0 z-10 flex items-center gap-2 border-b border-border bg-bg/95 px-10 py-1.5 backdrop-blur lg:px-20 xl:px-32">
+          <div className="sticky top-0 z-10 flex items-center gap-2 border-b border-border bg-bg/95 px-4 py-1.5 backdrop-blur @2xl:px-10 @4xl:px-20 @6xl:px-32">
             <StatusIcon status={group.status} size={13} />
             <span className="text-[12px] font-medium text-muted">
               {t(STATUS_META[group.status].label)}
@@ -234,7 +234,7 @@ export function IssueTable({ issues }: { issues: IssueWithLabels[] }) {
                   openIssue(issue.id);
                 }}
                 onMouseEnter={() => setFocusIndex(index)}
-                className={`flex cursor-default items-center gap-2.5 px-10 py-[7px] text-[13px] transition-colors lg:px-20 xl:px-32 ${
+                className={`flex cursor-default items-center gap-2.5 px-4 py-[7px] text-[13px] transition-colors @2xl:px-10 @4xl:px-20 @6xl:px-32 ${
                   focused ? "bg-row-active" : opened ? "bg-surface" : "hover:bg-elevated/40"
                 } ${opened ? "border-l-2 border-l-accent" : "border-l-2 border-l-transparent"}`}
               >
@@ -252,7 +252,7 @@ export function IssueTable({ issues }: { issues: IssueWithLabels[] }) {
                     {t(PRIORITY_NAMES[issue.priority])}
                   </span>
                 </span>
-                <span className="flex w-[146px] shrink-0 items-center gap-1.5">
+                <span className="hidden w-[146px] shrink-0 items-center gap-1.5 @4xl:flex">
                   {issue.assignees.length === 1 ? (
                     (() => {
                       const assignee = issue.assignees[0];
@@ -294,7 +294,7 @@ export function IssueTable({ issues }: { issues: IssueWithLabels[] }) {
                     </span>
                   ) : null}
                 </span>
-                <span className="flex w-[112px] shrink-0 items-center justify-end gap-1">
+                <span className="hidden w-[112px] shrink-0 items-center justify-end gap-1 @4xl:flex">
                   {issue.labels.slice(0, 2).map((label) => (
                     <LabelPill key={label.id} name={label.name} color={label.color} small />
                   ))}
@@ -302,9 +302,9 @@ export function IssueTable({ issues }: { issues: IssueWithLabels[] }) {
                     <span className="text-[11px] text-faint">+{issue.labels.length - 2}</span>
                   )}
                 </span>
-                <span className="flex w-[44px] shrink-0 items-center justify-end gap-1">
+                <span className="flex w-[72px] shrink-0 items-center justify-end gap-1">
                   <ViaBadge via={issue.createdVia} />
-                  <span suppressHydrationWarning className="w-8 text-right text-[12px] text-faint">
+                  <span suppressHydrationWarning className="whitespace-nowrap text-right text-[12px] text-faint">
                     {timeAgo(issue.updatedAt, locale)}
                   </span>
                 </span>

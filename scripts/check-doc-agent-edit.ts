@@ -39,7 +39,8 @@ async function main() {
   }
   await db.insert(projects).values({ id: "p1", workspaceId: ws, key: "P1", name: "p1", createdBy: "ann", createdAt: at, updatedAt: at } as never);
   const ctx = (userId: string) => ({ workspaceId: ws, projectId: "p1", projectKey: "P1", userId });
-  const run = (userId: string, name: string, args: unknown) => executeAgentTool(ctx(userId), name, args);
+  const run = (userId: string, name: string, args: object) =>
+    executeAgentTool(ctx(userId), name, { workspace: "TW", ...args });
 
   for (const name of ["edit_doc", "undo_doc_edit"]) {
     assert(AGENT_TOOLS.find((tool) => tool.name === name)?.write, `${name} is a write, so it asks for approval`);

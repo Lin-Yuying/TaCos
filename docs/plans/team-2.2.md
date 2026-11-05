@@ -35,7 +35,7 @@ Item-level checks stay cheap (types, check scripts). End-to-end tests and screen
 | 12 | Agent workspace-level read and search, cross-workspace read; writes name a target | done | Check script: write without target refused; no read outside joined workspaces |
 | 13 | Hand a task to own Agent, queue while computer is off, write back comment and notify | done | Check script: queued turn runs when runner returns; write asks for approval by default |
 | 14 | Realtime co-editing, presence avatars, cursors | done | Two clients converge in a check script; if unstable, `blocked` and 2.2 ships without it |
-| 15 | Batch E2E and screenshots with real models and new data dirs; fresh-context review; fix findings | todo | Report lists tested and untested |
+| 15 | Batch E2E and screenshots with real models and new data dirs; fresh-context review; fix findings | done | Report lists tested and untested |
 | 16 | Deploy to the server without touching morula or Caddy; add this Mac's public key | todo | `curl` through the tunnel returns the app; memory measured |
 | 17 | Push, open PR; after the user merges by hand, tag `v2.2.0` and publish "TaCos 2.2" | todo | Release has its assets; title set |
 
@@ -102,4 +102,12 @@ Levels are view, comment and edit (`src/lib/page-level.ts`). A shared page has o
 - `pages.doc` stays the Markdown everything else reads. The socket stores to it at most 2 s after typing stops, and within 10 s during continuous typing, through `updatePage`, so versions and permissions apply as for any save. Text written some other way (an Agent edit, a restore, an old-path save) is applied to the Yjs history as a diff, so open clients merge it instead of doubling text.
 - A short-lived signed token names the workspace, page and person. The socket checks it, the membership and the page level when a client connects. A reader's connection is read-only on the server.
 - If the socket does not sync within 5 s, the page falls back to the old save path.
-- Limits: the last person to type gets the version's attribution; a permission change reaches an open connection only when it reconnects; an outside write can overwrite up to about 2 s of typing that was not stored yet; leaving the page during a lost connection loses text not yet synced.
+- Limits: the last person to type gets the version's attribution; a permission change reaches an open connection only when it reconnects; an outside write merges with typing instead of overwriting it (item 15); leaving the page during a lost connection loses text not yet synced.
+
+### Item 15: batch E2E and review
+
+- Ran on the packaged server (`TACOS_SERVER_MODE=1`, new data dir per run) with real Codex and WorkBuddy turns.
+- Verified: restart with no lost or doubled text, one approval card with deny and allow, a queued turn that runs when the computer returns, cross-workspace read, a write elsewhere that asks, zh screenshots, standalone document save with no socket, `npm run check:harness` 59 checks.
+- Fixes from the review: a stored state is saved when the document loads, so a quiet restart cannot double text; outside writes merge through a temporary Y.Doc; typing during Trash survives a restore; backups use `rsync --link-dest`; `/etc/tacos/env` is created under `umask 077`; the install keeps the port and waits for `/login`; restore and purge check level and clear the collab row; runner tokens honor the TTL.
+- Codex elicitations and WorkBuddy's `bypassPermissions` both leave the TaCos tool route as the only approval gate.
+- Not verified on this machine: real Pi, OpenCode and DeepSeek turns, which end with a clear error because no key is configured for them.

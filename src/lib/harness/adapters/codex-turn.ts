@@ -285,6 +285,11 @@ export async function* openCodexTurn(input: TurnInput, log?: TurnLog): AsyncGene
       send({ jsonrpc: "2.0", id, result: { action: "decline" } });
       return;
     }
+    // The tool route asks for TaCos's own tools, for every harness. Asking here too means two cards.
+    if (params.serverName === "tacos") {
+      send({ jsonrpc: "2.0", id, result: { action: "accept", content: {} } });
+      return;
+    }
     const message = String(params.message ?? "Allow this tool call?");
     const toolName = message.match(/run tool "([^"]+)"/)?.[1] ?? "call";
     // H-P3-19: delete tools always wait for a card, even when approval is Full.

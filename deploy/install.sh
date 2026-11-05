@@ -6,7 +6,10 @@ set -euo pipefail
 
 PAYLOAD="${1:?usage: install.sh <payload dir>}"
 NODE_VERSION="v24.13.0"
-PORT="${TACOS_PORT:-3200}"
+# An update keeps the port that members' keys already permit.
+KEPT_PORT=""
+[ -f /etc/tacos/env ] && KEPT_PORT="$(sed -n 's/^PORT=//p' /etc/tacos/env)"
+PORT="${TACOS_PORT:-${KEPT_PORT:-3200}}"
 HERE="$(cd "$(dirname "$0")" && pwd)"
 
 if ! id tacos >/dev/null 2>&1; then
@@ -32,9 +35,9 @@ fi
 
 if [ ! -f /etc/tacos/env ]; then
   install -d -m 755 /etc/tacos
-  umask 077
   ADMIN_PASSWORD="$(head -c 18 /dev/urandom | base64 | tr -d '+/=')"
-  cat > /etc/tacos/env <<ENV
+  # Only this file: the app folder copied below has to stay readable by the tacos account.
+  (umask 077; cat > /etc/tacos/env) <<ENV
 NODE_ENV=production
 HOSTNAME=127.0.0.1
 PORT=$PORT
@@ -61,4 +64,12 @@ systemctl daemon-reload
 systemctl enable --now tacos-backup.timer
 systemctl enable tacos.service
 systemctl restart tacos.service
-echo "TaCos is running on 127.0.0.1:$PORT"
+for _ in $(seq 1 30); do
+  if curl -fsS -o /dev/null "http://127.0.0.1:$PORT/login"; then
+    echo "TaCos is running on 127.0.0.1:$PORT"
+    exit 0
+  fi
+  sleep 2
+done
+echo "TaCos did not answer on 127.0.0.1:$PORT. See: journalctl -u tacos -n 50" >&2
+exit 1

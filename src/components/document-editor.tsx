@@ -310,12 +310,14 @@ export function DocumentEditor({
   }, [editor]);
 
   // A change from outside the editor (a linked page, an accepted AI edit) replaces the text.
-  // Typing never lands here because `emitted` already holds it.
+  // Typing never lands here because `emitted` already holds it. A shared document takes outside
+  // text from the server; here `value` can be a moment behind what others just typed.
+  const shared = Boolean(collab);
   useEffect(() => {
-    if (!editor || value === emitted.current) return;
+    if (!editor || shared || value === emitted.current) return;
     emitted.current = value;
     editor.commands.setContent(markdownToDocument(markdown, value), { emitUpdate: false });
-  }, [editor, markdown, value]);
+  }, [editor, markdown, shared, value]);
 
   useEffect(() => {
     if (editor) editor.setEditable(editable, false);

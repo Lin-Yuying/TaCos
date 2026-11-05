@@ -66,7 +66,7 @@ async function main() {
   const original = (await pages.getPage("w1", pageId, "ann"))!;
 
   const port = await freePort();
-  const collab = await startCollabServer(port);
+  let collab = await startCollabServer(port);
   assert(collabRunning(), "the app can tell the socket is running");
 
   const clients: HocuspocusProvider[] = [];
@@ -175,6 +175,51 @@ async function main() {
   assert(again.text().includes("Added while closed."), "text from while the document was closed arrives");
   assert(again.text().split("Later ").length === 2, `reopening does not double the text: ${again.text()}`);
   assert(again.text().split("Added while closed.").length === 2, "the new text comes in once");
+
+  for (const client of clients) client.destroy();
+  clients.length = 0;
+
+  // A new document, a client that never types, and a server restart under it.
+  const quiet = await pages.createPage("w1", "ann", { title: "Quiet" });
+  await pages.updatePage("w1", quiet.id, "ann", { doc: "Only once." });
+  await pages.setPageShared("w1", quiet.id, "ann", true);
+  const q = open("ann", quiet.id, issueCollabToken({ workspaceId: "w1", pageId: quiet.id, userId: "ann" }));
+  await until("the quiet client to sync", () => q.provider.isSynced && q.text().includes("Only once."));
+  await collab.stop();
+  await until("the client to notice", () => !q.provider.isSynced || !q.provider.isAuthenticated);
+  collab = await startCollabServer(port);
+  await until("the quiet client to come back", () => collab.hocuspocus.documents.has(quiet.id) && q.provider.isSynced, 45_000);
+  await sleep(2600);
+  assert(q.text().split("Only once.").length === 2, `a reconnect does not double the text: ${q.text()}`);
+  assert((await pages.getPage("w1", quiet.id, "ann"))!.doc.split("Only once.").length === 2, "the page is not doubled either");
+
+  // Typing not stored yet, then text written from the stored page: both stay.
+  typeInto(q.doc, "Unstored ");
+  await until("the typing to reach the server", () => {
+    const live = collab.hocuspocus.documents.get(quiet.id);
+    return Boolean(live?.getXmlFragment("default").toString().includes("Unstored "));
+  });
+  const beforeOutside = (await pages.getPage("w1", quiet.id, "ann"))!;
+  assert(!beforeOutside.doc.includes("Unstored "), "the typing is not stored yet");
+  await pages.updatePage("w1", quiet.id, "ann", { doc: `${beforeOutside.doc}\n\nFrom outside.` });
+  await until("the outside text to arrive", () => q.text().includes("From outside."));
+  assert(q.text().includes("Unstored "), `outside text keeps typing that was not stored: ${q.text()}`);
+  await until("both to reach the page", async () => {
+    const page = (await pages.getPage("w1", quiet.id, "ann"))!;
+    return page.doc.includes("Unstored ") && page.doc.includes("From outside.");
+  });
+
+  // Typing while the page goes to the Trash comes back with the page.
+  typeInto(q.doc, "Trashed ");
+  await pages.deletePage("w1", quiet.id, "ann");
+  await sleep(2600);
+  q.provider.destroy();
+  clients.length = 0;
+  await until("the trashed document to unload", () => !collab.hocuspocus.documents.has(quiet.id));
+  await pages.restorePage("w1", quiet.id, "ann");
+  const back = open("ann", quiet.id, issueCollabToken({ workspaceId: "w1", pageId: quiet.id, userId: "ann" }));
+  await until("the restored page to sync", () => back.provider.isSynced);
+  assert(back.text().includes("Trashed "), `typing during the delete survives: ${back.text()}`);
 
   for (const client of clients) client.destroy();
   await collab.stop();

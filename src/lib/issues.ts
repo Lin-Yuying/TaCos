@@ -40,6 +40,7 @@ import {
   workspaceMembers,
   workspaces,
   pageAccess,
+  pageCollab,
   pageComments,
   pageFavorites,
   pageVersions,
@@ -429,6 +430,7 @@ const WORKSPACE_TRASH_DAYS = 30;
 // Hard delete: only the 30-day sweep and an expired restore call this.
 async function purgeWorkspaceData(db: ReturnType<typeof getDb>, workspaceId: string) {
   const workspacePages = db.select({ id: pages.id }).from(pages).where(eq(pages.workspaceId, workspaceId));
+  await db.delete(pageCollab).where(inArray(pageCollab.pageId, workspacePages));
   await db.delete(pageAccess).where(inArray(pageAccess.pageId, workspacePages));
   await db.delete(pageFavorites).where(inArray(pageFavorites.pageId, workspacePages));
   await removeWorkspaceAttachments(workspaceId);

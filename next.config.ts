@@ -16,7 +16,7 @@ const nextConfig: NextConfig = {
   },
   // The dev badge ("N" in the corner) is Next's build indicator, not app UI.
   devIndicators: false,
-  serverExternalPackages: ["better-sqlite3", "@tus/server", "@tus/file-store", "@hocuspocus/server", "yjs", "@tiptap/y-tiptap", "ws"],
+  serverExternalPackages: ["better-sqlite3", "@tus/server", "@tus/file-store"],
   turbopack: {
     rules: {
       "*.css": {

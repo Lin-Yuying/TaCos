@@ -10,6 +10,7 @@ import {
   readdirSync,
   realpathSync,
   rmSync,
+  unlinkSync,
   statSync,
 } from "node:fs";
 import { execFileSync } from "node:child_process";
@@ -73,7 +74,7 @@ function dereference(dir) {
     const full = path.join(dir, entry.name);
     if (entry.isSymbolicLink()) {
       const target = realpathSync(full);
-      rmSync(full);
+      unlinkSync(full);
       cpSync(target, full, { recursive: true });
       dereference(full);
     } else if (entry.isDirectory()) {

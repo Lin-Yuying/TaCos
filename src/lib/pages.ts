@@ -1,7 +1,7 @@
 import crypto from "node:crypto";
 import { and, desc, eq, inArray, isNotNull, isNull, lt, or } from "drizzle-orm";
 import { getDb } from "../db/client";
-import { notifications, pageAccess, pageComments, pageFavorites, pageVersions, pages, users } from "../db/schema";
+import { notifications, pageAccess, pageCollab, pageComments, pageFavorites, pageVersions, pages, users } from "../db/schema";
 import { attachmentImageType, getAttachment, removePageAttachments } from "./attachments";
 import { collabDocWritten } from "./collab/live";
 import { isPageLevel, levelAllows, type PageLevel } from "./page-level";
@@ -942,6 +942,7 @@ export async function restorePage(
   viewerId: string
 ): Promise<void> {
   const row = await findTrashed(workspaceId, pageId, viewerId);
+  await requirePageLevel({ ...row, shared: row.shared === 1 }, viewerId, "edit");
   const db = getDb();
   // A parent that is gone or still in the Trash cannot hold it: it comes back at the top.
   const parent = row.parentId ? await findPage(workspaceId, row.parentId) : null;
@@ -972,6 +973,7 @@ export async function purgePage(
       .from(pages)
       .where(and(eq(pages.workspaceId, workspaceId), eq(pages.trashRoot, pageId)))
   ).map((page) => page.id);
+  await db.delete(pageCollab).where(inArray(pageCollab.pageId, ids));
   await db.delete(pageVersions).where(inArray(pageVersions.pageId, ids));
   await db.delete(pageComments).where(inArray(pageComments.pageId, ids));
   await db.delete(pageAccess).where(inArray(pageAccess.pageId, ids));

@@ -25,6 +25,7 @@ import type {
   ProjectMember,
 } from "@/lib/issues";
 import { useT } from "@/components/i18n-context";
+import type { FieldValues, TaskField } from "@/lib/task-view";
 
 type Counts = Record<Status, number> & { total: number };
 type ProjectDetail = Project & { doc: string; createdBy: string | null };
@@ -48,7 +49,11 @@ export function ProjectWorkspace({
   unseenDocEdits,
   resources,
   trashedTitles,
+  fields,
+  fieldValues,
 }: {
+  fields: TaskField[];
+  fieldValues: FieldValues;
   workspaceId: string;
   project: ProjectDetail;
   counts: Counts;
@@ -211,7 +216,14 @@ export function ProjectWorkspace({
               <LayoutToggle />
             </div>
           </header>
-          <IssueLayout issues={shown} workspaceId={workspaceId} currentUserId={currentUserId} />
+          <IssueLayout
+            issues={shown}
+            workspaceId={workspaceId}
+            currentUserId={currentUserId}
+            fields={fields}
+            values={fieldValues}
+            manageFields
+          />
         </>
       )}
     </div>

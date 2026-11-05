@@ -1,7 +1,9 @@
 // Copies the database with SQLite's online backup, so the server can keep writing, and keeps
-// 14 days. Files people upload are copied with it. Copies stay on this server, so they
-// protect against a bad write or a mistaken delete, and not against losing the machine.
-import { cpSync, existsSync, mkdirSync, readdirSync, rmSync } from "node:fs";
+// 14 days. Files people upload are copied with it, and a file unchanged since the last backup
+// takes no new space. Copies stay on this server, so they protect against a bad write or a
+// mistaken delete, and not against losing the machine.
+import { execFileSync } from "node:child_process";
+import { existsSync, mkdirSync, readdirSync, rmSync } from "node:fs";
 import { createRequire } from "node:module";
 import path from "node:path";
 
@@ -21,9 +23,13 @@ await db.backup(path.join(target, "tacos.db"));
 db.close();
 
 const uploads = path.join(dataDir, "uploads");
-if (existsSync(uploads)) cpSync(uploads, path.join(target, "uploads"), { recursive: true });
-
 const days = readdirSync(backupRoot).filter((name) => /^\d{4}-\d{2}-\d{2}$/.test(name)).sort();
+if (existsSync(uploads)) {
+  const previous = days.filter((name) => name < day).at(-1);
+  const linkDest = previous ? [`--link-dest=${path.join(backupRoot, previous, "uploads")}`] : [];
+  execFileSync("rsync", ["-a", "--delete", ...linkDest, `${uploads}/`, `${path.join(target, "uploads")}/`]);
+}
+
 for (const old of days.slice(0, Math.max(0, days.length - KEEP))) {
   rmSync(path.join(backupRoot, old), { recursive: true, force: true });
 }

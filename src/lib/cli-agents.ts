@@ -764,6 +764,11 @@ function codexStream(binary: string, prompt: CliPrompt, options: RunOptions): Re
           send({ jsonrpc: "2.0", id, result: { action: "decline" } });
           return;
         }
+        // The tool route asks for TaCos's own tools, for every harness. Asking here too means two cards.
+        if (params.serverName === "tacos") {
+          send({ jsonrpc: "2.0", id, result: { action: "accept", content: {} } });
+          return;
+        }
         const message = String(params.message ?? "Allow this tool call?");
         const toolName = message.match(/run tool "([^"]+)"/)?.[1] ?? "call";
         if (

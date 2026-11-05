@@ -35,8 +35,17 @@ function writeText(doc: Y.Doc, markdown: string): void {
   }, "tacos-text");
 }
 
-async function saveState(pageId: string, doc: Y.Doc, revision: number): Promise<void> {
-  const state = Buffer.from(Y.encodeStateAsUpdate(doc));
+// The same text as the document would serialize it, without touching the document.
+function readBack(markdown: string): string {
+  const doc = new Y.Doc();
+  writeText(doc, markdown);
+  const text = toMarkdown(doc);
+  doc.destroy();
+  return text;
+}
+
+async function saveState(pageId: string, update: Uint8Array, revision: number): Promise<void> {
+  const state = Buffer.from(update);
   await getDb()
     .insert(pageCollab)
     .values({ pageId, state, revision, updatedAt: new Date().toISOString() })
@@ -51,6 +60,9 @@ export async function startCollabServer(port = collabPort()): Promise<{ stop: ()
   // What the document's text was when it last matched the page, whoever wrote it. Text that
   // only differs by how Markdown reads back is not an edit.
   const settled = new Map<string, string>();
+  // Who to write the text as. Hocuspocus reports only the latest change, and an outside write has
+  // no person on it: going by that would drop typing that was still waiting to store.
+  const editors = new Map<string, Context>();
 
   const server = new Server<Context>({
     port,
@@ -84,34 +96,57 @@ export async function startCollabServer(port = collabPort()): Promise<{ stop: ()
       if (!page) throw new Error("Not allowed");
       const [saved] = await getDb().select().from(pageCollab).where(eq(pageCollab.pageId, documentName)).limit(1);
       if (saved) Y.applyUpdate(document, new Uint8Array(saved.state));
-      if (!saved || saved.revision !== page.revision) writeText(document, page.doc);
-      settled.set(documentName, toMarkdown(document));
+      if (!saved || saved.revision !== page.revision) {
+        writeText(document, page.doc);
+        // Saved before anyone syncs. A client that reconnects later has to meet this same history:
+        // text rebuilt a second time would merge in beside its copy and show up twice.
+        await saveState(documentName, Y.encodeStateAsUpdate(document), page.revision);
+      }
+      settled.set(documentName, readBack(page.doc));
       return document;
     },
 
-    async onStoreDocument({ document, documentName, lastContext }) {
-      const { workspaceId, userId } = lastContext;
-      if (!workspaceId || !userId) return;
-      const page = await getPage(workspaceId, documentName, userId);
-      if (!page) return;
+    async onChange({ documentName, context }) {
+      if (context.userId) editors.set(documentName, context);
+    },
+
+    async onStoreDocument({ document, documentName }) {
+      const editor = editors.get(documentName);
+      if (!editor) return;
+      const { workspaceId, userId } = editor;
+      const state = Y.encodeStateAsUpdate(document);
       const text = toMarkdown(document);
-      let revision = page.revision;
-      if (text !== page.doc && text !== settled.get(documentName)) {
-        const written = await updatePage(
-          workspaceId,
-          documentName,
-          userId,
-          { doc: text, baseRevision: page.revision },
-          { fromCollab: true }
-        );
-        revision = written.revision;
-        settled.set(documentName, text);
+      const page = await getPage(workspaceId, documentName, userId);
+      if (!page) {
+        // In the Trash: the page cannot take the text, and restoring it should bring the text back.
+        await getDb()
+          .update(pageCollab)
+          .set({ state: Buffer.from(state), updatedAt: new Date().toISOString() })
+          .where(eq(pageCollab.pageId, documentName));
+        return;
       }
-      await saveState(documentName, document, revision);
+      let revision = page.revision;
+      try {
+        if (text !== page.doc && text !== settled.get(documentName)) {
+          const written = await updatePage(
+            workspaceId,
+            documentName,
+            userId,
+            { doc: text, baseRevision: page.revision },
+            { fromCollab: true }
+          );
+          revision = written.revision;
+          settled.set(documentName, text);
+        }
+      } finally {
+        // Also when the page refused the text: it stays here for the next store to try.
+        await saveState(documentName, state, revision);
+      }
     },
 
     async afterUnloadDocument({ documentName }) {
       settled.delete(documentName);
+      editors.delete(documentName);
     },
   });
 
@@ -122,9 +157,23 @@ export async function startCollabServer(port = collabPort()): Promise<{ stop: ()
     replace(pageId, markdown, revision) {
       const document = hocuspocus.documents.get(pageId);
       if (!document) return;
-      writeText(document, markdown);
-      settled.set(pageId, toMarkdown(document));
-      void saveState(pageId, document, revision);
+      const saved = getDb().select().from(pageCollab).where(eq(pageCollab.pageId, pageId)).get();
+      if (!saved) {
+        writeText(document, markdown);
+        settled.set(pageId, toMarkdown(document));
+        void saveState(pageId, Y.encodeStateAsUpdate(document), revision);
+        return;
+      }
+      // Whoever wrote this started from the stored page, so it is applied to the stored state and
+      // merged in. Applying it to the live text would delete whatever was typed since the last store.
+      const stored = new Y.Doc();
+      Y.applyUpdate(stored, new Uint8Array(saved.state));
+      const before = Y.encodeStateVector(stored);
+      writeText(stored, markdown);
+      Y.applyUpdate(document, Y.encodeStateAsUpdate(stored, before), "tacos-text");
+      settled.set(pageId, toMarkdown(stored));
+      void saveState(pageId, Y.encodeStateAsUpdate(stored), revision);
+      stored.destroy();
     },
   });
 

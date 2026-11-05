@@ -7,7 +7,8 @@ KEY="${1:?usage: add-member-key.sh \"<public key line>\"}"
 PORT="$(sed -n 's/^PORT=//p' /etc/tacos/env)"
 FILE=/home/tacos/.ssh/authorized_keys
 
-if ! printf '%s\n' "$KEY" | grep -Eq '^ssh-(ed25519|rsa) [A-Za-z0-9+/=]+( [^"]*)?$'; then
+# Checked as a whole: grep looks at each line, and a second line would become an unrestricted key.
+if [[ "$KEY" == *$'\n'* ]] || ! printf '%s\n' "$KEY" | grep -Eq '^ssh-(ed25519|rsa) [A-Za-z0-9+/=]+( [^"]*)?$'; then
   echo "That does not look like one public key line." >&2
   exit 1
 fi

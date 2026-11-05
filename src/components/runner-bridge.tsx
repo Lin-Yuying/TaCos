@@ -20,6 +20,7 @@ export type DesktopRunner = {
 export type DesktopResult<T> = { ok: true; data: T } | { ok: false; error: string };
 
 export function desktopRunner(): DesktopRunner | undefined {
+  if (typeof window === "undefined") return undefined;
   return (window as unknown as { tacosDesktop?: { runner?: DesktopRunner } }).tacosDesktop?.runner;
 }
 

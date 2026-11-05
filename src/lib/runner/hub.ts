@@ -1,5 +1,5 @@
 import crypto from "node:crypto";
-import { and, asc, eq, isNotNull, isNull, lt, or } from "drizzle-orm";
+import { and, asc, eq, gte, isNotNull, isNull, lt, or } from "drizzle-orm";
 import { getDb } from "@/db/client";
 import { agentRuns, projects, runnerStatus, runnerTokens } from "@/db/schema";
 import {
@@ -62,7 +62,12 @@ export async function runnerUserFor(request: Request): Promise<string | null> {
   const [row] = await getDb()
     .select({ userId: runnerTokens.userId })
     .from(runnerTokens)
-    .where(eq(runnerTokens.tokenHash, hashToken(token)))
+    .where(
+      and(
+        eq(runnerTokens.tokenHash, hashToken(token)),
+        gte(runnerTokens.createdAt, new Date(Date.now() - TOKEN_TTL_MS).toISOString())
+      )
+    )
     .limit(1);
   return row?.userId ?? null;
 }
