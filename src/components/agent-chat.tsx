@@ -23,6 +23,7 @@ import {
   PanelLeft,
   Pencil,
   Pin,
+  Paperclip,
   Plus,
   Search,
   Settings2,
@@ -38,6 +39,11 @@ import { Menu, MenuItem } from "@/components/menu";
 import { useUI } from "@/components/ui-context";
 import { ThreadTaskChips } from "@/components/thread-task-chips";
 import { Markdown } from "@/components/markdown";
+import {
+  AGENT_ATTACHMENT_MAX_BYTES,
+  AGENT_ATTACHMENT_MAX_COUNT,
+  type AgentAttachmentWire,
+} from "@/lib/agent-composer-attachments.shared";
 import { rememberHarness, streamAiEdit, type AgentApprovalCard, type AgentStepFrame } from "@/lib/ai-client";
 import {
   createAgentSkillAction,
@@ -895,6 +901,34 @@ function SkillManager({
   );
 }
 
+type ComposerAttachment = AgentAttachmentWire & { id: string; previewUrl?: string };
+
+async function filesToAttachments(
+  files: FileList | File[],
+  t: (key: string, vars?: Record<string, string | number>) => string
+): Promise<{ items: ComposerAttachment[]; error: string | null }> {
+  const list = Array.from(files);
+  const items: ComposerAttachment[] = [];
+  const maxMb = Math.round(AGENT_ATTACHMENT_MAX_BYTES / (1024 * 1024));
+  for (const file of list) {
+    if (file.size > AGENT_ATTACHMENT_MAX_BYTES) {
+      return { items: [], error: t('"{name}" is too large (max {max} MB)', { name: file.name, max: maxMb }) };
+    }
+    const buffer = await file.arrayBuffer();
+    const bytes = new Uint8Array(buffer);
+    let binary = "";
+    for (let i = 0; i < bytes.length; i += 1) binary += String.fromCharCode(bytes[i]!);
+    items.push({
+      id: `${file.name}-${file.size}-${file.lastModified}`,
+      name: file.name,
+      mimeType: file.type || undefined,
+      data: btoa(binary),
+      previewUrl: file.type.startsWith("image/") ? URL.createObjectURL(file) : undefined,
+    });
+  }
+  return { items, error: null };
+}
+
 function Composer({
   value,
   onChange,
@@ -913,7 +947,7 @@ function Composer({
 }: {
   value: string;
   onChange: (value: string) => void;
-  onSubmit: () => void;
+  onSubmit: (text: string, attachments: AgentAttachmentWire[]) => void;
   busy?: boolean;
   onStop?: () => void;
   placeholder: string;
@@ -931,6 +965,9 @@ function Composer({
 }) {
   const t = useT();
   const box = useRef<HTMLTextAreaElement | null>(null);
+  const fileInput = useRef<HTMLInputElement | null>(null);
+  const [attachments, setAttachments] = useState<ComposerAttachment[]>([]);
+  const [attachError, setAttachError] = useState<string | null>(null);
   // The "+" menu steals focus on click, so remember where the caret was when the
   // textarea last had it.
   const caret = useRef(0);
@@ -1005,8 +1042,76 @@ function Composer({
     writeToken(at, at, `${needsSpace ? " " : ""}@${skillToken(skill)} `);
   }
 
+  useEffect(
+    () => () => {
+      for (const item of attachments) {
+        if (item.previewUrl) URL.revokeObjectURL(item.previewUrl);
+      }
+    },
+    [attachments]
+  );
+
+  async function addFiles(files: FileList | File[] | null | undefined) {
+    if (!files?.length || busy) return;
+    setAttachError(null);
+    const { items, error } = await filesToAttachments(files, t);
+    if (error) {
+      setAttachError(error);
+      return;
+    }
+    setAttachments((prev) => {
+      const next = [...prev];
+      for (const item of items) {
+        if (next.some((existing) => existing.id === item.id)) continue;
+        if (next.length >= AGENT_ATTACHMENT_MAX_COUNT) {
+          setAttachError(t("At most {n} files per message", { n: AGENT_ATTACHMENT_MAX_COUNT }));
+          break;
+        }
+        next.push(item);
+      }
+      return next;
+    });
+  }
+
+  function removeAttachment(id: string) {
+    setAttachments((prev) => {
+      const item = prev.find((entry) => entry.id === id);
+      if (item?.previewUrl) URL.revokeObjectURL(item.previewUrl);
+      return prev.filter((entry) => entry.id !== id);
+    });
+  }
+
+  function submitComposer() {
+    if (busy) return;
+    const text = value.trim();
+    if (!text && attachments.length === 0) return;
+    onSubmit(
+      text,
+      attachments.map(({ name, mimeType, data }) => ({ name, mimeType, data }))
+    );
+    setAttachments((prev) => {
+      for (const item of prev) {
+        if (item.previewUrl) URL.revokeObjectURL(item.previewUrl);
+      }
+      return [];
+    });
+    setAttachError(null);
+  }
+
+  const canSend = Boolean(value.trim() || attachments.length);
+
   return (
-    <div className="relative rounded-[22px] border border-border bg-surface p-2 shadow-[0_1px_3px_rgba(0,0,0,0.05)] transition-colors focus-within:border-border-strong">
+    <div
+      className="relative rounded-[22px] border border-border bg-surface p-2 shadow-[0_1px_3px_rgba(0,0,0,0.05)] transition-colors focus-within:border-border-strong"
+      onDragOver={(event) => {
+        if (busy) return;
+        event.preventDefault();
+      }}
+      onDrop={(event) => {
+        event.preventDefault();
+        void addFiles(event.dataTransfer.files);
+      }}
+    >
       {mention && matches.length > 0 && (
         <div
           ref={panel}
@@ -1048,6 +1153,45 @@ function Composer({
           </div>
         </div>
       )}
+      {attachments.length > 0 && (
+        <div className="mb-1 flex flex-wrap gap-1.5 px-1.5 pt-1">
+          {attachments.map((item) => (
+            <span
+              key={item.id}
+              className="flex max-w-full items-center gap-1 rounded-full border border-border bg-elevated py-0.5 pl-1 pr-1.5 text-small text-muted"
+            >
+              {item.previewUrl ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={item.previewUrl} alt="" className="h-6 w-6 shrink-0 rounded object-cover" />
+              ) : (
+                <FileText size={14} className="shrink-0 text-faint" />
+              )}
+              <span className="max-w-[160px] truncate" title={item.name}>
+                {item.name}
+              </span>
+              <button
+                type="button"
+                onClick={() => removeAttachment(item.id)}
+                className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-faint transition-colors hover:bg-surface hover:text-text"
+                aria-label={t("Remove attachment")}
+              >
+                <X size={12} />
+              </button>
+            </span>
+          ))}
+        </div>
+      )}
+      {attachError && <p className="px-2 pb-1 text-small text-danger">{t(attachError)}</p>}
+      <input
+        ref={fileInput}
+        type="file"
+        multiple
+        className="hidden"
+        onChange={(event) => {
+          void addFiles(event.target.files);
+          event.target.value = "";
+        }}
+      />
       <textarea
         ref={(el) => {
           box.current = el;
@@ -1056,6 +1200,13 @@ function Composer({
         value={value}
         rows={1}
         placeholder={placeholder}
+        onPaste={(event) => {
+          const files = event.clipboardData?.files;
+          if (files?.length) {
+            event.preventDefault();
+            void addFiles(files);
+          }
+        }}
         onChange={(event) => {
           onChange(event.target.value);
           caret.current = event.target.selectionStart ?? event.target.value.length;
@@ -1089,7 +1240,7 @@ function Composer({
           }
           if (event.key === "Enter" && !event.shiftKey && !event.nativeEvent.isComposing) {
             event.preventDefault();
-            if (!busy) onSubmit();
+            if (!busy) submitComposer();
           }
         }}
         className="max-h-[220px] min-h-[30px] w-full resize-none bg-transparent px-2.5 pt-2 text-body leading-relaxed outline-none placeholder:text-faint"
@@ -1098,6 +1249,16 @@ function Composer({
           the send button never leaves it. z-10 keeps open menus above the row under the card. */}
       <div className="@container relative z-10 mt-1 px-0.5 pb-0.5">
         <div className="flex flex-wrap items-center gap-x-0.5 gap-y-1 @[340px]:flex-nowrap">
+          <button
+            type="button"
+            disabled={busy}
+            onClick={() => fileInput.current?.click()}
+            className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-muted transition-colors hover:bg-elevated hover:text-text disabled:opacity-40"
+            aria-label={t("Attach files")}
+            title={t("Attach files")}
+          >
+            <Paperclip size={15} />
+          </button>
           {onNew && (
             <Menu
               width={260}
@@ -1107,6 +1268,15 @@ function Composer({
             >
               {(close) => (
                 <>
+                  <MenuItem
+                    onSelect={() => {
+                      close();
+                      fileInput.current?.click();
+                    }}
+                  >
+                    <Paperclip size={13} /> {t("Attach files…")}
+                  </MenuItem>
+                  <div className="my-1 border-t border-border" />
                   {/* Machine-level skill folders: keep the entry above the list, which is long
                       enough to scroll on a short window. */}
                   {onCreateSkill && onDeleteSkill && (
@@ -1170,8 +1340,8 @@ function Composer({
             {actions}
             <button
               type="button"
-              onClick={() => (busy && onStop ? onStop() : onSubmit())}
-              disabled={!busy && (!value.trim() || submitDisabled)}
+              onClick={() => (busy && onStop ? onStop() : submitComposer())}
+              disabled={!busy && (!canSend || submitDisabled)}
               className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[#0d0d0d] text-white transition-opacity hover:opacity-80 disabled:bg-elevated disabled:text-faint disabled:opacity-100"
               aria-label={t(busy ? "Stop" : "Send")}
               title={t(busy ? "Stop" : "Send")}
@@ -1759,14 +1929,13 @@ function StartComposer({
   onEngine: (engine: AgentHarnessId) => void;
   onModel: (model: string, effort: string) => void;
   onApproval: (approval: AgentApproval) => void;
-  onStart: (text: string) => void;
+  onStart: (text: string, attachments: AgentAttachmentWire[]) => void;
 }) {
   const t = useT();
   const [text, setText] = useState("");
-  const submit = () => {
-    const message = text.trim();
-    if (!message || busy) return;
-    onStart(message);
+  const submit = (message: string, attachments: AgentAttachmentWire[]) => {
+    if ((!message.trim() && attachments.length === 0) || busy) return;
+    onStart(message.trim(), attachments);
   };
   return (
     <div className="flex min-h-0 flex-1 flex-col overflow-y-auto">
@@ -1779,7 +1948,10 @@ function StartComposer({
             <Composer
               value={text}
               onChange={setText}
-              onSubmit={submit}
+              onSubmit={(message, attachments) => {
+                submit(message, attachments);
+                setText("");
+              }}
               placeholder={t("Message TaCos")}
               onNew={() => setText("")}
               skills={skills}
@@ -1975,7 +2147,7 @@ export function AgentWorkspace({
     }
   }
 
-  async function start(text: string) {
+  async function start(text: string, attachments: AgentAttachmentWire[] = []) {
     setStarting(true);
     setStartError(null);
     let result: Awaited<ReturnType<typeof startAgentThreadAction>>;
@@ -2003,7 +2175,10 @@ export function AgentWorkspace({
     // The first turn has to survive the navigation into the new thread, so it waits
     // here for Conversation to pick up on mount.
     try {
-      sessionStorage.setItem(`tacos:agent:pending:${result.data.id}`, text);
+      sessionStorage.setItem(
+        `tacos:agent:pending:${result.data.id}`,
+        JSON.stringify({ text, attachments })
+      );
     } catch {
       /* no storage — the thread still opens, the message just isn't pre-sent */
     }
@@ -2145,7 +2320,7 @@ export function AgentWorkspace({
                 rememberPrefs({ visibility });
               }}
               onEngine={chooseEngine}
-              onStart={(text) => void start(text)}
+              onStart={(text, attachments) => void start(text, attachments)}
             />
           </>
         )}
@@ -2277,14 +2452,28 @@ function Conversation({
     if (pendingSent.current) return;
     pendingSent.current = true;
     const key = `tacos:agent:pending:${active.id}`;
-    let pending: string | null = null;
+    let pendingText = "";
+    let pendingAttachments: AgentAttachmentWire[] = [];
     try {
-      pending = sessionStorage.getItem(key);
-      if (pending) sessionStorage.removeItem(key);
+      const raw = sessionStorage.getItem(key);
+      if (raw) {
+        sessionStorage.removeItem(key);
+        try {
+          const parsed = JSON.parse(raw) as { text?: string; attachments?: AgentAttachmentWire[] };
+          if (parsed && typeof parsed === "object" && ("text" in parsed || "attachments" in parsed)) {
+            pendingText = typeof parsed.text === "string" ? parsed.text : "";
+            pendingAttachments = Array.isArray(parsed.attachments) ? parsed.attachments : [];
+          } else {
+            pendingText = raw;
+          }
+        } catch {
+          pendingText = raw;
+        }
+      }
     } catch {
       /* no storage — nothing to pre-send */
     }
-    if (pending) void send(pending);
+    if (pendingText.trim() || pendingAttachments.length) void send(pendingText, pendingAttachments);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -2296,9 +2485,9 @@ function Conversation({
     });
   }
 
-  async function send(text: string) {
+  async function send(text: string, attachments: AgentAttachmentWire[] = []) {
     const message = text.trim();
-    if (!message || busy) return;
+    if ((!message && attachments.length === 0) || busy) return;
     setInput("");
     setError(null);
     setApproval(null);
@@ -2306,14 +2495,26 @@ function Conversation({
     const startedAt = Date.now();
     setMessages((prev) => [
       ...prev,
-      { id: `local-${startedAt}`, role: "user", content: message, steps: [] },
+      {
+        id: `local-${startedAt}`,
+        role: "user",
+        content: message || attachments.map((file) => file.name).join(", "),
+        steps: [],
+      },
       { id: `streaming-${startedAt}`, role: "assistant", content: "", steps: [] },
     ]);
     const controller = new AbortController();
     abort.current = controller;
     try {
       await streamAiEdit(
-        { workspaceId, action: "agent", threadId: active.id, engine, text: message },
+        {
+          workspaceId,
+          action: "agent",
+          threadId: active.id,
+          engine,
+          text: message,
+          attachments: attachments.length ? attachments : undefined,
+        },
         (delta) => patchLastAssistant((last) => ({ ...last, content: last.content + delta })),
         controller.signal,
         (frame) => {
@@ -2547,7 +2748,7 @@ function Conversation({
           <Composer
             value={input}
             onChange={setInput}
-            onSubmit={() => void send(input)}
+            onSubmit={(text, attachments) => void send(text, attachments)}
             busy={busy}
             onStop={() => abort.current?.abort()}
             placeholder={t("Message TaCos")}

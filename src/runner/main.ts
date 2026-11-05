@@ -15,6 +15,7 @@ import { FIRST_CLASS_HARNESS_IDS, getHarnessAdapter, listHarnessDetect } from "@
 import { turnTimer, writeTurnTiming, type TurnTimer } from "@/lib/harness/turn-timing";
 import type { TurnEvent } from "@/lib/harness/types";
 import { keysForHarness } from "@/lib/model-endpoint";
+import { materializePayloadAttachments, turnInputAttachments } from "@/lib/agent-composer-attachments";
 import type { ClaimedRun, EditPayload, RunnerCapabilities, TurnPayload } from "@/lib/runner/protocol";
 import { readConfig } from "./keys";
 
@@ -158,6 +159,9 @@ async function* turnEvents(
   );
   // A missing cwd makes spawn report ENOENT for the binary, on every harness's first turn here.
   fs.mkdirSync(cwd, { recursive: true });
+  const attachmentRefs = payload.attachments?.length
+    ? materializePayloadAttachments(cwd, payload.attachments)
+    : [];
   const keys = keysForHarness(config.endpoints, payload.harness);
   const access = accessFor(keysForHarness(config.endpoints, "pi"));
   const turnModel = await resolveTurnModel(payload.harness, payload.model, payload.effort, access);
@@ -172,6 +176,7 @@ async function* turnEvents(
     sessionId: payload.threadId,
     cwd,
     prompt: payload.prompt,
+    ...turnInputAttachments(attachmentRefs),
     model: turnModel.model || defaults.model || null,
     effort: turnModel.effort || defaults.effort || null,
     approval: payload.approval,

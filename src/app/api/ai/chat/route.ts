@@ -37,6 +37,13 @@ import { harnessKeysFor, harnessesWithKeys, modelAccessFor } from "@/lib/model-k
 import { readyWithKeys } from "@/lib/harness/gate";
 import type { ApprovalDecision as HarnessApprovalDecision } from "@/lib/harness";
 import { TacosError } from "@/lib/issues";
+import {
+  buildLocalAgentTurnAttachments,
+  buildRemoteAgentTurnAttachments,
+  parseWireAttachments,
+  turnInputAttachments,
+  turnPayloadAttachments,
+} from "@/lib/agent-composer-attachments";
 import { requireRunnerOnline, startRun } from "@/lib/runner/hub";
 import { isServerMode } from "@/lib/server-mode";
 
@@ -78,6 +85,7 @@ export async function POST(request: Request) {
       text?: string;
       instruction?: string;
       context?: string;
+      attachments?: unknown;
     };
     const workspaceId = typeof body.workspaceId === "string" ? body.workspaceId : "";
     if (!workspaceId) throw new TacosError("Workspace is required", 400);
@@ -148,11 +156,16 @@ export async function POST(request: Request) {
       if (thread.engine !== engine) await setThreadEngine(threadId, engine);
 
       const message = text.trim();
-      await appendAgentMessage({ threadId, role: "user", content: message, authorId: access.user.id });
+      const wires = parseWireAttachments(body.attachments);
+      if (!message && wires.length === 0) {
+        throw new TacosError("Type a message or attach a file", 400);
+      }
+      const storedMessage = message || wires.map((wire) => wire.name).join(", ");
+      await appendAgentMessage({ threadId, role: "user", content: storedMessage, authorId: access.user.id });
       const assistantId = await appendAgentMessage({ threadId, role: "assistant", content: "" });
 
       const messages = agentMessages({
-        message,
+        message: storedMessage,
         history: thread.messages,
         context: await agentContext({
           workspaceId,
@@ -170,9 +183,11 @@ export async function POST(request: Request) {
       });
 
       const turn = { threadId, messageId: assistantId };
+      const flatPrompt = flattenMessages(messages);
 
       // On a server the turn runs on this person's own computer, with their keys and logins.
       if (isServerMode()) {
+        const remoteAttachments = buildRemoteAgentTurnAttachments(flatPrompt, wires);
         const events = await startRun({
           userId: access.user.id,
           workspaceId,
@@ -182,14 +197,15 @@ export async function POST(request: Request) {
             harness: engine,
             threadId,
             projectId: thread.projectId,
-            prompt: flattenMessages(messages),
-            message,
+            prompt: remoteAttachments.prompt,
+            message: storedMessage,
             model: thread.model,
             effort: thread.effort,
             approval: thread.approval,
             autoApproveTools: AGENT_TOOLS.filter((tool) => !tool.write).map((tool) => tool.name),
             neverAutoApproveTools: AGENT_TOOLS.filter((tool) => tool.delete).map((tool) => tool.name),
             proxy: runtime.proxy,
+            ...turnPayloadAttachments(remoteAttachments.payloadAttachments),
           },
           signal: request.signal,
         });
@@ -209,12 +225,14 @@ export async function POST(request: Request) {
       // Only Codex has skills; "@name" tokens are matched against the skills this machine
       // really has, so ordinary prose containing an @ sign is left alone.
       const skills =
-        engine === "codex" && message.includes("@") ? skillsInText(message, await listCodexSkills()) : [];
+        engine === "codex" && storedMessage.includes("@") ? skillsInText(storedMessage, await listCodexSkills()) : [];
       const origin = new URL(request.url).origin;
       const cwd = path.join(DATA_DIR, "agent", workspaceId, thread.projectId || "general");
       // A missing cwd makes spawn report ENOENT for the binary, on every harness's first turn here.
       fs.mkdirSync(cwd, { recursive: true });
-      const prompt = flattenMessages(messages);
+      const localAttachments = buildLocalAgentTurnAttachments(cwd, flatPrompt, wires);
+      const prompt = localAttachments.prompt;
+      const composerAttachments = turnInputAttachments(localAttachments.refs);
       const isTurnApproved = () =>
         Boolean(grant && (grant.autoApproveTurn || thread.approval !== "ask"));
 
@@ -235,6 +253,7 @@ export async function POST(request: Request) {
           sessionId: threadId,
           cwd,
           prompt,
+          ...composerAttachments,
           model: turnModel.model || defaults.model || null,
           effort: turnModel.effort || defaults.effort || null,
           approval: thread.approval,
@@ -282,6 +301,7 @@ export async function POST(request: Request) {
           sessionId: threadId,
           cwd,
           prompt,
+          ...composerAttachments,
           model: turnModel.model,
           effort: turnModel.effort,
           approval: thread.approval,
@@ -329,6 +349,7 @@ export async function POST(request: Request) {
           sessionId: threadId,
           cwd,
           prompt,
+          ...composerAttachments,
           model: turnModel.model,
           effort: turnModel.effort,
           approval: thread.approval,
@@ -376,6 +397,7 @@ export async function POST(request: Request) {
           sessionId: threadId,
           cwd,
           prompt,
+          ...composerAttachments,
           model: turnModel.model,
           effort: turnModel.effort,
           approval: thread.approval,
@@ -423,6 +445,7 @@ export async function POST(request: Request) {
           sessionId: threadId,
           cwd,
           prompt,
+          ...composerAttachments,
           model: turnModel.model,
           effort: turnModel.effort,
           approval: thread.approval,

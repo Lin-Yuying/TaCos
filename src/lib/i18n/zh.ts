@@ -772,6 +772,12 @@ const zh: Record<string, string> = {
   // Harness settings and composer (H-FIX-30)
   "Harness": "Harness",
   "Message TaCos": "给 TaCos 发消息",
+  "Attach files": "添加文件",
+  "Attach files…": "添加文件…",
+  "Remove attachment": "移除附件",
+  '"{name}" is too large (max {max} MB)': "「{name}」太大（最多 {max} MB）",
+  "At most {n} files per message": "每条消息最多 {n} 个文件",
+  "Type a message or attach a file": "输入消息或添加文件",
   "The agent can change this project's tasks, comments and docs. Every change waits for your Allow.": "智能体可以修改此项目的任务、评论和文档。每项修改都要等你点「允许」。",
   "Agent needs a ready harness": "智能体需要一个就绪的 harness",
   "Enable at least one local harness that is installed and ready. Open Settings to turn a harness on, install it, or sign in.": "请至少启用一个已安装且就绪的本地 harness。打开设置来启用、安装或登录 harness。",
