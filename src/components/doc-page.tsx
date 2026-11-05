@@ -47,7 +47,9 @@ import { levelAllows, type PageLevel } from "@/lib/page-level";
 import type { Member } from "@/lib/issues";
 import type { PageComment } from "@/lib/page-comments";
 import type { DocPage, PageAuthor, PageRef, PageSummary } from "@/lib/pages";
+import { DocMentionWarning } from "@/components/doc-mention-warning";
 import { useT } from "@/components/i18n-context";
+import { mentionedMembersWithoutAccess } from "@/lib/mentions";
 
 const ICONS = ["📄", "📘", "📝", "🗂️", "🧭", "🚀", "🧪", "🌱", "🍅", "✨", "🐙", "🔭"];
 
@@ -402,6 +404,10 @@ export function DocPageView({
     [ctx, onOpenPage]
   );
   const placed = useMemo(() => placedPageKeys(doc), [doc]);
+  const blockedDocMentions = useMemo(
+    () => mentionedMembersWithoutAccess({ shared, createdBy: page.createdBy }, members, doc, { doc: true }),
+    [shared, page.createdBy, members, doc]
+  );
   const openComments = comments.filter((comment) => !comment.resolvedAt).length;
   const unplaced = subpages.filter(
     (child) => !placed.has(child.id) && !placed.has(child.title.toLowerCase())
@@ -777,6 +783,16 @@ export function DocPageView({
 
             {/* Anything you can edit opens in the editor directly — there is no
                 read/edit toggle to switch out of, so the caret is where you click. */}
+            {canEdit && blockedDocMentions.length > 0 && (
+              <div className="mb-3">
+                <DocMentionWarning
+                  members={blockedDocMentions}
+                  shared={shared}
+                  isOwner={isOwner}
+                  onShare={() => void toggleShared()}
+                />
+              </div>
+            )}
             {!canEdit && !doc.trim() && <p className="text-body text-faint">{t("This page is empty.")}</p>}
             {(canEdit || doc.trim()) && (
               <DocumentEditor
@@ -877,6 +893,8 @@ export function DocPageView({
           onSelect={setActiveComment}
           onClearDraft={() => setDraftAnchor(null)}
           onClose={() => setSide(null)}
+          page={{ shared, createdBy: page.createdBy }}
+          onShare={() => void toggleShared()}
         />
       )}
       </div>

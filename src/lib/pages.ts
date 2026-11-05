@@ -587,8 +587,8 @@ async function recordVersion(page: DocPage, write: VersionWrite): Promise<void> 
     .where(and(eq(pageVersions.pageId, page.id), lt(pageVersions.seq, seq - MAX_VERSIONS_PER_PAGE + 1)));
 }
 
-// One notice to each member newly mentioned in the text who can read the page. The person
-// who wrote it gets none, and a save that keeps an old mention does not send it again.
+// One notice to each member newly mentioned in the text who can read the page, including
+// a self @. A save that keeps an old mention does not send it again.
 async function notifyDocMentions(page: DocPage, doc: string, authorId: string): Promise<void> {
   const before = new Set(parseDocMentions(page.doc));
   const added = parseDocMentions(doc).filter((name) => !before.has(name));
@@ -597,7 +597,7 @@ async function notifyDocMentions(page: DocPage, doc: string, authorId: string): 
   const who = members.find((member) => member.id === authorId)?.displayName ?? "";
   for (const member of members) {
     if (!added.includes(member.username.toLowerCase())) continue;
-    if (member.id === authorId || !pageVisible(page, member.id)) continue;
+    if (!pageVisible(page, member.id)) continue;
     await getDb().insert(notifications).values({
       id: crypto.randomUUID(),
       workspaceId: page.workspaceId,

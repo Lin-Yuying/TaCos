@@ -28,12 +28,16 @@ export function DocCommentsPanel({
   onSelect,
   onClearDraft,
   onClose,
+  page,
+  onShare,
 }: {
   comments: PageComment[];
   members: Member[];
   userId: string | null;
   isOwner: boolean;
   canComment: boolean;
+  page: { shared: boolean; createdBy: string };
+  onShare?: () => void;
   compact: boolean;
   // Comments whose quote can still be found in the text.
   located: Set<string>;
@@ -172,7 +176,17 @@ export function DocCommentsPanel({
             </button>
           </div>
         )}
-        <MentionBox value={body} members={members} busy={busy} onChange={setBody} onSubmit={() => void submit()} focusOn={draftAnchor} />
+        <MentionBox
+          value={body}
+          members={members}
+          busy={busy}
+          onChange={setBody}
+          onSubmit={() => void submit()}
+          focusOn={draftAnchor}
+          page={page}
+          isOwner={isOwner}
+          onShare={onShare}
+        />
       </div>}
     </aside>
   );

@@ -43,6 +43,22 @@ export function parseDocMentions(markdown: string): string[] {
   return parseMentions(markdown.replace(/```[\s\S]*?```/g, " ").replace(/`[^`\n]*`/g, " "));
 }
 
+export type MentionPerson = { id: string; username: string; displayName: string };
+
+/** Workspace members named in the text who cannot read a private page (not its author). */
+export function mentionedMembersWithoutAccess(
+  page: { shared: boolean; createdBy: string },
+  members: MentionPerson[],
+  text: string,
+  options: { doc?: boolean } = {}
+): MentionPerson[] {
+  const names = (options.doc ? parseDocMentions : parseMentions)(text);
+  if (!names.length || page.shared) return [];
+  return members.filter(
+    (member) => names.includes(member.username.toLowerCase()) && member.id !== page.createdBy
+  );
+}
+
 // Splits text into plain parts and mention parts for display.
 export function splitMentions(text: string): Array<{ text: string; mention?: string }> {
   const parts: Array<{ text: string; mention?: string }> = [];

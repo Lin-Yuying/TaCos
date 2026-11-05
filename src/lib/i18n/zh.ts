@@ -1019,6 +1019,7 @@ const zh: Record<string, string> = {
   "Deleted document": "已删除的文档",
   "{name} commented on your document": "{name} 评论了你的文档",
   "{name} mentioned you in a document": "{name} 在文档里提到了你",
+  "{names} cannot see this document.": "{names} 看不到这篇文档。",
   'Delete "{name}" and everything inside it permanently? This cannot be undone.': "永久删除「{name}」和它里面的所有内容？删除后无法恢复。",
   "{count} subpages": "{count} 个子页面",
   "Move “{title}” and everything inside it to the Trash?": "把「{title}」和它里面的所有内容移到回收站？",
