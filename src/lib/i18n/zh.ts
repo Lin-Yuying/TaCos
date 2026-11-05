@@ -407,7 +407,7 @@ const zh: Record<string, string> = {
   "Create task": "创建任务",
   List: "列表",
   Board: "看板",
-  "No issues found": "没有找到任务",
+  "No tasks found": "没有找到任务",
   "Adjust your filters, or press {key} to create one.":
     "调整筛选条件，或按 {key} 新建一个。",
   "New issue": "新建任务",
