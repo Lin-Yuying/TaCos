@@ -24,6 +24,7 @@ import {
   removeOverviewComment,
   removeOverviewGrant,
   releaseIssue,
+  reportBlocker,
   removeProjectMember,
   restoreIssue,
   reviewIssue,
@@ -183,6 +184,17 @@ export async function purgeIssueAction(workspaceId: string, issueId: string) {
     await requireWorkspace(workspaceId);
     await purgeIssue(workspaceId, issueId);
     refresh(workspaceId);
+  });
+}
+
+export async function reportBlockerAction(workspaceId: string, idOrIdentifier: string, body: string) {
+  return run<IssueDetail>(async () => {
+    const { user } = await requireWorkspace(workspaceId);
+    await reportBlocker(workspaceId, idOrIdentifier, body, userActor(user));
+    const detail = await getIssueDetail(workspaceId, idOrIdentifier, user.id);
+    if (!detail) throw new TacosError("Task not found", 404);
+    refresh(workspaceId);
+    return detail;
   });
 }
 

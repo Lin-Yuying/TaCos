@@ -19,6 +19,7 @@ import {
 import { getDb } from "../db/client";
 import {
   apiKeys,
+  blockers,
   comments,
   events,
   favorites,
@@ -446,6 +447,7 @@ async function purgeWorkspaceData(db: ReturnType<typeof getDb>, workspaceId: str
     await db.delete(taskFieldValues).where(eq(taskFieldValues.issueId, row.id));
     await db.delete(issueAssignees).where(eq(issueAssignees.issueId, row.id));
     await db.delete(issueLabels).where(eq(issueLabels.issueId, row.id));
+    await db.delete(blockers).where(eq(blockers.issueId, row.id));
     await db.delete(comments).where(eq(comments.issueId, row.id));
     await db.delete(events).where(eq(events.issueId, row.id));
   }
@@ -1580,6 +1582,7 @@ export async function purgeProject(workspaceId: string, projectId: string, userI
   for (const row of rows) {
     await db.delete(taskFieldValues).where(eq(taskFieldValues.issueId, row.id));
     await db.delete(issueLabels).where(eq(issueLabels.issueId, row.id));
+    await db.delete(blockers).where(eq(blockers.issueId, row.id));
     await db.delete(comments).where(eq(comments.issueId, row.id));
     await db.delete(events).where(eq(events.issueId, row.id));
     await db.delete(notifications).where(eq(notifications.issueId, row.id));
@@ -2042,7 +2045,7 @@ export async function notify(input: {
   workspaceId: string;
   userId: string;
   issueId: string;
-  type: "assigned" | "commented" | "mentioned" | "due_soon" | "handoff_done" | "handoff_failed" | "handoff_waiting" | ClaimNotice;
+  type: "assigned" | "commented" | "mentioned" | "due_soon" | "handoff_done" | "handoff_failed" | "handoff_waiting" | "blocker" | ClaimNotice;
   body: string;
 }) {
   await getDb().insert(notifications).values({
@@ -2575,6 +2578,57 @@ async function notifyMentions(
   return sent;
 }
 
+// A blocker goes to the assignees, who can clear it. When the reporter is the only
+// assignee, or the task has none, it goes to the person who opened the task, then the
+// project lead, then the workspace owner. The reporter is never notified.
+async function blockerRecipient(workspaceId: string, row: IssueRow, actorId: string): Promise<string[]> {
+  const db = getDb();
+  const assignees = await db
+    .select({ userId: issueAssignees.userId })
+    .from(issueAssignees)
+    .where(eq(issueAssignees.issueId, row.id));
+  const others = assignees.map((assignee) => assignee.userId).filter((userId) => userId !== actorId);
+  if (others.length > 0) return others;
+  const [project] = await db
+    .select({ createdBy: projects.createdBy })
+    .from(projects)
+    .where(eq(projects.id, row.projectId));
+  const [workspace] = await db
+    .select({ createdBy: workspaces.createdBy })
+    .from(workspaces)
+    .where(eq(workspaces.id, workspaceId));
+  for (const userId of [row.createdBy, project?.createdBy, workspace?.createdBy]) {
+    if (userId && userId !== actorId) return [userId];
+  }
+  return [];
+}
+
+export async function reportBlocker(
+  workspaceId: string,
+  idOrIdentifier: string,
+  body: string,
+  actor: MutationActor
+): Promise<{ id: string }> {
+  if (actor.kind !== "user") throw new TacosError("Only a member can report a blocker", 403);
+  const text = typeof body === "string" ? body.trim() : "";
+  if (!text) throw new TacosError("Say what is blocking this task", 400);
+  const row = await findIssueRow(workspaceId, idOrIdentifier);
+  if (!row) throw new TacosError(`Issue "${idOrIdentifier}" not found`, 404);
+  const id = crypto.randomUUID();
+  await getDb().insert(blockers).values({
+    id,
+    issueId: row.id,
+    authorId: actor.userId,
+    body: text,
+    createdAt: nowIso(),
+  });
+  await recordEvent(row.id, "blocker_reported", { body: text }, actor);
+  for (const userId of await blockerRecipient(workspaceId, row, actor.userId)) {
+    await notify({ workspaceId, userId, issueId: row.id, type: "blocker", body: actor.displayName });
+  }
+  return { id };
+}
+
 async function notifyClaimWatchers(workspaceId: string, issueId: string, type: ClaimNotice, actorId: string) {
   const db = getDb();
   const [issue] = await db.select({ createdBy: issues.createdBy }).from(issues).where(eq(issues.id, issueId));
@@ -2785,6 +2839,7 @@ export async function purgeIssue(workspaceId: string, issueId: string) {
   await db.delete(taskFieldValues).where(eq(taskFieldValues.issueId, issueId));
   await db.delete(issueAssignees).where(eq(issueAssignees.issueId, issueId));
   await db.delete(issueLabels).where(eq(issueLabels.issueId, issueId));
+  await db.delete(blockers).where(eq(blockers.issueId, issueId));
   await db.delete(comments).where(eq(comments.issueId, issueId));
   await db.delete(events).where(eq(events.issueId, issueId));
   await db.delete(notifications).where(eq(notifications.issueId, issueId));

@@ -191,5 +191,6 @@ function noticeText(type: string, body: string, t: ReturnType<typeof useT>): str
   if (type === "handoff_failed") return t("Your Agent could not finish {task}", { task: body });
   if (type === "handoff_waiting") return t("Your Agent needs your approval on {task}", { task: body });
   if (type === "claim_transferred") return t("{name} handed a task to you", { name: body });
+  if (type === "blocker") return t("{name} reported a blocker", { name: body });
   return body;
 }

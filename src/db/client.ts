@@ -296,6 +296,15 @@ CREATE TABLE IF NOT EXISTS issue_labels (
   PRIMARY KEY (issue_id, label_id)
 );
 
+CREATE TABLE IF NOT EXISTS blockers (
+  id TEXT PRIMARY KEY,
+  issue_id TEXT NOT NULL,
+  author_id TEXT NOT NULL,
+  body TEXT NOT NULL,
+  created_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS blockers_issue_idx ON blockers (issue_id);
+
 CREATE TABLE IF NOT EXISTS comments (
   id TEXT PRIMARY KEY,
   issue_id TEXT NOT NULL,

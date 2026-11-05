@@ -444,6 +444,19 @@ export const issueLabels = sqliteTable(
   (t) => [primaryKey({ columns: [t.issueId, t.labelId] })]
 );
 
+// A member's report that a task is stuck. The inbox notice is separate.
+export const blockers = sqliteTable(
+  "blockers",
+  {
+    id: text("id").primaryKey(),
+    issueId: text("issue_id").notNull(),
+    authorId: text("author_id").notNull(),
+    body: text("body").notNull(),
+    createdAt: text("created_at").notNull(),
+  },
+  (t) => [index("blockers_issue_idx").on(t.issueId)]
+);
+
 export const comments = sqliteTable(
   "comments",
   {
@@ -464,7 +477,8 @@ export const events = sqliteTable(
     id: text("id").primaryKey(),
     issueId: text("issue_id").notNull(),
     // created | status_changed | priority_changed | title_changed |
-    // description_changed | labels_changed | assignee_changed | reordered | commented
+    // description_changed | labels_changed | assignee_changed | reordered | commented |
+    // blocker_reported
     type: text("type").notNull(),
     data: text("data").notNull().default("{}"),
     actorId: text("actor_id"),
@@ -483,7 +497,7 @@ export const notifications = sqliteTable(
     issueId: text("issue_id").notNull(),
     // Set on a document's notice; issueId is empty then.
     pageId: text("page_id"),
-    // assigned | commented | mentioned | doc_commented | doc_mentioned
+    // assigned | commented | mentioned | doc_commented | doc_mentioned | blocker
     type: text("type").notNull(),
     body: text("body").notNull(),
     readAt: text("read_at"),

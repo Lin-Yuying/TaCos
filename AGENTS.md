@@ -73,6 +73,7 @@ Always-on rules for this repo. Put occasional workflows in skills or docs, and d
 | Member | A person in a workspace. | `workspace_members` |
 | Project | A group of tasks and documents inside a workspace. | `projects` |
 | Task | A unit of work. | `issues` |
+| Blocker | A report that a task is stuck. | `blockers` |
 | Document | A markdown page. Either private to its author or shared with the workspace. | `pages` |
 | Harness | An agent CLI a member runs: `codex`, `pi`, `opencode`, `codebuddy`, `dsh`. | `src/lib/harness` |
 | Thread / turn | A conversation with Agent / one request and its reply inside it. | `agent_threads` |

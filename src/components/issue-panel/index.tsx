@@ -3,11 +3,12 @@
 import { useEffect, useRef, useState } from "react";
 import { useLiveTick } from "@/components/live-refresh";
 import { ISSUE_DELETED, useUI, type DeletedIssue } from "@/components/ui-context";
-import { addCommentAction, deleteIssueAction, updateIssueDetailAction } from "@/app/actions";
+import { addCommentAction, deleteIssueAction, reportBlockerAction, updateIssueDetailAction } from "@/app/actions";
 import type { Label, Member } from "@/lib/issues";
 import { PanelHeader } from "./header";
 import { PropertiesRow } from "./properties";
 import { DueRow } from "./due-row";
+import { BlockerReport } from "./blocker-report";
 import { ClaimRow } from "./claim-row";
 import { SourceChatRow } from "./source-chat-row";
 import { AdvanceButton } from "./advance-button";
@@ -158,6 +159,19 @@ function IssuePanel({
     return false;
   }
 
+  async function submitBlocker(body: string) {
+    if (!detail || busy) return false;
+    setBusy(true);
+    const result = await reportBlockerAction(workspaceId, detail.id, body);
+    setBusy(false);
+    if (result.ok) {
+      setDetail({ ...result.data.issue, comments: result.data.comments, events: result.data.events });
+      return true;
+    }
+    setError(result.error);
+    return false;
+  }
+
   async function submitComment() {
     if (!detail || !comment.trim() || busy) return;
     setBusy(true);
@@ -275,6 +289,8 @@ function IssuePanel({
         <SourceChatRow workspaceId={workspaceId} threadId={detail.sourceThreadId} />
 
         <DueRow detail={detail} onUpdate={update} />
+
+        <BlockerReport events={detail.events} busy={busy} onSubmit={submitBlocker} />
 
         <DescriptionSection
           workspaceId={workspaceId}
