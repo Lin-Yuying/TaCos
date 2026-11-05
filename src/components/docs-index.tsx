@@ -116,7 +116,7 @@ export function DocsIndex({
               href={`/${workspaceId}/docs/${page.id}`}
               className="flex items-center gap-2 rounded-md px-2 py-1.5 text-body text-text transition-colors hover:bg-elevated/60"
             >
-              <span className="shrink-0">{page.icon ?? "📄"}</span>
+              <span className="shrink-0">{page.icon ?? <FileText size={14} className="text-muted" />}</span>
               <span className="truncate">{page.title}</span>
               <span className="ml-auto flex shrink-0 items-center gap-1 text-caption text-faint">
                 {page.shared ? <Users size={11} /> : <Lock size={11} />}
@@ -134,7 +134,7 @@ export function DocsIndex({
       <div className={`w-full py-6 ${PAGE_INSET}`}>
         <div className="flex items-center justify-between gap-3">
           <div>
-            <h1 className="text-heading font-semibold tracking-tight">{t("Docs")}</h1>
+            <h1 className="text-heading font-semibold tracking-tight">{t("Documents")}</h1>
             <p className="mt-0.5 text-small text-muted">
               {t("Markdown documents stored with your TaCos data. Private until you share them.")}
             </p>
@@ -177,7 +177,7 @@ export function DocsIndex({
               onClick={() => void createPage()}
               className="flex shrink-0 items-center gap-1 rounded-md border border-border px-2.5 py-1.5 text-small font-medium text-muted transition-colors hover:border-border-strong hover:text-text"
             >
-              <Plus size={13} /> {t("New page")}
+              <Plus size={13} /> {t("New document")}
             </button>
           </div>
         </div>

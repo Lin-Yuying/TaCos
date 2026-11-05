@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
   History,
+  FileText,
   Link2,
   Lock,
   Maximize2,
@@ -452,7 +453,7 @@ export function DocPageView({
         <span className="flex min-w-0 flex-1 items-center gap-2">
           <nav data-doc-breadcrumb className="flex min-w-0 items-center gap-1 truncate">
             <Link href={`/${workspaceId}/docs`} className="shrink-0 hover:text-text">
-              {t("Docs")}
+              {t("Documents")}
             </Link>
             {ancestors.map((ancestor) => (
               <span key={ancestor.id} className="flex min-w-0 items-center gap-1">
@@ -690,7 +691,7 @@ export function DocPageView({
               triggerClassName="shrink-0 rounded-md p-1 text-display leading-none transition-colors hover:bg-elevated"
               trigger={
                 <span title={t("Change icon")}>
-                  {icon ?? "📄"}
+                  {icon ?? <FileText size={28} strokeWidth={1.5} className="text-muted" />}
                 </span>
               }
             >
@@ -785,7 +786,7 @@ export function DocPageView({
                       }}
                       className="flex min-w-0 flex-1 items-center gap-2"
                     >
-                      <span className="shrink-0">{child.icon ?? "📄"}</span>
+                      <span className="shrink-0">{child.icon ?? <FileText size={14} className="text-muted" />}</span>
                       <span className="truncate underline decoration-border-strong underline-offset-2">
                         {child.title}
                       </span>
@@ -952,7 +953,7 @@ function PagePicker({
           }}
         >
           <span className="flex items-center gap-2">
-            <span className="shrink-0">{ref.icon ?? "📄"}</span>
+            <span className="shrink-0">{ref.icon ?? <FileText size={14} className="text-muted" />}</span>
             <span className="truncate">{ref.title}</span>
           </span>
         </MenuItem>

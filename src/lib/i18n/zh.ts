@@ -638,7 +638,6 @@ const zh: Record<string, string> = {
   "Add to favorites": "加入收藏",
   "Pages created here belong to this project. They stay private until you share them with the workspace.":
     "在这里创建的页面属于这个项目。分享到工作区之前，只有你能看到。",
-  "New page": "新建页面",
   "No documents in this project yet — create one to keep notes, specs or links next to the tasks.":
     "这个项目还没有文档。可以新建一个，把笔记、需求说明或链接放在任务旁边。",
   // settings-view

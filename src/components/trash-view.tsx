@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { RotateCcw, Trash2 } from "lucide-react";
+import { FileText, RotateCcw, Trash2 } from "lucide-react";
 import {
   purgeIssueAction,
   purgeProjectAction,
@@ -146,7 +146,7 @@ export function TrashView({
           <div className="divide-y divide-border rounded-lg border border-border">
             {docs.map((doc) => (
               <div key={doc.id} data-trashed-doc className="flex items-start gap-3 px-4 py-2.5">
-                <span className="mt-[1px] shrink-0 text-body leading-none">{doc.icon ?? "📄"}</span>
+                <span className="mt-[1px] shrink-0 text-body leading-none">{doc.icon ?? <FileText size={14} className="text-muted" />}</span>
                 <div className="min-w-0 flex-1">
                   <div className="truncate text-body">{doc.title}</div>
                   <div className="mt-0.5 text-small text-faint">

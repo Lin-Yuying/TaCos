@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { FileText } from "lucide-react";
 import { splitMentions } from "@/lib/mentions";
 import {
   useEffect,
@@ -87,7 +88,7 @@ function PageChip({
     <>
       {/* The icon is chrome: the stored Markdown only has the page title, so leaving
           it in the text flow would shift every passage after the chip. */}
-      <span data-md-glyph className="shrink-0">{target.icon ?? "📄"}</span>
+      <span data-md-glyph className="shrink-0">{target.icon ?? <FileText size={14} className="inline align-[-2px] text-muted" />}</span>
       <span className="truncate underline decoration-border-strong underline-offset-2 hover:decoration-text">
         {target.title}
       </span>
@@ -129,7 +130,7 @@ export function PageRow({
 }) {
   const body = (
     <>
-      <span data-md-glyph className="shrink-0">{target.icon ?? "📄"}</span>
+      <span data-md-glyph className="shrink-0">{target.icon ?? <FileText size={14} className="inline align-[-2px] text-muted" />}</span>
       <span className="truncate underline decoration-border-strong underline-offset-2 hover:decoration-text">
         {target.title}
       </span>

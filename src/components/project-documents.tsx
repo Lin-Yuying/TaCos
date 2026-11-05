@@ -52,7 +52,7 @@ export function ProjectDocuments({
             disabled={creating}
             className="flex shrink-0 items-center gap-1 rounded-md border border-border px-2.5 py-1.5 text-small font-medium text-muted transition-colors hover:border-border-strong hover:text-text disabled:opacity-50"
           >
-            <Plus size={13} /> {t("New page")}
+            <Plus size={13} /> {t("New document")}
           </button>
         </div>
 
