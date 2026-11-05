@@ -389,7 +389,7 @@ const zh: Record<string, string> = {
   Draft: "起草",
   "Close AI draft": "关闭 AI 起草",
   Project: "项目",
-  "No projects yet — create one in Settings.": "还没有项目，可以在设置里创建。",
+  "A task needs a project. Create one": "任务要归到项目，先新建一个",
   Labels: "标签",
   "Create task": "创建任务",
   List: "列表",
