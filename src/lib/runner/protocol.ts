@@ -56,7 +56,7 @@ export type ClaimedRun = {
   toolToken?: string;
 };
 
-export type RunEvents = { runId: string; events: TurnEvent[] };
+export type RunEvents = { runId: string; sequence?: number; events: TurnEvent[] };
 
 /** `~/.tacos/runner/config.json` on a member's computer. The only place that holds their keys. */
 export type RunnerConfig = {

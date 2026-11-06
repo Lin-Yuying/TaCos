@@ -9,6 +9,6 @@ export async function POST(request: Request) {
     return Response.json({ error: "runId and events are required" }, { status: 400 });
   }
   if (!(await ownsRun(userId, body.runId))) return Response.json({ error: "Not your run" }, { status: 403 });
-  pushRunEvents(body.runId, body.events);
-  return Response.json({ cancelled: runCancelled(body.runId) });
+  try{await pushRunEvents(body.runId, body.events,body.sequence);}catch(error){return Response.json({error:error instanceof Error?error.message:"Event batch rejected"},{status:409});}
+  return Response.json({ cancelled: runCancelled(body.runId),sequence:body.sequence });
 }

@@ -3,12 +3,13 @@
  * harness adapters the desktop app uses, and sends the events back. All traffic is outbound, and
  * the model keys in this process never go to the server.
  */
+import { acknowledgeEventBatch,archiveEventBatch,checkEventSpoolCapacity,recoverEventBatches,saveEventBatch } from "./event-spool";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import type { AgentSkill } from "@/lib/ai-constants";
 import { codexDefaults, listCodexSkills, openCliStream, skillsInText } from "@/lib/cli-agents";
-import { clearHarnessDetectCache } from "@/lib/harness/detect-bin";
+import { clearHarnessDetectCache, warmHarnessDetectCache } from "@/lib/harness/detect-bin";
 import { readyWithKeys, signedInHarnesses } from "@/lib/harness/gate";
 import { listComposerModels, resolveTurnModel, type ModelAccess } from "@/lib/harness/models";
 import { FIRST_CLASS_HARNESS_IDS, getHarnessAdapter, listHarnessDetect } from "@/lib/harness/registry";
@@ -49,6 +50,7 @@ let cached: { at: number; value: RunnerCapabilities } | null = null;
 
 async function capabilities(): Promise<RunnerCapabilities> {
   if (cached && Date.now() - cached.at < CAPABILITIES_MS) return cached.value;
+  await warmHarnessDetectCache();
   const config = readConfig();
   const keyed = FIRST_CLASS_HARNESS_IDS.filter((id) => keysForHarness(config.endpoints, id));
   const harnesses = listHarnessDetect();
@@ -67,60 +69,45 @@ async function capabilities(): Promise<RunnerCapabilities> {
 
 /** Sends events in order, a batch at a time, so a turn's text arrives in step with the model. */
 function eventSender(runId: string, abort: AbortController, clock: TurnTimer) {
-  let pending: TurnEvent[] = [];
-  let sending: Promise<void> = Promise.resolve();
-  let timer: NodeJS.Timeout | null = null;
-
-  const send = async (events: TurnEvent[]) => {
-    const startedAt = Date.now();
-    const bytes = Buffer.byteLength(JSON.stringify(events));
-    for (let attempt = 0; attempt < SEND_ATTEMPTS; attempt += 1) {
-      if (attempt > 0) clock.uploadRetry();
-      try {
-        const response = await postJson("/api/runner/events", { runId, events });
-        if (response.ok) {
-          clock.upload(Date.now() - startedAt, bytes);
-          if (((await response.json()) as { cancelled?: boolean }).cancelled) abort.abort();
-          return;
+  let pending:TurnEvent[]=[],bytes=0,sequence=0;
+  let terminalFailure:Error|null=null;
+  let sending:Promise<void>|null=null,timer:NodeJS.Timeout|null=null;
+  const send=async(events:TurnEvent[])=>{
+    const startedAt=Date.now(),batch=++sequence,body=JSON.stringify({server:SERVER,runId,sequence:batch,events});
+    const spool=await saveEventBatch(runId,batch,body);
+    const deadline=Date.now()+(abort.signal.aborted?5000:30000);
+    for(let attempt=0;attempt<SEND_ATTEMPTS&&Date.now()<deadline;attempt++){
+      if(attempt)clock.uploadRetry();
+      try{
+        const response=await serverFetch("/api/runner/events",{method:"POST",body,signal:AbortSignal.timeout(Math.max(1,Math.min(8000,deadline-Date.now())))});
+        if(response.ok){const ack=await response.json() as {sequence?:number;cancelled?:boolean};
+          if(ack.sequence!==undefined&&ack.sequence!==batch)throw new Error("Event acknowledgement mismatch");
+          clock.upload(Date.now()-startedAt,Buffer.byteLength(body));
+          if(ack.cancelled){await archiveEventBatch(spool);abort.abort();throw new Error(`Run cancelled. Events saved: ${spool}.gz`);}
+          await acknowledgeEventBatch(spool);return;
         }
-        if (response.status === 401 || response.status === 403) break;
-      } catch {
-        /* the tunnel is reconnecting */
-      }
-      await new Promise((resolve) => setTimeout(resolve, 1_000));
+        if(response.status===401||response.status===403)break;
+      }catch{/* keep the durable batch for recovery */}
+      if(abort.signal.aborted)break;
+      await new Promise(resolve=>setTimeout(resolve,Math.min(1000,Math.max(0,deadline-Date.now()))));
     }
-    log(`run ${runId}: the server stopped taking events`);
-    abort.abort();
+    abort.abort();throw new Error(`The server did not acknowledge events. Saved: ${spool}`);
   };
-
-  const flush = () => {
-    if (timer) clearTimeout(timer);
-    timer = null;
-    if (pending.length === 0) return sending;
-    const batch = pending;
-    pending = [];
-    sending = sending.then(() => send(batch));
+  const flush=():Promise<void>=>{
+    if(timer)clearTimeout(timer);timer=null;
+    if(terminalFailure)return Promise.reject(terminalFailure);
+    if(sending)return sending;
+    if(!pending.length)return Promise.resolve();
+    sending=(async()=>{while(pending.length){const batch=pending;pending=[];bytes=0;try{await send(batch);}catch(error){terminalFailure=error instanceof Error?error:new Error(String(error));if(pending.length){await saveEventBatch(runId,++sequence,JSON.stringify({server:SERVER,runId,sequence,events:pending}));pending=[];bytes=0;}throw terminalFailure;}}})().finally(()=>{sending=null;});
     return sending;
   };
-
-  return {
-    push(event: TurnEvent) {
-      pending.push(event);
-      if (!timer) timer = setTimeout(flush, FLUSH_MS);
-    },
-    flush,
-  };
+  return {async push(event:TurnEvent){if(terminalFailure)throw terminalFailure;pending.push(event);bytes+=Buffer.byteLength(JSON.stringify(event));if(bytes>=256*1024||pending.length>=128||sending)await flush();else if(!timer)timer=setTimeout(()=>{void flush().catch(error=>{log(String(error));abort.abort();});},FLUSH_MS);},flush};
 }
 
 function watchCancel(runId: string, abort: AbortController): () => void {
-  const timer = setInterval(() => {
-    void serverFetch(`/api/runner/control?runId=${encodeURIComponent(runId)}`)
-      .then(async (response) => {
-        if (response.ok && ((await response.json()) as { cancelled?: boolean }).cancelled) abort.abort();
-      })
-      .catch(() => {});
-  }, CONTROL_MS);
-  return () => clearInterval(timer);
+  const stopped=new AbortController();let timer:ReturnType<typeof setTimeout>|null=null;
+  const tick=async()=>{try{const response=await serverFetch(`/api/runner/control?runId=${encodeURIComponent(runId)}`,{signal:AbortSignal.any([stopped.signal,AbortSignal.timeout(8000)])});if(response.ok&&((await response.json()) as {cancelled?:boolean}).cancelled)abort.abort();}catch{/* next single flight retries */}finally{if(!stopped.signal.aborted)timer=setTimeout(tick,CONTROL_MS);}};
+  timer=setTimeout(tick,CONTROL_MS);return()=>{stopped.abort();if(timer)clearTimeout(timer);};
 }
 
 // A folder name comes from the server, and it stays one folder under this person's agent folder.
@@ -303,12 +290,12 @@ async function execute(run: ClaimedRun): Promise<void> {
     const events = run.payload.kind === "turn" ? turnEvents(run, run.payload, abort, timingFile) : editEvents(run.payload, abort);
     for await (const event of events) {
       timer.event(event);
-      sender.push(event);
+      await sender.push(event);
       if (event.type === "error" || event.type === "done") break;
     }
-    sender.push({ type: "done" });
+    await sender.push({ type: "done" });
   } catch (err) {
-    sender.push({ type: "error", message: err instanceof Error ? err.message : "The run failed on this computer." });
+    await sender.push({ type: "error", message: err instanceof Error ? err.message : "The run failed on this computer." });
   } finally {
     stopWatching();
     await sender.flush();
@@ -326,18 +313,22 @@ function refresh(): void {
   pollAbort?.abort();
 }
 
+const MAX_RUNS=Math.max(1,Math.min(8,Math.floor(Number(process.env.TACOS_RUNNER_SLOTS)||2)));
+const activeRuns=new Set<Promise<void>>();
 async function pollLoop(): Promise<never> {
   while (true) {
     try {
+      await checkEventSpoolCapacity();
+      if(activeRuns.size>=MAX_RUNS){await Promise.race(activeRuns);continue;}
       pollAbort = new AbortController();
-      const response = await postJson("/api/runner/poll", { capabilities: await capabilities() }, pollAbort.signal);
+      const response = await postJson("/api/runner/poll", { capabilities: await capabilities(),slots:MAX_RUNS }, pollAbort.signal);
       if (response.status === 401) {
         log("the server no longer accepts this token");
         process.exit(3);
       }
       if (!response.ok) throw new Error(`poll answered ${response.status}`);
       const { run } = (await response.json()) as { run: ClaimedRun | null };
-      if (run) void execute(run);
+      if(run){const work=execute(run).catch(error=>log(String(error))).finally(()=>activeRuns.delete(work));activeRuns.add(work);}
     } catch (err) {
       if (!pollAbort?.signal.aborted) {
         log(err instanceof Error ? err.message : "poll failed");
@@ -358,4 +349,4 @@ parentPort?.on("message", ({ data }) => {
 });
 process.on("SIGUSR1", refresh);
 
-void pollLoop();
+void recoverEventBatches(SERVER,async body=>{const response=await serverFetch("/api/runner/events",{method:"POST",body,signal:AbortSignal.timeout(8000)});return response.ok?{ok:true,...await response.json()}:{ok:false};}).catch(error=>log(String(error))).finally(()=>void pollLoop());

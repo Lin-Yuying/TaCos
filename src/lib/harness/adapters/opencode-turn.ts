@@ -108,9 +108,11 @@ export async function* openOpencodeTurn(input: TurnInput, log?: TurnLog): AsyncG
   }
 
   const queue: TurnEvent[] = [];
+  let queuedBytes=0;
   let wake: (() => void) | null = null;
   const push = (event: TurnEvent) => {
-    queue.push(event);
+    queue.push(event);queuedBytes+=Buffer.byteLength(JSON.stringify(event));
+    if(queuedBytes>=1024*1024)child?.stdout?.pause();
     wake?.();
   };
 
@@ -179,7 +181,7 @@ export async function* openOpencodeTurn(input: TurnInput, log?: TurnLog): AsyncG
     child.stderr.setEncoding("utf8");
     child.stderr.on("data", (chunk: string) => {
       stderr = `${stderr}${chunk}`.slice(-4_000);
-      log?.write(chunk);
+      if(log){child?.stderr?.pause();void log?.write(chunk).finally(()=>child?.stderr?.resume());}
     });
   }
 
@@ -317,7 +319,7 @@ export async function* openOpencodeTurn(input: TurnInput, log?: TurnLog): AsyncG
   try {
   while (true) {
     while (queue.length > 0) {
-      const event = queue.shift()!;
+      const event = queue.shift()!;queuedBytes-=Buffer.byteLength(JSON.stringify(event));if(queuedBytes<256*1024)child?.stdout?.resume();
       yield event;
       if (event.type === "done" || event.type === "error") {
         clearTimeout(timer);

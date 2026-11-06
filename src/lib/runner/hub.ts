@@ -1,5 +1,6 @@
+import { packText,unpackText } from "../compressed-text";
 import crypto from "node:crypto";
-import { and, asc, eq, gte, isNotNull, isNull, lt, or } from "drizzle-orm";
+import { and, asc, eq, gte, isNotNull, isNull, lt, or, sql } from "drizzle-orm";
 import { getDb } from "@/db/client";
 import { agentRuns, projects, runnerStatus, runnerTokens } from "@/db/schema";
 import {
@@ -22,10 +23,12 @@ const SILENT_RUN_MS = Number(process.env.TACOS_RUNNER_SILENT_MS) || 75_000;
 const TOKEN_TTL_MS = 30 * 86_400_000;
 
 type LiveRun = {
-  push: (event: TurnEvent) => void;
+  push: (event: TurnEvent) => Promise<void>;
   cancelled: boolean;
   toolToken?: string;
   lastContact: number;
+  sequence?:number;
+  receiving?: {sequence:number;body:string;promise:Promise<number|undefined>};
   pending: Map<string, ToolApprovalCard>;
 };
 
@@ -108,11 +111,12 @@ function wake(userId: string): void {
   for (const waiter of set) waiter();
 }
 
-async function nextQueued(userId: string) {
+function capacity(userId:string,slots:number){return sql`(SELECT count(*) FROM agent_runs active WHERE active.user_id=${userId} AND active.status='running') < ${slots} AND NOT EXISTS(SELECT 1 FROM agent_runs active WHERE active.user_id=${userId} AND active.status='running' AND (active.thread_id=${agentRuns.threadId} OR (active.workspace_id=${agentRuns.workspaceId} AND json_extract(CASE WHEN json_valid(active.payload) THEN active.payload ELSE '{}' END,'$.kind')<>'edit' AND json_extract(CASE WHEN json_valid(${agentRuns.payload}) THEN ${agentRuns.payload} ELSE '{}' END,'$.kind')<>'edit' AND coalesce(json_extract(CASE WHEN json_valid(active.payload) THEN active.payload ELSE '{}' END,'$.projectId'),(SELECT project_id FROM issues WHERE id=active.issue_id))=coalesce(json_extract(CASE WHEN json_valid(${agentRuns.payload}) THEN ${agentRuns.payload} ELSE '{}' END,'$.projectId'),(SELECT project_id FROM issues WHERE id=${agentRuns.issueId})))))`;}
+async function nextQueued(userId: string, slots:number) {
   const [row] = await getDb()
     .select()
     .from(agentRuns)
-    .where(and(eq(agentRuns.userId, userId), eq(agentRuns.status, "queued")))
+    .where(and(eq(agentRuns.userId, userId), eq(agentRuns.status, "queued"),capacity(userId,slots)))
     .orderBy(asc(agentRuns.createdAt))
     .limit(1);
   return row ?? null;
@@ -140,15 +144,16 @@ async function grantFor(row: typeof agentRuns.$inferSelect, payload: RunPayload)
 }
 
 /** Hands the oldest queued run to the computer asking, waiting up to one poll for one to appear. */
-export async function claimRun(userId: string, signal: AbortSignal): Promise<ClaimedRun | null> {
+export async function claimRun(userId: string, signal: AbortSignal, slots=1): Promise<ClaimedRun | null> {
+  slots=Math.max(1,Math.min(8,Math.floor(Number(slots))||1));
   const deadline = Date.now() + POLL_MS;
   while (!signal.aborted) {
-    const row = await nextQueued(userId);
+    const row = await nextQueued(userId,Math.max(1,Math.min(8,Math.floor(slots)||1)));
     if (row) {
       const taken = await getDb()
         .update(agentRuns)
         .set({ status: "running" })
-        .where(and(eq(agentRuns.id, row.id), eq(agentRuns.status, "queued")));
+        .where(and(eq(agentRuns.id, row.id), eq(agentRuns.status, "queued"),capacity(userId,slots)));
       if (taken.changes === 0) continue;
       // A handed-off task has been waiting for this moment, so its prompt reads the task as it is now.
       let payload = JSON.parse(row.payload) as RunPayload;
@@ -186,10 +191,14 @@ export async function claimRun(userId: string, signal: AbortSignal): Promise<Cla
 }
 
 export async function finishRun(runId: string, status: string, error?: string): Promise<void> {
+  const row=await getDb().select({userId:agentRuns.userId,payload:agentRuns.payload,payloadCompressed:agentRuns.payloadCompressed}).from(agentRuns).where(eq(agentRuns.id,runId)).get();
+  const packed=row?await packText(await unpackText(row.payload,row.payloadCompressed)):null;
   await getDb()
     .update(agentRuns)
-    .set({ status, error: error ?? null, finishedAt: new Date().toISOString() })
+    .set({ status, error: error ?? null, finishedAt: new Date().toISOString(),...(packed?{payload:packed.text,payloadCompressed:packed.compressed}:{}) })
     .where(eq(agentRuns.id, runId));
+  if(row)wake(row.userId);
+  await compressRunArchives(10);
 }
 
 /**
@@ -240,10 +249,15 @@ export function followRun(
   input: { threadId?: string | null; signal?: AbortSignal; approvalWaitMs?: number }
 ): AsyncGenerator<TurnEvent> {
   const queue: TurnEvent[] = [];
+  let queuedBytes=0,closed=false;
+  const space=new Set<()=>void>();
   let notify: (() => void) | null = null;
-  const push = (event: TurnEvent) => {
-    queue.push(event);
-    notify?.();
+  const push = async (event: TurnEvent) => {
+    const size=Buffer.byteLength(JSON.stringify(event));
+    const control=event.type==="done"||event.type==="error"||event.type==="approval"||event.type==="approval_done";
+    while(!closed&&!control&&queue.length&&queuedBytes+size>1024*1024)await new Promise<void>(resolve=>space.add(resolve));
+    if(closed)return;
+    queue.push(event);queuedBytes+=size;notify?.();
   };
   const live: LiveRun = { push, cancelled: false, lastContact: Date.now(), pending: new Map() };
   hub().live.set(runId, live);
@@ -282,7 +296,7 @@ export function followRun(
     try {
       while (true) {
         while (queue.length > 0) {
-          const event = queue.shift()!;
+          const event = queue.shift()!;queuedBytes-=Buffer.byteLength(JSON.stringify(event));for(const resolve of space)resolve();space.clear();
           if (event.type === "error") failure = event.message;
           if (event.type === "approval") live.pending.set(event.requestId, event);
           if (event.type === "approval_done") live.pending.delete(event.requestId);
@@ -295,6 +309,7 @@ export function followRun(
         notify = null;
       }
     } finally {
+      closed=true;for(const resolve of space)resolve();space.clear();queue.length=0;
       clearInterval(watchdog);
       unsubscribe();
       input.signal?.removeEventListener("abort", onAbort);
@@ -323,12 +338,23 @@ export async function ownsRun(userId: string, runId: string): Promise<boolean> {
   return Boolean(row);
 }
 
-export function pushRunEvents(runId: string, events: TurnEvent[]): void {
-  const live = hub().live.get(runId);
-  if (!live) return;
-  live.lastContact = Date.now();
-  for (const event of events) live.push(event);
+export async function pushRunEvents(runId: string, events: TurnEvent[], sequence?:number): Promise<number | undefined> {
+ const live=hub().live.get(runId);if(!live)return;
+ live.lastContact=Date.now();
+ if(sequence===undefined){for(const event of events){if(live.cancelled)break;await live.push(event);}return;}
+ if(!Number.isSafeInteger(sequence)||sequence<1)throw new TacosError("Invalid event sequence",400);
+ const body=JSON.stringify(events),db=getDb().$client;
+ if(live.receiving){const receiving=live.receiving;if(receiving.sequence===sequence){if(body!==receiving.body)throw new TacosError("Event sequence reused",409);return receiving.promise;}await receiving.promise;return pushRunEvents(runId,events,sequence);}
+ const stored=db.prepare("SELECT body,body_compressed AS compressed,accepted FROM runner_event_batches WHERE run_id=? AND sequence=?").get(runId,sequence) as {body:string;compressed:string|null;accepted:number}|undefined;
+ if(stored&&await unpackText(stored.body,stored.compressed)!==body)throw new TacosError("Event sequence reused",409);
+ if(stored?.accepted)return sequence;
+ if(sequence!==(live.sequence??0)+1)throw new TacosError("Event sequence gap",409);
+ db.prepare("INSERT OR IGNORE INTO runner_event_batches(run_id,sequence,body,created_at) VALUES(?,?,?,?)").run(runId,sequence,body,new Date().toISOString());
+ const promise=(async()=>{for(const event of events){if(live.cancelled)break;await live.push(event);}db.prepare("UPDATE runner_event_batches SET accepted=1 WHERE run_id=? AND sequence=?").run(runId,sequence);live.sequence=sequence;return sequence;})();
+ live.receiving={sequence,body,promise};
+ try{return await promise;}finally{if(live.receiving?.promise===promise)live.receiving=undefined;}
 }
+export async function touchRunnerStatus(userId:string){await getDb().update(runnerStatus).set({lastSeenAt:new Date().toISOString()}).where(eq(runnerStatus.userId,userId));}
 
 export function runCancelled(runId: string): boolean {
   const live = hub().live.get(runId);
@@ -373,4 +399,13 @@ export async function failInterruptedRuns(): Promise<void> {
   if (handoffs.length === 0) return;
   const { noticeHandoffFailed } = await import("@/lib/agent-handoff");
   for (const row of handoffs) await noticeHandoffFailed(row);
+}
+
+export async function readRunPayload(userId:string,runId:string):Promise<unknown>{const row=await getDb().select().from(agentRuns).where(and(eq(agentRuns.id,runId),eq(agentRuns.userId,userId))).get();if(!row)throw new TacosError("Run not found",404);return JSON.parse(await unpackText(row.payload,row.payloadCompressed));}
+
+export async function compressRunArchives(limit=20){const db=getDb().$client;
+ const rows=db.prepare("SELECT id,payload FROM agent_runs WHERE status NOT IN ('queued','running') AND payload_compressed IS NULL LIMIT ?").all(limit) as {id:string;payload:string}[];
+ for(const row of rows){const packed=await packText(row.payload);db.prepare("UPDATE agent_runs SET payload=?,payload_compressed=? WHERE id=? AND payload=? AND status NOT IN ('queued','running') AND payload_compressed IS NULL").run(packed.text,packed.compressed??"",row.id,row.payload);}
+ const batches=db.prepare("SELECT run_id AS runId,sequence,body FROM runner_event_batches WHERE body_compressed IS NULL AND run_id IN (SELECT id FROM agent_runs WHERE status NOT IN ('queued','running')) LIMIT ?").all(limit) as {runId:string;sequence:number;body:string}[];
+ for(const row of batches){const packed=await packText(row.body);db.prepare("UPDATE runner_event_batches SET body=?,body_compressed=? WHERE run_id=? AND sequence=? AND body=? AND body_compressed IS NULL").run(packed.text,packed.compressed??"",row.runId,row.sequence,row.body);}
 }

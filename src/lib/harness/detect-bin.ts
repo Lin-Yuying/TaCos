@@ -1,4 +1,4 @@
-import { execFileSync } from "node:child_process";
+import { execFile, execFileSync } from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -10,6 +10,18 @@ const CACHE_MS = 30_000;
 type Cached<T> = { at: number; value: T };
 const binaryCache = new Map<string, Cached<string | null>>();
 const versionCache = new Map<string, Cached<string | null>>();
+const refreshing=new Map<string,Promise<void>>();let generation=0;
+function asyncExec(binary:string,args:string[]):Promise<string|null>{return new Promise(resolve=>execFile(binary,args,{encoding:"utf8",timeout:5000,maxBuffer:1024*1024},(error,stdout)=>resolve(error?null:stdout.trim().split("\n")[0].trim()||null)));}
+async function refreshBinary(id:HarnessId){const key=`binary:${id}`;if(refreshing.has(key))return refreshing.get(key);const current=generation;
+ const work=(async()=>{let found:string|null=null;const override=process.env[HARNESS_BIN_ENV[id]]?.trim();for(const candidate of [...(override?[override]:[]),...HARNESS_CANDIDATES[id]])if(executable(candidate)){found=candidate;break;}
+ if(!found)for(const name of HARNESS_SHELL_NAMES[id]){const value=await asyncExec(process.platform==="win32"?"cmd.exe":"/bin/sh",process.platform==="win32"?["/c",`where ${name}`]:["-lc",`command -v ${name}`]);if(value&&executable(value)){found=value;break;}}
+ if(current===generation)binaryCache.set(id,{at:Date.now(),value:found});})();refreshing.set(key,work);try{await work;}finally{if(refreshing.get(key)===work)refreshing.delete(key);}
+}
+async function refreshVersion(id:HarnessId,binary:string){const key=`${id}:${binary}`;if(refreshing.has(key))return refreshing.get(key);const current=generation;
+ const work=(async()=>{const value=await asyncExec(binary,HARNESS_VERSION_ARGS[id]);if(current===generation)versionCache.set(key,{at:Date.now(),value});})();refreshing.set(key,work);try{await work;}finally{if(refreshing.get(key)===work)refreshing.delete(key);}
+}
+export async function warmHarnessDetectCache(){await Promise.all((Object.keys(HARNESS_BIN_ENV) as HarnessId[]).map(async id=>{await refreshBinary(id);const binary=binaryCache.get(id)?.value;if(binary)await refreshVersion(id,binary);}));}
+
 
 export const HARNESS_BIN_ENV: Record<HarnessId, string> = {
   codex: "TACOS_CODEX_BIN",
@@ -99,7 +111,7 @@ function fromShell(name: string): string | null {
 
 export function findHarnessBinary(id: HarnessId): string | null {
   const cached = binaryCache.get(id);
-  if (cached && Date.now() - cached.at < CACHE_MS) return cached.value;
+  if(cached){if(Date.now()-cached.at>=CACHE_MS)void refreshBinary(id);return cached.value&&executable(cached.value)?cached.value:null;}
 
   const override = process.env[HARNESS_BIN_ENV[id]]?.trim();
   let found: string | null = null;
@@ -124,7 +136,7 @@ export function findHarnessBinary(id: HarnessId): string | null {
 export function readHarnessVersion(id: HarnessId, binary: string): string | null {
   const key = `${id}:${binary}`;
   const cached = versionCache.get(key);
-  if (cached && Date.now() - cached.at < CACHE_MS) return cached.value;
+  if(cached){if(Date.now()-cached.at>=CACHE_MS)void refreshVersion(id,binary);return cached.value;}
 
   let version: string | null = null;
   try {
@@ -147,6 +159,7 @@ export function readHarnessVersion(id: HarnessId, binary: string): string | null
 }
 
 export function clearHarnessDetectCache(): void {
+  generation++;refreshing.clear();
   binaryCache.clear();
   versionCache.clear();
 }

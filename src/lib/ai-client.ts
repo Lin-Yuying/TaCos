@@ -46,6 +46,7 @@ export type AgentStepFrame = {
   kind: "command" | "file" | "tool" | "info" | "thinking";
   title: string;
   detail?: string;
+  detailAvailable?:boolean;
   status: "running" | "done" | "error" | "denied";
 };
 

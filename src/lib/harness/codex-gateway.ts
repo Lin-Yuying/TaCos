@@ -412,6 +412,11 @@ async function* lines(body: AsyncIterable<Uint8Array>): AsyncGenerator<string> {
   if (buffer) yield buffer;
 }
 
+function drain(res:http.ServerResponse):Promise<void>{
+ if(!res.writableNeedDrain)return Promise.resolve();
+ return new Promise((resolve,reject)=>{const cleanup=()=>{res.off("drain",ready);res.off("close",closed);res.off("error",failed);};const ready=()=>{cleanup();resolve();};const closed=()=>{cleanup();reject(new Error("Connection closed"));};const failed=(error:Error)=>{cleanup();reject(error);};res.once("drain",ready);res.once("close",closed);res.once("error",failed);if(res.destroyed)closed();});
+}
+
 async function translateStream(
   upstream: Awaited<ReturnType<typeof proxiedFetch>>,
   res: http.ServerResponse,
@@ -431,7 +436,7 @@ async function translateStream(
         } catch {
           continue;
         }
-        stream.take(chunk);
+        stream.take(chunk);await drain(res);
       }
     } else {
       stream.take(asObject(await upstream.json()));
@@ -487,7 +492,7 @@ export async function startCodexGateway(own: OwnEndpoint, proxy: string | undefi
       const direct = await post("/responses", body, abort.signal);
       if (direct.status !== 404 && direct.status !== 405) {
         res.writeHead(direct.status, { "content-type": direct.headers.get("content-type") ?? "application/json" });
-        for await (const chunk of direct.body as unknown as AsyncIterable<Uint8Array>) res.write(chunk);
+        for await (const chunk of direct.body as unknown as AsyncIterable<Uint8Array>){res.write(chunk);await drain(res);}
         res.end();
         return;
       }
