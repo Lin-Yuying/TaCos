@@ -30,6 +30,7 @@ const BUILTIN_LABEL: Record<(typeof BUILTIN_KEYS)[number], string> = {
   assignee: "Assignee",
   project: "Project",
   dueDate: "Due date",
+  source: "Source",
 };
 
 const OP_LABEL: Record<FilterOp, string> = {
@@ -62,7 +63,18 @@ function choicesFor(
   t: (text: string) => string,
   choices?:{projects:string[];members:{id:string;displayName:string}[]}
 ): { value: string; label: string }[] | null {
-  if (key === "status") return STATUS_ORDER.map((value) => ({ value, label: t(STATUS_META[value].label) }));
+  if (key === "status") {
+    return [
+      { value: "active", label: t("Active") },
+      ...STATUS_ORDER.map((value) => ({ value, label: t(STATUS_META[value].label) })),
+    ];
+  }
+  if (key === "source") {
+    return [
+      { value: "person", label: t("Person") },
+      { value: "agent", label: t("Agent") },
+    ];
+  }
   if (key === "priority") {
     return [1, 2, 3, 4].map((value) => ({ value: String(value), label: t(PRIORITY_NAMES[value as 1]) }));
   }

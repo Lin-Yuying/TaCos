@@ -65,6 +65,29 @@ function main() {
     "My Tasks heading must use its own label, not the member's name",
   );
 
+  // The three removed rows must be saveable as personal views.
+  const taskView = read("src/lib/task-view.ts");
+  assert(taskView.includes('"source"'), "task views must offer a Source filter");
+  assert(taskView.includes('filter.value === "active"'), "Active must match the two open statuses");
+  const bar = read("src/components/task-view-bar.tsx");
+  for (const choice of ['value: "active"', 'key === "source"', 'value: "agent"', 'value: "person"']) {
+    assert(bar.includes(choice), `filter choices must include ${choice}`);
+  }
+
+  // Badge counts for the two queues that carry work to do.
+  assert(shell.includes("badge={openTasks || null}"), "Open Tasks must show its count");
+  assert(shell.includes("badge={reviewTasks || null}"), "Review must show its count");
+  assert(shell.includes("tag={openTasks ? openTasks : undefined}"), "the rail flyout must show the Open Tasks count");
+  assert(shell.includes("tag={reviewTasks ? reviewTasks : undefined}"), "the rail flyout must show the Review count");
+  const layout = read("src/app/[workspaceId]/layout.tsx");
+  assert(layout.includes("countOpenTasks") && layout.includes("countPendingReview"), "the layout must count both queues");
+  const issues = read("src/lib/issues.ts");
+  assert(
+    issues.includes("export async function countOpenTasks") &&
+      issues.includes("export async function countPendingReview"),
+    "issues.ts must expose both queue counts",
+  );
+
   const zh = read("src/lib/i18n/zh.ts");
   for (const copy of [
     '"My Tasks": "我的任务"',

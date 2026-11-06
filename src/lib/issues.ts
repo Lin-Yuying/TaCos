@@ -2005,6 +2005,33 @@ export async function listIssuesPage(workspaceId: string, filters: ListFilters =
     ? Buffer.from(JSON.stringify({rank:STATUS_ORDER.indexOf(last.status as Status),position:last.position,createdAt:last.createdAt,id:last.id})).toString("base64url") : null };
 }
 
+/** Sidebar badge for the claim queue; same conditions as `status: "open"`. */
+export async function countOpenTasks(workspaceId: string, viewerId?: string): Promise<number> {
+  const where = await issueConditions(workspaceId, { status: "open", viewerId });
+  if (!where) return 0;
+  return Number(
+    getDb().select({ n: sql<number>`count(*)` }).from(issues).where(where).get()?.n ?? 0,
+  );
+}
+
+/** Sidebar badge for the review queue; same conditions as `listPendingReview`. */
+export async function countPendingReview(workspaceId: string): Promise<number> {
+  const row = getDb()
+    .select({ n: sql<number>`count(*)` })
+    .from(issues)
+    .leftJoin(projects, eq(projects.id, issues.projectId))
+    .where(
+      and(
+        eq(issues.workspaceId, workspaceId),
+        isNull(issues.deletedAt),
+        isNull(projects.deletedAt),
+        eq(issues.reviewStatus, "pending"),
+      ),
+    )
+    .get();
+  return Number(row?.n ?? 0);
+}
+
 export async function findIssueRow(workspaceId: string, idOrIdentifier: string): Promise<IssueRow | null> {
   const raw = idOrIdentifier.trim();
   const db = getDb();

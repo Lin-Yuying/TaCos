@@ -179,6 +179,8 @@ function SidebarNav({
   members,
   viewerId,
   unread,
+  openTasks,
+  reviewTasks,
   hidden,
   width,
   agentAllowed,
@@ -197,6 +199,8 @@ function SidebarNav({
   // The column's current width: the Customize menu is as wide as the sidebar itself,
   // so it has to follow a drag rather than guess a number.
   width: number;
+  openTasks: number;
+  reviewTasks: number;
   agentAllowed: boolean;
   onToggleSection: (key: string) => void;
   onInvite: () => void;
@@ -310,6 +314,7 @@ function SidebarNav({
               href={link({ view: "open" })}
               active={active({ view: "open" })}
               icon={<Hand size={14} />}
+              badge={openTasks || null}
             >
               {t("Open Tasks")}
             </NavItem>
@@ -320,6 +325,7 @@ function SidebarNav({
               href={`/${workspaceId}/review`}
               active={pathname.endsWith("/review")}
               icon={<ShieldCheck size={14} />}
+              badge={reviewTasks || null}
             >
               {t("Review")}
             </NavItem>
@@ -896,6 +902,8 @@ function SidebarRail({
   workspace,
   workspaces,
   unread,
+  openTasks,
+  reviewTasks,
   hidden,
   projects,
   favorites,
@@ -909,6 +917,8 @@ function SidebarRail({
   workspace: WorkspaceInfo;
   workspaces: WorkspaceInfo[];
   unread: number | null;
+  openTasks: number;
+  reviewTasks: number;
   hidden: string[];
   projects: Project[];
   favorites: Project[];
@@ -1001,6 +1011,7 @@ function SidebarRail({
               href={`/${workspaceId}/?view=open`}
               active={taskActive({ view: "open" })}
               icon={<Hand size={14} />}
+              tag={openTasks ? openTasks : undefined}
               onSelect={close}
             >
               {t("Open Tasks")}
@@ -1019,6 +1030,7 @@ function SidebarRail({
               href={`/${workspaceId}/review`}
               active={pathname.endsWith("/review")}
               icon={<ShieldCheck size={14} />}
+              tag={reviewTasks ? reviewTasks : undefined}
               onSelect={close}
             >
               {t("Review")}
@@ -1710,6 +1722,8 @@ export function WorkspaceShell({
   pages,
   joinCode,
   agentAllowed,
+  openTasks,
+  reviewTasks,
   children,
 }: {
   workspace: WorkspaceInfo;
@@ -1722,6 +1736,8 @@ export function WorkspaceShell({
   pages: PageSummary[];
   joinCode: string | null;
   agentAllowed: boolean;
+  openTasks: number;
+  reviewTasks: number;
   children: ReactNode;
 }) {
   const t = useT();
@@ -1811,6 +1827,8 @@ export function WorkspaceShell({
               workspace={workspace}
               workspaces={workspaces}
               unread={unread}
+              openTasks={openTasks}
+              reviewTasks={reviewTasks}
               hidden={hiddenSections}
               projects={projects}
               favorites={favorites}
@@ -1838,6 +1856,8 @@ export function WorkspaceShell({
                   members={members}
                   viewerId={user.id}
                   unread={unread}
+                  openTasks={openTasks}
+                  reviewTasks={reviewTasks}
                   hidden={hiddenSections}
                   width={sidebarWidth}
                   agentAllowed={agentAllowed}
