@@ -9,6 +9,12 @@ import {
   useState,
   type ReactNode,
 } from "react";
+import { listPinsAction } from "@/app/entity-actions";
+import { PERSONAL_STATE_CHANGED, type PersonalPin } from "@/lib/ui/entity-actions";
+import { usePathname, useSearchParams } from "next/navigation";
+import { useStoredJson } from "@/lib/use-stored-json";
+import { Modal } from "@/components/ui/modal";
+import { useT } from "@/components/i18n-context";
 import type { Priority, Status } from "@/lib/constants";
 
 // Fired on `window` after notifications are read so the sidebar badge and the bell
@@ -55,7 +61,12 @@ export type ComposerSeed = {
 
 const LAYOUT_KEY = "tacos.issues.layout";
 
+export type ToastAction = { label: string; run: () => void | Promise<void> };
 type UIState = {
+  scope: string;
+  pins: PersonalPin[];
+  refreshPins: () => void;
+  confirm: (message: string) => Promise<boolean>;
   openIssueId: string | null;
   openIssue: (id: string) => void;
   closeIssue: () => void;
@@ -89,7 +100,7 @@ type UIState = {
   aiReady: boolean;
   // Short-lived confirmations ("Task deleted") that replace dialogs for actions whose
   // outcome is otherwise invisible once the surrounding UI has already moved on.
-  toast: (message: string) => void;
+  toast: (message: string, action?: ToastAction) => void;
 };
 
 const UIContext = createContext<UIState | null>(null);
@@ -113,32 +124,43 @@ export function isTyping(e: KeyboardEvent) {
 
 export function UIProvider({
   children,
+  userId, workspaceId,
   aiReady = false,
 }: {
   children: ReactNode;
+  userId: string; workspaceId: string;
   aiReady?: boolean;
 }) {
+  const t = useT();
+  const pathname = usePathname();
+  const params = useSearchParams();
+  const scope = `${userId}.${workspaceId}`;
+  const [pins, setPins] = useState<PersonalPin[]>([]);
+  const refreshPins = useCallback(() => { void listPinsAction(workspaceId).then((result) => { if (result.ok) setPins(result.data); }); }, [workspaceId]);
+  useEffect(() => { refreshPins(); window.addEventListener(PERSONAL_STATE_CHANGED, refreshPins); return () => window.removeEventListener(PERSONAL_STATE_CHANGED, refreshPins); }, [refreshPins]);
+  const [confirmation, setConfirmation] = useState<{message: string; resolve: (ok: boolean) => void} | null>(null);
+  const confirm = useCallback((message: string) => new Promise<boolean>((resolve) => setConfirmation({message, resolve})), []);
   const [openIssueId, setOpenIssueId] = useState<string | null>(null);
   const [openPageId, setOpenPageId] = useState<string | null>(null);
-  const [panelExpanded, setPanelExpandedState] = useState(false);
+  const [panelExpanded, setPanelExpandedState] = useStoredJson(`tacos.panel.expanded.${scope}`, false);
   const openIssue = useCallback((id: string) => {
+    const url = new URL(window.location.href); url.searchParams.set("issue", id);
+    window.history.pushState(null, "", url);
     setOpenIssueId(id);
     setOpenPageId(null);
-    setPanelExpandedState(false);
   }, []);
   const closeIssue = useCallback(() => {
+    const url = new URL(window.location.href); url.searchParams.delete("issue");
+    window.history.pushState(null, "", url);
     setOpenIssueId(null);
-    setPanelExpandedState(false);
   }, []);
   const openPage = useCallback((id: string) => {
     setOpenPageId(id);
     setOpenIssueId(null);
-    setPanelExpandedState(false);
   }, []);
   const closePage = useCallback(() => {
     setOpenPageId(null);
     // An expanded pane is the only thing on screen; closing it must bring the page back.
-    setPanelExpandedState(false);
   }, []);
   const setPanelExpanded = useCallback((expanded: boolean) => {
     setPanelExpandedState(expanded);
@@ -168,35 +190,25 @@ export function UIProvider({
   );
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [focused, setFocused] = useState<FocusRef>(null);
-  const [layout, setLayoutState] = useState<IssueLayout>("list");
-  const [toasts, setToasts] = useState<{ id: number; message: string }[]>([]);
+  const layoutKey = `${LAYOUT_KEY}.v2.${scope}.${pathname}`;
+  const [layout, setLayoutState] = useStoredJson<IssueLayout>(layoutKey, "list");
+  const [toasts, setToasts] = useState<{ id: number; message: string; action?: ToastAction }[]>([]);
   const toastSeq = useRef(0);
 
-  const toast = useCallback((message: string) => {
+  const toast = useCallback((message: string, action?: ToastAction) => {
     const id = ++toastSeq.current;
-    setToasts((prev) => [...prev, { id, message }].slice(-3));
-    setTimeout(() => setToasts((prev) => prev.filter((entry) => entry.id !== id)), 3200);
+    setToasts((prev) => [...prev, { id, message, action }].slice(-3));
+    setTimeout(() => setToasts((prev) => prev.filter((entry) => entry.id !== id)), action ? 12000 : 5000);
   }, []);
 
-  // One choice for every issue view, kept on the device rather than in the URL so
-  // navigating between views does not reset it. Read after mount to match the server HTML.
+  function setLayout(next: IssueLayout) { setLayoutState(next); }
+  // Native history participates in Next navigation without reloading the list.
+  useEffect(() => { setOpenIssueId(params.get("issue")); }, [params]);
   useEffect(() => {
-    try {
-      const saved = window.localStorage.getItem(LAYOUT_KEY);
-      if (saved === "board" || saved === "table" || saved === "calendar") setLayoutState(saved);
-    } catch {
-      /* storage unavailable — stay on the list layout */
-    }
-  }, []);
-
-  function setLayout(next: IssueLayout) {
-    setLayoutState(next);
-    try {
-      window.localStorage.setItem(LAYOUT_KEY, next);
-    } catch {
-      /* storage unavailable — the choice still applies to this page view */
-    }
-  }
+    const failed = () => toast(t("Local storage is full. Keep this page open and copy your draft."));
+    window.addEventListener("tacos:storage-error", failed);
+    return () => window.removeEventListener("tacos:storage-error", failed);
+  }, [t, toast]);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -205,7 +217,7 @@ export function UIProvider({
         setPaletteOpen((open) => !open);
         return;
       }
-      if (isTyping(e) || e.metaKey || e.ctrlKey || e.altKey) return;
+      if (e.defaultPrevented || document.querySelector('[role="dialog"], [role="menu"][data-state="open"]') || isTyping(e) || e.metaKey || e.ctrlKey || e.altKey) return;
       if (e.key === "c") {
         e.preventDefault();
         setComposerOpen(true);
@@ -218,6 +230,7 @@ export function UIProvider({
   return (
     <UIContext.Provider
       value={{
+        scope, confirm, pins, refreshPins,
         openIssueId,
         openIssue,
         closeIssue,
@@ -244,6 +257,13 @@ export function UIProvider({
       }}
     >
       {children}
+      <Modal open={!!confirmation} title={t("Confirm")} onClose={() => { confirmation?.resolve(false); setConfirmation(null); }}>
+        <p className="text-body text-text">{confirmation?.message}</p>
+        <div className="mt-4 flex justify-end gap-3">
+          <button autoFocus onClick={() => { confirmation?.resolve(false); setConfirmation(null); }}>{t("Cancel")}</button>
+          <button className="rounded bg-danger px-3 py-1.5 text-body text-white" onClick={() => { confirmation?.resolve(true); setConfirmation(null); }}>{t("Confirm")}</button>
+        </div>
+      </Modal>
       <div className="pointer-events-none fixed bottom-6 left-1/2 z-50 flex -translate-x-1/2 flex-col items-center gap-1.5">
         {toasts.map((entry) => (
           <div
@@ -252,6 +272,7 @@ export function UIProvider({
             className="rounded-lg bg-text px-3.5 py-2 text-small font-medium text-bg shadow-[0_6px_20px_rgba(0,0,0,0.18)]"
           >
             {entry.message}
+            {entry.action && <button className="pointer-events-auto ml-3 underline" onClick={() => { void entry.action!.run(); setToasts((all) => all.filter((item) => item.id !== entry.id)); }}>{entry.action.label}</button>}
           </div>
         ))}
       </div>

@@ -419,6 +419,7 @@ export const taskFields = sqliteTable(
     name: text("name").notNull(),
     type: text("type").notNull(),
     options: text("options").notNull().default("[]"),
+    disabledAt: text("disabled_at"),
     createdBy: text("created_by").notNull(),
     createdAt: text("created_at").notNull(),
   },
@@ -657,3 +658,9 @@ export const pageCollab = sqliteTable("page_collab", {
   revision: integer("revision").notNull(),
   updatedAt: text("updated_at").notNull(),
 });
+
+export const personalEntityState = sqliteTable("personal_entity_state", {
+  userId: text("user_id").notNull(), workspaceId: text("workspace_id").notNull(),
+  entityType: text("entity_type").notNull(), entityId: text("entity_id").notNull(),
+  pinnedAt: text("pinned_at"), position: integer("position").notNull().default(0),
+}, (t) => [primaryKey({ columns: [t.userId, t.workspaceId, t.entityType, t.entityId] })]);

@@ -11,6 +11,12 @@ import * as schema from "./schema";
 export { DATA_DIR };
 
 const DDL = `
+CREATE TABLE IF NOT EXISTS personal_entity_state (
+  user_id TEXT NOT NULL, workspace_id TEXT NOT NULL, entity_type TEXT NOT NULL, entity_id TEXT NOT NULL,
+  pinned_at TEXT, position INTEGER NOT NULL DEFAULT 0,
+  PRIMARY KEY(user_id, workspace_id, entity_type, entity_id)
+);
+
 CREATE TABLE IF NOT EXISTS users (
   id TEXT PRIMARY KEY,
   username TEXT NOT NULL UNIQUE,
@@ -855,6 +861,7 @@ function bootstrap(sqlite: Database.Database) {
   addColumnIfMissing(sqlite, "projects", "doc", "TEXT NOT NULL DEFAULT ''");
   addColumnIfMissing(sqlite, "projects", "icon", "TEXT");
   addColumnIfMissing(sqlite, "issues", "deleted_at", "TEXT");
+  addColumnIfMissing(sqlite, "task_fields", "disabled_at", "TEXT");
   addColumnIfMissing(sqlite, "issues", "position", "REAL NOT NULL DEFAULT 0");
   addColumnIfMissing(sqlite, "issues", "due_date", "TEXT");
   addColumnIfMissing(sqlite, "issues", "reminder", "TEXT");

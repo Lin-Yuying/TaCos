@@ -68,7 +68,7 @@ export default async function WorkspaceLayout({
 
   return (
     <I18nProvider locale={locale}>
-      <UIProvider aiReady={aiEnabled}>
+      <UIProvider key={`${user.id}.${active.id}`} userId={user.id} workspaceId={active.id} aiReady={aiEnabled}>
         <WorkspaceShell
           workspace={{
             id: active.id,

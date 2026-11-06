@@ -1,5 +1,7 @@
 "use client";
 
+import { EntityRow } from "@/components/ui/entity-row";
+
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -14,7 +16,8 @@ import {
   extractInstruction,
   type Instruction,
 } from "@atlaskit/pragmatic-drag-and-drop-hitbox/tree-item";
-import { movePageAction } from "@/app/pages-actions";
+import { useUI } from "@/components/ui-context";
+import { movePageAction, previewPageMoveAction } from "@/app/pages-actions";
 import { useT } from "@/components/i18n-context";
 import type { PageSummary } from "@/lib/pages";
 import { useStoredJson } from "@/lib/use-stored-json";
@@ -54,11 +57,11 @@ function DocRow({
   useEffect(() => {
     const element = ref.current;
     if (!element) return;
-    const stopDrag = draggable({ element, getInitialData: () => ({ pageId: page.id }) });
+    const stopDrag = draggable({ element, canDrag: () => page.canEdit === true, getInitialData: () => ({ pageId: page.id }) });
     const stopDrop = dropTargetForElements({
       element,
       canDrop: ({ source }) =>
-        typeof source.data.pageId === "string" && !blocked(source.data.pageId, page.id),
+        page.canEdit === true && typeof source.data.pageId === "string" && !blocked(source.data.pageId, page.id),
       getData: ({ input, element: target }) =>
         attachInstruction(
           { rowId: page.id },
@@ -78,10 +81,11 @@ function DocRow({
       stopDrag();
       stopDrop();
     };
-  }, [page.id, depth, open, children.length, blocked]);
+  }, [page.id, page.canEdit, depth, open, children.length, blocked]);
 
   return (
     <>
+      <EntityRow kind="document" id={page.id} title={page.title}>
       <div
         ref={ref}
         data-doc-row={page.id}
@@ -117,6 +121,7 @@ function DocRow({
           <span className="truncate">{page.title || t("Untitled")}</span>
         </Link>
       </div>
+      </EntityRow>
       {open &&
         children.map((child) => (
           <DocRow
@@ -140,6 +145,8 @@ function DocRow({
 /** The sidebar's document tree: every page in one tree — sharing is shown on the page. */
 export function DocTree({ workspaceId, pages }: { workspaceId: string; pages: PageSummary[] }) {
   const t = useT();
+  const {confirm}=useUI();
+  const moving=useRef(false);
   const router = useRouter();
   const pathname = usePathname();
   const [expanded, setExpanded] = useStoredJson(EXPANDED_KEY, NO_EXPANDED);
@@ -188,13 +195,20 @@ export function DocTree({ workspaceId, pages }: { workspaceId: string; pages: Pa
   );
 
   async function move(pageId: string, target: { parentId: string | null; beforeId: string | null; shared?: boolean }) {
-    const result = await movePageAction(workspaceId, pageId, target);
+    if(moving.current)return;moving.current=true;
+    try {
+      const preview=await previewPageMoveAction(workspaceId,pageId,target);
+      if(!preview.ok){setError(preview.error);return;}
+      const impact=preview.data;
+      if(impact.requiresConfirmation&&!(await confirm(t("Move this document and {count} children? Visibility: {visibility}; permission: {level}; project: {project}.",{count:impact.descendantCount,visibility:t(impact.shared?"Shared":"Private"),level:impact.level,project:impact.projectId??t("None")}))))return;
+      const result = await movePageAction(workspaceId, pageId, {...target,confirmedImpact:impact.token});
     if (result.ok) {
       setError(null);
       router.refresh();
     } else {
       setError(result.error);
     }
+    }catch{setError(t("Could not save. Retry."));}finally{moving.current=false;}
   }
 
   const moveRef = useRef(move);

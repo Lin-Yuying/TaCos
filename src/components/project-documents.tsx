@@ -1,8 +1,10 @@
 "use client";
 
+import { EntityRow } from "@/components/ui/entity-row";
+
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { FileText, Lock, Plus, Users } from "lucide-react";
 import { createPageAction } from "@/app/pages-actions";
 import { timeAgo } from "@/lib/format";
@@ -24,15 +26,18 @@ export function ProjectDocuments({
   const [error, setError] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
 
+  const creatingRef=useRef(false);
   async function createPage() {
+    if(creatingRef.current)return;creatingRef.current=true;
+    try {
     setCreating(true);
     const result = await createPageAction(workspaceId, { projectId });
-    setCreating(false);
     if (!result.ok) {
       setError(result.error);
       return;
     }
     router.push(`/${workspaceId}/docs/${result.data.id}`);
+    }catch{setError("Could not save. Retry.");}finally{creatingRef.current=false;setCreating(false);}
   }
 
   return (
@@ -64,7 +69,8 @@ export function ProjectDocuments({
         ) : (
           <div className="mt-5 space-y-0.5">
             {pages.map((page) => (
-              <Link
+              <EntityRow key={page.id} kind="document" id={page.id} title={page.title}>
+            <Link
                 key={page.id}
                 href={`/${workspaceId}/docs/${page.id}`}
                 style={{ paddingLeft: 8 + page.depth * 18 }}
@@ -82,6 +88,7 @@ export function ProjectDocuments({
                   </span>
                 </span>
               </Link>
+            </EntityRow>
             ))}
           </div>
         )}

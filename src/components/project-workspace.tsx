@@ -1,6 +1,7 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { Search, X } from "lucide-react";
 import { StatusIcon } from "@/components/icons";
 import { IssueLayout, LayoutToggle } from "@/components/issue-layout";
@@ -74,7 +75,9 @@ export function ProjectWorkspace({
   trashedTitles: Record<string, string>;
 }) {
   const t = useT();
-  const [tab, setTab] = useState<ProjectTab>(initialTab);
+  const params = useSearchParams();
+  const selectedTab = params.get("tab");
+  const tab: ProjectTab = selectedTab === "documents" || selectedTab === "issues" || selectedTab === "overview" ? selectedTab : initialTab;
   const [status, setStatus] = useState<Status | null>(null);
   const [q, setQ] = useState("");
   const [favorite, setFavorite] = useState(initialFavorite);
@@ -125,7 +128,8 @@ export function ProjectWorkspace({
         canPickIcon={access.canEdit}
         onPickIcon={pickIcon}
         onTab={(next) => {
-          setTab(next);
+          const url = new URL(window.location.href); url.searchParams.set("tab", next);
+          window.history.pushState(null, "", url);
           if (next === "issues") setStatus(null);
         }}
         onToggleFavorite={toggleFavorite}

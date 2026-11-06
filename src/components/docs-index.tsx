@@ -1,5 +1,7 @@
 "use client";
 
+import { EntityRow } from "@/components/ui/entity-row";
+
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useRef, useState } from "react";
@@ -37,16 +39,22 @@ export function DocsIndex({
   const filesRef = useRef<HTMLInputElement>(null);
   const folderRef = useRef<HTMLInputElement>(null);
   const importing = useRef(false);
+  const creatingRef=useRef(false);
+  const [creating,setCreating]=useState(false);
   const mine = pages.filter((page) => page.createdBy === userId);
   const shared = pages.filter((page) => page.createdBy !== userId);
 
   async function createPage() {
+    if(creatingRef.current)return;
+    creatingRef.current=true;setCreating(true);
+    try {
     const result = await createPageAction(workspaceId);
     if (!result.ok) {
       setError(result.error);
       return;
     }
     router.push(`/${workspaceId}/docs/${result.data.id}`);
+    }catch{setError("Could not save. Retry.");}finally{creatingRef.current=false;setCreating(false);}
   }
 
   async function importFiles(picked: File[], stripRoot: boolean) {
@@ -112,6 +120,7 @@ export function DocsIndex({
       ) : (
         <div className="space-y-0.5">
           {items.map((page) => (
+            <EntityRow key={page.id} kind="document" id={page.id} title={page.title}>
             <Link
               key={page.id}
               href={`/${workspaceId}/docs/${page.id}`}
@@ -124,6 +133,7 @@ export function DocsIndex({
                 {page.shared ? t("Shared") : t("Private")}
               </span>
             </Link>
+            </EntityRow>
           ))}
         </div>
       )}
@@ -175,7 +185,7 @@ export function DocsIndex({
             </Menu>
             <button
               type="button"
-              onClick={() => void createPage()}
+              disabled={creating} onClick={() => void createPage()}
               className="flex shrink-0 items-center gap-1 rounded-md border border-border px-2.5 py-1.5 text-small font-medium text-muted transition-colors hover:border-border-strong hover:text-text"
             >
               <Plus size={13} /> {t("New page")}
