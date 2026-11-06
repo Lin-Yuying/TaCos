@@ -132,13 +132,12 @@ attachments zip), import from Notion/Markdown/Linear CSV with dry-run mapping,
 owner/admin-only API/CLI export, audit and no secrets in output. Pairs with U-12
 backup UX; prevents lock-in.
 
-### U-06 — Enterprise and governance
+### U-06 — Enterprise and governance (deferred, not planned)
 
-Plan: `docs/plans/enterprise-governance.md`.
-Scope: OIDC SSO (SAML/SCIM follow-ups), domain auto-join/SCIM provisioning,
-role matrix, owner/admin security audit log (90 days default, filter/API/
-webhook), retention policies, session controls and an admin console. Do when
-the team or customers need it.
+Decision 2026-11-06: TaCos is a 5-person internal team; SSO/SCIM, security audit
+UI, retention policies and the admin console are **not planned**. The plan stays
+at `docs/plans/enterprise-governance.md` as a benchmark record. Revisit only if
+the company grows or TaCos is offered to other teams.
 
 ### U-07 — External agent platform
 
