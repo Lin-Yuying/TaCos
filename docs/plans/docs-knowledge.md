@@ -144,14 +144,22 @@ is the knowledge graph and reuse.
 - Public web publishing and external sharing (not planned: internal company use only).
 - AI Q&A/summarization over the doc corpus (possible follow-up after U-02).
 
-## Open decisions
+## Decisions (accepted per recommendation, 2026-11-06)
 
-1. Link syntax: `[[` picker (recommended) vs only `@` vs markdown links.
-2. Backlink scope: pages only (recommended first) or tasks/comments too?
-3. Templates: workspace-only first (recommended) or per-project templates in
-   the same PR?
-4. Outline: generated reader sidebar (recommended) or editor-only?
-5. Version retention: keep 200/page (current) or add a policy now?
+1. Page links use the `[[` picker; `@` stays for mentions and task
+   identifiers keep their current rendering.
+2. Backlinks v1 covers **page → page only**; task/comment sources are a
+   follow-up.
+3. Templates start at the **workspace level**; per-project templates and a
+   default template are follow-ups.
+4. The outline/table of contents lives in the **reader sidebar**, not only in
+   the editor.
+5. Version retention stays at 200 versions per page in this PR; no arbitrary
+   version diff or retention policy yet.
+6. Links store the page **id** and resolve the title at render time; access
+   checks use the existing page visibility rules (no guests).
+7. Existing plain text and `@mentions` are **not auto-converted** to page links;
+   only new `[[` links are recorded.
 
 ## Dependencies
 
