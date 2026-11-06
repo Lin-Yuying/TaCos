@@ -97,18 +97,44 @@ curl -X PATCH http://localhost:3000/api/v1/issues/CORE-7 \
 curl -X POST http://localhost:3000/api/v1/issues/CORE-7/comments \
   -H "Authorization: Bearer tac_YOUR_KEY" \
   -H "Content-Type: application/json" -d '{"body":"Shipped in v1.2"}'
+
+# create a project (a project-scoped key cannot do this)
+curl -X POST http://localhost:3000/api/v1/projects \
+  -H "Authorization: Bearer tac_YOUR_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"name":"Mobile app","description":"iOS and Android"}'
+
+# set custom fields, then make the task wait for another one
+curl -X PUT http://localhost:3000/api/v1/issues/CORE-7/fields \
+  -H "Authorization: Bearer tac_YOUR_KEY" \
+  -H "Content-Type: application/json" -d '{"fields":{"Stage":"beta"}}'
+curl -X POST http://localhost:3000/api/v1/issues/CORE-7/dependencies \
+  -H "Authorization: Bearer tac_YOUR_KEY" \
+  -H "Content-Type: application/json" -d '{"blockedBy":"CORE-3"}'
 ```
 
 | Endpoint | Methods |
 | --- | --- |
-| `/api/v1/issues` | `GET` (filters: `status`, `priority`, `q`, `label`, `project`, `cursor`, `limit`; page headers `X-Total-Count`, `X-Next-Cursor`), `POST` |
-| `/api/v1/issues/{id}` | `GET`, `PATCH`, `DELETE` — `{id}` accepts a UUID or identifier (`CORE-7`) |
+| `/api/v1/issues` | `GET` (filters: `status`, `priority`, `q`, `label`, `project`, `cursor`, `limit`; page headers `X-Total-Count`, `X-Next-Cursor`), `POST` (accepts `recurrence`) |
+| `/api/v1/issues/{id}` | `GET` (includes custom `fields`), `PATCH` (accepts `recurrence`), `DELETE` (soft delete into Trash) — `{id}` accepts a UUID or identifier (`CORE-7`) |
 | `/api/v1/issues/{id}/comments` | `GET`, `POST` |
+| `/api/v1/issues/{id}/fields` | `PUT` — `{"fields":{"Stage":"beta"}}`, keys are a field name or id, `null` clears one |
+| `/api/v1/issues/{id}/dependencies` | `POST` — `{"blockedBy":"CORE-3"}` |
+| `/api/v1/issues/{id}/dependencies/{blockedBy}` | `DELETE` |
+| `/api/v1/issues/{id}/claim` | `POST` (claim), `DELETE` (release) — acts for the key's person |
+| `/api/v1/issues/{id}/review` | `POST` — `{"state":"approved"}` or `{"state":"rejected"}` for a task waiting for review |
+| `/api/v1/issues/{id}/blockers` | `POST` — `{"body":"Waiting on the API"}` |
+| `/api/v1/issues/{id}/restore` | `POST` — restores a task from Trash by id or identifier |
+| `/api/v1/projects` | `GET`, `POST` — a project-scoped key lists only its projects and cannot create one |
+| `/api/v1/projects/{id}` | `GET` (members + task counts), `PATCH` (`name`, `description`, `color`, `icon`), `DELETE` (moves the project and its tasks to Trash; creator or owner only) |
+| `/api/v1/projects/{id}/members` | `GET`, `POST` — `{"username":"sam"}` or `{"userId":"…"}` |
+| `/api/v1/projects/{id}/members/{userId}` | `DELETE` — the project lead cannot be removed |
+| `/api/v1/projects/{id}/tasks` | `GET` — same filters and page headers as `/api/v1/issues`, pinned to the project |
 | `/api/v1/labels` | `GET`, `POST` |
 | `/api/v1/me` | `GET` (key name, scopes, project count, expiry, last used time/IP) |
 | `/api/mcp` | `POST` (MCP Streamable HTTP, same Bearer key) |
 
-Statuses: `todo`, `in_progress`, `done`, `canceled` (aliases such as `in progress` and `completed` work too). Priorities: `none|low|medium|high|urgent` or `0–4`.
+Statuses: `todo`, `in_progress`, `done`, `canceled` (aliases such as `in progress` and `completed` work too). Priorities: `none|low|medium|high|urgent` or `0–4`. Recurrence: `daily`, `weekly`, `monthly`.
 
 ## MCP server (Claude Code / Claude Desktop / Codex)
 
@@ -123,9 +149,19 @@ Two transports share one tool implementation:
 
 Tools: `list_issues`, `get_issue`, `create_issue`, `update_issue`,
 `delete_issue`, `add_comment`, `list_labels`, `create_label`, `list_projects`,
-`list_members`. The list tools take `cursor`/`limit` and return `nextCursor`.
+`list_members`, `get_project`, `create_project`, `update_project`,
+`list_project_tasks`, `set_task_fields`, `add_dependency`, `remove_dependency`,
+`claim_issue`, `release_issue`, `set_review_state`, `report_blocker`,
+`restore_issue`. The list tools take `cursor`/`limit` and return `nextCursor`.
 Every tool declares MCP annotations; the list/get tools also declare
 `outputSchema` and return `structuredContent`.
+
+`claim_issue`, `release_issue`, `set_review_state`, `report_blocker` and
+`create_project` need a person: over HTTP the key's owner is that person, while
+the local stdio server has no signed-in user and refuses the first four.
+`set_task_fields` takes raw values keyed by field name or id and `null` clears
+one. A server limited to a project allowlist can work in those projects but
+cannot create a new one.
 
 Remote (Claude Code):
 

@@ -1,60 +1,21 @@
-import { errorResponse, readJsonBody, requireApiKey } from "@/lib/api-auth";
+import { apiActor, assertKeyProject, errorResponse, readJsonBody, requireApiKey } from "@/lib/api-auth";
 import { parseLabelNames, parsePriority, parseStatus } from "@/lib/api-input";
+import { issueListResponse } from "@/lib/api-issues";
 import {
   assertSeesProject,
   createIssue,
-  listIssuesPage,
   listProjects,
   PRIORITY_NAMES,
-  resolveAssigneeId,
   resolveAssigneeIds,
   type Priority,
   type ReminderPreset,
-  type Status,
 } from "@/lib/issues";
-import { assertKeyProject } from "@/lib/api-auth";
+import type { Recurrence } from "@/lib/constants";
 
 export async function GET(req: Request) {
   try {
     const key = await requireApiKey(req);
-    const params = new URL(req.url).searchParams;
-    const statusParam = params.get("status");
-    let status: Status | "active" | "all" | undefined;
-    if (statusParam === "active" || statusParam === "all") {
-      status = statusParam;
-    } else if (statusParam) {
-      status = parseStatus(statusParam);
-    }
-    const priorityParam = params.get("priority");
-    const priority = priorityParam ? parsePriority(priorityParam) : undefined;
-    const assigneeParam = params.get("assignee");
-    let assigneeId: string | null | undefined;
-    if (assigneeParam === "none") {
-      assigneeId = null;
-    } else if (assigneeParam) {
-      assigneeId = await resolveAssigneeId(key.workspaceId, assigneeParam);
-    }
-    const limitParam = params.get("limit");
-    const limit = limitParam ? Math.min(Math.max(parseInt(limitParam, 10) || 100, 1), 200) : 100;
-    const projectParam = params.get("project");
-    const project = projectParam ? await assertKeyProject(key, projectParam) : undefined;
-
-    const page = await listIssuesPage(key.workspaceId, {
-      viewerId: key.createdBy,
-      status,
-      priority,
-      q: params.get("q") ?? undefined,
-      label: params.get("label") ?? undefined,
-      projectId: project?.id,
-      projectIds: key.projectIds ?? undefined,
-      assigneeId,
-      limit,
-      cursor: params.get("cursor") ?? undefined,
-    });
-    return Response.json(
-      page.items.map((issue) => ({ ...issue, priorityLabel: PRIORITY_NAMES[issue.priority] })),
-      { headers: { "X-Total-Count": String(page.total), ...(page.nextCursor ? { "X-Next-Cursor": page.nextCursor } : {}) } }
-    );
+    return await issueListResponse(req, key);
   } catch (err) {
     return errorResponse(err);
   }
@@ -108,10 +69,12 @@ export async function POST(req: Request) {
         dueDate: typeof body.dueDate === "string" ? body.dueDate : null,
         reminder:
           typeof body.reminder === "string" ? (body.reminder as ReminderPreset) : null,
+        recurrence:
+          typeof body.recurrence === "string" ? (body.recurrence as Recurrence) : null,
         project: project.key,
         parent: typeof body.parent === "string" ? body.parent : null,
       },
-      { kind: "agent", label: `api:${key.name}`, via: "api" }
+      apiActor(key)
     );
     return Response.json(
       { ...detail.issue, priorityLabel: PRIORITY_NAMES[detail.issue.priority] },

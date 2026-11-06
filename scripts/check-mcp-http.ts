@@ -122,18 +122,24 @@ async function main() {
   const names = tools.map((tool) => tool.name).sort();
   assert(
     names.join(",") ===
-      "add_comment,create_issue,create_label,delete_issue,get_issue,list_issues,list_labels,list_members,list_projects,update_issue",
-    `all ten tools registered: ${names.join(",")}`
+      "add_comment,add_dependency,claim_issue,create_issue,create_label,create_project,delete_issue,get_issue,get_project,list_issues,list_labels,list_members,list_project_tasks,list_projects,release_issue,remove_dependency,report_blocker,restore_issue,set_review_state,set_task_fields,update_issue,update_project",
+    `all twenty-two tools registered: ${names.join(",")}`
   );
   const listIssues = tools.find((tool) => tool.name === "list_issues");
   const deleteIssue = tools.find((tool) => tool.name === "delete_issue");
+  const getProject = tools.find((tool) => tool.name === "get_project");
+  const listProjectTasks = tools.find((tool) => tool.name === "list_project_tasks");
   assert(listIssues?.annotations?.readOnlyHint === true, "list_issues is annotated read-only");
   assert(deleteIssue?.annotations?.destructiveHint === true, "delete_issue is annotated destructive");
+  assert(getProject?.annotations?.readOnlyHint === true, "get_project is annotated read-only");
+  assert(listProjectTasks?.annotations?.readOnlyHint === true, "list_project_tasks is annotated read-only");
   assert(tools.every((tool) => tool.annotations?.openWorldHint === false), "every tool is closed-world");
   assert(
     listIssues?.outputSchema !== undefined && listIssues.outputSchema !== null,
     "list_issues declares an output schema"
   );
+  assert(getProject?.outputSchema !== undefined && getProject.outputSchema !== null, "get_project declares an output schema");
+  assert(listProjectTasks?.outputSchema !== undefined && listProjectTasks.outputSchema !== null, "list_project_tasks declares an output schema");
 
   const firstPage = await writeClient.callTool({ name: "list_issues", arguments: { limit: 2 } });
   const first = firstPage.structuredContent as { count: number; nextCursor: string | null; issues: Array<{ id: string }> };
@@ -166,7 +172,7 @@ async function main() {
   const readClient = await connect(reader.key);
   const readNames = (await readClient.listTools()).tools.map((tool) => tool.name).sort();
   assert(
-    readNames.join(",") === "get_issue,list_issues,list_labels,list_members,list_projects",
+    readNames.join(",") === "get_issue,get_project,list_issues,list_labels,list_members,list_project_tasks,list_projects",
     `read-only key serves only read tools: ${readNames.join(",")}`
   );
   const denied = await readClient.callTool({
@@ -259,7 +265,7 @@ async function main() {
   await readClient.close();
   await scopedClient.close();
   console.log(
-    "check-mcp-http: pass (10 tools, annotations, output schema, cursor pagination, mixed-case labels, read-only rejection, project allowlist, task visibility, batch rate limit, 401)"
+    "check-mcp-http: pass (22 tools, annotations, output schema, cursor pagination, mixed-case labels, read-only rejection, project allowlist, task visibility, batch rate limit, 401)"
   );
 }
 

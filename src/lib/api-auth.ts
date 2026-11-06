@@ -6,6 +6,7 @@ import {
   verifyApiKey,
   type ApiKeyRecord,
   type ApiKeyScope,
+  type MutationActor,
   type Project,
 } from "./issues";
 import { ApiKeyRateLimitError, takeApiKeyToken } from "./api-key-rate-limit";
@@ -99,6 +100,12 @@ export async function assertKeyProject(key: ApiKeyRecord, idOrKey: string): Prom
 export function assertKeyProjectId(key: ApiKeyRecord, projectId: string, label: string): void {
   if (key.projectIds === null || key.projectIds.includes(projectId)) return;
   throw new TacosError(`This API key is not allowed to use project "${label}".`, 403, PROJECT_HINT);
+}
+
+// A write from the REST surface is attributed to the key that made it, not to the
+// person the key belongs to.
+export function apiActor(key: ApiKeyRecord): MutationActor {
+  return { kind: "agent", label: `api:${key.name}`, via: "api" };
 }
 
 // The task routes name a task, not a project, so resolve the task's project first.

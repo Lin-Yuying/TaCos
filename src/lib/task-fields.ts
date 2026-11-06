@@ -115,7 +115,7 @@ export async function setTaskFieldValue(
   issueId: string,
   fieldId: string,
   raw: string | null,
-  viewerId: string,
+  viewerId: string | undefined,
   actor: MutationActor
 ): Promise<string | null> {
   const field = await findField(workspaceId, fieldId);
@@ -138,6 +138,67 @@ export async function setTaskFieldValue(
   }
   await recordEvent(id, "field_changed", { field: field.name, from: old?.value ?? null, to: value }, actor);
   return value;
+}
+
+/** A task's custom field values keyed by field name, the shape the API and MCP use. */
+export async function listIssueFieldValues(
+  workspaceId: string,
+  issueId: string
+): Promise<Record<string, string>> {
+  const values = (await listFieldValues([issueId]))[issueId] ?? {};
+  const out: Record<string, string> = {};
+  for (const field of await listTaskFields(workspaceId)) {
+    const value = values[field.id];
+    if (value !== undefined) out[field.name] = value;
+  }
+  return out;
+}
+
+/** Field keys from the API/MCP: the field id, or its name ignoring case. */
+export async function resolveTaskFieldsByKeys(
+  workspaceId: string,
+  keys: string[]
+): Promise<TaskField[]> {
+  const fields = await listTaskFields(workspaceId);
+  return keys.map((key) => {
+    const wanted = key.trim();
+    const field = fields.find(
+      (entry) => entry.id === wanted || entry.name.toLowerCase() === wanted.toLowerCase()
+    );
+    if (!field) {
+      throw new TacosError(
+        `Unknown field "${key}"`,
+        400,
+        fields.length
+          ? `Available fields: ${fields.map((entry) => entry.name).join(", ")}`
+          : "This workspace has no custom fields yet. Create one in the task view."
+      );
+    }
+    return field;
+  });
+}
+
+/** Sets several values from a name/id-keyed object and returns the task's values by name. */
+export async function setTaskFieldValuesByName(
+  workspaceId: string,
+  issueId: string,
+  values: Record<string, string | null>,
+  viewerId: string | undefined,
+  actor: MutationActor
+): Promise<Record<string, string>> {
+  const keys = Object.keys(values);
+  const fields = await resolveTaskFieldsByKeys(workspaceId, keys);
+  for (let index = 0; index < fields.length; index++) {
+    await setTaskFieldValue(
+      workspaceId,
+      issueId,
+      fields[index].id,
+      values[keys[index]] ?? null,
+      viewerId,
+      actor
+    );
+  }
+  return listIssueFieldValues(workspaceId, issueId);
 }
 
 export async function taskFieldImpact(workspaceId: string, fieldId: string): Promise<number> {

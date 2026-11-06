@@ -2,28 +2,43 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import {
   addComment,
+  addDependency,
   assertSeesIssue,
   assertSeesProject,
+  claimIssue,
+  countIssuesByStatus,
   createIssue,
   createLabel,
+  createProject,
   deleteIssue,
   findIssueRow,
+  findTrashedIssueRow,
   getIssueDetail,
   getProject,
   listIssuesPage,
   listLabels,
   listMembers,
+  listProjectMembers,
   listProjects,
   normalizePriority,
   normalizeStatus,
   PRIORITY_NAMES,
+  releaseIssue,
+  removeDependency,
+  reportBlocker,
   resolveAssigneeId,
   resolveAssigneeIds,
+  restoreIssue,
+  reviewIssue,
   updateIssue,
+  updateProject,
   type Priority,
+  type Project,
   type ReminderPreset,
   type Status,
 } from "../src/lib/issues";
+import { listIssueFieldValues, setTaskFieldValuesByName } from "../src/lib/task-fields";
+import type { Recurrence } from "../src/lib/constants";
 
 export type McpActor = { kind: "agent"; label: string; via: "api" | "mcp" };
 
@@ -38,6 +53,9 @@ export type CreateMcpServerOptions = {
   viewerId: string | null;
   // TACOS_MCP_TOOLS: when set, only these tool names register.
   toolFilter: string[] | null;
+  // The person behind an API key. The local stdio server has no person, so tools
+  // that must act as someone (claim, review, blockers, project ownership) refuse.
+  userId: string | null;
 };
 
 export const MCP_READ_TOOL_NAMES = [
@@ -46,6 +64,8 @@ export const MCP_READ_TOOL_NAMES = [
   "list_labels",
   "list_projects",
   "list_members",
+  "get_project",
+  "list_project_tasks",
 ] as const;
 
 export const MCP_WRITE_TOOL_NAMES = [
@@ -54,6 +74,16 @@ export const MCP_WRITE_TOOL_NAMES = [
   "delete_issue",
   "add_comment",
   "create_label",
+  "create_project",
+  "update_project",
+  "set_task_fields",
+  "add_dependency",
+  "remove_dependency",
+  "claim_issue",
+  "release_issue",
+  "set_review_state",
+  "report_blocker",
+  "restore_issue",
 ] as const;
 
 const STATUS_HELP =
@@ -165,7 +195,7 @@ const deleteAnnotations = { ...createAnnotations, destructiveHint: true };
 const itemSchema = z.record(z.string(), z.unknown());
 
 export function createMcpServer(options: CreateMcpServerOptions): McpServer {
-  const { workspaceId, actor, readOnly, allowedProjectIds, toolFilter, viewerId } = options;
+  const { workspaceId, actor, readOnly, allowedProjectIds, toolFilter, viewerId, userId } = options;
   const server = new McpServer({ name: "tacos", version: "0.3.0" });
 
   function enabled(name: string): boolean {
@@ -211,6 +241,37 @@ export function createMcpServer(options: CreateMcpServerOptions): McpServer {
       const project = await getProject(workspaceId, row.projectId, viewerId ?? undefined);
       throw projectAllowedError(project?.key ?? row.projectId);
     }
+  }
+
+  // Some actions belong to a person (a claim, a review, a blocker, a project lead).
+  // The HTTP endpoint knows the key's person; the stdio server does not.
+  function requirePerson(tool: string): string {
+    if (userId) return userId;
+    throw new Error(
+      `${tool} needs a signed-in person. Use /api/mcp with an API key that belongs to a workspace member, or the web UI.`
+    );
+  }
+
+  // A scoped server can work inside its allowlist; a new project would be outside it.
+  function assertCanCreateProject(): void {
+    if (allowedProjectIds === null) return;
+    throw new Error(
+      "This MCP server is limited to a project allowlist and cannot create projects. Use a server with all projects, or create the project in the web UI."
+    );
+  }
+
+  function stripDoc(project: Project & { doc?: string }): Project {
+    const { doc, ...meta } = project;
+    void doc;
+    return meta;
+  }
+
+  async function projectPayload(project: Project) {
+    const [members, taskCounts] = await Promise.all([
+      listProjectMembers(workspaceId, project.id),
+      countIssuesByStatus(workspaceId, project.id),
+    ]);
+    return { ...project, members, memberCount: members.length, taskCounts };
   }
 
   if (enabled("list_issues")) {
@@ -290,6 +351,7 @@ export function createMcpServer(options: CreateMcpServerOptions): McpServer {
           projectId: z.string(),
           comments: z.array(itemSchema),
           events: z.array(itemSchema),
+          fields: z.record(z.string(), z.string()),
         }),
         annotations: readAnnotations,
       },
@@ -303,6 +365,7 @@ export function createMcpServer(options: CreateMcpServerOptions): McpServer {
             priorityLabel: PRIORITY_NAMES[detail.issue.priority],
             comments: detail.comments,
             events: detail.events,
+            fields: await listIssueFieldValues(workspaceId, detail.issue.id),
           });
         })
     );
@@ -331,6 +394,10 @@ export function createMcpServer(options: CreateMcpServerOptions): McpServer {
             .enum(["12h", "1d", "3d", "5d", "7d"])
             .optional()
             .describe("How long before the due date to remind"),
+          recurrence: z
+            .enum(["daily", "weekly", "monthly"])
+            .optional()
+            .describe("Open the next occurrence when this task is marked done"),
           parent: z
             .string()
             .optional()
@@ -338,7 +405,7 @@ export function createMcpServer(options: CreateMcpServerOptions): McpServer {
         },
         annotations: createAnnotations,
       },
-      async ({ title, description, project, status, priority, assignee, assignees, labels, dueDate, reminder, parent }) =>
+      async ({ title, description, project, status, priority, assignee, assignees, labels, dueDate, reminder, recurrence, parent }) =>
         guard(async () => {
           const resolved = await resolveProject(project);
           const assigneeValues = assignees ?? (assignee ? [assignee] : []);
@@ -354,6 +421,7 @@ export function createMcpServer(options: CreateMcpServerOptions): McpServer {
               labelNames: labels,
               dueDate,
               reminder,
+              recurrence: recurrence ?? null,
               parent,
             },
             actor
@@ -389,6 +457,10 @@ export function createMcpServer(options: CreateMcpServerOptions): McpServer {
             .string()
             .optional()
             .describe("How long before the due date to remind: 12h, 1d, 3d, 5d, 7d; empty string clears it"),
+          recurrence: z
+            .string()
+            .optional()
+            .describe("daily, weekly or monthly; empty string clears it"),
           parent: z
             .string()
             .optional()
@@ -396,7 +468,7 @@ export function createMcpServer(options: CreateMcpServerOptions): McpServer {
         },
         annotations: updateAnnotations,
       },
-      async ({ id, title, description, status, priority, assignee, assignees, labels, dueDate, reminder, parent }) =>
+      async ({ id, title, description, status, priority, assignee, assignees, labels, dueDate, reminder, recurrence, parent }) =>
         guard(async () => {
           await assertIssueAllowed(id);
           let assigneeIds: string[] | undefined;
@@ -427,6 +499,12 @@ export function createMcpServer(options: CreateMcpServerOptions): McpServer {
                   : reminder === ""
                     ? null
                     : (reminder as ReminderPreset),
+              recurrence:
+                recurrence === undefined
+                  ? undefined
+                  : recurrence === ""
+                    ? null
+                    : (recurrence as Recurrence),
               parent,
             },
             actor
@@ -589,6 +667,369 @@ export function createMcpServer(options: CreateMcpServerOptions): McpServer {
             (a, b) => compareText(a.username, b.username) || compareText(a.id, b.id)
           );
           return ok({ members: page, nextCursor });
+        })
+    );
+  }
+
+  if (enabled("get_project")) {
+    server.registerTool(
+      "get_project",
+      {
+        title: "Get project",
+        description:
+          "Get one project with its members and task counts. Defaults to the first project this server may use.",
+        inputSchema: {
+          project: z
+            .string()
+            .optional()
+            .describe("Project key (e.g. CORE) or id; defaults to the first available project"),
+        },
+        outputSchema: z.looseObject({
+          id: z.string(),
+          key: z.string(),
+          name: z.string(),
+          description: z.string(),
+          members: z.array(itemSchema),
+          memberCount: z.number(),
+          taskCounts: itemSchema,
+        }),
+        annotations: readAnnotations,
+      },
+      async ({ project }) =>
+        guard(async () => {
+          const resolved = await resolveProject(project);
+          return ok(await projectPayload(stripDoc(resolved)));
+        })
+    );
+  }
+
+  if (enabled("list_project_tasks")) {
+    server.registerTool(
+      "list_project_tasks",
+      {
+        title: "List project tasks",
+        description:
+          "List one project's tasks with the same filters as list_issues. Pass the previous nextCursor to read the next page.",
+        inputSchema: {
+          project: z
+            .string()
+            .optional()
+            .describe("Project key (e.g. CORE) or id; defaults to the first available project"),
+          status: z
+            .string()
+            .optional()
+            .describe(`Filter by status: ${STATUS_HELP}, or "active" (todo + in_progress), or "all"`),
+          priority: z.union([z.string(), z.number()]).optional().describe(`Filter by priority: ${PRIORITY_HELP}`),
+          assignee: z.string().optional().describe('Assignee username, or "none" for unassigned'),
+          q: z.string().optional().describe("Free-text search across title, description, and identifier"),
+          label: z.string().optional().describe("Filter by label name"),
+          limit: z.number().optional().describe("Max results (default 100, max 200)"),
+          cursor: z.string().optional().describe("Opaque cursor from the previous call's nextCursor"),
+        },
+        outputSchema: z.looseObject({
+          project: z.string(),
+          count: z.number(),
+          total: z.number(),
+          issues: z.array(itemSchema),
+          nextCursor: z.string().nullable(),
+        }),
+        annotations: readAnnotations,
+      },
+      async ({ project, status, priority, assignee, q, label, limit, cursor }) =>
+        guard(async () => {
+          const resolved = await resolveProject(project);
+          let assigneeId: string | null | undefined;
+          if (assignee === "none") {
+            assigneeId = null;
+          } else if (assignee) {
+            assigneeId = await resolveAssigneeId(workspaceId, assignee);
+          }
+          const page = await listIssuesPage(workspaceId, {
+            status: status === "active" || status === "all" ? status : parseStatus(status),
+            priority: parsePriority(priority),
+            q,
+            label,
+            projectId: resolved.id,
+            projectIds: allowedProjectIds ?? undefined,
+            viewerId: viewerId ?? undefined,
+            assigneeId,
+            limit: limit !== undefined ? pageLimit(limit, 100) : undefined,
+            cursor,
+          });
+          return ok({
+            project: resolved.key,
+            count: page.items.length,
+            total: page.total,
+            issues: page.items.map((issue) => ({
+              ...issue,
+              priorityLabel: PRIORITY_NAMES[issue.priority],
+            })),
+            nextCursor: page.nextCursor,
+          });
+        })
+    );
+  }
+
+  if (enabled("create_project")) {
+    server.registerTool(
+      "create_project",
+      {
+        title: "Create project",
+        description:
+          "Create a project; its key becomes the prefix for task identifiers. Needs an all-projects server.",
+        inputSchema: {
+          name: z.string().describe("Short project name, e.g. Mobile app"),
+          description: z.string().optional().describe("One-line summary shown under the title"),
+        },
+        annotations: createAnnotations,
+      },
+      async ({ name, description }) =>
+        guard(async () => {
+          assertCanCreateProject();
+          const project = await createProject({
+            workspaceId,
+            name,
+            description,
+            createdBy: userId,
+          });
+          return ok({ ...project });
+        })
+    );
+  }
+
+  if (enabled("update_project")) {
+    server.registerTool(
+      "update_project",
+      {
+        title: "Update project",
+        description: "Rename a project or change its description, color or icon.",
+        inputSchema: {
+          project: z.string().describe("Project key (e.g. CORE) or id"),
+          name: z.string().optional().describe("New project name"),
+          description: z.string().optional().describe("One-line summary"),
+          color: z.string().optional().describe("Palette color, e.g. #8b5cf6"),
+          icon: z.string().nullable().optional().describe("A single emoji, or null to clear it"),
+        },
+        annotations: updateAnnotations,
+      },
+      async ({ project, name, description, color, icon }) =>
+        guard(async () => {
+          const resolved = await resolveProject(project);
+          if (name === undefined && description === undefined && color === undefined && icon === undefined) {
+            throw new Error("Send at least one of name, description, color or icon.");
+          }
+          const updated = await updateProject(
+            workspaceId,
+            resolved.id,
+            { name, description, color, icon },
+            userId ?? undefined
+          );
+          return ok({ ...updated });
+        })
+    );
+  }
+
+  if (enabled("set_task_fields")) {
+    server.registerTool(
+      "set_task_fields",
+      {
+        title: "Set task fields",
+        description:
+          "Set custom task field values from a name/id-keyed object. Values are raw strings (checkbox \"1\"); null clears one.",
+        inputSchema: {
+          id: z.string().describe("Issue id or identifier, e.g. CORE-7"),
+          fields: z
+            .record(z.string(), z.union([z.string(), z.null()]))
+            .describe('Field name or id → value, e.g. {"Stage": "beta"}; null clears'),
+        },
+        annotations: updateAnnotations,
+      },
+      async ({ id, fields }) =>
+        guard(async () => {
+          await assertIssueAllowed(id);
+          const row = await findIssueRow(workspaceId, id);
+          if (!row) throw new Error(`Issue "${id}" not found`);
+          const values = await setTaskFieldValuesByName(
+            workspaceId,
+            row.id,
+            fields,
+            userId ?? undefined,
+            actor
+          );
+          return ok({ id: row.id, identifier: row.identifier, fields: values });
+        })
+    );
+  }
+
+  if (enabled("add_dependency")) {
+    server.registerTool(
+      "add_dependency",
+      {
+        title: "Add dependency",
+        description:
+          "Make a task wait for another task. Refuses a self-link or a loop.",
+        inputSchema: {
+          id: z.string().describe("Issue id or identifier, e.g. CORE-7"),
+          blockedBy: z.string().describe("The task that must finish first, e.g. CORE-3"),
+        },
+        annotations: updateAnnotations,
+      },
+      async ({ id, blockedBy }) =>
+        guard(async () => {
+          await assertIssueAllowed(id);
+          await assertIssueAllowed(blockedBy);
+          const detail = await addDependency(workspaceId, id, blockedBy, userId ?? undefined, actor);
+          return ok({
+            id: detail.issue.id,
+            identifier: detail.issue.identifier,
+            dependencies: detail.dependencies,
+            blocked: detail.blocked,
+          });
+        })
+    );
+  }
+
+  if (enabled("remove_dependency")) {
+    server.registerTool(
+      "remove_dependency",
+      {
+        title: "Remove dependency",
+        description: "Remove a task that this task was waiting for.",
+        inputSchema: {
+          id: z.string().describe("Issue id or identifier, e.g. CORE-7"),
+          blockedBy: z.string().describe("The task to stop waiting for, e.g. CORE-3"),
+        },
+        annotations: updateAnnotations,
+      },
+      async ({ id, blockedBy }) =>
+        guard(async () => {
+          await assertIssueAllowed(id);
+          await assertIssueAllowed(blockedBy);
+          const detail = await removeDependency(workspaceId, id, blockedBy, userId ?? undefined, actor);
+          return ok({
+            id: detail.issue.id,
+            identifier: detail.issue.identifier,
+            dependencies: detail.dependencies,
+            blocked: detail.blocked,
+          });
+        })
+    );
+  }
+
+  if (enabled("claim_issue")) {
+    server.registerTool(
+      "claim_issue",
+      {
+        title: "Claim issue",
+        description:
+          "Claim an approved, open task for the person behind the API key. A task waiting for review or already claimed is refused.",
+        inputSchema: {
+          id: z.string().describe("Issue id or identifier, e.g. CORE-7"),
+        },
+        annotations: createAnnotations,
+      },
+      async ({ id }) =>
+        guard(async () => {
+          const person = requirePerson("claim_issue");
+          await assertIssueAllowed(id);
+          return ok(await claimIssue(workspaceId, id, person, actor));
+        })
+    );
+  }
+
+  if (enabled("release_issue")) {
+    server.registerTool(
+      "release_issue",
+      {
+        title: "Release issue",
+        description: "Release a claim held by the person behind the API key.",
+        inputSchema: {
+          id: z.string().describe("Issue id or identifier, e.g. CORE-7"),
+        },
+        annotations: createAnnotations,
+      },
+      async ({ id }) =>
+        guard(async () => {
+          const person = requirePerson("release_issue");
+          await assertIssueAllowed(id);
+          return ok(await releaseIssue(workspaceId, id, person, actor));
+        })
+    );
+  }
+
+  if (enabled("set_review_state")) {
+    server.registerTool(
+      "set_review_state",
+      {
+        title: "Set review state",
+        description:
+          "Approve or reject a task that waits for review, as the person behind the API key. Other tasks are refused.",
+        inputSchema: {
+          id: z.string().describe("Issue id or identifier, e.g. CORE-7"),
+          state: z.enum(["approved", "rejected"]).describe("Approve or reject the task"),
+        },
+        annotations: createAnnotations,
+      },
+      async ({ id, state }) =>
+        guard(async () => {
+          const person = requirePerson("set_review_state");
+          await assertIssueAllowed(id);
+          return ok(
+            await reviewIssue(
+              workspaceId,
+              id,
+              person,
+              state === "approved" ? "approve" : "reject",
+              actor
+            )
+          );
+        })
+    );
+  }
+
+  if (enabled("report_blocker")) {
+    server.registerTool(
+      "report_blocker",
+      {
+        title: "Report blocker",
+        description:
+          "Report that a task is stuck. The assignees are notified; the report is attributed to the API key.",
+        inputSchema: {
+          id: z.string().describe("Issue id or identifier, e.g. CORE-7"),
+          body: z.string().describe("What is blocking this task"),
+        },
+        annotations: createAnnotations,
+      },
+      async ({ id, body }) =>
+        guard(async () => {
+          const person = requirePerson("report_blocker");
+          await assertIssueAllowed(id);
+          return ok(await reportBlocker(workspaceId, id, body, actor, { reportedById: person }));
+        })
+    );
+  }
+
+  if (enabled("restore_issue")) {
+    server.registerTool(
+      "restore_issue",
+      {
+        title: "Restore issue",
+        description: "Restore a task from the Trash.",
+        inputSchema: {
+          id: z.string().describe("Issue id or identifier, e.g. CORE-7"),
+        },
+        annotations: createAnnotations,
+      },
+      async ({ id }) =>
+        guard(async () => {
+          const row = await findTrashedIssueRow(workspaceId, id);
+          if (!row) throw new Error(`Issue "${id}" is not in the trash`);
+          if (viewerId) await assertSeesIssue(workspaceId, row.id, viewerId);
+          if (allowedProjectIds !== null && !allowedProjectIds.includes(row.projectId)) {
+            const project = await getProject(workspaceId, row.projectId);
+            throw projectAllowedError(project?.key ?? row.projectId);
+          }
+          return ok({ restored: await restoreIssue(workspaceId, row.id) });
         })
     );
   }

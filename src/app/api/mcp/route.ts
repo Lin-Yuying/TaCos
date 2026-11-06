@@ -112,7 +112,11 @@ export async function POST(req: Request) {
     readOnly,
     allowedProjectIds: key.projectIds,
     toolFilter: null,
+    // The key stands for the person who created it; person-only actions (claim,
+    // review, blockers, project ownership) act as that person, and task visibility is
+    // filtered as that person too.
     viewerId: key.createdBy,
+    userId: key.createdBy,
   });
   // Stateless: one server and transport per POST, no session id, no server-initiated
   // notifications. Stateful sessions are explicitly a follow-up.
