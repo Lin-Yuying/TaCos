@@ -1,5 +1,8 @@
 "use client";
 
+import { ThreadSidebar } from "@/components/thread-sidebar";
+import { ThreadMenu } from "@/components/thread-menu";
+import { useStoredJson } from "@/lib/use-stored-json";
 import { useDraft } from "@/lib/ui/draft-store";
 
 import { useEffect, useRef, useState, type ReactNode } from "react";
@@ -772,7 +775,7 @@ function SkillManager({
 
   async function remove(skill: AgentSkill) {
     if (
-      !window.confirm(
+      !await confirm(
         t(
           'Delete the skill "{name}"? Its folder is removed from this machine, so every workspace using it loses it.',
           { name: skillToken(skill) }
@@ -932,6 +935,7 @@ function Composer({
   onDeleteSkill?: (skill: AgentSkill) => Promise<SkillDeleteResult>;
 }) {
   const t = useT();
+  const {confirm}=useUI();
   const box = useRef<HTMLTextAreaElement | null>(null);
   // The "+" menu steals focus on click, so remember where the caret was when the
   // textarea last had it.
@@ -1252,470 +1256,6 @@ function ThreadRenameInput({
   );
 }
 
-function ThreadSidebar({
-  workspaceId,
-  threads,
-  projects,
-  activeId,
-  variant = "docked",
-  onNavigate,
-}: {
-  workspaceId: string;
-  threads: AgentThread[];
-  projects: ProjectOption[];
-  activeId?: string;
-  variant?: "docked" | "drawer";
-  onNavigate?: () => void;
-}) {
-  const t = useT();
-  const router = useRouter();
-  const { toast } = useUI();
-  const [expanded, setExpanded] = useState<Record<string, boolean>>({});
-  const [searching, setSearching] = useState(false);
-  const [query, setQuery] = useState("");
-  // The ChatGPT-style row menu: pinned rows leave their project group, unread rows keep a
-  // dot until they are opened again.
-  const [menu, setMenu] = useState<{ thread: AgentThread; left: number; top: number } | null>(
-    null
-  );
-  const [pane, setPane] = useState<"root" | "project">("root");
-  const [renaming, setRenaming] = useState<{ id: string; value: string } | null>(null);
-  const menuRef = useRef<HTMLDivElement | null>(null);
-
-  const closeMenu = () => {
-    setMenu(null);
-    setPane("root");
-  };
-
-  useEffect(() => {
-    if (!menu) return;
-    const onDown = (event: MouseEvent) => {
-      if (!menuRef.current?.contains(event.target as Node)) closeMenu();
-    };
-    const onKey = (event: KeyboardEvent) => {
-      if (event.key === "Escape") closeMenu();
-    };
-    document.addEventListener("mousedown", onDown);
-    document.addEventListener("keydown", onKey);
-    // A fixed panel would drift away from its row while the list scrolls.
-    window.addEventListener("scroll", closeMenu, true);
-    window.addEventListener("resize", closeMenu);
-    return () => {
-      document.removeEventListener("mousedown", onDown);
-      document.removeEventListener("keydown", onKey);
-      window.removeEventListener("scroll", closeMenu, true);
-      window.removeEventListener("resize", closeMenu);
-    };
-  }, [menu]);
-
-  const openMenu = (thread: AgentThread, x: number, y: number) => {
-    const width = 224;
-    const height = 336;
-    setMenu({
-      thread,
-      left: Math.max(8, Math.min(x + 2, window.innerWidth - width - 8)),
-      top: y + height > window.innerHeight - 8 ? Math.max(8, y - height) : y + 2,
-    });
-    setPane("root");
-  };
-
-  const pin = async (thread: AgentThread) => {
-    closeMenu();
-    const result = await setAgentThreadPinnedAction(workspaceId, thread.id, !thread.pinnedAt);
-    if (!result.ok) toast(t(result.error));
-    else router.refresh();
-  };
-
-  const markUnread = async (thread: AgentThread) => {
-    closeMenu();
-    const result = await setAgentThreadUnreadAction(workspaceId, thread.id, true);
-    if (!result.ok) toast(t(result.error));
-    else {
-      toast(t("Marked as unread"));
-      router.refresh();
-    }
-  };
-
-  const moveToProject = async (thread: AgentThread, projectId: string) => {
-    closeMenu();
-    if (projectId === thread.projectId) return;
-    const result = await setAgentThreadProjectAction(workspaceId, thread.id, projectId);
-    if (!result.ok) toast(t(result.error));
-    else router.refresh();
-  };
-
-  const toggleShared = async (thread: AgentThread) => {
-    closeMenu();
-    const result = await setAgentThreadVisibilityAction(
-      workspaceId,
-      thread.id,
-      thread.visibility === "shared" ? "private" : "shared"
-    );
-    if (!result.ok) toast(t(result.error));
-    else router.refresh();
-  };
-
-  const copyLink = async (thread: AgentThread) => {
-    closeMenu();
-    const url = `${window.location.origin}/${workspaceId}/agent?thread=${thread.id}`;
-    try {
-      await navigator.clipboard.writeText(url);
-      toast(t("Link copied"));
-    } catch {
-      toast(t("Could not copy the link"));
-    }
-  };
-
-  const openInWindow = (thread: AgentThread) => {
-    closeMenu();
-    window.open(`/${workspaceId}/agent?thread=${thread.id}`, "_blank", "noopener,noreferrer");
-  };
-
-  const remove = async (thread: AgentThread) => {
-    closeMenu();
-    if (!window.confirm(t("Delete “{title}” and its history?", { title: thread.title || t("this conversation") }))) return;
-    const result = await deleteAgentThreadAction(workspaceId, thread.id);
-    if (!result.ok) {
-      toast(t(result.error));
-      return;
-    }
-    if (thread.id === activeId) router.push(`/${workspaceId}/agent`);
-    router.refresh();
-  };
-
-  const startRename = (thread: AgentThread) => {
-    closeMenu();
-    // The Recents copy steps aside while renaming, so make sure the one that stays is
-    // actually on screen (a group only shows its first three rows before "Show more").
-    setExpanded((prev) => ({ ...prev, [thread.projectId || "no-project"]: true }));
-    setRenaming({ id: thread.id, value: thread.title });
-  };
-
-  const commitRename = async () => {
-    const current = renaming;
-    setRenaming(null);
-    if (!current) return;
-    const next = current.value.replace(/\s+/g, " ").trim();
-    if (!next || next === threads.find((thread) => thread.id === current.id)?.title) return;
-    const result = await renameAgentThreadAction(workspaceId, current.id, next);
-    if (!result.ok) toast(t(result.error));
-    else router.refresh();
-  };
-
-  const pinned = threads
-    .filter((thread) => thread.pinnedAt)
-    .sort((a, b) => (b.pinnedAt ?? "").localeCompare(a.pinnedAt ?? ""));
-  const groups = projects
-    .map((project) => ({
-      project,
-      items: threads.filter((thread) => thread.projectId === project.id && !thread.pinnedAt),
-    }))
-    .filter((group) => group.items.length > 0);
-  // Conversations started with "Don't work in a project" have no folder to sit under.
-  const loose = threads.filter((thread) => !thread.projectId && !thread.pinnedAt);
-  const recents = threads
-    .filter((thread) => !thread.pinnedAt && thread.id !== renaming?.id)
-    .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))
-    .slice(0, 8);
-  const needle = query.trim().toLowerCase();
-  const matches = needle
-    ? threads.filter((thread) => (thread.title || "New conversation").toLowerCase().includes(needle))
-    : [];
-
-  const row = (thread: AgentThread, indent = false) => {
-    if (renaming?.id === thread.id) {
-      return (
-        <div
-          key={thread.id}
-          className={`flex h-[30px] items-center rounded-md bg-elevated pr-1 ${
-            indent ? "pl-6" : "pl-1"
-          }`}
-        >
-          <ThreadRenameInput
-            threadId={thread.id}
-            value={renaming.value}
-            onChange={(value) => setRenaming({ id: thread.id, value })}
-            onCommit={() => void commitRename()}
-            onCancel={() => setRenaming(null)}
-          />
-        </div>
-      );
-    }
-    return (
-      <div
-        key={thread.id}
-        onContextMenu={(event) => {
-          event.preventDefault();
-          openMenu(thread, event.clientX, event.clientY);
-        }}
-        className={`group relative flex h-[30px] items-center rounded-md text-body transition-colors ${
-          indent ? "pl-7" : "pl-2"
-        } ${thread.id === activeId || menu?.thread.id === thread.id ? "bg-elevated text-text" : "text-text/85 hover:bg-elevated"}`}
-      >
-        <Link
-          href={`/${workspaceId}/agent?thread=${thread.id}`}
-          onClick={() => {
-            if (thread.unread) void setAgentThreadUnreadAction(workspaceId, thread.id, false);
-            onNavigate?.();
-          }}
-          className="flex h-full min-w-0 flex-1 items-center gap-1.5 pr-1"
-        >
-          {thread.unread && (
-            <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-accent" title={t("Unread")} />
-          )}
-          <span
-            className={`min-w-0 flex-1 truncate ${thread.unread ? "font-medium text-text" : ""}`}
-          >
-            {thread.title || "New conversation"}
-          </span>
-          {thread.visibility === "shared" && <Users size={11} className="shrink-0 text-faint" />}
-        </Link>
-        <button
-          type="button"
-          onMouseDown={(event) => event.stopPropagation()}
-          onClick={(event) => {
-            event.preventDefault();
-            if (menu?.thread.id === thread.id) closeMenu();
-            else {
-              const rect = event.currentTarget.getBoundingClientRect();
-              openMenu(thread, rect.left, rect.bottom);
-            }
-          }}
-          className={`mr-1 flex h-6 w-6 shrink-0 items-center justify-center rounded text-muted transition-colors hover:bg-border/60 hover:text-text ${
-            menu?.thread.id === thread.id ? "opacity-100" : "opacity-0 group-hover:opacity-100 focus-visible:opacity-100"
-          }`}
-          aria-label={t("Conversation options")}
-          title={t("Conversation options")}
-        >
-          <MoreHorizontal size={14} />
-        </button>
-      </div>
-    );
-  };
-
-  return (
-    <aside
-      className={
-        variant === "drawer"
-          ? "flex h-full w-[264px] shrink-0 flex-col border-r border-border bg-surface"
-          : "hidden w-[248px] shrink-0 flex-col border-r border-border bg-surface @[620px]:flex"
-      }
-    >
-      {/* The workspace switcher and Inbox live in the app sidebar now, so this column
-          only has to frame the conversation list. */}
-      <div className="flex h-12 shrink-0 items-center gap-1 px-3">
-        <span className="min-w-0 flex-1 truncate text-body font-semibold">{t("Conversations")}</span>
-        <button
-          type="button"
-          onClick={() => {
-            setSearching((open) => !open);
-            setQuery("");
-          }}
-          className="flex h-7 w-7 items-center justify-center rounded-md text-muted transition-colors hover:bg-elevated hover:text-text"
-          title={t("Search conversations")}
-        >
-          <Search size={14} />
-        </button>
-      </div>
-
-      {searching && (
-        <div className="px-2 pb-1">
-          <input
-            autoFocus
-            value={query}
-            onChange={(event) => setQuery(event.target.value)}
-            onKeyDown={(event) => {
-              if (event.key === "Escape") {
-                setSearching(false);
-                setQuery("");
-              }
-            }}
-            placeholder={t("Search conversations")}
-            className="h-[30px] w-full rounded-md border border-border bg-bg px-2 text-small outline-none placeholder:text-faint focus:border-border-strong"
-          />
-        </div>
-      )}
-
-      <div className="px-2 pb-1">
-        {/* H-P3-18: New chat leaves the thread URL. The empty composer creates a new session id. */}
-        <Link
-          href={`/${workspaceId}/agent`}
-          onClick={onNavigate}
-          className="flex h-[30px] items-center gap-2 rounded-md px-2 text-body text-text/85 transition-colors hover:bg-elevated"
-          data-testid="agent-new-chat"
-        >
-          <Pencil size={13} className="shrink-0 text-faint" /> {t("New chat")}
-        </Link>
-      </div>
-
-      <nav className="min-h-0 flex-1 overflow-y-auto px-2 pb-4">
-        {needle ? (
-          matches.length > 0 ? (
-            <div className="pt-1">{matches.map((thread) => row(thread))}</div>
-          ) : (
-            <p className="px-2 py-2 text-small text-faint">{t("No matches.")}</p>
-          )
-        ) : (
-          <>
-            {pinned.length > 0 && (
-              <div className="pb-2">
-                <div className="flex items-center gap-1.5 px-2 pb-1 pt-2 text-small text-faint">
-                  <Pin size={12} className="shrink-0" />
-                  <span className="min-w-0 flex-1 truncate">{t("Pinned")}</span>
-                </div>
-                {pinned.map((thread) => row(thread))}
-              </div>
-            )}
-
-            {groups.map(({ project, items }) => {
-              const open = expanded[project.id];
-              const shown = open ? items : items.slice(0, 3);
-              return (
-                <div key={project.id} className="pb-2">
-                  <div className="flex items-center gap-1.5 px-2 pb-1 pt-2 text-small text-faint">
-                    <Folder size={12} className="shrink-0" />
-                    <span className="min-w-0 flex-1 truncate">{project.name}</span>
-                  </div>
-                  {shown.map((thread) => row(thread, true))}
-                  {!open && items.length > 3 && (
-                    <button
-                      type="button"
-                      onClick={() => setExpanded((prev) => ({ ...prev, [project.id]: true }))}
-                      className="ml-7 mt-0.5 rounded px-2 py-0.5 text-small text-faint transition-colors hover:text-text"
-                    >
-                      {t("Show more")}
-                    </button>
-                  )}
-                </div>
-              );
-            })}
-
-            {loose.length > 0 && (
-              <div className="pb-2">
-                <div className="flex items-center gap-1.5 px-2 pb-1 pt-2 text-small text-faint">
-                  <Folder size={12} className="shrink-0" />
-                  <span className="min-w-0 flex-1 truncate">{t("No project")}</span>
-                </div>
-                {(expanded["no-project"] ? loose : loose.slice(0, 3)).map((thread) => row(thread, true))}
-                {!expanded["no-project"] && loose.length > 3 && (
-                  <button
-                    type="button"
-                    onClick={() => setExpanded((prev) => ({ ...prev, "no-project": true }))}
-                    className="ml-7 mt-0.5 rounded px-2 py-0.5 text-small text-faint transition-colors hover:text-text"
-                  >
-                    {t("Show more")}
-                  </button>
-                )}
-              </div>
-            )}
-
-            <div className="px-2 pb-1 pt-3 text-small text-muted">{t("Recents")}</div>
-            {recents.length === 0 ? (
-              <p className="px-2 py-1 text-small text-faint">{t("No conversations yet.")}</p>
-            ) : (
-              recents.map((thread) => row(thread))
-            )}
-          </>
-        )}
-      </nav>
-
-      {menu &&
-        createPortal(
-          <div
-            ref={menuRef}
-            onContextMenu={(event) => event.preventDefault()}
-            className="fixed z-[80] overflow-y-auto overflow-x-hidden rounded-lg border border-border bg-overlay p-1 shadow-xl shadow-black/10"
-            style={{
-              left: menu.left,
-              top: menu.top,
-              width: 224,
-              maxHeight: "calc(100dvh - 16px)",
-              overflowAnchor: "none",
-            }}
-          >
-            {pane === "project" ? (
-              <>
-                <button
-                  type="button"
-                  onClick={() => setPane("root")}
-                  className="mb-1 flex w-full items-center gap-1.5 rounded-md px-2 py-1.5 text-left text-small text-muted transition-colors hover:bg-elevated hover:text-text"
-                >
-                  <ChevronLeft size={13} /> {t("Project")}
-                </button>
-                <MenuItem
-                  active={!menu.thread.projectId}
-                  onSelect={() => void moveToProject(menu.thread, "")}
-                >
-                  <span className="h-1.5 w-1.5 rounded-full bg-faint" /> {t("No project")}
-                </MenuItem>
-                {projects.map((project) => (
-                  <MenuItem
-                    key={project.id}
-                    active={project.id === menu.thread.projectId}
-                    onSelect={() => void moveToProject(menu.thread, project.id)}
-                  >
-                    <span
-                      className="h-1.5 w-1.5 shrink-0 rounded-full"
-                      style={{ background: project.color }}
-                    />
-                    <span className="min-w-0 truncate">{project.name}</span>
-                  </MenuItem>
-                ))}
-              </>
-            ) : (
-              <>
-                {menu.thread.mine && (
-                  <MenuItem onSelect={() => startRename(menu.thread)}>
-                    <Pencil size={13} /> {t("Rename")}
-                  </MenuItem>
-                )}
-                <MenuItem onSelect={() => void pin(menu.thread)}>
-                  <Pin size={13} /> {t(menu.thread.pinnedAt ? "Unpin" : "Pin")}
-                </MenuItem>
-                <MenuItem onSelect={() => void markUnread(menu.thread)}>
-                  <Dot size={13} /> {t("Mark as unread")}
-                </MenuItem>
-                {menu.thread.mine && (
-                  <>
-                    <div className="my-1 h-px bg-border" />
-                    <MenuItem onSelect={() => setPane("project")}>
-                      <Folder size={13} /> {t("Project")}
-                      <ChevronRight size={13} className="ml-auto text-faint" />
-                    </MenuItem>
-                    <MenuItem onSelect={() => void toggleShared(menu.thread)}>
-                      {menu.thread.visibility === "shared" ? (
-                        <Lock size={13} />
-                      ) : (
-                        <Users size={13} />
-                      )}
-                      {t(menu.thread.visibility === "shared" ? "Make private" : "Share with workspace")}
-                    </MenuItem>
-                  </>
-                )}
-                <div className="my-1 h-px bg-border" />
-                <MenuItem onSelect={() => void copyLink(menu.thread)}>
-                  <Link2 size={13} /> {t("Copy link")}
-                </MenuItem>
-                <MenuItem onSelect={() => openInWindow(menu.thread)}>
-                  <ExternalLink size={13} /> {t("Open in new window")}
-                </MenuItem>
-                {menu.thread.mine && (
-                  <>
-                    <div className="my-1 h-px bg-border" />
-                    <MenuItem danger onSelect={() => void remove(menu.thread)}>
-                      <Trash2 size={13} /> {t("Delete")}
-                    </MenuItem>
-                  </>
-                )}
-              </>
-            )}
-          </div>,
-          document.body
-        )}
-    </aside>
-  );
-}
-
 function StartComposer({
   projects,
   options,
@@ -1875,6 +1415,8 @@ export function AgentWorkspace({
   const [starting, setStarting] = useState(false);
   const [startError, setStartError] = useState<string | null>(null);
   const [drawer, setDrawer] = useState(false);
+  const {scope}=useUI();
+  const [sidebarClosed,setSidebarClosed]=useStoredJson(`tacos.agent.sidebar.closed.${scope}`,false);
   const [draftProject, setDraftProject] = useState(projects[0]?.id ?? "");
   const [draftVisibility, setDraftVisibility] = useState<"private" | "shared">("private");
   const [draftEngine, setDraftEngine] = useState<AgentHarnessId>(defaultEngine);
@@ -2045,13 +1587,13 @@ export function AgentWorkspace({
 
   return (
     <div className="relative @container flex h-full min-h-0 w-full bg-bg">
-      <ThreadSidebar
+      {!sidebarClosed&&<ThreadSidebar onCollapse={()=>setSidebarClosed(true)}
         workspaceId={workspaceId}
         threads={threads}
         projects={projects}
         activeId={active?.id}
         onNavigate={() => setDrawer(false)}
-      />
+      />}
 
       {/* Narrow windows drop the docked sidebar; the panel button in each header opens
           this copy of it instead so conversations stay reachable. */}
@@ -2077,6 +1619,7 @@ export function AgentWorkspace({
       )}
 
       <main className="flex min-w-0 flex-1 flex-col">
+        <button className="self-start px-3 py-1 text-small text-muted" onClick={()=>{setSidebarClosed(!sidebarClosed);setDrawer(true);}}>{t(sidebarClosed?"Show conversations":"Conversations")}</button>
         {active ? (
           // Keyed by thread so switching conversations starts from that thread's own state
           // instead of carrying the previous one's messages across.
@@ -2189,6 +1732,11 @@ function Conversation({
   const t = useT();
   const router = useRouter();
   const [messages, setMessages] = useState<UiMessage[]>(() => toUi(active));
+  const {confirm,toast}=useUI();
+  const [failedAccepted,setFailedAccepted]=useDraft("agent-failed-accepted",active.id,false);
+  const [failedText,setFailedText]=useDraft<string|null>("agent-failed-turn",active.id,null);
+  const [follow,setFollow]=useState(true);
+  const following=useRef(true),running=useRef(false),chatScroll=useRef<HTMLDivElement>(null);
   const [input, setInput] = useDraft("agent", active.id, "");
   const [busy, setBusy] = useState(false);
   // H-COLLAB-13: a live refresh brings new server messages (another member's turn).
@@ -2268,7 +1816,7 @@ function Conversation({
   const pendingSent = useRef(false);
 
   useEffect(() => {
-    bottom.current?.scrollIntoView({ block: "end" });
+    if(following.current)bottom.current?.scrollIntoView({ block: "end" });
   }, [messages, approval]);
 
   // A conversation created from the empty-state composer hands its first message over in
@@ -2298,7 +1846,8 @@ function Conversation({
 
   async function send(text: string) {
     const message = text.trim();
-    if (!message || busy) return;
+    if (!message || running.current) return;
+    running.current=true;following.current=true;setFollow(true);
     setError(null);
     setApproval(null);
     setBusy(true);
@@ -2314,10 +1863,10 @@ function Conversation({
     try {
       await streamAiEdit(
         { workspaceId, action: "agent", threadId: active.id, engine, text: message },
-        (delta) => { if (!accepted) {accepted=true;setInput("");} patchLastAssistant((last) => ({ ...last, content: last.content + delta })); },
+        (delta) => { if (!accepted) {accepted=true;setInput(current=>current.trim()===message?"":current);} patchLastAssistant((last) => ({ ...last, content: last.content + delta })); },
         controller.signal,
         (frame) => {
-          if (!accepted) {accepted=true;setInput("");}
+          if (!accepted) {accepted=true;setInput(current=>current.trim()===message?"":current);}
           if (frame.type === "step") {
             patchLastAssistant((last) => {
               const key = frame.step.key || `${frame.step.kind}|${frame.step.title}`;
@@ -2334,7 +1883,9 @@ function Conversation({
           }
         }
       );
+      setInput(current=>current.trim()===message?"":current);setFailedText(null);setFailedAccepted(false);
     } catch (err) {
+      setFailedText(message);setFailedAccepted(accepted);
       const aborted = err instanceof Error && err.name === "AbortError";
       setMessages((prev) => {
         const last = prev[prev.length - 1];
@@ -2346,7 +1897,7 @@ function Conversation({
       if (!aborted) setError(err instanceof Error ? err.message : "The agent could not answer");
     } finally {
       abort.current = null;
-      setBusy(false);
+      running.current=false;setBusy(false);
       setApproval(null);
       router.refresh();
       box.current?.focus();
@@ -2372,49 +1923,7 @@ function Conversation({
     }
   }
 
-  async function rename() {
-    if (!active.mine) return;
-    const next = window.prompt(t("Conversation name"), active.title || t("Untitled conversation"));
-    if (!next || !next.trim()) return;
-    const result = await renameAgentThreadAction(workspaceId, active.id, next.trim());
-    if (!result.ok) setError(result.error);
-    else router.refresh();
-  }
-
-  async function changeProject(projectId: string) {
-    if (!active.mine || projectId === active.projectId) return;
-    const result = await setAgentThreadProjectAction(workspaceId, active.id, projectId);
-    if (!result.ok) {
-      setError(result.error);
-      return;
-    }
-    router.refresh();
-  }
-
-
-  async function toggleVisibility() {
-    if (!active.mine) return;
-    const result = await setAgentThreadVisibilityAction(
-      workspaceId,
-      active.id,
-      active.visibility === "shared" ? "private" : "shared"
-    );
-    if (!result.ok) setError(result.error);
-    else router.refresh();
-  }
-
-  async function remove() {
-    if (!active.mine) return;
-    if (!window.confirm(t("Delete “{title}” and its history?", { title: active.title || t("this conversation") }))) return;
-    const result = await deleteAgentThreadAction(workspaceId, active.id);
-    if (!result.ok) {
-      setError(result.error);
-      return;
-    }
-    router.push(`/${workspaceId}/agent`);
-    router.refresh();
-  }
-
+  async function changeProject(projectId:string){const result=await setAgentThreadProjectAction(workspaceId,active.id,projectId);if(!result.ok)setError(result.error);else router.refresh();}
   return (
     <div className="flex min-h-0 min-w-0 flex-1 flex-col">
       <header className="relative flex h-12 shrink-0 items-center justify-between gap-2 px-3">
@@ -2431,7 +1940,7 @@ function Conversation({
             className="h-1.5 w-1.5 shrink-0 rounded-full"
             style={{ background: active.projectColor || "var(--color-faint)" }}
           />
-          <span className="max-w-[180px] truncate">{active.projectName || t("No project")}</span>
+          <span className="max-w-[200px] truncate font-medium text-text" title={active.title}>{active.title||t("Untitled conversation")}</span><span className="max-w-[120px] truncate">{active.projectName||t("No project")}</span>
           {active.visibility === "shared" && <Users size={11} className="shrink-0 text-faint" />}
           {!active.mine && <span className="shrink-0 text-faint">· {active.createdByName}</span>}
         </div>
@@ -2439,49 +1948,11 @@ function Conversation({
           <ThreadTaskChips workspaceId={workspaceId} threadId={active.id} busy={busy} />
         </div>
         <div className="flex shrink-0 items-center">
-          {active.mine && (
-            <Menu
-              width={220}
-              align="right"
-              trigger={<MoreHorizontal size={16} />}
-              triggerClassName="flex h-7 w-7 items-center justify-center rounded-md text-muted transition-colors hover:bg-elevated hover:text-text"
-            >
-              {(close) => (
-                <>
-                  <MenuItem
-                    onSelect={() => {
-                      close();
-                      void toggleVisibility();
-                    }}
-                  >
-                    {active.visibility === "shared" ? <Lock size={13} /> : <Users size={13} />}
-                    {t(active.visibility === "shared" ? "Make private" : "Share with workspace")}
-                  </MenuItem>
-                  <MenuItem
-                    onSelect={() => {
-                      close();
-                      void rename();
-                    }}
-                  >
-                    <Pencil size={13} /> {t("Rename")}
-                  </MenuItem>
-                  <MenuItem
-                    danger
-                    onSelect={() => {
-                      close();
-                      void remove();
-                    }}
-                  >
-                    <Trash2 size={13} /> {t("Delete conversation")}
-                  </MenuItem>
-                </>
-              )}
-            </Menu>
-          )}
+          <ThreadMenu workspaceId={workspaceId} thread={active} projects={projects}/>
         </div>
       </header>
 
-      <div className="min-h-0 flex-1 overflow-y-auto">
+      <div ref={chatScroll} onScroll={e=>{const element=e.currentTarget;following.current=element.scrollHeight-element.scrollTop-element.clientHeight<80;setFollow(following.current);}} className="min-h-0 flex-1 overflow-y-auto">
         <div className="mx-auto flex w-full max-w-3xl flex-col gap-6 px-5 pb-8 pt-4">
           {messages.length === 0 && (
             <div className="pt-16 text-center">
@@ -2518,7 +1989,7 @@ function Conversation({
                 )}
                 <div className="max-w-[85%] whitespace-pre-wrap rounded-2xl rounded-br-md bg-elevated px-3.5 py-2 text-body leading-relaxed">
                   {message.content}
-                </div>
+                </div><div className="flex gap-3 text-small text-faint"><button disabled={busy} onClick={()=>{setInput(message.content);box.current?.focus();}}>{t("Edit and resend")}</button><button onClick={()=>void navigator.clipboard.writeText(message.content).then(()=>toast(t("Copied"))).catch(()=>toast(t("Could not copy the link")))}>{t("Copy")}</button></div>
               </div>
             ) : (
               <div key={message.id} className="min-w-0 text-body leading-relaxed">
@@ -2545,7 +2016,9 @@ function Conversation({
 
       <div className="shrink-0 px-4 pb-4">
         <div className="mx-auto w-full max-w-3xl">
+          {!follow&&<button className="mb-2 rounded border border-border px-3 py-1 text-small" onClick={()=>{following.current=true;setFollow(true);bottom.current?.scrollIntoView({block:"end"});}}>{t("Jump to latest")}</button>}
           {error && <TurnError error={error} />}
+          {failedText&&<div className="mb-2 flex gap-3 text-small"><button disabled={busy} onClick={()=>{setInput(failedText);box.current?.focus();}}>{t("Edit failed message")}</button>{!failedAccepted&&<button disabled={busy} onClick={()=>void (async()=>{if(await confirm(t("Send this request again? Check the conversation first; the previous request may already have run.")))await send(failedText);})()}>{t("Retry")}</button>}{failedAccepted&&<span>{t("The request started. Review its results before sending another request.")}</span>}<button onClick={()=>void navigator.clipboard.writeText(failedText).then(()=>toast(t("Copied"))).catch(()=>toast(t("Could not copy the link")))}>{t("Copy")}</button></div>}
           <Composer
             value={input}
             onChange={setInput}
