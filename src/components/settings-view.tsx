@@ -1341,12 +1341,17 @@ export function SettingsView({
               <p className="text-body leading-relaxed text-muted">
                 {interpolate(
                   t(
-                    "For Claude Code / Claude Desktop. The MCP server reads and writes this same database directly, so it works even when the web app is closed. It exposes {tools} with project and assignee support."
+                    "Use the local MCP server beside the database, or the remote endpoint at {path} from any machine that can reach this workspace. Both expose {tools} and use the same API keys; a read-only key only gets the read tools."
                   ),
                   {
+                    path: (
+                      <code className="rounded bg-elevated px-1 font-mono text-small text-text">
+                        /api/mcp
+                      </code>
+                    ),
                     tools: (
                       <code className="font-mono text-small text-text">
-                        list/get/create/update/delete issue, add_comment, list/create label
+                        list/get/create/update/delete issue, add_comment, list/create label, list projects and members
                       </code>
                     ),
                   }
@@ -1354,7 +1359,7 @@ export function SettingsView({
               </p>
               {mcpCommand ? (
                 <>
-                  <div className="text-small font-medium text-muted">Claude Code</div>
+                  <div className="text-small font-medium text-muted">{t("Local server (stdio)")}</div>
                   <Snippet code={`claude mcp add tacos -- ${mcpCommand}`} />
                   <p className="text-small text-faint">
                     {interpolate(
@@ -1368,8 +1373,13 @@ export function SettingsView({
                   </p>
                 </>
               ) : (
-                <p className="text-small text-faint">{t("This install does not include the MCP server. See README to run it from the source code.")}</p>
+                <p className="text-small text-faint">{t("This install does not include the local MCP server. See README to run it from the source code; the remote endpoint at /api/mcp still works.")}</p>
               )}
+              <div className="text-small font-medium text-muted">{t("Remote server (Streamable HTTP)")}</div>
+              <Snippet code={`claude mcp add --transport http tacos ${origin}/api/mcp --header "Authorization: Bearer tac_YOUR_KEY"`} />
+              <p className="text-small text-faint">
+                {t("The remote endpoint is stateless: every request carries the Bearer key, and the key's scopes and project allowlist apply to every tool call.")}
+              </p>
             </section>
           </div>
         </details>

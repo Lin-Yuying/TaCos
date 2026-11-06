@@ -1378,6 +1378,16 @@ const zh: Record<string, string> = {
     "只有工作区管理员可以创建永不过期的 key",
   "Only the key's owner or an admin can rotate it": "只有密钥的所有者或管理员可以轮换它",
   "API key not found": "找不到这个 API key",
+  "Use the local MCP server beside the database, or the remote endpoint at {path} from any machine that can reach this workspace. Both expose {tools} and use the same API keys; a read-only key only gets the read tools.":
+    "可以在数据库所在机器上运行本地 MCP 服务，也可以从任何能访问这个工作区的机器连接 {path} 远程端点。两者都提供 {tools}，并使用同一套 API key；只读 key 只能看到只读工具。",
+  "Local server (stdio)": "本地服务（stdio）",
+  "Set {readOnly} to hide write tools, or {tools} to register only the named tools. Both work on the stdio server.":
+    "设置 {readOnly} 可以隐藏写入工具，设置 {tools} 可以只注册列出的工具。两者都只对本地 stdio 服务生效。",
+  "This install does not include the local MCP server. See README to run it from the source code; the remote endpoint at /api/mcp still works.":
+    "这个安装版不包含本地 MCP 服务。按 README 从源代码启动即可使用；/api/mcp 远程端点仍然可用。",
+  "Remote server (Streamable HTTP)": "远程服务（Streamable HTTP）",
+  "The remote endpoint is stateless: every request carries the Bearer key, and the key's scopes and project allowlist apply to every tool call.":
+    "远程端点是无状态的：每个请求都带 Bearer key，key 的权限和项目白名单对每次工具调用生效。",
 };
 
 export default zh;
