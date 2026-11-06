@@ -3873,12 +3873,13 @@ function decodeList(raw: string | null): string[] | null {
   if (raw == null) return null;
   try {
     const value = JSON.parse(raw) as unknown;
-    if (!Array.isArray(value)) return null;
+    if (!Array.isArray(value)) return [];
     return value.filter((entry): entry is string => typeof entry === "string");
   } catch {
-    // Only this module writes these columns; a bad value keeps the legacy meaning
-    // instead of silently locking a working key out.
-    return null;
+    // SQL NULL is the legacy full-access marker. A malformed non-null value must
+    // fail closed instead of silently escalating a restricted key.
+    console.error("[tacos] malformed API-key JSON column; treating it as empty");
+    return [];
   }
 }
 
@@ -3938,10 +3939,11 @@ function normalizeApiKeyScopes(scopes: ApiKeyScope[]): ApiKeyScope[] {
 
 async function normalizeApiKeyProjects(
   workspaceId: string,
-  projectIds: string[] | null
+  projectIds: string[] | null,
+  createdBy: string
 ): Promise<string[] | null> {
   if (projectIds === null || projectIds.length === 0) return null;
-  const live = await listProjects(workspaceId);
+  const live = await listProjects(workspaceId, createdBy);
   const allowed = new Map(live.map((project) => [project.id, project.key]));
   const unique = [...new Set(projectIds)];
   for (const id of unique) {
@@ -3963,7 +3965,7 @@ export async function createApiKey(
   const trimmed = name.trim();
   if (!trimmed) throw new TacosError("API key name is required");
   const normalizedScopes = normalizeApiKeyScopes(scopes);
-  const normalizedProjects = await normalizeApiKeyProjects(workspaceId, projectIds);
+  const normalizedProjects = await normalizeApiKeyProjects(workspaceId, projectIds, createdBy);
   if (expiresInDays !== null && !API_KEY_EXPIRY_DAYS.includes(expiresInDays as (typeof API_KEY_EXPIRY_DAYS)[number])) {
     throw new TacosError("Expiry must be 30, 90 or 365 days");
   }
@@ -4096,11 +4098,24 @@ export async function rotateApiKey(
   const facts = await workspaceFacts(workspaceId, actorId);
   const allowed = row.createdBy === actorId || facts.ownerId === actorId || facts.role === "admin";
   if (!allowed) throw new TacosError("Only the key's owner or an admin can rotate it", 403);
+  const [creator] = await db
+    .select({ userId: workspaceMembers.userId })
+    .from(workspaceMembers)
+    .where(and(eq(workspaceMembers.workspaceId, workspaceId), eq(workspaceMembers.userId, row.createdBy)))
+    .limit(1);
+  if (!creator) {
+    throw new TacosError("The key's creator has left this workspace. Revoke the key instead.", 409);
+  }
   const old = mapApiKeyRow(row);
   const key = generateApiKey();
   const now = nowIso();
-  const lifetimeMs =
-    old.expiresAt === null ? null : Math.max(0, Date.parse(old.expiresAt) - Date.parse(old.createdAt));
+  if (old.expiresAt !== null && Date.parse(old.expiresAt) <= Date.now()) {
+    throw new TacosError("This key has expired. Create a new key instead.", 400);
+  }
+  if (old.expiresAt === null && !(facts.ownerId === actorId || facts.role === "admin")) {
+    throw new TacosError("Only a workspace admin can rotate a never-expiring key", 403);
+  }
+  const remainingMs = old.expiresAt === null ? null : Math.max(0, Date.parse(old.expiresAt) - Date.now());
   const record: ApiKeyRecord = {
     id: crypto.randomUUID(),
     workspaceId,
@@ -4112,16 +4127,17 @@ export async function rotateApiKey(
     revokedAt: null,
     scopes: old.scopes,
     projectIds: old.projectIds,
-    expiresAt: lifetimeMs === null ? null : new Date(Date.now() + lifetimeMs).toISOString(),
+    expiresAt: remainingMs === null ? null : new Date(Date.now() + remainingMs).toISOString(),
     rotatedFrom: old.id,
     keyPrefix: key.slice(0, 8),
     last4: key.slice(-4),
   };
   db.transaction((tx) => {
-    tx.update(apiKeys)
+    const revoked = tx.update(apiKeys)
       .set({ revokedAt: now })
-      .where(and(eq(apiKeys.id, id), eq(apiKeys.workspaceId, workspaceId)))
+      .where(and(eq(apiKeys.id, id), eq(apiKeys.workspaceId, workspaceId), isNull(apiKeys.revokedAt)))
       .run();
+    if (revoked.changes === 0) throw new TacosError("API key was already rotated or revoked. Reload and retry.", 409);
     tx.insert(apiKeys)
       .values({
         id: record.id,
