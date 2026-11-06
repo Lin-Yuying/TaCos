@@ -266,19 +266,14 @@ export async function* openPiTurn(input: TurnInput, log?: TurnLog): AsyncGenerat
     }
   }
 
-  input.signal?.addEventListener(
-    "abort",
-    () => {
-      clearTimeout(timer);
-      finish("The turn was cancelled.");
-    },
-    { once: true }
-  );
+  const onAbort=()=>{clearTimeout(timer);finish("The turn was cancelled.");};
+  input.signal?.addEventListener("abort",onAbort,{once:true});
   if (input.signal?.aborted) {
     clearTimeout(timer);
     finish("The turn was cancelled.");
   }
 
+  try {
   while (true) {
     while (queue.length > 0) {
       const event = queue.shift()!;
@@ -300,5 +295,7 @@ export async function* openPiTurn(input: TurnInput, log?: TurnLog): AsyncGenerat
     });
     wake = null;
   }
+  } finally {clearTimeout(timer);unsubscribe();input.signal?.removeEventListener("abort",onAbort);child?.kill();queue.length=0;}
+
 }
 

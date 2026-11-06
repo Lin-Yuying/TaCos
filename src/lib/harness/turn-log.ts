@@ -12,6 +12,7 @@ import type { HarnessId, TurnEvent, TurnInput } from "./types";
 export type TurnLog = {
   path: string;
   write(chunk: string): void;
+  close(): Promise<void>;
 };
 
 export function harnessLogDir(): string {
@@ -27,24 +28,15 @@ export function openTurnLog(harness: HarnessId, sessionId: string): TurnLog {
   const dir = harnessLogDir();
   const stamp = new Date().toISOString().replace(/[:.]/g, "-");
   const file = path.join(dir, `${harness}-${safe(sessionId)}-${stamp}.log`);
-  let ok = true;
-  try {
-    fs.mkdirSync(dir, { recursive: true });
-    fs.writeFileSync(file, `# TaCos ${harness} turn ${sessionId} ${new Date().toISOString()}\n`);
-  } catch {
-    ok = false;
-  }
-  return {
-    path: file,
-    write(chunk: string) {
-      if (!ok) return;
-      try {
-        fs.appendFileSync(file, chunk);
-      } catch {
-        ok = false;
-      }
-    },
+  fs.mkdirSync(dir, {recursive:true});
+  const stream=fs.createWriteStream(file,{flags:"a",highWaterMark:64*1024});
+  let failed=false;
+  stream.on("error",()=>{failed=true;});
+  stream.write(`# TaCos ${harness} turn ${sessionId} ${new Date().toISOString()}\n`);
+  return {path:file,write(chunk){if(!failed && !stream.writableEnded)stream.write(chunk);},
+    close(){return new Promise<void>(resolve=>{if(failed||stream.closed)return resolve();stream.end(resolve);stream.once("error",()=>resolve());});}
   };
+
 }
 
 export function withLogPath(message: string, logPath: string): string {
@@ -72,5 +64,5 @@ export async function* loggedTurn(
     log.write(`[throw] ${message}\n`);
     yield { type: "error", message: withLogPath(`${harness} turn failed: ${message}`, log.path) };
     yield { type: "done" };
-  }
+  } finally {await log.close();}
 }

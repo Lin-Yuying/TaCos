@@ -352,19 +352,14 @@ export async function* openCodebuddyTurn(input: TurnInput, log?: TurnLog): Async
     }
   }
 
-  input.signal?.addEventListener(
-    "abort",
-    () => {
-      clearTimeout(timer);
-      finish("The turn was cancelled.");
-    },
-    { once: true }
-  );
+  const onAbort=()=>{clearTimeout(timer);finish("The turn was cancelled.");};
+  input.signal?.addEventListener("abort",onAbort,{once:true});
   if (input.signal?.aborted) {
     clearTimeout(timer);
     finish("The turn was cancelled.");
   }
 
+  try {
   while (true) {
     while (queue.length > 0) {
       const event = queue.shift()!;
@@ -386,4 +381,6 @@ export async function* openCodebuddyTurn(input: TurnInput, log?: TurnLog): Async
     });
     wake = null;
   }
+  } finally {clearTimeout(timer);unsubscribe();input.signal?.removeEventListener("abort",onAbort);child?.kill();queue.length=0;}
+
 }

@@ -100,7 +100,11 @@ export function hasLiveAgentTurn(userId: string): boolean {
 }
 
 export function revokeAgentToolGrant(token: string): void {
-  store().grants.delete(token);
+  const grant=store().grants.get(token);store().grants.delete(token);
+  if(grant && ![...store().grants.values()].some(other=>other.threadId===grant.threadId && other.expiresAt>Date.now())){
+    for(const card of approvalQueues.get(grant.threadId)??[]) { answerAgentApproval(card.requestId,"decline");clearQueuedApproval(card.requestId); }
+    approvalQueues.delete(grant.threadId);
+  }
 }
 
 // "Allow for this turn": the person trusts the rest of this turn's writes, so the
@@ -133,6 +137,7 @@ export function waitForAgentApproval(
     const finish = (decision: ApprovalDecision) => {
       if (settled) return;
       settled = true;
+      clearQueuedApproval(requestId);
       const set = approvals.get(requestId);
       if (set) {
         set.delete(finish);
@@ -168,6 +173,11 @@ type ApprovalListener = (card: ToolApprovalCard) => void;
 
 const approvalListeners = new Map<string, Set<ApprovalListener>>();
 const approvalQueues = new Map<string, ToolApprovalCard[]>();
+const queueTimers=new Map<string,ReturnType<typeof setTimeout>>();
+function clearQueuedApproval(requestId:string){
+  clearTimeout(queueTimers.get(requestId));queueTimers.delete(requestId);
+  for(const [threadId,queue] of approvalQueues){const next=queue.filter(card=>card.requestId!==requestId);if(next.length)approvalQueues.set(threadId,next);else approvalQueues.delete(threadId);}
+}
 
 /** Publish a tool approval card for a running turn (Pi / non-elicitation harnesses). */
 export function publishToolApproval(threadId: string, card: ToolApprovalCard): void {
@@ -176,8 +186,10 @@ export function publishToolApproval(threadId: string, card: ToolApprovalCard): v
     for (const listener of listeners) listener(card);
     return;
   }
+  clearQueuedApproval(card.requestId);
   const queue = approvalQueues.get(threadId) ?? [];
   queue.push(card);
+  const timer=setTimeout(()=>{answerAgentApproval(card.requestId,"decline");clearQueuedApproval(card.requestId);},APPROVAL_TTL_MS);timer.unref?.();queueTimers.set(card.requestId,timer);
   approvalQueues.set(threadId, queue);
 }
 
@@ -188,7 +200,7 @@ export function subscribeToolApprovals(
 ): () => void {
   const queued = approvalQueues.get(threadId) ?? [];
   approvalQueues.delete(threadId);
-  for (const card of queued) listener(card);
+  for (const card of queued) {clearQueuedApproval(card.requestId);listener(card); }
   let set = approvalListeners.get(threadId);
   if (!set) {
     set = new Set();
