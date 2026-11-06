@@ -124,12 +124,13 @@ the same plan.
 ### U-13b — Documents and pages (second PR)
 
 - REST: `GET/POST /pages`, `GET/PATCH/DELETE /pages/{id}`, page tree, page
-  comments list/add, page sharing/access (respecting U-01's sharing model).
+  comments list/add. Page sharing/access **changes stay in the web UI / U-01**
+  for this PR; the API reads the sharing state but does not change it.
 - MCP tools mirroring the in-app Agent: `list_pages`, `get_page`,
   `create_page`, `update_page`, `list_page_comments`, `add_page_comment`,
   optionally `search_pages`.
 - Permissions: read-only keys cannot create/edit; guests/private-page rules
-  follow U-01; sharing changes need explicit scope.
+  follow U-01. Sharing changes are out of scope.
 - Drafting/publishing or block-level editing stays out; markdown content only.
 
 ### Later (recorded, not planned as PRs yet)
@@ -168,21 +169,21 @@ the same plan.
 - Block-based page editing, publishing, databases.
 - API billing/quotas beyond #77 rate limits.
 
-## Open decisions
+## Decisions (accepted per recommendation, 2026-11-06)
 
-1. Split into two PRs (recommended U-13a projects/tasks, U-13b pages) or keep
-   one large PR?
-2. Do external clients need page sharing/access changes in U-13b, or is
-   read/create/edit enough for v1 (sharing via UI only)?
-3. Task custom fields: expose raw `task_fields` keys or a typed API? (Raw
-   key/value first recommended.)
-4. Dependencies/relations: include in U-13a (recommended) or later?
-5. Should external MCP reuse the in-app `AGENT_TOOLS` definitions to guarantee
-   parity, or keep a curated external tool set?
-6. API versioning: keep `/api/v1` and add fields/tools additively (recommended)
-   or start `/api/v2` for the expanded surface?
-7. Are webhooks/notifications/search part of the roadmap now or later? (Not in
-   these two PRs.)
+1. Split implementation into **U-13a (projects + task completeness)** and
+   **U-13b (pages/documents)**, both under this plan.
+2. U-13b v1 exposes page list/read/create/edit and page comments. Page
+   sharing/access changes stay in the web UI and U-01; the API does not change
+   sharing.
+3. Custom task fields use **raw key/value** for v1 (no typed schema).
+4. Dependencies and relations are included in **U-13a**.
+5. External MCP keeps a **curated external tool set**, sharing validation and
+   schemas with the in-app tools where practical, but it does not expose
+   internal-only `AGENT_TOOLS` automatically.
+6. The expanded surface is **additive on `/api/v1`**; no `/api/v2` now.
+7. Attachments, Inbox/notifications, cross-entity search and API webhooks stay
+   as later follow-ups.
 
 ## Dependencies
 

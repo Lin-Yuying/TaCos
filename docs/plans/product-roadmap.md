@@ -205,7 +205,7 @@ Benchmarks: Linear GraphQL API, Notion API, GitHub REST, Asana API.
 Scope (two implementation PRs): **U-13a** projects CRUD + project membership +
 task extensions (custom fields, dependencies, recurrence, claims, review,
 blockers, trash restore); **U-13b** pages/documents list/read/create/edit +
-page comments, aligned with U-01 sharing. All new surface reuses #77 scopes and
+page comments (sharing changes stay in the web UI/U-01). All new surface reuses #77 scopes and
 project allowlists, with MCP annotations/pagination/output schemas. Attachments,
 Inbox, search and API webhooks are recorded as later follow-ups.
 
