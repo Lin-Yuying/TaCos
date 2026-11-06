@@ -8,7 +8,7 @@ import {
   findIssueRow,
   getIssueDetail,
   getProject,
-  listIssues,
+  listIssuesPage,
   listLabels,
   listMembers,
   listProjects,
@@ -28,10 +28,12 @@ export type McpActor = { kind: "agent"; label: string; via: "api" | "mcp" };
 export type CreateMcpServerOptions = {
   workspaceId: string;
   actor: McpActor;
-  // A read-scoped API key registers only read tools.
+  // A read-scoped API key (or TACOS_MCP_READ_ONLY=1) registers only read tools.
   readOnly: boolean;
   // null means every project in the workspace.
   allowedProjectIds: string[] | null;
+  // TACOS_MCP_TOOLS: when set, only these tool names register.
+  toolFilter: string[] | null;
 };
 
 export const MCP_READ_TOOL_NAMES = [
@@ -53,18 +55,23 @@ export const MCP_WRITE_TOOL_NAMES = [
 const STATUS_HELP =
   "todo, in_progress, done, canceled (aliases like 'in progress', 'completed', 'cancelled' also work)";
 const PRIORITY_HELP = "none (0), low (1), medium (2), high (3), urgent (4)";
+const PAGE_DEFAULT = 50;
+const PAGE_MAX = 200;
 
-function ok(data: unknown) {
-  return { content: [{ type: "text" as const, text: JSON.stringify(data, null, 2) }] };
+function ok(data: Record<string, unknown>) {
+  return {
+    content: [{ type: "text" as const, text: JSON.stringify(data, null, 2) }],
+    structuredContent: data,
+  };
 }
 
 function fail(message: string) {
   return { isError: true, content: [{ type: "text" as const, text: message }] };
 }
 
-async function guard(fn: () => Promise<unknown>) {
+async function guard(fn: () => Promise<ReturnType<typeof ok>>) {
   try {
-    return ok(await fn());
+    return await fn();
   } catch (err) {
     return fail(err instanceof Error ? err.message : String(err));
   }
@@ -84,12 +91,85 @@ function parsePriority(value?: string | number): Priority | undefined {
   return priority;
 }
 
+function pageLimit(value: number | undefined, fallback = PAGE_DEFAULT): number {
+  return Math.min(PAGE_MAX, Math.max(1, Math.trunc(value ?? fallback)));
+}
+
+type ListCursor = { k: string; id: string };
+
+function encodeCursor(cursor: ListCursor): string {
+  return Buffer.from(JSON.stringify(cursor)).toString("base64url");
+}
+
+function decodeCursor(raw: string): ListCursor {
+  try {
+    const value = JSON.parse(Buffer.from(raw, "base64url").toString("utf8")) as ListCursor;
+    if (typeof value.k !== "string" || typeof value.id !== "string") throw new Error();
+    return value;
+  } catch {
+    throw new Error("Invalid cursor. Use the nextCursor value returned by the previous call.");
+  }
+}
+
+// Keyset pagination over an in-memory, deterministically sorted list. The cursor names
+// the last row's stable sort key and id, so deleting that row between pages still
+// resumes at the next one.
+function paginate<T>(
+  items: T[],
+  limit: number,
+  cursor: string | undefined,
+  key: (item: T) => ListCursor,
+  compare: (a: T, b: T) => number
+): { page: T[]; nextCursor: string | null } {
+  const sorted = [...items].sort(compare);
+  const after = cursor ? decodeCursor(cursor) : null;
+  const rest = after
+    ? sorted.filter((item) => {
+        const current = key(item);
+        return current.k > after.k || (current.k === after.k && current.id > after.id);
+      })
+    : sorted;
+  const page = rest.slice(0, limit);
+  const last = page.at(-1);
+  return {
+    page,
+    nextCursor: rest.length > limit && last ? encodeCursor(key(last)) : null,
+  };
+}
+
+const readAnnotations = {
+  readOnlyHint: true,
+  destructiveHint: false,
+  idempotentHint: true,
+  openWorldHint: false,
+};
+
+const createAnnotations = {
+  readOnlyHint: false,
+  destructiveHint: false,
+  idempotentHint: false,
+  openWorldHint: false,
+};
+
+const updateAnnotations = { ...createAnnotations, idempotentHint: true };
+const deleteAnnotations = { ...createAnnotations, destructiveHint: true };
+
+const itemSchema = z.record(z.string(), z.unknown());
+
 export function createMcpServer(options: CreateMcpServerOptions): McpServer {
-  const { workspaceId, actor, readOnly, allowedProjectIds } = options;
+  const { workspaceId, actor, readOnly, allowedProjectIds, toolFilter } = options;
   const server = new McpServer({ name: "tacos", version: "0.3.0" });
 
+  function enabled(name: string): boolean {
+    if (toolFilter !== null && !toolFilter.includes(name)) return false;
+    if (readOnly && !(MCP_READ_TOOL_NAMES as readonly string[]).includes(name)) return false;
+    return true;
+  }
+
   function projectAllowedError(projectKey: string): Error {
-    return new Error(`Project "${projectKey}" is outside this MCP server's project allowlist.`);
+    return new Error(
+      `Project "${projectKey}" is outside this MCP server's project allowlist.`
+    );
   }
 
   async function resolveProject(project?: string) {
@@ -124,74 +204,101 @@ export function createMcpServer(options: CreateMcpServerOptions): McpServer {
     }
   }
 
-  server.registerTool(
-    "list_issues",
-    {
-      title: "List issues",
-      description: "List issues, newest activity first, grouped by status. Filter by status, priority, project, assignee, text query, or label.",
-      inputSchema: {
-        status: z.string().optional().describe(`Filter by status: ${STATUS_HELP}, or "active" (todo + in_progress), or "all"`),
-        priority: z.union([z.string(), z.number()]).optional().describe(`Filter by priority: ${PRIORITY_HELP}`),
-        project: z.string().optional().describe("Project key, e.g. CORE"),
-        assignee: z.string().optional().describe('Filter by assignee: username, "me" is not supported (agents have no account), or "none" for unassigned'),
-        q: z.string().optional().describe("Free-text search across title, description, and identifier"),
-        label: z.string().optional().describe("Filter by label name"),
-        limit: z.number().optional().describe("Max results (default 100, max 200)"),
+  if (enabled("list_issues")) {
+    server.registerTool(
+      "list_issues",
+      {
+        title: "List issues",
+        description:
+          "List issues, newest activity first, grouped by status. Filter by status, priority, project, assignee, text query, or label. Pass the previous nextCursor to read the next page.",
+        inputSchema: {
+          status: z.string().optional().describe(`Filter by status: ${STATUS_HELP}, or "active" (todo + in_progress), or "all"`),
+          priority: z.union([z.string(), z.number()]).optional().describe(`Filter by priority: ${PRIORITY_HELP}`),
+          project: z.string().optional().describe("Project key, e.g. CORE"),
+          assignee: z.string().optional().describe('Filter by assignee: username, "me" is not supported (agents have no account), or "none" for unassigned'),
+          q: z.string().optional().describe("Free-text search across title, description, and identifier"),
+          label: z.string().optional().describe("Filter by label name"),
+          limit: z.number().optional().describe("Max results (default 100, max 200)"),
+          cursor: z.string().optional().describe("Opaque cursor from the previous call's nextCursor"),
+        },
+        outputSchema: z.looseObject({
+          count: z.number(),
+          total: z.number(),
+          issues: z.array(itemSchema),
+          nextCursor: z.string().nullable(),
+        }),
+        annotations: readAnnotations,
       },
-    },
-    async ({ status, priority, project, assignee, q, label, limit }) =>
-      guard(async () => {
-        const resolved = project ? await resolveProject(project) : undefined;
-        let assigneeId: string | null | undefined;
-        if (assignee === "none") {
-          assigneeId = null;
-        } else if (assignee) {
-          assigneeId = await resolveAssigneeId(workspaceId, assignee);
-        }
-        const issues = await listIssues(workspaceId, {
-          status: status === "active" || status === "all" ? status : parseStatus(status),
-          priority: parsePriority(priority),
-          q,
-          label,
-          projectId: resolved?.id,
-          projectIds: allowedProjectIds ?? undefined,
-          assigneeId,
-          limit: limit ? Math.min(Math.max(limit, 1), 200) : undefined,
-        });
-        return {
-          count: issues.length,
-          issues: issues.map((issue) => ({
-            ...issue,
-            priorityLabel: PRIORITY_NAMES[issue.priority],
-          })),
-        };
-      })
-  );
+      async ({ status, priority, project, assignee, q, label, limit, cursor }) =>
+        guard(async () => {
+          const resolved = project ? await resolveProject(project) : undefined;
+          let assigneeId: string | null | undefined;
+          if (assignee === "none") {
+            assigneeId = null;
+          } else if (assignee) {
+            assigneeId = await resolveAssigneeId(workspaceId, assignee);
+          }
+          const page = await listIssuesPage(workspaceId, {
+            status: status === "active" || status === "all" ? status : parseStatus(status),
+            priority: parsePriority(priority),
+            q,
+            label,
+            projectId: resolved?.id,
+            projectIds: allowedProjectIds ?? undefined,
+            assigneeId,
+            limit: limit ? pageLimit(limit, 100) : undefined,
+            cursor,
+          });
+          return ok({
+            count: page.items.length,
+            total: page.total,
+            issues: page.items.map((issue) => ({
+              ...issue,
+              priorityLabel: PRIORITY_NAMES[issue.priority],
+            })),
+            nextCursor: page.nextCursor,
+          });
+        })
+    );
+  }
 
-  server.registerTool(
-    "get_issue",
-    {
-      title: "Get issue",
-      description: "Get one issue with its labels, assignee, comments, and full activity timeline.",
-      inputSchema: {
-        id: z.string().describe("Issue id or identifier, e.g. CORE-7"),
+  if (enabled("get_issue")) {
+    server.registerTool(
+      "get_issue",
+      {
+        title: "Get issue",
+        description: "Get one issue with its labels, assignee, comments, and full activity timeline.",
+        inputSchema: {
+          id: z.string().describe("Issue id or identifier, e.g. CORE-7"),
+        },
+        outputSchema: z.looseObject({
+          id: z.string(),
+          identifier: z.string(),
+          title: z.string(),
+          status: z.string(),
+          priority: z.number(),
+          projectId: z.string(),
+          comments: z.array(itemSchema),
+          events: z.array(itemSchema),
+        }),
+        annotations: readAnnotations,
       },
-    },
-    async ({ id }) =>
-      guard(async () => {
-        await assertIssueAllowed(id);
-        const detail = await getIssueDetail(workspaceId, id);
-        if (!detail) throw new Error(`Issue "${id}" not found`);
-        return {
-          ...detail.issue,
-          priorityLabel: PRIORITY_NAMES[detail.issue.priority],
-          comments: detail.comments,
-          events: detail.events,
-        };
-      })
-  );
+      async ({ id }) =>
+        guard(async () => {
+          await assertIssueAllowed(id);
+          const detail = await getIssueDetail(workspaceId, id);
+          if (!detail) throw new Error(`Issue "${id}" not found`);
+          return ok({
+            ...detail.issue,
+            priorityLabel: PRIORITY_NAMES[detail.issue.priority],
+            comments: detail.comments,
+            events: detail.events,
+          });
+        })
+    );
+  }
 
-  if (!readOnly) {
+  if (enabled("create_issue")) {
     server.registerTool(
       "create_issue",
       {
@@ -219,6 +326,7 @@ export function createMcpServer(options: CreateMcpServerOptions): McpServer {
             .optional()
             .describe("Identifier of the parent task. The subtask stays in that task's project."),
         },
+        annotations: createAnnotations,
       },
       async ({ title, description, project, status, priority, assignee, assignees, labels, dueDate, reminder, parent }) =>
         guard(async () => {
@@ -240,10 +348,12 @@ export function createMcpServer(options: CreateMcpServerOptions): McpServer {
             },
             actor
           );
-          return { ...detail.issue, priorityLabel: PRIORITY_NAMES[detail.issue.priority] };
+          return ok({ ...detail.issue, priorityLabel: PRIORITY_NAMES[detail.issue.priority] });
         })
     );
+  }
 
+  if (enabled("update_issue")) {
     server.registerTool(
       "update_issue",
       {
@@ -274,6 +384,7 @@ export function createMcpServer(options: CreateMcpServerOptions): McpServer {
             .optional()
             .describe("Identifier of the parent task. Empty string detaches this task."),
         },
+        annotations: updateAnnotations,
       },
       async ({ id, title, description, status, priority, assignee, assignees, labels, dueDate, reminder, parent }) =>
         guard(async () => {
@@ -310,10 +421,12 @@ export function createMcpServer(options: CreateMcpServerOptions): McpServer {
             },
             actor
           );
-          return { ...detail.issue, priorityLabel: PRIORITY_NAMES[detail.issue.priority] };
+          return ok({ ...detail.issue, priorityLabel: PRIORITY_NAMES[detail.issue.priority] });
         })
     );
+  }
 
+  if (enabled("delete_issue")) {
     server.registerTool(
       "delete_issue",
       {
@@ -322,14 +435,17 @@ export function createMcpServer(options: CreateMcpServerOptions): McpServer {
         inputSchema: {
           id: z.string().describe("Issue id or identifier, e.g. CORE-7"),
         },
+        annotations: deleteAnnotations,
       },
       async ({ id }) =>
         guard(async () => {
           await assertIssueAllowed(id);
-          return { deleted: (await deleteIssue(workspaceId, id)).identifier };
+          return ok({ deleted: (await deleteIssue(workspaceId, id)).identifier });
         })
     );
+  }
 
+  if (enabled("add_comment")) {
     server.registerTool(
       "add_comment",
       {
@@ -339,18 +455,52 @@ export function createMcpServer(options: CreateMcpServerOptions): McpServer {
           id: z.string().describe("Issue id or identifier, e.g. CORE-7"),
           body: z.string().describe("Comment text"),
         },
+        annotations: createAnnotations,
       },
       async ({ id, body }) =>
         guard(async () => {
           await assertIssueAllowed(id);
           const detail = await addComment(workspaceId, id, body, actor);
-          return {
+          return ok({
             comment: detail.comments[detail.comments.length - 1],
             issue: detail.issue,
-          };
+          });
         })
     );
+  }
 
+  if (enabled("list_labels")) {
+    server.registerTool(
+      "list_labels",
+      {
+        title: "List labels",
+        description: "List issue labels in the workspace, one page at a time.",
+        inputSchema: {
+          limit: z.number().optional().describe("Max results (default 50, max 200)"),
+          cursor: z.string().optional().describe("Opaque cursor from the previous call's nextCursor"),
+        },
+        outputSchema: z.looseObject({
+          labels: z.array(itemSchema),
+          nextCursor: z.string().nullable(),
+        }),
+        annotations: readAnnotations,
+      },
+      async ({ limit, cursor }) =>
+        guard(async () => {
+          const labels = await listLabels(workspaceId);
+          const { page, nextCursor } = paginate(
+            labels,
+            pageLimit(limit),
+            cursor,
+            (label) => ({ k: label.name, id: label.id }),
+            (a, b) => a.name.localeCompare(b.name) || a.id.localeCompare(b.id)
+          );
+          return ok({ labels: page, nextCursor });
+        })
+    );
+  }
+
+  if (enabled("create_label")) {
     server.registerTool(
       "create_label",
       {
@@ -360,49 +510,78 @@ export function createMcpServer(options: CreateMcpServerOptions): McpServer {
           name: z.string(),
           color: z.string().optional().describe("Hex color like #eb5757"),
         },
+        annotations: createAnnotations,
       },
       async ({ name, color }) =>
-        guard(async () => createLabel(workspaceId, { name, color }))
+        guard(async () => ok({ ...(await createLabel(workspaceId, { name, color })) }))
     );
   }
 
-  server.registerTool(
-    "list_labels",
-    {
-      title: "List labels",
-      description: "List all issue labels in the workspace.",
-      inputSchema: {},
-    },
-    async () => guard(async () => ({ labels: await listLabels(workspaceId) }))
-  );
+  if (enabled("list_projects")) {
+    server.registerTool(
+      "list_projects",
+      {
+        title: "List projects",
+        description: "List projects in the workspace with their keys (used as issue identifier prefixes), one page at a time.",
+        inputSchema: {
+          limit: z.number().optional().describe("Max results (default 50, max 200)"),
+          cursor: z.string().optional().describe("Opaque cursor from the previous call's nextCursor"),
+        },
+        outputSchema: z.looseObject({
+          projects: z.array(itemSchema),
+          nextCursor: z.string().nullable(),
+        }),
+        annotations: readAnnotations,
+      },
+      async ({ limit, cursor }) =>
+        guard(async () => {
+          const projects = await listProjects(workspaceId);
+          const allowed =
+            allowedProjectIds === null
+              ? projects
+              : projects.filter((project) => allowedProjectIds.includes(project.id));
+          const { page, nextCursor } = paginate(
+            allowed,
+            pageLimit(limit),
+            cursor,
+            (project) => ({ k: project.key, id: project.id }),
+            (a, b) => a.key.localeCompare(b.key) || a.id.localeCompare(b.id)
+          );
+          return ok({ projects: page, nextCursor });
+        })
+    );
+  }
 
-  server.registerTool(
-    "list_projects",
-    {
-      title: "List projects",
-      description: "List all projects in the workspace with their keys (used as issue identifier prefixes).",
-      inputSchema: {},
-    },
-    async () =>
-      guard(async () => {
-        const projects = await listProjects(workspaceId);
-        const allowed =
-          allowedProjectIds === null
-            ? projects
-            : projects.filter((project) => allowedProjectIds.includes(project.id));
-        return { projects: allowed };
-      })
-  );
-
-  server.registerTool(
-    "list_members",
-    {
-      title: "List members",
-      description: "List workspace members — useful for looking up usernames to assign issues.",
-      inputSchema: {},
-    },
-    async () => guard(async () => ({ members: await listMembers(workspaceId) }))
-  );
+  if (enabled("list_members")) {
+    server.registerTool(
+      "list_members",
+      {
+        title: "List members",
+        description: "List workspace members — useful for looking up usernames to assign issues, one page at a time.",
+        inputSchema: {
+          limit: z.number().optional().describe("Max results (default 50, max 200)"),
+          cursor: z.string().optional().describe("Opaque cursor from the previous call's nextCursor"),
+        },
+        outputSchema: z.looseObject({
+          members: z.array(itemSchema),
+          nextCursor: z.string().nullable(),
+        }),
+        annotations: readAnnotations,
+      },
+      async ({ limit, cursor }) =>
+        guard(async () => {
+          const members = await listMembers(workspaceId);
+          const { page, nextCursor } = paginate(
+            members,
+            pageLimit(limit),
+            cursor,
+            (member) => ({ k: member.username, id: member.id }),
+            (a, b) => a.username.localeCompare(b.username) || a.id.localeCompare(b.id)
+          );
+          return ok({ members: page, nextCursor });
+        })
+    );
+  }
 
   return server;
 }

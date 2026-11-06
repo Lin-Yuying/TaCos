@@ -43,6 +43,33 @@ function toolCallMode(messages: JsonRpcMessage[] | null): "read" | "write" | nul
   return mode;
 }
 
+// A read-only key does not register write tools, so a write call would only say
+// "not found". Answer a single tool call with a tool error that names the missing scope.
+function readOnlyToolCallError(messages: JsonRpcMessage[] | null): Record<string, unknown> | null {
+  if (!messages || messages.length !== 1) return null;
+  const message = messages[0];
+  if (
+    message.method !== "tools/call" ||
+    typeof message.params?.name !== "string" ||
+    !(MCP_WRITE_TOOL_NAMES as readonly string[]).includes(message.params.name)
+  ) {
+    return null;
+  }
+  return {
+    jsonrpc: "2.0",
+    id: message.id ?? null,
+    result: {
+      content: [
+        {
+          type: "text",
+          text: 'This API key is read-only. Create a key with the "write" scope in Settings → Agent access to change data.',
+        },
+      ],
+      isError: true,
+    },
+  };
+}
+
 export async function POST(req: Request) {
   let key: ApiKeyRecord;
   try {
@@ -62,6 +89,10 @@ export async function POST(req: Request) {
 
   const readOnly = !apiKeyHasScope(key, "write");
   try {
+    if (readOnly) {
+      const denied = readOnlyToolCallError(messages);
+      if (denied) return Response.json(denied);
+    }
     const mode = toolCallMode(messages);
     if (mode) {
       assertKeyScope(key, mode);
@@ -77,6 +108,7 @@ export async function POST(req: Request) {
     actor: { kind: "agent", label: `api:${key.name}`, via: "mcp" },
     readOnly,
     allowedProjectIds: key.projectIds,
+    toolFilter: null,
   });
   // Stateless: one server and transport per POST, no session id, no server-initiated
   // notifications. Stateful sessions are explicitly a follow-up.

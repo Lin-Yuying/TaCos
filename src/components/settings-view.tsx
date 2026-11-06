@@ -1371,6 +1371,15 @@ export function SettingsView({
                       }
                     )}
                   </p>
+                  <p className="text-small text-faint">
+                    {interpolate(
+                      t("Set {readOnly} to hide write tools, or {tools} to register only the named tools. Both work on the stdio server."),
+                      {
+                        readOnly: <code className="font-mono">TACOS_MCP_READ_ONLY=1</code>,
+                        tools: <code className="font-mono">TACOS_MCP_TOOLS=list_issues,get_issue</code>,
+                      }
+                    )}
+                  </p>
                 </>
               ) : (
                 <p className="text-small text-faint">{t("This install does not include the local MCP server. See README to run it from the source code; the remote endpoint at /api/mcp still works.")}</p>
