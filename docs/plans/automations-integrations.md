@@ -1,17 +1,14 @@
-# Automations and integrations (next functional block)
+# Automations (internal only; integrations removed)
 
-Status: planned as the next functional block after the three current plans
-(Agent access #77, Inbox #78, Agent #79). Research and candidate scope only; no
-implementation started. Written 2026-11-06 after checking the codebase and
-comparing with Linear, Notion and Asana.
+Status: plan trimmed on 2026-11-06 for a 5-person internal team: **internal
+automations only; Slack, GitHub and outbound/inbound webhooks are removed**.
+Deferred until the team actually needs rules; no implementation started.
 
 ## Why this is next
 
-The repository has **no automation, workflow, webhook, Slack or GitHub
-integration code at all** — a full-text search for automation/integration terms
-finds nothing. That is the largest functional gap left in the shell comparison:
-Linear, Notion and Asana all let a workspace define "when X happens, do Y",
-including "delegate to an agent" and "notify Slack".
+The repository has **no internal automation/workflow code**. For a 5-person
+team this is a convenience, not a must-have; the plan is kept only for internal
+rules ("when X happens, do Y inside TaCos", including delegating to an agent).
 
 It is also the natural glue for the three planned PRs:
 
@@ -80,7 +77,7 @@ action targets (notify Slack, open a PR, call a webhook).
 | Out-of-app channels | None | Slack, email, mobile, webhooks | Slack (agents can connect) | Slack, email, webhooks |
 | Inbound trigger source | API/MCP calls only | Slack, GitHub, API | Slack, Notion events, API | Slack, API, forms |
 
-## Candidate scope (one PR, four commits)
+## Candidate scope (one PR, three commits; internal actions only)
 
 Default: one PR, matching the pattern of the other plans. If the rule engine and
 the Slack/GitHub integrations do not fit together during implementation, the
@@ -179,26 +176,19 @@ fallback is to split commit 3 out — ask before splitting.
 
 1. Only owner/admin can create, edit or delete rules; members see enabled rules
    and their own triggered runs; agents/API/MCP cannot create rules.
-2. Slack v1 = outgoing notifications + create a task from Slack; no full Slack
-   OAuth app or marketplace distribution in this PR.
-3. GitHub is in this PR as "attach branch/PR links from a webhook"; two-way
-   issue/PR sync stays a follow-up.
+2. No Slack, GitHub or webhook integration is planned (5-person internal team).
 4. One PR with the four commits; the scheduler is a single in-process interval
    (no new daemon, no external cron requirement).
-5. Each inbound webhook has a per-hook secret (an API key may additionally be
-   required), a timestamp/signature check and replay protection.
-6. Outbound webhooks block private/loopback targets by default; an owner may
-   explicitly allow them for self-hosted internal endpoints. Sign with HMAC,
-   timeout and bounded retries.
-7. Rule actions that delegate/start an agent reuse #79's delegation/review path;
-   #79 owns only delegation-start and finish/failure notifications, #80 owns the
-   general rule engine and external integrations (no duplicate trigger builders).
+5. Inbound/outbound webhooks and Slack/GitHub adapters are removed from this
+   plan.
+6. Rule actions that delegate/start an agent reuse #79's delegation/review path;
+   #79 owns delegation-start and finish/failure notifications; #80 owns only the
+   internal rule engine.
 
 ## Files likely touched
 
 - `src/db/client.ts`, `src/db/schema.ts` — rule/run tables, indexes.
-- New `src/lib/automations/` — triggers, evaluator, actions, scheduler,
-  webhook signing, Slack/GitHub adapters.
+- New `src/lib/automations/` — triggers, evaluator, actions, scheduler.
 - `src/lib/issues.ts`, `src/lib/agent-handoff.ts`, `src/lib/pages.ts` — call the
   evaluator after mutations; reuse delegation/agent-run API.
 - `src/app/api/automations/*`, actions in `src/app/workspace-misc-actions.ts` or
