@@ -4,7 +4,9 @@ import { useDetailSource } from "@/components/detail-navigation";
 import { PersonalViews } from "@/components/personal-views";
 import { BatchSelection } from "@/components/ui/batch-selection";
 import dynamic from "next/dynamic";
-import { useMemo } from "react";
+import { useEffect,useMemo,useRef,useState } from "react";
+import { taskViewPageAction,taskViewCandidatesAction,taskViewExportAction,taskViewChoicesAction } from "@/app/task-query-actions";
+import type { TaskQuery,queryTaskView } from "@/lib/task-query";
 import { usePathname, useSearchParams, useRouter } from "next/navigation";
 import { CalendarDays, Columns3, List, Plus, Table2 } from "lucide-react";
 import { IssueBoard } from "@/components/issue-board";
@@ -85,6 +87,7 @@ export function IssueLayout({
   fields = NO_FIELDS,
   values = NO_VALUES,
   manageFields = false,
+  serverQuery,initialPage,
 }: {
   issues: IssueWithLabels[];
   workspaceId: string;
@@ -92,6 +95,7 @@ export function IssueLayout({
   fields?: TaskField[];
   values?: FieldValues;
   manageFields?: boolean;
+  serverQuery?:TaskQuery;initialPage?:Awaited<ReturnType<typeof queryTaskView>>;
 }) {
   const t = useT();
   const router = useRouter();
@@ -99,19 +103,31 @@ export function IssueLayout({
   const pathname=usePathname(),params=useSearchParams();
   const viewScope=`${pathname}?view=${params.get("view")??"all"}&assignee=${params.get("assignee")??""}`;
   const [view, setView] = useStoredJson<TaskView>(`tacos.tasks.view.${scope}.${viewScope}`, EMPTY_VIEW);
-  const shown = useMemo(() => {const rank=new Map(pins.filter(p=>p.kind==="task").map((p,index)=>[p.id,index]));return applyView(issues,view,fields,values).sort((a,b)=>(rank.get(a.id)??Infinity)-(rank.get(b.id)??Infinity));}, [issues,view,fields,values,pins]);
+  const [remote,setRemote]=useState(initialPage),[pending,setPending]=useState(false),[failure,setFailure]=useState<string|null>(null);
+  const [choices,setChoices]=useState<{projects:string[];members:{id:string;displayName:string}[]}>();
+  const requestGeneration=useRef(0);
+  const queryKey=JSON.stringify(serverQuery),viewKey=JSON.stringify(view);
+  useEffect(()=>{if(!serverQuery)return;let live=true;const generation=++requestGeneration.current;Promise.resolve().then(()=>{if(live)setPending(true);});void taskViewPageAction(workspaceId,serverQuery,view,0).then(result=>{if(!live||generation!==requestGeneration.current)return;if(result.ok){setRemote(result.data);setFailure(null);}else setFailure(result.error);setPending(false);}).catch(error=>{if(live&&generation===requestGeneration.current){setFailure(error instanceof Error?error.message:"Could not load tasks. Retry.");setPending(false);}});return()=>{live=false;requestGeneration.current++;};},[workspaceId,queryKey,viewKey,initialPage,pins]);
+  useEffect(()=>{if(serverQuery)void taskViewChoicesAction(workspaceId).then(result=>{if(result.ok)setChoices(result.data);}).catch(()=>{});},[workspaceId,queryKey]);
+  async function changePage(page:number,reset=false){if(!serverQuery||!remote)return;const generation=++requestGeneration.current;setPending(true);try{const result=await taskViewPageAction(workspaceId,serverQuery,view,page,reset?undefined:remote.revision);if(generation!==requestGeneration.current)return;if(result.ok){setRemote(result.data);setFailure(null);}else setFailure(result.error);}catch(error){if(generation===requestGeneration.current)setFailure(error instanceof Error?error.message:"Could not load tasks. Retry.");}finally{if(generation===requestGeneration.current)setPending(false);}}
+  async function exportView(){if(!serverQuery)return;setPending(true);try{const result=await taskViewExportAction(workspaceId,serverQuery,view);if(!result.ok){setFailure(result.error);return;}const url=URL.createObjectURL(new Blob([JSON.stringify(result.data,null,2)],{type:"application/json"})),link=document.createElement("a");link.href=url;link.download="tasks.json";link.click();setTimeout(()=>URL.revokeObjectURL(url),1000);}catch(error){setFailure(error instanceof Error?error.message:"Could not export tasks. Retry.");}finally{setPending(false);}}
+  const pageIssues=serverQuery?(remote?.items??issues):issues;
+  const pageValues=serverQuery?(remote?.values??values):values;
+  const shown = useMemo(() => {const rank=new Map(pins.filter(p=>p.kind==="task").map((p,index)=>[p.id,index]));return (serverQuery?[...pageIssues]:applyView(issues,view,fields,values)).sort((a,b)=>(rank.get(a.id)??Infinity)-(rank.get(b.id)??Infinity));}, [issues,view,fields,values,pins,serverQuery,pageIssues]);
   const pinnedIds=new Set(pins.filter(pin=>pin.kind==="task").map(pin=>pin.id));
   useDetailSource("task",(layout==="list"?[...shown.filter(issue=>pinnedIds.has(issue.id)),...STATUS_ORDER.flatMap(status=>shown.filter(issue=>issue.status===status&&!pinnedIds.has(issue.id)))]:shown).map(issue=>issue.id));
-  if (issues.length === 0) return <Empty />;
+  if (!serverQuery&&issues.length === 0) return <Empty />;
   return (
     <>
-      <div className="flex items-center gap-2 border-b border-border px-3 py-1"><BatchSelection workspaceId={workspaceId} kind="task" items={shown}/><PersonalViews workspaceId={workspaceId} viewScope={viewScope} view={view} onChange={setView}/><span className="text-small text-faint">{shown.length} / {issues.length}</span></div>
+      <div className="flex items-center gap-2 border-b border-border px-3 py-1"><BatchSelection key={queryKey+viewKey} workspaceId={workspaceId} kind="task" items={shown} loadItems={serverQuery?()=>taskViewCandidatesAction(workspaceId,serverQuery,view):undefined}/><PersonalViews workspaceId={workspaceId} viewScope={viewScope} view={view} onChange={setView}/><span className="text-small text-faint">{serverQuery?`${(remote?.page??0)*100+ (shown.length?1:0)}–${(remote?.page??0)*100+shown.length} / ${remote?.total??0}`:`${shown.length} / ${issues.length}`}</span></div>
+      {serverQuery&&<div className="flex shrink-0 flex-wrap items-center gap-3 px-3 py-1 text-small"><button disabled={pending||!remote?.page} onClick={()=>void changePage((remote?.page??0)-1)}>{t("Previous")}</button><button disabled={pending||!remote||((remote.page+1)*100>=remote.total)} onClick={()=>void changePage((remote?.page??0)+1)}>{t("Next")}</button><button disabled={pending} onClick={()=>void exportView()}>{t("Export all filtered tasks")}</button>{pending&&<span>{t("Loading…")}</span>}{failure&&<span role="alert" className="text-danger">{t(failure)} <button onClick={()=>void changePage(0,true)}>{t("Refresh")}</button></span>}</div>}
       <TaskViewBar
         workspaceId={workspaceId}
         view={view}
         onChange={setView}
         fields={fields}
-        issues={issues}
+        choices={choices}
+        issues={pageIssues}
         manageFields={manageFields}
         onFieldsChanged={() => router.refresh()}
       />
@@ -126,7 +142,7 @@ export function IssueLayout({
           workspaceId={workspaceId}
           issues={shown}
           fields={fields}
-          values={values}
+          values={pageValues}
           view={view}
           onViewChange={setView}
         />

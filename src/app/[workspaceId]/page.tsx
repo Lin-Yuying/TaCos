@@ -2,10 +2,10 @@ import { Suspense } from "react";
 import { connection } from "next/server";
 import { redirect } from "next/navigation";
 import { getSessionUser } from "@/lib/auth";
-import { listIssues, listMembers, listProjects, type Status } from "@/lib/issues";
+import { listMembers, listProjects, type Status } from "@/lib/issues";
 import { ListHeader } from "@/components/list-header";
 import { IssueLayout } from "@/components/issue-layout";
-import { listFieldValues, listTaskFields } from "@/lib/task-fields";
+import { queryTaskView,type TaskQuery } from "@/lib/task-query";
 
 type View = "all" | "active" | "open" | "my" | "unassigned" | "agent" | Status;
 
@@ -54,7 +54,7 @@ async function IssuesView({
       ? members.find((m) => m.id === assigneeParam)
       : undefined;
 
-  const issues = await listIssues(workspaceId, {
+  const query:TaskQuery = {
     status:
       view === "active"
         ? "active"
@@ -73,13 +73,11 @@ async function IssuesView({
           ? null
           : (assigneeMember?.id ?? undefined),
     agent: view === "agent",
-    viewerId: user.id,
-  });
+  };
+  const result=await queryTaskView(workspaceId,user.id,query);
+  const issues=result.items;
 
-  const [fields, values] = await Promise.all([
-    listTaskFields(workspaceId),
-    listFieldValues(issues.map((issue) => issue.id)),
-  ]);
+  const {fields,values}=result;
 
   return (
     <div className="flex min-h-0 min-w-0 flex-1 flex-col">
@@ -87,13 +85,15 @@ async function IssuesView({
         view={view === "all" || view === "active" || view === "open" || view === "agent" ? view : (view as Status)}
         q={q}
         label={label}
-        count={issues.length}
+        count={result.total}
         projectParam={project?.id ?? projectId}
         projectName={project?.name}
         assigneeParam={assigneeParam}
         assigneeName={assigneeParam === "me" ? user.displayName : assigneeMember?.displayName}
       />
       <IssueLayout
+        serverQuery={query}
+        initialPage={result}
         issues={issues}
         workspaceId={workspaceId}
         currentUserId={user.id}

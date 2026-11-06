@@ -10,6 +10,7 @@ import {
   type ComponentType,
   type MouseEvent,
 } from "react";
+import { FloatingPanel } from "./ui/suggestion-menu";
 import { useRouter } from "next/navigation";
 import {
   Bold,
@@ -1225,7 +1226,7 @@ export function ProjectOverview({
   return (
     // The scroll box and the floating History/AI dock are siblings, so the dock stays in
     // the corner instead of scrolling away with the document (Linear's arrangement).
-    <div className="relative min-h-0 flex-1">
+    <div className="@container relative min-h-0 min-w-0 flex-1">
       <div ref={scrollRef} className="h-full overflow-y-auto">
         {/* Properties and Resources live in the header now, so the document starts right
             under it. */}
@@ -1245,7 +1246,7 @@ export function ProjectOverview({
                 </button>
               </div>
             )}
-            <div className="flex items-start gap-6">
+            <div className="relative flex items-start gap-6">
               <div ref={wrapRef} className="relative min-w-0 flex-1">
                 <div
                   ref={descRef}
@@ -1308,13 +1309,10 @@ export function ProjectOverview({
                 })}
 
                 {openThread && openPin && (
-                  <div
-                    data-overview-pop
-                    style={{
-                      top: openPin.top + 26,
-                      left: Math.max(0, Math.min(openPin.left - 150, wrapWidth - 328)),
-                    }}
-                    className="absolute z-30 w-[320px] rounded-xl border border-border bg-bg p-3 shadow-[0_10px_36px_rgba(0,0,0,0.16)]"
+                  <FloatingPanel
+                    context={()=>wrapRef.current}
+                    rect={()=>{const wrap=wrapRef.current?.getBoundingClientRect();return wrap?new DOMRect(wrap.left+openPin.left,wrap.top+openPin.top,22,22):null;}}
+                    className="absolute z-30 w-[320px] max-w-[min(100%,calc(100vw-24px))] max-h-[min(70vh,560px)] overflow-auto rounded-xl border border-border bg-bg p-3 shadow-[0_10px_36px_rgba(0,0,0,0.16)]"
                   >
                     <div className="mb-2 flex items-center justify-between gap-2">
                       <span className="text-caption font-semibold uppercase tracking-wider text-faint">
@@ -1332,12 +1330,12 @@ export function ProjectOverview({
                       </button>
                     </div>
                     {threadBody(openThread)}
-                  </div>
+                  </FloatingPanel>
                 )}
               </div>
 
               {historyOpen && (
-                <aside className="sticky top-0 flex max-h-[calc(100vh-7rem)] w-[min(50%,460px)] shrink-0 flex-col self-start overflow-hidden rounded-xl border border-border bg-bg shadow-[0_1px_2px_rgba(0,0,0,0.05)]">
+                <aside className="absolute right-0 top-0 z-30 flex max-h-[min(80vh,800px)] w-[min(100%,460px)] @min-[800px]:sticky @min-[800px]:w-[min(50%,460px)] shrink-0 flex-col self-start overflow-hidden rounded-xl border border-border bg-bg shadow-[0_1px_2px_rgba(0,0,0,0.05)]">
                   <header className="flex h-11 shrink-0 items-center gap-2 border-b border-border px-3">
                     <History size={14} className="text-muted" />
                     <span className="text-small font-semibold text-text">{t("History")}</span>
@@ -1589,10 +1587,8 @@ export function ProjectOverview({
           )}
 
           {composer && access.canComment && (
-            <div
-              data-overview-pop
-              style={{ left: composer.x, top: composer.y }}
-              className="fixed z-40 w-[320px] rounded-xl border border-border bg-bg p-2.5 shadow-[0_10px_36px_rgba(0,0,0,0.16)]"
+            <FloatingPanel rect={()=>new DOMRect(composer.x,composer.y,0,0)}
+              className="fixed z-40 w-[320px] max-w-[min(100%,calc(100vw-24px))] max-h-[min(70vh,560px)] overflow-auto rounded-xl border border-border bg-bg p-2.5 shadow-[0_10px_36px_rgba(0,0,0,0.16)]"
             >
               <p className="mb-1.5 line-clamp-2 px-0.5 text-small font-medium text-text">
                 “{composer.anchor.quote}”
@@ -1604,13 +1600,13 @@ export function ProjectOverview({
                 onDraft={setDraft}
                 onPost={() => void postComment(composer.anchor, "new")}
               />
-            </div>
+            </FloatingPanel>
           )}
 
           {orphansOpen && orphanThreads.length > 0 && (
             <div
               data-overview-pop
-              style={{ left: orphanPos.x, top: orphanPos.y }}
+              style={{ left: Math.max(12,Math.min(orphanPos.x,window.innerWidth-332)), top: Math.max(12,Math.min(orphanPos.y,window.innerHeight-460)),maxWidth:"calc(100vw - 24px)",maxHeight:"calc(100dvh - 24px)",overflow:"auto" }}
               className="fixed z-40 w-[340px] rounded-xl border border-border bg-bg p-3 shadow-[0_10px_36px_rgba(0,0,0,0.16)]"
             >
               <div className="mb-2 flex items-center justify-between gap-2">

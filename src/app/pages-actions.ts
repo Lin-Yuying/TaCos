@@ -1,6 +1,6 @@
 "use server";
 
-import { revalidatePath } from "next/cache";
+import { invalidatePath as revalidatePath } from "@/lib/revalidation";
 import { requireWorkspace } from "@/lib/auth";
 import { collabRunning } from "@/lib/collab/live";
 import { issueCollabToken } from "@/lib/collab/token";
@@ -48,7 +48,8 @@ import type { PageLevel } from "@/lib/page-level";
 import type { ActionResult } from "./actions";
 
 function refresh(workspaceId: string) {
-  revalidatePath(`/${workspaceId}`, "layout");
+  revalidatePath(`/${workspaceId}/docs`, "layout");
+  revalidatePath("/[workspaceId]/projects/[projectId]", "page");
 }
 
 async function run<T>(fn: () => Promise<T>): Promise<ActionResult<T>> {
@@ -76,7 +77,7 @@ export async function createPageAction(
 
 export async function importMarkdownAction(
   workspaceId: string,
-  file: { path: string; content: string }
+  file: { path: string; content?: string;parsed?:{title:string;doc:string} }
 ): Promise<ActionResult<ImportedPage>> {
   return run(async () => {
     const { user } = await requireWorkspace(workspaceId);
@@ -243,7 +244,7 @@ export async function listPageCommentsAction(
   return run(async () => {
     const { user } = await requireWorkspace(workspaceId);
     return {
-      comments: await listPageComments(workspaceId, pageId, user.id),
+      comments: await listPageComments(workspaceId, pageId, user.id,{summary:true}),
       members: await listMembers(workspaceId),
     };
   });
@@ -256,7 +257,7 @@ export async function addPageCommentAction(
 ): Promise<ActionResult<PageComment[]>> {
   return run(async () => {
     const { user } = await requireWorkspace(workspaceId);
-    return addPageComment(workspaceId, pageId, user.id, input);
+    return addPageComment(workspaceId, pageId, user.id, input,{incremental:true});
   });
 }
 
@@ -268,7 +269,7 @@ export async function setPageCommentResolvedAction(
 ): Promise<ActionResult<PageComment[]>> {
   return run(async () => {
     const { user } = await requireWorkspace(workspaceId);
-    return setPageCommentResolved(workspaceId, pageId, user.id, commentId, resolved);
+    return setPageCommentResolved(workspaceId, pageId, user.id, commentId, resolved,{incremental:true});
   });
 }
 
@@ -279,7 +280,7 @@ export async function removePageCommentAction(
 ): Promise<ActionResult<PageComment[]>> {
   return run(async () => {
     const { user } = await requireWorkspace(workspaceId);
-    return removePageComment(workspaceId, pageId, user.id, commentId);
+    return removePageComment(workspaceId, pageId, user.id, commentId,{incremental:true});
   });
 }
 
@@ -376,5 +377,7 @@ export async function listMoveTargetsAction(workspaceId:string) {
  return run(async()=>{const {user}=await requireWorkspace(workspaceId);return {pages:await listPageTree(workspaceId,user.id),projects:await listProjects(workspaceId,user.id)};});
 }
 
-export async function editPageCommentAction(ws:string,pageId:string,id:string,body:string){return run(async()=>{const {user}=await requireWorkspace(ws);return editPageComment(ws,pageId,user.id,id,body);});}
-export async function restorePageCommentAction(ws:string,pageId:string,id:string){return run(async()=>{const {user}=await requireWorkspace(ws);return restorePageComment(ws,pageId,user.id,id);});}
+export async function editPageCommentAction(ws:string,pageId:string,id:string,body:string){return run(async()=>{const {user}=await requireWorkspace(ws);return editPageComment(ws,pageId,user.id,id,body,{incremental:true});});}
+export async function restorePageCommentAction(ws:string,pageId:string,id:string){return run(async()=>{const {user}=await requireWorkspace(ws);return restorePageComment(ws,pageId,user.id,id,{incremental:true});});}
+
+export async function loadPageCommentBodiesAction(ws:string,pageId:string,ids:string[]){return run(async()=>{const {user}=await requireWorkspace(ws);if(ids.length>100)throw new Error("Load up to 100 comments at a time");return listPageComments(ws,pageId,user.id,{ids});});}

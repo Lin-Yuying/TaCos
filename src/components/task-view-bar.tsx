@@ -1,5 +1,6 @@
 "use client";
 
+import { DebouncedInput } from "./ui/debounced-input";
 import { TaskFieldManager } from "@/components/task-field-manager";
 import { useState } from "react";
 import { ArrowDownUp, Filter, ListPlus, Plus, Trash2, X } from "lucide-react";
@@ -58,17 +59,18 @@ function choicesFor(
   key: string,
   fields: TaskField[],
   issues: IssueWithLabels[],
-  t: (text: string) => string
+  t: (text: string) => string,
+  choices?:{projects:string[];members:{id:string;displayName:string}[]}
 ): { value: string; label: string }[] | null {
   if (key === "status") return STATUS_ORDER.map((value) => ({ value, label: t(STATUS_META[value].label) }));
   if (key === "priority") {
     return [1, 2, 3, 4].map((value) => ({ value: String(value), label: t(PRIORITY_NAMES[value as 1]) }));
   }
   if (key === "project") {
-    return [...new Set(issues.map((issue) => issue.projectName))].map((value) => ({ value, label: value }));
+    return [...new Set((choices?.projects??issues.map((issue) => issue.projectName)))].map((value) => ({ value, label: value }));
   }
   if (key === "assignee") {
-    const people = new Map(issues.flatMap((issue) => issue.assignees).map((person) => [person.id, person.displayName]));
+    const people = new Map((choices?.members??issues.flatMap((issue) => issue.assignees)).map((person) => [person.id, person.displayName]));
     return [...people].map(([value, label]) => ({ value, label }));
   }
   const field = fields.find((candidate) => fieldKey(candidate.id) === key);
@@ -90,7 +92,7 @@ export function TaskViewBar({
   fields,
   issues,
   manageFields,
-  onFieldsChanged,
+  onFieldsChanged,choices:filterChoices,
 }: {
   workspaceId: string;
   view: TaskView;
@@ -99,6 +101,7 @@ export function TaskViewBar({
   issues: IssueWithLabels[];
   manageFields: boolean;
   onFieldsChanged: () => void;
+  choices?:{projects:string[];members:{id:string;displayName:string}[]};
 }) {
   const t = useT();
   const {confirm, toast} = useUI();
@@ -167,10 +170,10 @@ export function TaskViewBar({
         {() => (
           <div data-task-filters className="space-y-1.5 p-2 text-small">
             {view.filters.map((filter, index) => {
-              const choices = choicesFor(filter.key, fields, issues, t);
+              const choices = choicesFor(filter.key, fields, issues, t,filterChoices);
               const needsValue = filter.op !== "empty" && filter.op !== "not_empty";
               return (
-                <div key={index} className="flex items-center gap-1">
+                <div key={index} className="flex flex-wrap items-center gap-1">
                   {keySelect(filter.key, (key) => setFilter(index, { key, value: "" }))}
                   <select
                     value={filter.op}
@@ -198,10 +201,10 @@ export function TaskViewBar({
                         ))}
                       </select>
                     ) : (
-                      <input
+                      <DebouncedInput
                         type={inputType(filter.key, fields)}
                         value={filter.value ?? ""}
-                        onChange={(event) => setFilter(index, { value: event.target.value })}
+                        onCommit={(value) => setFilter(index, { value })}
                         className={`${inputClass} flex-1`}
                       />
                     ))}

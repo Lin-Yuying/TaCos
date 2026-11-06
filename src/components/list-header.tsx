@@ -1,5 +1,6 @@
 "use client";
 
+import { DebouncedInput } from "./ui/debounced-input";
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Search, X } from "lucide-react";
@@ -62,15 +63,6 @@ export function ListHeader({
     return `?${sp.toString()}`;
   };
 
-  useEffect(() => {
-    if (value === q) return;
-    const timer = setTimeout(() => {
-      router.replace(buildUrl({ q: value.trim() || undefined }), { scroll: false });
-    }, 250);
-    return () => clearTimeout(timer);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [value]);
-
   // Filtering by a person is what the header is actually about, so it replaces the
   // generic "All Issues" title instead of adding a second chip next to it.
   const heading =
@@ -109,9 +101,9 @@ export function ListHeader({
       <div className="ml-auto flex min-w-0 shrink items-center gap-2">
         <div className="flex w-40 min-w-[56px] shrink items-center gap-2 rounded-full border border-border bg-elevated/50 px-3 py-1.5 focus-within:border-border-strong">
           <Search size={13} className="shrink-0 text-faint" />
-          <input
+          <DebouncedInput
             value={value}
-            onChange={(e) => setValue(e.target.value)}
+            onCommit={(value)=>{setValue(value);router.replace(buildUrl({q:value.trim()||undefined}),{scroll:false});}}
             placeholder={t("Search tasks…")}
             className="min-w-0 w-full bg-transparent text-body text-text placeholder:text-faint"
           />

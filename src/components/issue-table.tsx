@@ -200,7 +200,7 @@ export function IssueTable({ issues }: { issues: IssueWithLabels[] }) {
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.defaultPrevented || !scroller.current?.contains(document.activeElement) || document.querySelector('[role="dialog"], [role="menu"][data-state="open"]') || isTyping(e) || e.metaKey || e.ctrlKey || e.altKey) return;
+      if (e.defaultPrevented || !(document.activeElement as HTMLElement|null)?.closest("[data-task-row]") || !!(e.target as HTMLElement|null)?.closest("button,a,input,textarea,select") || document.querySelector('[role="dialog"], [role="menu"][data-state="open"]') || isTyping(e) || e.metaKey || e.ctrlKey || e.altKey) return;
       if (e.key === "ArrowDown" || e.key === "j") {
         e.preventDefault();
         keyboardFocus.current=true;
@@ -224,7 +224,7 @@ export function IssueTable({ issues }: { issues: IssueWithLabels[] }) {
 
 
   return (
-    <VirtualStack scrollRef={scroller} handle={windowHandle} className="@container min-h-0 flex-1 overflow-y-auto" items={entries} estimate={38} stickyIndexes={stickyIndexes} keyFor={entry=>"header" in entry?`group:${entry.header.status}`:entry.issue.id} render={entry=>{
+    <VirtualStack scrollRef={scroller} handle={windowHandle} className="@container min-h-0 flex-1 overflow-y-auto" items={entries} keepIndex={focusId?entryIndex.get(focusId):undefined} estimate={38} stickyIndexes={stickyIndexes} keyFor={entry=>"header" in entry?`group:${entry.header.status}`:entry.issue.id} render={entry=>{
       if("header" in entry){const group=entry.header;return (<div className={`sticky top-0 z-10 flex items-center gap-2 border-b border-border bg-bg/95 py-1.5 backdrop-blur ${PAGE_INSET}`}>
             {group.status!=="pinned"&&<StatusIcon status={group.status} size={13} />}
             <span className="text-small font-medium text-muted">
@@ -244,6 +244,7 @@ export function IssueTable({ issues }: { issues: IssueWithLabels[] }) {
                 ref={(el) => {
                   rowRefs.current[index] = el;
                 }}
+                data-task-row
                 role="button"
                 tabIndex={focused || focusIndex === null && index === 0 ? 0 : -1}
                 onFocus={() => setFocusIndex(index)}

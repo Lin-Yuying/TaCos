@@ -1259,6 +1259,8 @@ const SIDEBAR_RAIL_NAME_MIN = 176;
 // the column back the way that mode was left instead of dumping you at the boundary.
 function useSidebarWidth() {
   const [width, setWidth] = useState(SIDEBAR_DEFAULT);
+  const [available,setAvailable]=useState<number|null>(null);
+  useEffect(()=>{const measure=()=>setAvailable(document.documentElement.clientWidth);const observer=new ResizeObserver(measure);observer.observe(document.documentElement);measure();return()=>observer.disconnect();},[]);
   const lastFull = useRef(SIDEBAR_DEFAULT);
   const lastRail = useRef(SIDEBAR_RAIL);
 
@@ -1326,7 +1328,8 @@ function useSidebarWidth() {
     });
   }, [remember]);
 
-  return { width, rail: width < SIDEBAR_MIN, resize, commit, toggle };
+  const rendered=available===null?width:Math.min(width,Math.max(SIDEBAR_RAIL_MIN,available-SIDEBAR_CONTENT_MIN));
+  return { width:rendered, rail: rendered < SIDEBAR_MIN, resize, commit, toggle };
 }
 
 /**

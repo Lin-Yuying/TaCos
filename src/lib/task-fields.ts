@@ -101,6 +101,7 @@ export async function deleteTaskField(workspaceId: string, viewerId: string, fie
 
 export async function listFieldValues(issueIds: string[]): Promise<FieldValues> {
   if (!issueIds.length) return {};
+  if(issueIds.length>500){const out:FieldValues={};for(let at=0;at<issueIds.length;at+=500)Object.assign(out,await listFieldValues(issueIds.slice(at,at+500)));return out;}
   const rows = await getDb().select({issueId:taskFieldValues.issueId, fieldId:taskFieldValues.fieldId, value:taskFieldValues.value}).from(taskFieldValues)
     .innerJoin(taskFields, eq(taskFields.id, taskFieldValues.fieldId))
     .where(and(inArray(taskFieldValues.issueId, issueIds), isNull(taskFields.disabledAt)));

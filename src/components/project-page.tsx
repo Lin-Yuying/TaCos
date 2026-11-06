@@ -1,3 +1,5 @@
+import { queryTaskView } from "@/lib/task-query";
+import { EMPTY_VIEW } from "@/lib/task-view";
 import { connection } from "next/server";
 import { redirect } from "next/navigation";
 import { getSessionUser, requireWorkspace } from "@/lib/auth";
@@ -37,12 +39,17 @@ import type { ProjectTab } from "@/components/project-header";
 export async function ProjectPage({
   params,
   initialTab,
+  searchParams,
 }: {
   params: Promise<{ workspaceId: string; projectId: string }>;
   initialTab: ProjectTab;
+  searchParams?: Promise<Record<string,string|string[]|undefined>>;
 }) {
   await connection();
   const { workspaceId, projectId } = await params;
+  const sp=await searchParams;
+  const selected=sp?.tab;
+  if(selected==="overview"||selected==="issues"||selected==="documents")initialTab=selected;
   const user = await getSessionUser();
   if (!user) redirect("/login");
   await requireWorkspace(workspaceId);
@@ -50,17 +57,21 @@ export async function ProjectPage({
   const project = await getProject(workspaceId, projectId, user.id);
   if (!project) redirect(`/${workspaceId}`);
 
+  const access=await getOverviewAccess(workspaceId,project.id,user.id);
+  if(!access.canView)initialTab="issues";
+
+  const taskQuery={projectId:project.id,status:typeof sp?.status==="string"&&["todo","in_progress","done","canceled"].includes(sp.status)?sp.status as "todo":undefined,q:typeof sp?.q==="string"?sp.q:undefined};
+  const taskPage=initialTab==="issues"?await queryTaskView(workspaceId,user.id,taskQuery,EMPTY_VIEW):undefined;
   // When the owner turns off workspace-wide task visibility, a member outside this
   // project cannot open it — the same check the sidebar and lists use.
-  const [visible, counts, members, projectMembers, issues, favorite, access, documents] =
+  const [visible, counts, members, projectMembers, issues, favorite, documents] =
     await Promise.all([
       listProjects(workspaceId, user.id),
       countIssuesByStatus(workspaceId, project.id, user.id),
       listMembers(workspaceId),
       listProjectMembers(workspaceId, project.id),
-      listIssues(workspaceId, { projectId: project.id, viewerId: user.id }),
+      initialTab==="overview" ? listIssues(workspaceId, { projectId: project.id, viewerId: user.id,summary:true }) : Promise.resolve(taskPage?.items??[]),
       isFavoriteProject(workspaceId, user.id, project.id),
-      getOverviewAccess(workspaceId, project.id, user.id),
       listProjectPageTree(workspaceId, project.id, user.id),
     ]);
   if (!visible.some((candidate) => candidate.id === project.id)) {
@@ -68,8 +79,8 @@ export async function ProjectPage({
   }
 
   const [fields, fieldValues] = await Promise.all([
-    listTaskFields(workspaceId),
-    listFieldValues(issues.map((issue) => issue.id)),
+    initialTab==="issues" ? listTaskFields(workspaceId) : Promise.resolve([]),
+    Promise.resolve(taskPage?.values??{}),
   ]);
 
   const [grants, comments, edits, unseenDocEdits, resources, trashedTitles, pageRefs, embeds]: [
@@ -81,7 +92,7 @@ export async function ProjectPage({
     Record<string, string>,
     Awaited<ReturnType<typeof listPageRefs>>,
     Record<string, string>,
-  ] = access.canView
+  ] = access.canView && initialTab==="overview"
     ? await Promise.all([
         listOverviewGrants(workspaceId, project.id),
         listOverviewComments(workspaceId, project.id),
@@ -105,11 +116,13 @@ export async function ProjectPage({
     // Keyed by project: the tab, the star and the filters are per-project state, and
     // jumping between projects in the sidebar would otherwise carry them over.
     <ProjectWorkspace
+      taskQuery={taskQuery}
+      taskPage={taskPage}
       fields={fields}
       fieldValues={fieldValues}
       key={project.id}
       workspaceId={workspaceId}
-      project={project}
+      project={access.canView?project:{...project,doc:""}}
       counts={counts}
       members={projectMembers}
       workspaceMembers={members}

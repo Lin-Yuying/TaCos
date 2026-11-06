@@ -218,10 +218,10 @@ export function UIProvider({
   // Native history participates in Next navigation without reloading the list.
   useEffect(() => { setOpenIssueId(params.get("issue"));setOpenPageId(params.get("issue")?null:params.get("doc")); }, [params]);
   useEffect(() => {
-    const failed = () => toast(t("Local storage is full. Keep this page open and copy your draft."),{label:t("Export"),run:exportLocalDrafts});
+    const failed = () => toast(t("Local storage is full. Keep this page open and copy your draft."),{label:t("Export"),run:()=>exportLocalDrafts(scope)});
     window.addEventListener("tacos:storage-error", failed);
     return () => window.removeEventListener("tacos:storage-error", failed);
-  }, [t, toast]);
+  }, [t, toast,scope]);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {

@@ -154,6 +154,10 @@ async function main() {
   const kept = await lib.createTaskField(ws, "owner", { name: "Kept", type: "text" });
   await lib.setTaskFieldValue(ws, "i1", kept.id, "x", "owner", actor);
   await purgeIssue(ws, "i1");
+  assert((await lib.listFieldValues(["i1"])).i1?.[kept.id] === "x", "purging a live task preserves its values");
+  const { deleteIssue } = await import("../src/lib/issues");
+  await deleteIssue(ws, "i1");
+  await purgeIssue(ws, "i1");
   assert(!(await lib.listFieldValues(["i1"])).i1, "purging a task removes its values");
 
   console.log("check-task-database: ok");
