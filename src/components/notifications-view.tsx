@@ -103,6 +103,11 @@ function sentence(item: NotificationRow, t: ReturnType<typeof useT>): string {
         status: data.statusLabel ?? "",
         view: data.viewName ?? t("a view you follow"),
       });
+    case "automation":
+      return t("{name}: {note}", {
+        name: data.ruleName ?? data.actorName ?? t("Automation"),
+        note: data.note ?? "",
+      });
     case "due_soon":
       return t("Due {date}: reminder", { date: data.date ?? item.body });
     case "handoff_done":

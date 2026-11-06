@@ -29,6 +29,7 @@ import { formatTokens } from "@/lib/agent-usage.shared";
 import { turnEventsToSse } from "@/lib/harness";
 import type { HarnessId, SubscriptionInfo, TurnEvent } from "@/lib/harness/types";
 import { addComment, getIssueDetail, notify, recordEvent, TacosError } from "@/lib/issues";
+import { emitAutomationEvent } from "@/lib/automations/dispatch";
 import { orderAgentApiEndpoints, resolveAgentApiEndpoints } from "@/lib/agent-api-config";
 import {
   cancelLiveRun,
@@ -436,6 +437,20 @@ export async function delegateTask(input: {
     },
     actor
   );
+  const [requester] = await getDb()
+    .select({ displayName: users.displayName })
+    .from(users)
+    .where(eq(users.id, input.userId));
+  await emitAutomationEvent({
+    type: "task.delegated",
+    workspaceId: input.workspaceId,
+    issueId: issue.id,
+    issueIdentifier: issue.identifier,
+    actorUserId: input.userId,
+    actorName: requester?.displayName ?? "A member",
+    data: { agentId: resolved.id, agentName: resolved.name, source: resolved.runSource },
+    idempotencyKey: `delegation:${runId}`,
+  });
   await notifyDelegation(input.workspaceId, issue.id, "delegation_started", resolved.name, [input.userId]);
   if (resolved.runSource === "api") {
     void runApiDelegation(runId).catch(async (err) => {
@@ -868,6 +883,16 @@ async function completeDelegation(row: RunRow, agentName: string, identifier: st
   await setIssueDelegation(row.issueId!, { status: "review", runId: row.id });
   await recordEvent(row.issueId!, "agent_review_requested", { agent: agentName, identifier }, await agentActor(agentName));
   await notifyDelegation(row.workspaceId, row.issueId!, "delegation_review", agentName);
+  await emitAutomationEvent({
+    type: "agent.run_finished",
+    workspaceId: row.workspaceId,
+    issueId: row.issueId!,
+    issueIdentifier: identifier,
+    actorUserId: row.userId,
+    actorName: agentName,
+    data: { agentId: row.agentId, agentName, runId: row.id },
+    idempotencyKey: `agent-run:${row.id}`,
+  });
 }
 
 async function failDelegation(runId: string, message: string): Promise<void> {
@@ -880,6 +905,15 @@ async function failDelegation(runId: string, message: string): Promise<void> {
     await setIssueDelegation(row.issueId, { status: "failed", runId });
     await recordEvent(row.issueId, "agent_failed", { error: message.slice(0, 500) }, await agentActor("Agent"));
     await notifyDelegation(row.workspaceId, row.issueId, "delegation_failed", "Agent");
+    await emitAutomationEvent({
+      type: "agent.run_failed",
+      workspaceId: row.workspaceId,
+      issueId: row.issueId,
+      actorUserId: row.userId,
+      actorName: "Agent",
+      data: { agentId: row.agentId, error: message.slice(0, 500), runId: row.id },
+      idempotencyKey: `agent-run:${row.id}`,
+    });
   }
 }
 
@@ -898,5 +932,14 @@ export async function noticeInterruptedDelegation(row: RunRow): Promise<void> {
     { error: "The server restarted during this run" },
     await agentActor("Agent")
   );
+  await emitAutomationEvent({
+    type: "agent.run_failed",
+    workspaceId: row.workspaceId,
+    issueId: row.issueId,
+    actorUserId: row.userId,
+    actorName: "Agent",
+    data: { agentId: row.agentId, error: "The server restarted during this run", runId: row.id },
+    idempotencyKey: `agent-run:${row.id}`,
+  });
   await notifyDelegation(row.workspaceId, row.issueId, "delegation_failed", "Agent");
 }

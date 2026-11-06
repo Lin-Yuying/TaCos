@@ -45,6 +45,8 @@ import { ProjectIcon, WorkspaceMark } from "@/components/icons";
 import { WorkspaceTrashList } from "@/components/workspace-trash-list";
 import { LabelsManager } from "@/components/labels-manager";
 import { PageTemplatesManager } from "@/components/page-templates-manager";
+import { AutomationSettingsSection } from "@/components/automation-settings-section";
+import type { AutomationSettingsView } from "@/lib/automations/store";
 import type { ApiKeyRecord, ApiKeyScope, DeletedWorkspace, Label, Member, Project } from "@/lib/issues";
 import type { HarnessSettingsView } from "@/lib/harness/types";
 import type { PageTemplate } from "@/lib/page-templates";
@@ -151,6 +153,7 @@ export function SettingsView({
   canManagePageTemplates,
   agents,
   agentUsage,
+  automations,
 }: {
   workspace: { id: string; name: string; key: string; icon: string | null };
   role: string;
@@ -174,6 +177,7 @@ export function SettingsView({
   canManagePageTemplates: boolean;
   agents: AgentView[];
   agentUsage: AgentUsageSummary;
+  automations: AutomationSettingsView;
 }) {
   const router = useRouter();
   const t = useT();
@@ -962,6 +966,22 @@ export function SettingsView({
             workspaceId={workspace.id}
             initialTemplates={pageTemplates}
             canManage={canManagePageTemplates}
+          />
+        </section>
+
+        <section id="automations" className="scroll-mt-6 space-y-3" data-testid="automation-settings">
+          <h2 className="text-body font-semibold">{t("Automations")}</h2>
+          <AutomationSettingsSection
+            workspaceId={workspace.id}
+            currentUserId={currentUser.id}
+            canManage={automations.canManage}
+            rules={automations.rules}
+            runs={automations.runs}
+            audit={automations.audit}
+            members={members}
+            projects={projects}
+            labels={labels}
+            agents={agents}
           />
         </section>
 

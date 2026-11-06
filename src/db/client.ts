@@ -85,6 +85,54 @@ CREATE TABLE IF NOT EXISTS personal_entity_state (
   PRIMARY KEY(user_id, workspace_id, entity_type, entity_id)
 );
 
+-- #80: internal automation rules, one idempotent row per (rule, event), and config history.
+CREATE TABLE IF NOT EXISTS automation_rules (
+  id TEXT PRIMARY KEY,
+  workspace_id TEXT NOT NULL,
+  name TEXT NOT NULL,
+  enabled INTEGER NOT NULL DEFAULT 1,
+  created_by TEXT NOT NULL,
+  updated_by TEXT NOT NULL,
+  trigger TEXT NOT NULL,
+  conditions TEXT NOT NULL DEFAULT '[]',
+  actions TEXT NOT NULL DEFAULT '[]',
+  last_run_at TEXT,
+  version INTEGER NOT NULL DEFAULT 1,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS automation_rules_workspace_idx ON automation_rules (workspace_id);
+CREATE TABLE IF NOT EXISTS automation_runs (
+  id TEXT PRIMARY KEY,
+  workspace_id TEXT NOT NULL,
+  rule_id TEXT NOT NULL,
+  rule_name TEXT NOT NULL DEFAULT '',
+  trigger TEXT NOT NULL,
+  event TEXT NOT NULL,
+  status TEXT NOT NULL,
+  action_results TEXT NOT NULL DEFAULT '[]',
+  error TEXT,
+  duration_ms INTEGER NOT NULL DEFAULT 0,
+  idempotency_key TEXT NOT NULL,
+  triggered_by TEXT,
+  created_at TEXT NOT NULL,
+  finished_at TEXT
+);
+CREATE UNIQUE INDEX IF NOT EXISTS automation_runs_rule_event_idx ON automation_runs (rule_id, idempotency_key);
+CREATE INDEX IF NOT EXISTS automation_runs_workspace_idx ON automation_runs (workspace_id, created_at);
+CREATE TABLE IF NOT EXISTS automation_audit (
+  id TEXT PRIMARY KEY,
+  workspace_id TEXT NOT NULL,
+  rule_id TEXT NOT NULL,
+  rule_name TEXT NOT NULL DEFAULT '',
+  action TEXT NOT NULL,
+  actor_id TEXT NOT NULL,
+  before TEXT,
+  after TEXT,
+  created_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS automation_audit_workspace_idx ON automation_audit (workspace_id, created_at);
+
 CREATE TABLE IF NOT EXISTS users (
   id TEXT PRIMARY KEY,
   username TEXT NOT NULL UNIQUE,

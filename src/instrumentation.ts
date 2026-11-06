@@ -1,4 +1,5 @@
 // H-COLLAB-11: start the due-date reminder scheduler when the Node server boots.
+// #80: the automation due scheduler is the second (and only other) in-process interval.
 export async function register() {
   if (process.env.NEXT_RUNTIME !== "nodejs") return;
   const { warmHarnessDetectCache }=await import("./lib/harness/detect-bin");
@@ -14,6 +15,10 @@ export async function register() {
     await startCollabServer().catch((err) => console.error("collab socket did not start", err));
   }
   const {startStorageMaintenance}=await import("./lib/permanent-cleanup");startStorageMaintenance();
+  if (process.env.TACOS_DISABLE_AUTOMATIONS !== "1") {
+    const { startAutomationScheduler } = await import("./lib/automations/scheduler");
+    startAutomationScheduler();
+  }
   if (process.env.TACOS_DISABLE_REMINDERS === "1") return;
   const { startDueReminderScheduler } = await import("./lib/issues");
   startDueReminderScheduler();

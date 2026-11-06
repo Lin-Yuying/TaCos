@@ -11,6 +11,7 @@ export function ensureRevisions(db: Database.Database) {
     pages: "documents", page_comments: "documents", page_versions: "documents",
     agent_threads: "threads", agent_runs: "threads", workspace_members: "permissions", workspaces: "permissions",
     personal_entity_state: "personal", personal_task_views: "personal",
+    automation_rules: "automations", automation_runs: "automations", automation_audit: "automations",
   };
   const via: Record<string, [string, string]> = {
     overview_comments: ["projects", "SELECT workspace_id FROM projects WHERE id = ROW.project_id"],

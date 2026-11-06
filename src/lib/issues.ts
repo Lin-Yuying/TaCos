@@ -1,4 +1,5 @@
 import { recordApiKeyUsage, pendingApiKeyUsage } from "./api-key-usage";
+import { emitAutomationEvent } from "./automations/dispatch";
 import { applyView, normalizeFieldValue, type FieldValues, type TaskField } from "./task-view";
 import { parseStoredDefinition } from "./task-views";
 import { TacosError } from "./tacos-error";
@@ -2250,6 +2251,7 @@ export type NotificationInput = {
     | "blocker"
     | "view_added"
     | "view_completed"
+    | "automation"
     | ClaimNotice;
   body: string;
   data?: NotificationData;
@@ -2455,6 +2457,30 @@ function commentAuthorFields(actor: MutationActor) {
   return actor.kind === "user"
     ? { authorId: actor.userId, agentAuthor: null }
     : { authorId: null, agentAuthor: actor.label };
+}
+
+/** Who /api / MCP / UI callers are, for an automation event and the run log. */
+function automationActorFields(actor: MutationActor) {
+  return actor.kind === "user"
+    ? { actorUserId: actor.userId, actorName: actor.displayName }
+    : { actorUserId: actor.publishedBy, actorName: `Agent (${actor.label})` };
+}
+
+async function emitTaskEvent(
+  workspaceId: string,
+  issue: { id: string; identifier: string },
+  type: Parameters<typeof emitAutomationEvent>[0]["type"],
+  actor: MutationActor,
+  data: Record<string, unknown> = {}
+) {
+  await emitAutomationEvent({
+    type,
+    workspaceId,
+    issueId: issue.id,
+    issueIdentifier: issue.identifier,
+    ...automationActorFields(actor),
+    data,
+  });
 }
 
 export async function recordEvent(
@@ -2671,7 +2697,9 @@ export async function createIssue(
   }
   if(customValues.length)await db.insert(taskFieldValues).values(customValues);
   await recordEvent(id, "created", { title }, actor);
-  if (description) await notifyMentions(workspaceId, id, description, actor);
+  const mentioned = description
+    ? await notifyMentions(workspaceId, id, description, actor)
+    : new Set<string>();
 
   for (const assigneeId of assigneeIds) {
     if (assigneeId !== actorUserId) {
@@ -2682,6 +2710,16 @@ export async function createIssue(
   const detail = await getIssueDetail(workspaceId, id);
   if (!detail) throw new TacosError("Failed to create issue", 500);
   await notifyViewSubscribers(workspaceId, detail, "added", actor);
+  // #80: a rule sees the finished task, its labels and its assignees.
+  await emitTaskEvent(workspaceId, detail.issue, "task.created", actor);
+  for (const assigneeId of assigneeIds) {
+    await emitTaskEvent(workspaceId, detail.issue, "task.assigned", actor, { assigneeId });
+  }
+  if (mentioned.size > 0) {
+    await emitTaskEvent(workspaceId, detail.issue, "task.mention", actor, {
+      userIds: [...mentioned],
+    });
+  }
   return detail;
 }
 
@@ -2735,6 +2773,7 @@ export async function updateIssue(
   const changes: Array<{ type: string; data: Record<string, unknown> }> = [];
   const memberMap = await membersById(workspaceId);
   let addedAssignees: string[] = [];
+  let descriptionMentions = new Set<string>();
 
   if (patch.title !== undefined) {
     const title = typeof patch.title === "string" ? patch.title.trim() : "";
@@ -2881,7 +2920,14 @@ export async function updateIssue(
       // Only members that the old text did not mention get a notice.
       const before = new Set(parseMentions(row.description ?? ""));
       const added = parseMentions(sets.description).filter((name) => !before.has(name));
-      if (added.length) await notifyMentions(workspaceId, row.id, added.map(mentionText).join(" "), actor);
+      if (added.length) {
+        descriptionMentions = await notifyMentions(
+          workspaceId,
+          row.id,
+          added.map(mentionText).join(" "),
+          actor
+        );
+      }
     }
     const assigneeChange = changes.find((c) => c.type === "assignee_changed");
     if (assigneeChange) {
@@ -2905,6 +2951,19 @@ export async function updateIssue(
       (sets.status === "done" || sets.status === "canceled")
   );
   if (completed) await notifyViewSubscribers(workspaceId, detail, "completed", actor);
+  // #80: the evaluator reads the task after its mutations, so conditions see new state.
+  const statusChange = changes.find((change) => change.type === "status_changed");
+  if (statusChange) {
+    await emitTaskEvent(workspaceId, detail.issue, "task.status_changed", actor, statusChange.data);
+  }
+  for (const assigneeId of addedAssignees) {
+    await emitTaskEvent(workspaceId, detail.issue, "task.assigned", actor, { assigneeId });
+  }
+  if (descriptionMentions.size > 0) {
+    await emitTaskEvent(workspaceId, detail.issue, "task.mention", actor, {
+      userIds: [...descriptionMentions],
+    });
+  }
   return detail;
 }
 
@@ -3046,6 +3105,12 @@ export async function moveIssue(
     (input.status === "done" || input.status === "canceled")
   ) {
     await notifyViewSubscribers(workspaceId, detail, "completed", actor);
+  }
+  if (input.status && input.status !== row.status) {
+    await emitTaskEvent(workspaceId, detail.issue, "task.status_changed", actor, {
+      from: row.status,
+      to: input.status,
+    });
   }
   return detail;
 }
@@ -3264,8 +3329,10 @@ export async function claimIssue(
     )
     .returning({ id: issues.id });
   if (updated.length === 0) throw new TacosError("Someone else already claimed this task", 409);
-  await recordEvent(row.id, "claimed", {}, actor ?? (await userActor(userId)));
+  const claimActor = actor ?? (await userActor(userId));
+  await recordEvent(row.id, "claimed", {}, claimActor);
   await notifyClaimWatchers(workspaceId, row.id, "claimed", userId);
+  await emitTaskEvent(workspaceId, row, "task.claimed", claimActor, { userId });
   return { id: row.id, identifier: row.identifier, claimedBy: userId, claimedAt: now };
 }
 
@@ -3284,8 +3351,10 @@ export async function releaseIssue(
     .where(and(eq(issues.workspaceId, workspaceId), eq(issues.id, row.id), eq(issues.claimedBy, userId)))
     .returning({ id: issues.id });
   if (updated.length === 0) throw new TacosError("Only the person who claimed this task can release it", 403);
-  await recordEvent(row.id, "released", {}, actor ?? (await userActor(userId)));
+  const releaseActor = actor ?? (await userActor(userId));
+  await recordEvent(row.id, "released", {}, releaseActor);
   await notifyClaimWatchers(workspaceId, row.id, "released", userId);
+  await emitTaskEvent(workspaceId, row, "task.released", releaseActor, { userId });
   return { id: row.id, identifier: row.identifier, claimedBy: null, claimedAt: null };
 }
 
@@ -3315,6 +3384,11 @@ export async function transferClaim(
   if (toUserId !== fromUserId) {
     await notify({ workspaceId, userId: toUserId, issueId: row.id, type: "claim_transferred", body: actor.displayName, data: { actorName: actor.displayName } });
   }
+  await emitTaskEvent(workspaceId, row, "task.released", actor, { userId: fromUserId });
+  await emitTaskEvent(workspaceId, row, "task.claimed", actor, {
+    userId: toUserId,
+    fromUserId,
+  });
   return { id: row.id, identifier: row.identifier, claimedBy: toUserId, claimedAt: now };
 }
 
@@ -3790,6 +3864,14 @@ export async function addComment(
 
   const detail = await getIssueDetail(workspaceId, row.id);
   if (!detail) throw new TacosError("Issue disappeared while commenting", 500);
+  await emitTaskEvent(workspaceId, detail.issue, "task.comment_added", actor, {
+    body: text.slice(0, 500),
+  });
+  if (mentioned.size > 0) {
+    await emitTaskEvent(workspaceId, detail.issue, "task.mention", actor, {
+      userIds: [...mentioned],
+    });
+  }
   return detail;
 }
 
@@ -4723,5 +4805,8 @@ export async function changeIssueCollection(workspaceId: string, id: string, cha
   const detail = await getIssueDetail(workspaceId,id,actor.userId);
   if (!detail) throw new TacosError("Task not found",404);
   if (added && added !== actor.userId) await notifyAssigned(workspaceId,id,detail.issue.title,added,actor);
+  if (added) {
+    await emitTaskEvent(workspaceId, detail.issue, "task.assigned", actor, { assigneeId: added });
+  }
   return detail;
 }
