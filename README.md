@@ -300,6 +300,35 @@ Desktop binaries are not code-signed. On Windows 11, Smart App Control blocks un
   code blocks or inline code is text, not a link.
 - Page history stays at 200 versions per page.
 
+## Automations (internal only)
+
+**Settings → Automations** lets the workspace owner or an admin build rules from three
+templates or from scratch. A rule is a trigger, optional conditions and an ordered list of
+actions. Members see the enabled rules and the runs their own actions triggered; agents,
+the REST API and MCP have no rule-creation surface.
+
+- Triggers: task created, status changed, assigned, claimed, released, delegated to an
+  agent, due soon, comment added, mention, agent run finished or failed, document updated.
+  A document save fires at most once per document in five minutes, so typing does not
+  spam the rule. Due soon means exactly N days before the due date (1, 2, 3, 5 or 7 in the
+  UI), checked by one in-process interval; `TACOS_DISABLE_AUTOMATIONS=1` turns it off.
+- Conditions: project, label, priority, assignee presence, status and text contains.
+  Every condition must pass. A rule never re-triggers on an event caused by its own
+  actions, and two rules that call each other stop after three action levels.
+- Actions run in order: set status, set assignees, set labels, add comment, notify people,
+  delegate to a shared workspace agent, create a document or create a task. A failure is
+  recorded and later actions still run. SQLite failures retry up to three times; a settled
+  business error does not.
+- Each (rule, event) runs at most once, so a scheduler restart or a retried dispatch
+  cannot duplicate a comment or a delegation. The run log shows the trigger, each action's
+  result, the duration and any error; **Rule changes** keeps an audit of edits, toggles and
+  deletions.
+- **Dry run** evaluates the saved rule against a task identifier or its last matching
+  event and previews the actions without writing anything.
+- Delegation actions reuse the #79 run and review path: the human assignees stay, the run
+  reports back as a review, and the Inbox notices are the same. This feature has no Slack,
+  GitHub, webhook, email, push or external-agent delivery.
+
 ## How it fits together
 
 ```
