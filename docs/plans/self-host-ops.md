@@ -133,16 +133,25 @@ Common pattern: **visible system health + verified backups + safe upgrade/rollba
 - Automatic remote runner control.
 - SSO/admin console (U-06).
 
-## Open decisions
+## Decisions (accepted per recommendation, 2026-11-06)
 
-1. Update channels: stable only (recommended first) or stable + insider?
-2. Backup schedule/retention defaults: daily, 14 days (recommended)?
-3. Diagnostics bundle contents: logs + redacted config (recommended); include
-   DB schema only, never data?
-4. Restore scope: same-version only (recommended) or cross-version with
-   migration?
-5. Runner admin: read-only status (recommended) or allow "disconnect/restart"
-   hints only?
+1. Desktop updates ship the **stable channel only** in v1; insider is a
+   follow-up.
+2. Backups run **daily with a 14-day retention** (configurable), plus an
+   automatic pre-upgrade backup.
+3. The diagnostics bundle contains logs, redacted config and the DB schema
+   version; **no database data**, with a size cap.
+4. Restore supports the **same version only**; cross-version migration stays a
+   follow-up. Rollback means the previous `app` plus the pre-upgrade backup.
+5. The runner/tunnel admin view is **read-only** (state, last seen, errors,
+   guidance); no remote control.
+6. Signing/notarization stays with the owner; the UI labels unsigned builds and
+   documents what is required.
+7. Server rollback guarantees only the previous app version plus the
+   pre-upgrade backup; older versions are not auto-rollback targets.
+8. **UI gate:** restore is a destructive flow, so confirmations, warnings and
+   rollback state must be explicit; System must not become an information dump;
+   1440/1100 screenshots are required.
 
 ## Dependencies
 
