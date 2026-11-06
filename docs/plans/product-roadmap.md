@@ -76,7 +76,6 @@ value; P2 later / depends on other work.
 | Collaboration depth | Task comments flat; no follow/watchers; no workspace activity feed | P2 | U-11 |
 | Import/export & portability | No workspace export/import | P2 (anti-lock-in, pairs with enterprise) | U-05 |
 | Desktop & self-host ops | No health/diagnostics, backup restore UX, update channels | P2 (operational trust) | U-12 |
-| External agent platform | No A2A/registry/external agents | P2 (after #80) | U-07 |
 | Channels & mobile | No email/push/PWA/mobile | P2/P3 | U-08 |
 | External API/MCP coverage | Tasks/comments/labels only; no projects CRUD, pages, task extensions | P1 (after #77) | U-13a/U-13b |
 | Views & task UX | Personal saved views only; no shared views/subscriptions/display options | P2 (can pull forward) | U-09 |
@@ -139,13 +138,12 @@ UI, retention policies and the admin console are **not planned**. The plan stays
 at `docs/plans/enterprise-governance.md` as a benchmark record. Revisit only if
 the company grows or TaCos is offered to other teams.
 
-### U-07 — External agent platform
+### U-07 — External agent platform (deferred, not planned)
 
-Plan: `docs/plans/external-agents.md`.
-Scope: external agent registry (Agent Card discovery, auth, project scope),
-A2A client for delegation with streaming/push, optional minimal A2A server to
-expose TaCos tasks to an orchestrator, permissions and audit. Depends on #79,
-#77 and #80; OAuth/enterprise federation later.
+Decision 2026-11-06: TaCos runs **internal agents only**. External A2A agents,
+a registry and remote delegation are **not planned**. The plan stays at
+`docs/plans/external-agents.md` as a benchmark record; revisit only if external
+agents become a real requirement.
 
 ### U-08 — Channels and mobile
 
@@ -262,8 +260,8 @@ respect dependencies and put value early:
    search → U-11 collaboration → U-03 planning.
 4. **Insight and operations**: U-02 insights → U-05 import/export → U-12
    desktop/self-host ops.
-5. **Platform**: U-07 external agents → U-08 channels/mobile. Enterprise
-   governance is not planned (5-person internal team).
+5. **Channels**: U-08 channels/mobile. Enterprise governance and external
+   agents are not planned (5-person internal team, internal agents only).
 
 Each implementation PR references its plan document, updates the plan status,
 ships one item per commit, and must pass the smoke test, `check:harness`, build
@@ -279,7 +277,6 @@ All areas now have a plan; these are the choices before implementation starts.
 1. Approve the recommended implementation waves above, or reorder them.
 2. U-03 cycles scope: workspace-wide or per-project?
 3. U-08 channels: email first or PWA/web push first?
-4. U-07 external agents: client + registry only, or also the A2A server?
-5. U-12: are code-signing/notarization certificates available (owner action)?
+4. U-12: are code-signing/notarization certificates available (owner action)?
 
 Plan PRs are draft #77-#81; no code has been written.

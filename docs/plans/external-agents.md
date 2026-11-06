@@ -1,9 +1,10 @@
 # U-07: External agent platform (A2A, registry, remote agents)
 
-Status: plan for a future PR. No implementation started. Written 2026-11-06
-(loop round 4).
+Status: **not planned** (decision 2026-11-06: internal agents only — external
+A2A agents and the registry are out of scope for now). Kept as a benchmark and
+design record; no implementation is scheduled.
 
-## Why
+## Why (recorded before the decision)
 
 Today TaCos can run agents only through local CLI harnesses (#79 adds a built-in
 API agent) or expose its own tools through MCP (#77). There is no way to
