@@ -13,7 +13,7 @@ import { ENGINE_COOKIE, type AgentHarnessId, type AgentHarnessOption } from "@/l
 import { codexDefaults, listCodexSkills } from "@/lib/cli-agents";
 import { listComposerModels } from "@/lib/harness/models";
 import {
-  getAgentThread,
+  getAgentThreadPage,
   listAgentThreads,
   type AgentThreadDetail,
 } from "@/lib/agent-threads";
@@ -80,7 +80,7 @@ async function AgentContent({
   // the start panel instead of leaking whether that id exists.
   let active: AgentThreadDetail | null = null;
   if (threadId) {
-    active = await getAgentThread(workspaceId, user.id, threadId).catch(() => null);
+    active = await getAgentThreadPage(workspaceId, user.id, threadId).catch(() => null);
   }
 
   return (

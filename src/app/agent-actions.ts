@@ -316,3 +316,6 @@ export async function cancelHandoffAction(
 }
 
 export async function searchAgentThreadsAction(ws:string,query:string,offset=0){return run(async()=>{const {user}=await requireWorkspace(ws);const {searchAgentThreads}=await import("@/lib/agent-threads");return searchAgentThreads(ws,user.id,query,offset);});}
+
+export async function loadAgentHistoryAction(ws:string,threadId:string,before:{createdAt:string;id:string}){return run(async()=>{const {user}=await requireWorkspace(ws);const {getAgentThreadPage}=await import("@/lib/agent-threads");return getAgentThreadPage(ws,user.id,threadId,before);});}
+export async function loadAgentStepDetailAction(ws:string,threadId:string,id:string){return run(async()=>{const {user}=await requireWorkspace(ws);const {getAgentStepDetail}=await import("@/lib/agent-threads");return getAgentStepDetail(ws,user.id,threadId,id);});}
