@@ -50,7 +50,7 @@ Item-level checks stay cheap (types, check scripts). End-to-end tests and screen
 | 24 | Recurring tasks | done | `node --import tsx scripts/check-recurrence.ts` |
 | 25 | Fix the six open security findings from the 2.2 review | done | `node --import tsx scripts/check-security-2.2.ts` |
 | 26 | Batch E2E and screenshots with real models and new data dirs; fresh-context review; fix findings | done | Report lists tested and untested |
-| 27 | Version 2.3.0, PR for the user to merge; after the merge, tag and publish | todo | PR open; release published after the merge |
+| 27 | Version 2.3.0, PR for the user to merge; after the merge, tag and publish | doing | PR open; release published after the merge |
 
 ### Item 26: batch E2E and review
 
@@ -61,3 +61,12 @@ Item-level checks stay cheap (types, check scripts). End-to-end tests and screen
 - `npm run check:harness`: 84/84 checks pass after the fixes below.
 - Four checks failed before this item. Three asserted 2.2 behaviour that 2.3 changed: `listThreadTasks` returns `ref` from `issueRef` instead of `identifier`; `startTaskChat` offers an opening message for a chat that never ran a turn; the layout passes `agentAllowed` from the harness gate together with existing threads. Those assertions were updated to the new behaviour, and `check-collab-agent-advance` gained a case for reopening a chat that already has messages. The fourth failure came from a duplicate blank line in `README.md` that the editor round trip folds; the line was removed. No check was weakened.
 - Not verified on this machine: real Pi, OpenCode, DeepSeek and WorkBuddy turns; English-locale screenshots; desktop packaging; server deployment; interactive document editing (toggle, callout, table rows, code highlight, page embed), which pass their check scripts but were not driven in the UI. A fresh-context review of the batch did not produce a report before this commit, so no findings from it were fixed; the four fixes above came from `npm run check:harness`.
+
+### Item 27: version 2.3.0
+
+- Version raised to 2.3.0 in `package.json` and `package-lock.json`.
+- `origin/main` was merged first (4 commits, 2.2.3). Three files conflicted and the 2.3 side was kept: `doc-tree.tsx` (Decisions ask for Documents (Shared, Private)), `list-header.tsx` and `project-workspace.tsx` (item 9 asks for one left edge via `PAGE_INSET`). Keeping the 2.3 side reverts main's 2.2.3 "one document tree" change. The independent 2.2.3 fixes in `doc-panel.tsx`, `project-meta.tsx` and `zh.ts` were merged.
+- After the merge commit, the smoke test and `npm run check:harness` were re-run: 84/84 checks pass.
+- PR #62 (`feat/team-2.3-all` into `main`) is open and mergeable. The user merges it manually.
+- Tagging `v2.3.0` and publishing the release follow the user's merge. Deploy stays with the user.
+- Status `doing`: the tag and release are not done.
