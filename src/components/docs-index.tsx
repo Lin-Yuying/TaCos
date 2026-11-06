@@ -1,4 +1,5 @@
 "use client";
+import { readImportedMarkdown } from "@/lib/import-markdown-stream";
 
 import { useDetailSource } from "@/components/detail-navigation";
 import { BatchSelection } from "@/components/ui/batch-selection";
@@ -88,7 +89,7 @@ export function DocsIndex({
       for(const [index,file] of files.entries()) {
         setProgress({done:index,total:files.length});
         const raw=relativePath(file),path=stripRoot&&raw.includes("/")?raw.slice(raw.indexOf("/")+1):raw;
-        try{const result=await importMarkdownAction(workspaceId,{path,content:await file.text()});results.push(result.ok?{file,stripRoot,status:result.data.created?"Imported":"Already existed"}:{file,stripRoot,status:"Failed",error:result.error});}
+        try{const result=await importMarkdownAction(workspaceId,{path,parsed:await readImportedMarkdown(file.stream(),file.name.replace(/\.(md|markdown|txt)$/i,""))});results.push(result.ok?{file,stripRoot,status:result.data.created?"Imported":"Already existed"}:{file,stripRoot,status:"Failed",error:result.error});}
         catch(error){results.push({file,stripRoot,status:"Failed",error:error instanceof Error?error.message:"Could not import. Retry."});}
         setImportResults([...results]);
       }

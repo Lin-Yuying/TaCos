@@ -1,7 +1,7 @@
 "use client";
 import { useEffect, useState } from "react";
 import { HocuspocusProvider } from "@hocuspocus/provider";
-import { openCollabCache } from "@/lib/ui/collab-cache";
+import { openCollabCache,type CollabCacheHandle } from "@/lib/ui/collab-cache";
 import * as Y from "yjs";
 import { getCollabSessionAction } from "@/app/pages-actions";
 import { useUI } from "@/components/ui-context";
@@ -11,7 +11,7 @@ function socketUrl(){const scheme=location.protocol==="https:"?"wss":"ws";return
 export function useDocCollab(workspaceId:string,pageId:string):DocCollab {
   const {scope}=useUI();const [state,setState]=useState<DocCollab>({status:"connecting"});
   useEffect(()=>{
-    let closed=false;let provider:HocuspocusProvider|null=null;let closeCache:(()=>void)|null=null;let doc:Y.Doc|null=null;let handshake:ReturnType<typeof setTimeout>|null=null;
+    let closed=false;let provider:HocuspocusProvider|null=null;let closeCache:CollabCacheHandle|null=null;let doc:Y.Doc|null=null;let handshake:ReturnType<typeof setTimeout>|null=null;
     const cacheKey=`tacos.collab.v1.${scope}.${pageId}`;
     void (async()=>{
       const result=await getCollabSessionAction(workspaceId,pageId).catch(()=>null);
@@ -35,6 +35,7 @@ export function useDocCollab(workspaceId:string,pageId:string):DocCollab {
       handshake=setTimeout(()=>{if(!closed&&!synced)setState({status:"connecting",error:"Could not connect to collaboration. Retry."});},8000);
       const show=()=>{
         if(closed)return;
+        if(synced&&connected&&current.unsyncedChanges===0)closeCache?.markSynced();
         const peers:CollabPeer[]=[...(current.awareness?.getStates().entries()??[])].flatMap(([clientId,value])=>{
           const peer=(value as {user?:{name?:string;color?:string}}).user;
           return clientId!==current.awareness?.clientID&&peer?.name?[{clientId,name:peer.name,color:peer.color??"#888"}]:[];

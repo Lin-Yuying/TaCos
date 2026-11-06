@@ -47,7 +47,7 @@ function main() {
 
   const panel = fs.readFileSync(new URL("../src/components/document-editor.tsx", import.meta.url), "utf8");
   assert(panel.includes("doc-comment-count"), "the margin shows the count");
-  assert(panel.includes("commentCountsByBlock"), "the margin uses the block counts");
+  assert(panel.includes("anchorsKey.getState") && panel.includes("setMarginCounts"), "the margin reuses located plugin ranges for block counts");
 
   console.log("ok");
 }

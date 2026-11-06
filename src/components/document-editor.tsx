@@ -1,5 +1,6 @@
 "use client";
 
+import { SuggestionMenu } from "./ui/suggestion-menu";
 import { type RefObject, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { useRouter } from "next/navigation";
 import { EditorContent, NodeViewWrapper, ReactNodeViewRenderer, useEditor, type Editor, type Range } from "@tiptap/react";
@@ -44,8 +45,9 @@ import { Markdown, type PageContext } from "@/components/markdown";
 import { documentColor, documentLinkHref } from "@/lib/markdown";
 import type { Member } from "@/lib/issues";
 import { BLOCK_TURNS, canTurnBlock, turnBlock } from "@/lib/editor/block-turn";
+import { incrementalMarkdown } from "@/lib/editor/incremental-markdown";
 import { documentMarkdown, markdownToDocument } from "@/lib/editor/document-markdown";
-import { anchorFromSelection, anchorRanges, commentCountsByBlock } from "@/lib/editor/anchors";
+import { anchorFromSelection, anchorRanges } from "@/lib/editor/anchors";
 import type { DocAnchor } from "@/lib/doc-anchor";
 import type { DocCollab } from "@/components/use-doc-collab";
 import { CodeLanguageMenu } from "@/components/code-block-controls";
@@ -91,7 +93,7 @@ function matchCommands(query: string): SlashCommand[] {
   return COMMANDS.filter((c) => `${c.label} ${c.keywords}`.toLowerCase().includes(needle));
 }
 
-type MenuState<T = SlashCommand> = { items: T[]; selected: number; x: number; y: number; pick: (item: T) => void };
+type MenuState<T = SlashCommand> = { items: T[]; selected: number; x: number; y: number; rect:()=>DOMRect|null; pick: (item: T) => void };
 
 // Arrow keys, Enter and Escape while a suggestion menu is open.
 function menuKey<T>(event: KeyboardEvent, open: MenuState<T> | null, set: (next: MenuState<T> | null) => void): boolean {
@@ -344,12 +346,23 @@ const CommentAnchors = Extension.create<{ store: AnchorStore }>({
           )
         )
       );
+    let knownAnchors=storage.anchors;
     return [
       new Plugin<DecorationSet>({
         key: anchorsKey,
         state: {
           init: (_, state) => build(state.doc),
-          apply: (tr, set) => (tr.docChanged || tr.getMeta(anchorsKey) ? build(tr.doc) : set),
+          apply: (tr, set) => {
+            const metadata=tr.getMeta(anchorsKey);
+            if(metadata&&knownAnchors!==storage.anchors){knownAnchors=storage.anchors;return build(tr.doc);}
+            if(!tr.docChanged&&!metadata)return set;
+            let positions=set.find().map(mark=>({id:String(mark.spec.id),from:mark.from,to:mark.to,touched:false}));
+            for(const map of tr.mapping.maps){positions=positions.map(range=>{let touched=range.touched;map.forEach((from,to)=>{if(range.from<=to&&range.to>=from)touched=true;});return {...range,from:map.map(range.from,1),to:map.map(range.to,-1),touched};});}
+            const retained=positions.filter(range=>!range.touched&&range.to>range.from),ids=new Set(retained.map(range=>range.id));
+            const relocated=tr.docChanged?anchorRanges(tr.doc,storage.anchors.filter(anchor=>!ids.has(anchor.id))):[];
+            const ranges=[...retained,...relocated.map(range=>({id:range.anchor.id,from:range.from,to:range.to}))];
+            return DecorationSet.create(tr.doc,ranges.map(range=>Decoration.inline(range.from,range.to,{class:range.id===storage.active?"doc-comment-anchor is-active":"doc-comment-anchor"},{id:range.id})));
+          },
         },
         props: {
           decorations: (state) => anchorsKey.getState(state),
@@ -409,6 +422,7 @@ export function DocumentEditor({
   const t = useT();
   const router = useRouter();
   const markdown = useMemo(() => documentMarkdown(), []);
+  const serialize=useMemo(()=>incrementalMarkdown(markdown),[markdown]);
   const emitted = useRef(value);
   const onChangeRef = useRef(onChange);
   const pagesRef = useRef(pages);
@@ -462,6 +476,7 @@ export function DocumentEditor({
             setMenu({
               items: props.items,
               selected,
+              rect:()=>props.clientRect?.()??null,
               x: rect?.left ?? 0,
               y: rect?.bottom ?? 0,
               pick: (command) => props.command(command),
@@ -508,7 +523,8 @@ export function DocumentEditor({
               setMentionMenu({
                 items: props.items,
                 selected: 0,
-                x: rect?.left ?? 0,
+                rect:()=>props.clientRect?.()??null,
+              x: rect?.left ?? 0,
                 y: rect?.bottom ?? 0,
                 pick: (member) => props.command({ id: member.username, label: null }),
               });
@@ -577,7 +593,7 @@ export function DocumentEditor({
       },
     },
     onUpdate: ({ editor: current }) => {
-      const next = markdown.serialize(current.getJSON());
+      const next = serialize(current.state.doc);
       if (next === emitted.current) return;
       emitted.current = next;
       onChangeRef.current(next);
@@ -661,12 +677,14 @@ export function DocumentEditor({
     if (!editor) return;
     anchorStore.update(anchors, activeAnchor, (id) => anchorClickRef.current?.(id));
     editor.view.dispatch(editor.state.tr.setMeta(anchorsKey, true));
-    const ranges = anchorRanges(editor.state.doc, anchors);
-    locatedRef.current?.(new Set(ranges.map((range) => range.anchor.id)));
+    const ranges = anchorsKey.getState(editor.state)?.find().map(mark=>({id:String(mark.spec.id),from:mark.from,to:mark.to}))??[];
+    locatedRef.current?.(new Set(ranges.map((range) => range.id)));
     const root = frameRef.current?.getBoundingClientRect();
+    const groups=new Map<number,string[]>();
+    for(const range of ranges){const pos=editor.state.doc.resolve(range.from),from=pos.depth>=1?pos.before(1):0;const ids=groups.get(from)??[];ids.push(range.id);groups.set(from,ids);}
     setMarginCounts(
       root
-        ? commentCountsByBlock(editor.state.doc, anchors).map((group) => ({
+        ? [...groups].map(([from,ids])=>({from,ids,count:ids.length})).sort((a,b)=>a.from-b.from).map((group) => ({
             ...group,
             top: editor.view.coordsAtPos(Math.min(group.from + 1, editor.state.doc.content.size)).top - root.top,
           }))
@@ -674,12 +692,14 @@ export function DocumentEditor({
     );
   }, [editor, anchorStore, anchors, activeAnchor, value]);
 
+  const locatedSelection=useRef<{id:string|null;done:boolean}>({id:null,done:false});
   // Explicit selection scrolls once. Typing only repaints the anchor positions.
   useEffect(()=>{
-    if(!editor||!activeAnchor)return;
-    const active=anchorRanges(editor.state.doc,anchorStore.anchors).find(range=>range.anchor.id===activeAnchor);
-    if(active){const {node}=editor.view.domAtPos(active.from);(node instanceof Element?node:node.parentElement)?.scrollIntoView({block:"center",behavior:"smooth"});}
-  },[editor,activeAnchor,anchorStore]);
+    if(locatedSelection.current.id!==activeAnchor)locatedSelection.current={id:activeAnchor,done:false};
+    if(!editor||!activeAnchor||locatedSelection.current.done)return;
+    const active=anchorsKey.getState(editor.state)?.find(undefined,undefined,spec=>spec.id===activeAnchor)[0];
+    if(active){locatedSelection.current.done=true;const {node}=editor.view.domAtPos(active.from);(node instanceof Element?node:node.parentElement)?.scrollIntoView({block:"center",behavior:"smooth"});}
+  },[editor,activeAnchor,anchorStore,anchors,value]);
 
   const marks = [
     { label: "Bold", icon: Bold, name: "bold", run: (e: Editor) => e.chain().focus().toggleBold().run() },
@@ -901,12 +921,7 @@ export function DocumentEditor({
         </button>
       )}
       {mentionMenu && mentionMenu.items.length > 0 && (
-        <div
-          role="listbox"
-          data-testid="doc-mention-menu"
-          style={{ position: "fixed", left: mentionMenu.x, top: mentionMenu.y + 4 }}
-          className="z-50 max-h-72 w-64 overflow-y-auto rounded-md border border-border bg-overlay p-1 shadow-md"
-        >
+        <SuggestionMenu rect={mentionMenu.rect} context={editor?.view.dom} testId="doc-mention-menu">
           {mentionMenu.items.map((member, index) => (
             <button
               key={member.id}
@@ -926,14 +941,10 @@ export function DocumentEditor({
               <span className="truncate text-small text-faint">@{member.username}</span>
             </button>
           ))}
-        </div>
+        </SuggestionMenu>
       )}
       {menu && menu.items.length > 0 && (
-        <div
-          role="listbox"
-          style={{ position: "fixed", left: menu.x, top: menu.y + 4 }}
-          className="z-50 max-h-72 w-64 overflow-y-auto rounded-md border border-border bg-overlay p-1 shadow-md"
-        >
+        <SuggestionMenu rect={menu.rect} context={editor?.view.dom}>
           {menu.items.map((command, index) => (
             <button
               key={command.label}
@@ -953,7 +964,7 @@ export function DocumentEditor({
               <span className="truncate text-small text-faint">{t(command.hint)}</span>
             </button>
           ))}
-        </div>
+        </SuggestionMenu>
       )}
     </div>
   );

@@ -1,4 +1,5 @@
 "use client";
+import { SafeImage } from "./safe-image";
 
 import { DetailNavigation } from "@/components/detail-navigation";
 import { useScrollMemory } from "@/lib/ui/scroll-memory";
@@ -146,6 +147,8 @@ export function DocPageView({
   const [error, setError] = useState<string | null>(null);
   const [side, setSide] = useState<"updates" | "comments" | null>(null);
   const [comments, setComments] = useState<PageComment[]>([]);
+  const mergeComments=(patch:PageComment[],bodyOnly=false)=>setComments(previous=>{const byId=new Map(previous.map(row=>[row.id,row]));for(const row of patch){const current=byId.get(row.id);if(bodyOnly){if(current&&current.editedAt===row.editedAt&&current.deletedAt===row.deletedAt)byId.set(row.id,{...current,body:row.body,bodyLoaded:true});}else byId.set(row.id,row);}return [...byId.values()].sort((a,b)=>a.createdAt.localeCompare(b.createdAt)||a.id.localeCompare(b.id));});
+  const refreshCommentIndex=(index:PageComment[])=>setComments(previous=>{const old=new Map(previous.map(row=>[row.id,row]));return index.map(row=>{const cached=old.get(row.id);return cached&&cached.editedAt===row.editedAt&&cached.deletedAt===row.deletedAt?{...row,body:cached.body,bodyLoaded:cached.bodyLoaded}:row;});});
   const [members, setMembers] = useState<Member[]>([]);
   const [located, setLocated] = useState<Set<string>>(new Set());
   const [draftAnchor, setDraftAnchor] = useDraft<DocAnchor | null>("document-comment-anchor",page.id,null);
@@ -270,7 +273,7 @@ export function DocPageView({
       if (!live) return;
       setCommentsLoading(false);
       if (!result.ok) {setCommentsError(result.error);return;}
-      setCommentsError(null);setComments(result.data.comments);
+      setCommentsError(null);refreshCommentIndex(result.data.comments);
       setMembers(result.data.members);
       if(requestedComment&&result.data.comments.some(comment=>comment.id===requestedComment)){setActiveComment(requestedComment);setSide("comments");}
     });
@@ -289,8 +292,8 @@ export function DocPageView({
     [comments]
   );
 
-  async function reloadComments(){setCommentsLoading(true);try{const result=await listPageCommentsAction(workspaceId,page.id);if(result.ok){setComments(result.data.comments);setCommentsError(null);}else setCommentsError(result.error);}catch{setCommentsError("Could not load comments. Retry.");}finally{setCommentsLoading(false);}}
-  async function commentAction(work:()=>Promise<{ok:boolean;data?:PageComment[];error?:string}>):Promise<boolean>{if(commentRunning.current)return false;commentRunning.current=true;setCommentBusy(true);try{const result=await work();if(!result.ok){setCommentsError(result.error??"Could not save. Retry.");return false;}if(result.data)setComments(result.data);setCommentsError(null);return true;}catch{setCommentsError("Could not save. Retry.");return false;}finally{commentRunning.current=false;setCommentBusy(false);}}
+  async function reloadComments(){setCommentsLoading(true);try{const result=await listPageCommentsAction(workspaceId,page.id);if(result.ok){refreshCommentIndex(result.data.comments);setCommentsError(null);}else setCommentsError(result.error);}catch{setCommentsError("Could not load comments. Retry.");}finally{setCommentsLoading(false);}}
+  async function commentAction(work:()=>Promise<{ok:boolean;data?:PageComment[];error?:string}>):Promise<boolean>{if(commentRunning.current)return false;commentRunning.current=true;setCommentBusy(true);try{const result=await work();if(!result.ok){setCommentsError(result.error??"Could not save. Retry.");return false;}if(result.data)mergeComments(result.data);setCommentsError(null);return true;}catch{setCommentsError("Could not save. Retry.");return false;}finally{commentRunning.current=false;setCommentBusy(false);}}
   async function addComment(body:string,parentId?:string){if(!body.trim())return false;const ok=await commentAction(()=>addPageCommentAction(workspaceId,page.id,{body,anchor:parentId?null:draftAnchor,parentId}));if(ok)setDraftAnchor(null);return ok;}
   async function resolveComment(id:string,resolved:boolean){await commentAction(()=>setPageCommentResolvedAction(workspaceId,page.id,id,resolved));}
   async function removeComment(id:string){if(!await confirm(t("Delete this comment? You can restore it here.")))return;await commentAction(()=>removePageCommentAction(workspaceId,page.id,id));}
@@ -668,7 +671,7 @@ export function DocPageView({
           {cover && (
             <div data-doc-cover className="group relative mb-4 h-40 overflow-hidden rounded-lg">
               {/* eslint-disable-next-line @next/next/no-img-element -- served by our own route, with its session check */}
-              <img src={`/api/files/${cover}`} alt="" className="h-full w-full object-cover" />
+              <SafeImage src={`/api/files/${cover}`} alt="" className="h-full w-full object-cover" />
               {canEdit && (
                 <div className="absolute right-2 top-2 flex gap-1 opacity-0 transition-opacity focus-within:opacity-100 group-hover:opacity-100">
                   <button
@@ -930,7 +933,7 @@ export function DocPageView({
       )}
       {side === "comments" && (
         <DocCommentsPanel
-          workspaceId={workspaceId} onChanged={setComments} onReload={()=>void reloadComments()} loading={commentsLoading} loadError={commentsError}
+          workspaceId={workspaceId} onChanged={mergeComments} onReload={()=>void reloadComments()} loading={commentsLoading} loadError={commentsError}
           pageId={page.id}
           comments={comments}
           members={members}
