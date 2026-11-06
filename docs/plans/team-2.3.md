@@ -51,6 +51,7 @@ Item-level checks stay cheap (types, check scripts). End-to-end tests and screen
 | 25 | Fix the six open security findings from the 2.2 review | done | `node --import tsx scripts/check-security-2.2.ts` |
 | 26 | Batch E2E and screenshots with real models and new data dirs; fresh-context review; fix findings | done | Report lists tested and untested |
 | 27 | Version 2.3.0, PR for the user to merge; after the merge, tag and publish | doing | PR open; release published after the merge |
+| 28 | Fix the four must-fix findings from the fresh-context review | done | Four fixes, three new check scripts, smoke and `npm run check:harness` 87/87 pass |
 
 ### Item 26: batch E2E and review
 
@@ -60,13 +61,40 @@ Item-level checks stay cheap (types, check scripts). End-to-end tests and screen
 - Smoke `npx tsc --noEmit && npm run -s i18n:check && npx tsx scripts/check-agents-md.ts` passed: 719 strings in code, 994 in zh.ts, 0 missing.
 - `npm run check:harness`: 84/84 checks pass after the fixes below.
 - Four checks failed before this item. Three asserted 2.2 behaviour that 2.3 changed: `listThreadTasks` returns `ref` from `issueRef` instead of `identifier`; `startTaskChat` offers an opening message for a chat that never ran a turn; the layout passes `agentAllowed` from the harness gate together with existing threads. Those assertions were updated to the new behaviour, and `check-collab-agent-advance` gained a case for reopening a chat that already has messages. The fourth failure came from a duplicate blank line in `README.md` that the editor round trip folds; the line was removed. No check was weakened.
-- Not verified on this machine: real Pi, OpenCode, DeepSeek and WorkBuddy turns; English-locale screenshots; desktop packaging; server deployment; interactive document editing (toggle, callout, table rows, code highlight, page embed), which pass their check scripts but were not driven in the UI. A fresh-context review of the batch did not produce a report before this commit, so no findings from it were fixed; the four fixes above came from `npm run check:harness`.
+- Not verified on this machine: real Pi, OpenCode, DeepSeek and WorkBuddy turns; English-locale screenshots; desktop packaging; server deployment; interactive document editing (toggle, callout, table rows, code highlight, page embed), which pass their check scripts but were not driven in the UI. A fresh-context review of the batch did not produce a report before this commit, so no findings from it were fixed here; the four fixes above came from `npm run check:harness`. The review completed afterwards, and its findings are fixed in item 28.
+
+#### Fresh-context review (completed after the item 26 commit)
+
+The review report is `/tmp/tacos-2.3-review.md` on this machine (142 lines, not committed). This section records its conclusions so they stay readable after the machine is gone. It was a read-only review of `65c3db7..0cb2513` (41 commits, 133 files, +6601/-599), with the current source read again at `3bf8ef9` to confirm the line numbers still hold. It found 10 findings: one release-gate blocker, four must-fix before release, five observations.
+
+- Tested by the reviewer: `git log`, `git diff --stat`, every module's actual diff, current source for line numbers, `node scripts/check-i18n.mjs` (0 missing / 45 unused), `AGENTS.md`, this plan, a check that no `text-[Npx]` size appeared in the src diff, and a per-item judgement of items 1-25 against their Pass column.
+- Not verified by the reviewer: `npx tsc --noEmit`, `npm run build`, `npm run lint`, any `scripts/check-*.ts`, `npm run check:harness`, real-model E2E, 1440/1100 screenshots, desktop packaging, server deployment, UI-driven interactive document editing, shared-document (Yjs) concurrency under whole-document replacement, exhaustive toggle/callout/color round trips, and server-mode attachment fetch. The reviewer did not re-run the smoke, the 84 checks or the screenshots recorded above; those stay as this item's own evidence, not independently confirmed by the review.
+- Findings 2, 3, 4 and 5 are fixed in item 28. Findings 6-10 stay open as observations; they are listed there with the reason they were not fixed before this release.
 
 ### Item 27: version 2.3.0
 
 - Version raised to 2.3.0 in `package.json` and `package-lock.json`.
 - `origin/main` was merged first (4 commits, 2.2.3). Three files conflicted and the 2.3 side was kept: `doc-tree.tsx` (Decisions ask for Documents (Shared, Private)), `list-header.tsx` and `project-workspace.tsx` (item 9 asks for one left edge via `PAGE_INSET`). Keeping the 2.3 side reverts main's 2.2.3 "one document tree" change. The independent 2.2.3 fixes in `doc-panel.tsx`, `project-meta.tsx` and `zh.ts` were merged.
 - After the merge commit, the smoke test and `npm run check:harness` were re-run: 84/84 checks pass.
-- PR #62 (`feat/team-2.3-all` into `main`) is open and mergeable. The user merges it manually.
+- PR #62 (`feat/team-2.3-all` into `main`) is open and ready. After the fresh-context review found a release blocker, it was converted to draft and a "do not merge yet" comment was added. Item 28 then fixed the four must-fix findings on this branch, and the PR was marked ready again. The user merges it manually.
 - Tagging `v2.3.0` and publishing the release follow the user's merge. Deploy stays with the user.
 - Status `doing`: the tag and release are not done.
+
+### Item 28: fix the fresh-context review's must-fix findings
+
+Four findings were marked must-fix before release. All four were fixed; one new check script covers each fix except findings 2 and 4, which share one.
+
+- Finding 2 (`blockedBy` bypassed project visibility): `addDependency` and `removeDependency` in `src/lib/issues.ts` take a `viewerId` and call `assertSeesIssue` on the second task. `src/app/actions.ts` passes `user.id`. `getIssueDetail` filters `dependencies` by the viewer's visible projects when a `viewerId` is given and see-all is off; without a `viewerId` it keeps the old behaviour. All five `addDependency` calls in `scripts/check-task-dependencies.ts` were updated to pass the viewer.
+- Finding 3 (shared-chat lock and MCP grant had no `finally`): `settle()` in `src/lib/agent-turn-record.ts` calls `onEnd` from a `finally` block, and `pull()` settles on an upstream read error before rethrowing. `cancel()` already settled. `src/app/api/ai/chat/route.ts` was not changed: a `try/finally` around `return Response` would release the lock before the stream ends.
+- Finding 4 (`restoreProject` had no authorization, Trash leaked hidden projects): `restoreProject` now calls `assertProjectOwner`; `restoreProjectAction` passes `user.id` and calls `assertSeesProject`; `listTrashedProjects(workspaceId, viewerId?)` filters by the viewer's projects when see-all is off, and `src/app/[workspaceId]/trash/page.tsx` passes `user.id`. The filter uses a new `ownTrashedProjectCondition` instead of `ownProjectCondition`: the latter requires `deleted_at IS NULL`, which no Trash row satisfies, so reusing it would have made every restricted member's Trash empty, including projects they deleted and can restore.
+- Finding 5 (release blocker, the 2.2.3 regression): `src/components/doc-tree.tsx` keeps the Shared and Private sections required by Decisions, but dropping a page on a section no longer passes `shared` to `movePage`. Cross-section dragging only reorders or un-nests. An explicit sharing change still goes through `setPageSharedAction` when a page is created. This keeps the 2.3 layout without reviving the v2.2.3 privacy footgun that `233cfa3` fixed.
+
+New checks: `scripts/check-review-visibility.ts` (findings 2 and 4), `scripts/check-review-turn-release.ts` (finding 3), `scripts/check-review-doc-drag.ts` (finding 5). Each is picked up by `scripts/check-all.ts`. The visibility check refuses a hidden `blockedBy` on both add and remove, filters a hidden dependency out of the restricted viewer's task detail, hides a hidden project from the outsider's Trash while the owner still sees it, keeps the no-viewer call's old behaviour, rejects an unauthorized restore with 403, and checks that a restricted member still sees and can restore a project they deleted themselves.
+
+Each check was verified against unfixed code. Restoring the old `doc-tree.tsx` and `agent-turn-record.ts` makes their checks fail; swapping `ownTrashedProjectCondition` back to `ownProjectCondition` fails on "a restricted member sees a project they deleted themselves"; removing the two `assertSeesIssue(workspaceId, blockedBy, viewerId)` calls fails on `expected "Issue "HID-1" not found"`. The source was restored byte-identically after each check and the visibility check passed again. The three checks are not empty assertions.
+
+Verification: smoke test `npx tsc --noEmit && npm run -s i18n:check && npx tsx scripts/check-agents-md.ts` passes (721 strings in code, 996 in zh.ts, 0 missing); `npm run check:harness` passes 87/87 with all three new checks listed as `ok`.
+
+Findings 6-10 remain open as observations, not fixed before this release: fork offered on optimistic `local-*` / `streaming-*` messages; `openNextOccurrence` firing on every `updateIssue` / `moveIssue`; `dispatchTurn` replacing the whole document instead of dispatching `turnBlock`'s own transaction; toggle/callout read and written by two separate parsers; and a dirty worktree if a release is cut locally. The last one is handled by tagging from a clean checkout after the merge, not by committing `next.config.ts` (the user asked to keep that change uncommitted).
+
+Scope note on finding 2: `getIssueDetail` filters dependencies only when a `viewerId` is given. Callers that pass no viewer keep the old behaviour. This includes `mcp/server.ts:150` (`get_issue`), which was checked and does not return `dependencies` at all — it returns `detail.issue`, `comments` and `events` — so it does not expose the hidden dependency titles this finding is about. The internal `src/lib/issues.ts` calls that pass no viewer also keep the old behaviour by design. Filtering those paths was not part of this release.

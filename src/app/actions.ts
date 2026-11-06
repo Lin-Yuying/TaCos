@@ -206,7 +206,7 @@ export async function addDependencyAction(workspaceId: string, idOrIdentifier: s
   return run<IssueDetail>(async () => {
     const { user } = await requireWorkspace(workspaceId);
     await assertSeesIssue(workspaceId, idOrIdentifier, user.id);
-    const detail = await addDependency(workspaceId, idOrIdentifier, blockedBy, userActor(user));
+    const detail = await addDependency(workspaceId, idOrIdentifier, blockedBy, user.id, userActor(user));
     refresh(workspaceId);
     return detail;
   });
@@ -216,7 +216,7 @@ export async function removeDependencyAction(workspaceId: string, idOrIdentifier
   return run<IssueDetail>(async () => {
     const { user } = await requireWorkspace(workspaceId);
     await assertSeesIssue(workspaceId, idOrIdentifier, user.id);
-    const detail = await removeDependency(workspaceId, idOrIdentifier, blockedBy, userActor(user));
+    const detail = await removeDependency(workspaceId, idOrIdentifier, blockedBy, user.id, userActor(user));
     refresh(workspaceId);
     return detail;
   });
@@ -415,8 +415,9 @@ export async function trashProjectAction(workspaceId: string, projectId: string)
 
 export async function restoreProjectAction(workspaceId: string, projectId: string) {
   return run<void>(async () => {
-    await requireWorkspace(workspaceId);
-    await restoreProject(workspaceId, projectId);
+    const { user } = await requireWorkspace(workspaceId);
+    await assertSeesProject(workspaceId, projectId, user.id);
+    await restoreProject(workspaceId, projectId, user.id);
     refresh(workspaceId);
   });
 }

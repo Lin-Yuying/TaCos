@@ -27,7 +27,7 @@ async function View({ params }: { params: Promise<{ workspaceId: string }> }) {
   if (!user) redirect("/login");
   const ctx = await requireWorkspace(workspaceId);
   const [projects, issues, docs] = await Promise.all([
-    listTrashedProjects(workspaceId),
+    listTrashedProjects(workspaceId, user.id),
     listTrashedIssues(workspaceId),
     listTrashedPages(workspaceId, user.id),
   ]);

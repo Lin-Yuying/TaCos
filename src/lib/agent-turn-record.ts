@@ -74,27 +74,39 @@ export function recordTurn(
   const settle = async () => {
     if (settled) return;
     settled = true;
-    await queue;
-    await (text.trim() ? updateAgentMessage(turn.messageId, text) : removeAgentMessage(turn.messageId));
-    turn.onEnd?.();
+    try {
+      await queue;
+      await (text.trim() ? updateAgentMessage(turn.messageId, text) : removeAgentMessage(turn.messageId));
+    } finally {
+      // The shared-chat lock and the per-turn MCP grant are released here. A failed
+      // database write must still let them go, otherwise the next sender is stuck.
+      turn.onEnd?.();
+    }
   };
 
   return new ReadableStream<Uint8Array>({
     async pull(controller) {
-      const { value, done } = await reader.read();
-      if (done) {
-        if (buffer.trim()) consume(buffer);
+      try {
+        const { value, done } = await reader.read();
+        if (done) {
+          if (buffer.trim()) consume(buffer);
+          await settle();
+          controller.close();
+          return;
+        }
+        controller.enqueue(value);
+        buffer += decoder.decode(value, { stream: true });
+        let index = buffer.indexOf("\n\n");
+        while (index >= 0) {
+          consume(buffer.slice(0, index));
+          buffer = buffer.slice(index + 2);
+          index = buffer.indexOf("\n\n");
+        }
+      } catch (err) {
+        // An upstream error never reaches the done branch, so settle here as well
+        // to release the lock and grant before the failure propagates downstream.
         await settle();
-        controller.close();
-        return;
-      }
-      controller.enqueue(value);
-      buffer += decoder.decode(value, { stream: true });
-      let index = buffer.indexOf("\n\n");
-      while (index >= 0) {
-        consume(buffer.slice(0, index));
-        buffer = buffer.slice(index + 2);
-        index = buffer.indexOf("\n\n");
+        throw err;
       }
     },
     async cancel() {

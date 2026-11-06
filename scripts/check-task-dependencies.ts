@@ -28,22 +28,22 @@ async function main() {
   const second = await createIssue(ws, { title: "Second", project: project.key }, actor);
   const third = await createIssue(ws, { title: "Third", project: project.key }, actor);
 
-  const linked = await addDependency(ws, first.issue.id, second.issue.identifier, actor);
+  const linked = await addDependency(ws, first.issue.id, second.issue.identifier, user.id, actor);
   assert(linked.blocked, "an open dependency blocks the task");
   assert(linked.dependencies.some((item) => item.id === second.issue.id), "the blocking task is listed");
 
   let loop = false;
   try {
-    await addDependency(ws, second.issue.id, first.issue.identifier, actor);
+    await addDependency(ws, second.issue.id, first.issue.identifier, user.id, actor);
   } catch (err) {
     loop = err instanceof Error && err.message === "That dependency would loop";
   }
   assert(loop, "a two-task loop is refused");
 
-  await addDependency(ws, second.issue.id, third.issue.identifier, actor);
+  await addDependency(ws, second.issue.id, third.issue.identifier, user.id, actor);
   let longer = false;
   try {
-    await addDependency(ws, third.issue.id, first.issue.identifier, actor);
+    await addDependency(ws, third.issue.id, first.issue.identifier, user.id, actor);
   } catch (err) {
     longer = err instanceof Error && err.message === "That dependency would loop";
   }
@@ -51,7 +51,7 @@ async function main() {
 
   let self = false;
   try {
-    await addDependency(ws, first.issue.id, first.issue.identifier, actor);
+    await addDependency(ws, first.issue.id, first.issue.identifier, user.id, actor);
   } catch (err) {
     self = err instanceof Error && err.message === "A task cannot depend on itself";
   }

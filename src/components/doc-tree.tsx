@@ -171,7 +171,7 @@ function DocSection({
   const [over, setOver] = useState(false);
 
   // The whole section is a drop target: letting go on its heading or empty space moves the
-  // page to the top level here, and shares or unshares it to match.
+  // page to the top level here (reorder / un-nest) without changing its sharing.
   useEffect(() => {
     const element = ref.current;
     if (!element) return;
@@ -301,7 +301,7 @@ export function DocTree({ workspaceId, pages }: { workspaceId: string; pages: Pa
           const pageId = source.data.pageId as string;
           if (!target) return;
           if (typeof target.data.sectionShared === "boolean") {
-            void moveRef.current(pageId, { parentId: null, beforeId: null, shared: target.data.sectionShared });
+            void moveRef.current(pageId, { parentId: null, beforeId: null });
             return;
           }
           const rowId = target.data.rowId as string;

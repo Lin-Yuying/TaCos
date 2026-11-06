@@ -748,6 +748,21 @@ function ownProjectCondition(viewerId: string) {
   )`;
 }
 
+// Trash lists deleted projects, so ownProjectCondition's `deleted_at IS NULL`
+// can never match here. Keep its ownership rule without that clause, so a
+// member still sees and can restore projects they deleted themselves.
+function ownTrashedProjectCondition(viewerId: string) {
+  return sql`EXISTS (
+    SELECT 1 FROM projects trashed
+    WHERE trashed.id = ${projects.id} AND (
+      trashed.created_by = ${viewerId} OR EXISTS (
+        SELECT 1 FROM project_members trashed_member
+        WHERE trashed_member.project_id = trashed.id AND trashed_member.user_id = ${viewerId}
+      )
+    )
+  )`;
+}
+
 function ownIssueProjectCondition(viewerId: string) {
   return sql`EXISTS (
     SELECT 1 FROM projects visible
@@ -800,7 +815,11 @@ export async function assertSeesIssue(workspaceId: string, idOrIdentifier: strin
 
 export type TrashedProject = Project & { deletedAt: string; issueCount: number };
 
-export async function listTrashedProjects(workspaceId: string): Promise<TrashedProject[]> {
+export async function listTrashedProjects(workspaceId: string, viewerId?: string): Promise<TrashedProject[]> {
+  const conditions = [eq(projects.workspaceId, workspaceId), isNotNull(projects.deletedAt)];
+  if (viewerId && !(await seesAllTasks(workspaceId, viewerId))) {
+    conditions.push(ownTrashedProjectCondition(viewerId));
+  }
   const rows = await getDb()
     .select({
       ...projectColumns,
@@ -808,7 +827,7 @@ export async function listTrashedProjects(workspaceId: string): Promise<TrashedP
       issueCount: sql<number>`(SELECT COUNT(*) FROM issues WHERE issues.project_id = ${projects.id})`,
     })
     .from(projects)
-    .where(and(eq(projects.workspaceId, workspaceId), isNotNull(projects.deletedAt)))
+    .where(and(...conditions))
     .orderBy(sql`${projects.deletedAt} DESC`);
   return rows.map((row) => ({ ...row, deletedAt: row.deletedAt!, issueCount: Number(row.issueCount) }));
 }
@@ -1048,7 +1067,8 @@ export async function trashProject(workspaceId: string, projectId: string, userI
     );
 }
 
-export async function restoreProject(workspaceId: string, projectId: string) {
+export async function restoreProject(workspaceId: string, projectId: string, userId: string) {
+  await assertProjectOwner(workspaceId, projectId, userId);
   await getDb()
     .update(projects)
     .set({ deletedAt: null })
@@ -2105,6 +2125,7 @@ export async function getIssueDetail(
       identifier: issues.identifier,
       title: issues.title,
       status: issues.status,
+      projectId: issues.projectId,
     })
     .from(issueDependencies)
     .innerJoin(issues, eq(issues.id, issueDependencies.blockedById))
@@ -2115,12 +2136,17 @@ export async function getIssueDetail(
         ne(issues.reviewStatus, "rejected")
       )
     );
-  const dependencies = dependencyRows.map((item) => ({
-    id: item.id,
-    identifier: item.identifier,
-    title: item.title,
-    status: item.status as Status,
-  }));
+  const restrictDependencies = viewerId ? !(await seesAllTasks(workspaceId, viewerId)) : false;
+  const dependencies: TaskDependency[] = [];
+  for (const item of dependencyRows) {
+    if (restrictDependencies && !(await getProject(workspaceId, item.projectId, viewerId))) continue;
+    dependencies.push({
+      id: item.id,
+      identifier: item.identifier,
+      title: item.title,
+      status: item.status as Status,
+    });
+  }
   return {
     issue: withLabels,
     comments: commentRows.map((c) => ({
@@ -2918,12 +2944,14 @@ export async function addDependency(
   workspaceId: string,
   idOrIdentifier: string,
   blockedBy: string,
+  viewerId: string,
   actor: MutationActor
 ): Promise<IssueDetail> {
   const row = await findIssueRow(workspaceId, idOrIdentifier);
   if (!row) throw new TacosError(`Issue "${idOrIdentifier}" not found`, 404);
   const blocker = await findIssueRow(workspaceId, blockedBy);
   if (!blocker) throw new TacosError(`Issue "${blockedBy}" not found`, 404);
+  await assertSeesIssue(workspaceId, blockedBy, viewerId);
   if (row.id === blocker.id) throw new TacosError("A task cannot depend on itself", 400);
   if (await dependencyLoops(row.id, blocker.id)) throw new TacosError("That dependency would loop", 400);
   const db = getDb();
@@ -2940,7 +2968,7 @@ export async function addDependency(
     });
     await recordEvent(row.id, "dependency_added", { task: blocker.identifier }, actor);
   }
-  const detail = await getIssueDetail(workspaceId, row.id);
+  const detail = await getIssueDetail(workspaceId, row.id, viewerId);
   if (!detail) throw new TacosError("Issue disappeared while updating", 500);
   return detail;
 }
@@ -2949,12 +2977,14 @@ export async function removeDependency(
   workspaceId: string,
   idOrIdentifier: string,
   blockedBy: string,
+  viewerId: string,
   actor: MutationActor
 ): Promise<IssueDetail> {
   const row = await findIssueRow(workspaceId, idOrIdentifier);
   if (!row) throw new TacosError(`Issue "${idOrIdentifier}" not found`, 404);
   const blocker = await findIssueRow(workspaceId, blockedBy);
   if (!blocker) throw new TacosError(`Issue "${blockedBy}" not found`, 404);
+  await assertSeesIssue(workspaceId, blockedBy, viewerId);
   const removed = await getDb()
     .delete(issueDependencies)
     .where(and(eq(issueDependencies.issueId, row.id), eq(issueDependencies.blockedById, blocker.id)))
@@ -2962,7 +2992,7 @@ export async function removeDependency(
   if (removed.length > 0) {
     await recordEvent(row.id, "dependency_removed", { task: blocker.identifier }, actor);
   }
-  const detail = await getIssueDetail(workspaceId, row.id);
+  const detail = await getIssueDetail(workspaceId, row.id, viewerId);
   if (!detail) throw new TacosError("Issue disappeared while updating", 500);
   return detail;
 }
