@@ -59,8 +59,8 @@ Areas deep-dived by rounds, with their reference products:
 | 1 | Product surface + sharing/permissions | Notion, Linear, Google Drive, Confluence, GitHub, Figma | done → `sharing-permissions.md` |
 | 2 | Tasks/views/planning/insights | Linear, Asana, ClickUp | done for planning/insights → `planning.md`, `insights.md`; the views/task-UX slice is U-09 |
 | 3 | Docs/search/collaboration/notifications | Notion, Linear, GitHub, Google Docs, Slack | done → `docs-knowledge.md`, `search.md`, `collaboration.md`; notifications covered by #78 (in-app), U-11 (collab) and U-08 (channels) |
-| 4 | Agent/automations/platform | Claude Code/Agent SDK, Codex, Cursor, OpenHands, A2A, MCP | next |
-| 5 | Enterprise/desktop/import-export/channels | Linear/Notion enterprise, GitHub, mobile-first tools | later |
+| 4 | Agent/automations/platform, views/task UX, self-host ops | A2A, MCP, Claude/Codex, Linear, GitHub, desktop/self-host best practice | done → `external-agents.md`, `views-task-ux.md`, `self-host-ops.md` |
+| 5 | Enterprise/import-export/channels | Linear members/roles + audit log, Notion enterprise, GitHub, notification channels | done → `enterprise-governance.md`, `import-export.md`, `channels-mobile.md` |
 
 ## 3. Gap and priority matrix
 
@@ -76,11 +76,11 @@ value; P2 later / depends on other work.
 | Search | FTS covers docs/tasks/comments only; no filters/scopes/page | P2 | U-10 |
 | Collaboration depth | Task comments flat; no follow/watchers; no workspace activity feed | P2 | U-11 |
 | Import/export & portability | No workspace export/import | P2 (anti-lock-in, pairs with enterprise) | U-05 |
+| Desktop & self-host ops | No health/diagnostics, backup restore UX, update channels | P2 (operational trust) | U-12 |
 | Enterprise & governance | No SSO/OIDC, audit UI, retention, admin console | P2 (when team grows or TaCos is shared externally) | U-06 |
-| External agent platform | No A2A/registry/external agents | P2 (after #80 automations) | U-07 |
+| External agent platform | No A2A/registry/external agents | P2 (after #80) | U-07 |
 | Channels & mobile | No email/push/PWA/mobile | P2/P3 | U-08 |
 | Views & task UX | Personal saved views only; no shared views/subscriptions/display options | P2 (can pull forward) | U-09 |
-| Search & command palette | Partial; no unified search | P2 (can fold into U-04 or a small PR) | — |
 
 ## 4. Upcoming PR sequence
 
@@ -125,38 +125,46 @@ entities. Block/database editing stays out.
 
 ### U-05 — Import, export and data portability
 
-Scope: workspace export (JSON/markdown/attachments), import from Notion/
-Linear/Markdown, backup/restore UX. Pairs with enterprise governance and
-prevents lock-in.
+Plan: `docs/plans/import-export.md`.
+Scope: canonical workspace export (JSON + markdown docs + task CSV +
+attachments zip), import from Notion/Markdown/Linear CSV with dry-run mapping,
+owner/admin-only API/CLI export, audit and no secrets in output. Pairs with U-12
+backup UX and U-06 governance; prevents lock-in.
 
 ### U-06 — Enterprise and governance
 
-Scope: SSO/OIDC, SCIM or invite domain controls, project-level admin and
-permission templates, admin audit UI, retention policy, data residency/export,
-security settings. Do when the team or customers need it.
+Plan: `docs/plans/enterprise-governance.md`.
+Scope: OIDC SSO (SAML/SCIM follow-ups), domain auto-join/SCIM provisioning,
+role matrix, owner/admin security audit log (90 days default, filter/API/
+webhook), retention policies, session controls and an admin console. Do when
+the team or customers need it.
 
 ### U-07 — External agent platform
 
-Scope: A2A server/client support, agent registry and discovery, permissions for
-external agents, plugin/marketplace seed. Depends on U-05/U-06 for governance
-and #80 for action targets.
+Plan: `docs/plans/external-agents.md`.
+Scope: external agent registry (Agent Card discovery, auth, project scope),
+A2A client for delegation with streaming/push, optional minimal A2A server to
+expose TaCos tasks to an orchestrator, permissions and audit. Depends on #79,
+#77, #80 and U-01; OAuth/enterprise federation later.
 
 ### U-08 — Channels and mobile
 
-Scope: email notifications, push, PWA/mobile-friendly shell, notification
-preferences per channel. Can be pulled earlier if the team works away from the
-desktop app.
+Plan: `docs/plans/channels-mobile.md`.
+Scope: per-event channel preferences (in-app/email/push/Slack), SMTP delivery
+with queue/retries/unsubscribe, web push + installable PWA (native apps later),
+quiet hours and digest, read-state sync. Can be pulled earlier if the team works
+away from the desktop app.
 
 ### U-09 — Views and task UX
 
-Plan: to be written in a later round (template in `docs/plans/_template.md`).
-Benchmarks: Linear Custom Views (shared views, view subscriptions, contextual
-views, grouping/display options), Asana saved views.
+Plan: `docs/plans/views-task-ux.md`.
+Benchmarks: Linear Custom Views + Display options, GitHub Projects views, Asana
+saved views.
 Scope: shared workspace/project views (today `personal_task_views` is
-per-user), saved-view subscriptions and notifications, display options
-(grouping/ordering/fields), view-level Slack/webhook notifications once #80
-lands, and quick filters/polish for table/calendar. Small-to-medium; can be
-pulled forward after U-01 because it improves every other feature.
+per-user), view subscriptions, display options (layout/grouping/ordering/
+property visibility/defaults), bulk edit, task templates, optional estimate
+field needed by U-03. Small-to-medium; can be pulled forward because it improves
+every other feature.
 
 ### U-10 — Unified search and command palette
 
@@ -177,6 +185,16 @@ already have threads/quotes/resolve), explicit follow/unfollow with watchers
 (auto-follow on create/assign/mention/comment), a workspace activity feed, and
 review comments attached to the review state (agent review from #79 reuses it).
 Presence is docs-only today; acceptable.
+
+### U-12 — Desktop and self-host operations
+
+Plan: `docs/plans/self-host-ops.md`.
+Benchmarks: desktop update/diagnostics practices (VS Code, Linear, Obsidian) and
+self-host backup/health/upgrade practices.
+Scope: System health/diagnostics page + bundle, verified backup/restore UI and
+pre-upgrade backup, desktop update channel/notes/rollback guidance, admin
+runner/tunnel status, server upgrade preflight/rollback. Signing/notarization
+certificates stay with the owner.
 
 ### Small continuous PRs
 
@@ -209,26 +227,51 @@ Round 3 (done): docs knowledge (`docs-knowledge.md`), unified search
 (`search.md`) and collaboration depth (`collaboration.md`); notifications are
 covered by #78 (in-app), U-11 (comments/follow) and U-08 (channels).
 
-Round 4 (next): agent/automations/platform; reconcile with #79/#80, write the
-external agent platform (A2A/registry) plan and a desktop/self-host operations
-plan if useful.
+Round 4 (done): external agents/platform (`external-agents.md`), views and task
+UX (`views-task-ux.md`), desktop/self-host operations (`self-host-ops.md`).
 
-Round 5: enterprise/import-export/channels and any remaining area plans.
+Round 5 (done): enterprise/governance (`enterprise-governance.md`), import/
+export (`import-export.md`), channels/mobile (`channels-mobile.md`).
 
-Round 6: consolidate, finalize the PR sequence and implementation orders, then
-mark the loop complete. Implementation starts only after the owner approves the
-plans.
+Round 6 (next): consolidate the PR sequence and implementation waves below,
+verify every area has a plan, then mark the loop complete. Implementation starts
+only after the owner approves the plans.
+
+## 6. Implementation order (recommended waves)
+
+The plans are written; the owner still chooses the order. Recommended waves
+respect dependencies and put value early:
+
+1. **Foundation (small, independent)**: #78 Inbox → #77 Agent access → U-01
+   sharing/permissions.
+2. **Agent and automation value**: #79 Agent → #80 automations/integrations →
+   U-09 views/task UX.
+3. **Knowledge and flow**: U-04 documents → U-10 search → U-11 collaboration →
+   U-03 planning.
+4. **Insight and operations**: U-02 insights → U-05 import/export → U-12
+   desktop/self-host ops.
+5. **Enterprise and platform**: U-06 enterprise/governance → U-07 external
+   agents → U-08 channels/mobile.
+
+Each implementation PR references its plan document, updates the plan status,
+ships one item per commit, and must pass the smoke test, `check:harness`, build
+and the checks named in the plan.
 
 All plans live in this draft PR (#81) until implementation is approved; each
 plan's status is updated when its implementation PR starts.
 
-## 6. Open decisions for the owner
+## 7. Open decisions for the owner
 
-1. Confirm U-01 (sharing/permissions) as the next planned block after
-   #77-#80, or move U-02/U-03 ahead.
-2. Scope of U-01: internal-only sharing first, or external guests + public
-   links in the same PR?
-3. Should private projects be part of U-01 or a separate smaller PR?
-4. Import/export: before or after enterprise governance?
-5. How many deep-dive rounds before implementation starts: continue the loop
-   until every area has a plan (recommended), or stop after the next few.
+All areas now have a plan; these are the choices before implementation starts.
+
+1. Approve the recommended implementation waves above, or reorder them.
+2. U-01 (sharing/permissions) scope: internal-only sharing first, or external
+   guests + public links in the same PR?
+3. U-01: should private projects be part of it or a separate smaller PR?
+4. U-03 cycles scope: workspace-wide or per-project?
+5. U-08 channels: email first or PWA/web push first?
+6. U-06 SSO: OIDC only first or SAML too?
+7. U-07 external agents: client + registry only, or also the A2A server?
+8. U-12: are code-signing/notarization certificates available (owner action)?
+
+Plan PRs are draft #77-#81; no code has been written.
