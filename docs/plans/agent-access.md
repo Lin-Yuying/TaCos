@@ -143,13 +143,15 @@ Commit 1 — API keys: scopes, project allowlist, expiry, rotation, rate limits.
   read-only or out-of-project request with 403. Expired/revoked keys return 401.
 - Project allowlist: `project_ids` limits list results and rejects writes to
   other projects. `null` keeps full access for legacy and new "all projects"
-  keys.
-- Expiry: choice of 30 / 90 / 365 days, default 90; legacy keys and
-  explicitly-created "never" keys stay without expiry only for admins (pending
-  decision). `expires_at` checked in `verifyApiKey`.
+  keys; the create form defaults to "All projects" and does **not** force a
+  selection, so a key can still mean the whole workspace.
+- Expiry: choice of 30 / 90 / 365 days, default 90; "never expires" is
+  admin-only, and legacy keys keep no expiry. `expires_at` checked in
+  `verifyApiKey`.
 - Rotation: "Rotate" creates a replacement with the same name/scopes/projects,
   shows it once, revokes the old key in the same transaction, records
-  `rotated_from`.
+  `rotated_from`. **The old key dies immediately; there is no grace window in
+  this PR** (a delayed-expiry rotation stays a follow-up if a consumer needs it).
 - Rate limits: per-key in-memory token bucket — 120 reads/min and 60
   writes/min, burst 20; 429 with `Retry-After`. Single-process by design; the
   team server runs one Next.js process, like the existing badge polling.
@@ -260,6 +262,10 @@ Commit 4 — checks, docs, i18n.
 - Keep the current 10 MCP tool names and input schemas; only add annotations,
   cursor pagination, output schemas and read-only filtering.
 - No OAuth in this PR; bearer API keys only.
+- Rotation revokes the old key immediately (no grace window).
+- The project allowlist is optional; no selection means all projects.
+- Last used time and IP are shown in the key table (stored, not used for
+  enforcement).
 
 ## Files the PR touches
 
