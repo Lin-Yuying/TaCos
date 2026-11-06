@@ -1,30 +1,24 @@
-import { assertKeyIssueProject, assertKeyProjectId, errorResponse, readJsonBody, requireApiKey } from "@/lib/api-auth";
+import {
+  apiActor,
+  assertKeyIssueProject,
+  assertKeyProjectId,
+  errorResponse,
+  readJsonBody,
+  requireApiKey,
+} from "@/lib/api-auth";
 import { parseLabelNames, parsePriority, parseStatus } from "@/lib/api-input";
+import { issueDetailPayload } from "@/lib/api-issues";
 import {
   assertSeesIssue,
   deleteIssue,
   getIssueDetail,
-  PRIORITY_NAMES,
-  TacosError,
-  resolveAssigneeId,
   resolveAssigneeIds,
+  TacosError,
   updateIssue,
 } from "@/lib/issues";
-import type { ReminderPreset } from "@/lib/constants";
+import type { Recurrence, ReminderPreset } from "@/lib/constants";
 
 type Ctx = { params: Promise<{ id: string }> };
-
-function flatDetail(detail: NonNullable<Awaited<ReturnType<typeof getIssueDetail>>>) {
-  return {
-    ...detail.issue,
-    priorityLabel: PRIORITY_NAMES[detail.issue.priority],
-    comments: detail.comments,
-    events: detail.events,
-    children: detail.children,
-    dependencies: detail.dependencies,
-    blocked: detail.blocked,
-  };
-}
 
 export async function GET(req: Request, ctx: Ctx) {
   try {
@@ -33,7 +27,7 @@ export async function GET(req: Request, ctx: Ctx) {
     const detail = await getIssueDetail(key.workspaceId, id, key.createdBy);
     if (!detail) throw new TacosError(`Issue "${id}" not found`, 404);
     assertKeyProjectId(key, detail.issue.projectId, detail.issue.projectKey);
-    return Response.json(flatDetail(detail));
+    return Response.json(await issueDetailPayload(key.workspaceId, detail));
   } catch (err) {
     return errorResponse(err);
   }
@@ -88,10 +82,16 @@ export async function PATCH(req: Request, ctx: Ctx) {
             : typeof body.parent === "string"
               ? body.parent
               : null,
+        recurrence:
+          body.recurrence === undefined
+            ? undefined
+            : typeof body.recurrence === "string" && body.recurrence.trim() !== ""
+              ? (body.recurrence as Recurrence)
+              : null,
       },
-      { kind: "agent", label: `api:${key.name}`, via: "api" }
+      apiActor(key)
     );
-    return Response.json(flatDetail(detail));
+    return Response.json(await issueDetailPayload(key.workspaceId, detail));
   } catch (err) {
     return errorResponse(err);
   }
@@ -106,6 +106,7 @@ export async function DELETE(req: Request, ctx: Ctx) {
     const deleted = await deleteIssue(key.workspaceId, id);
     return Response.json({
       deleted: { id: deleted.id, identifier: deleted.identifier, title: deleted.title },
+      trashed: true,
     });
   } catch (err) {
     return errorResponse(err);
