@@ -122,8 +122,8 @@ async function main() {
   const names = tools.map((tool) => tool.name).sort();
   assert(
     names.join(",") ===
-      "add_comment,add_dependency,claim_issue,create_issue,create_label,create_project,delete_issue,get_issue,get_project,list_issues,list_labels,list_members,list_project_tasks,list_projects,release_issue,remove_dependency,report_blocker,restore_issue,set_review_state,set_task_fields,update_issue,update_project",
-    `all twenty-two tools registered: ${names.join(",")}`
+      "add_comment,add_dependency,add_page_comment,claim_issue,create_issue,create_label,create_page,create_project,delete_issue,get_issue,get_page,get_project,list_issues,list_labels,list_members,list_page_comments,list_pages,list_project_tasks,list_projects,release_issue,remove_dependency,report_blocker,restore_issue,set_review_state,set_task_fields,update_issue,update_page,update_project",
+    `all twenty-eight tools registered: ${names.join(",")}`
   );
   const listIssues = tools.find((tool) => tool.name === "list_issues");
   const deleteIssue = tools.find((tool) => tool.name === "delete_issue");
@@ -172,7 +172,7 @@ async function main() {
   const readClient = await connect(reader.key);
   const readNames = (await readClient.listTools()).tools.map((tool) => tool.name).sort();
   assert(
-    readNames.join(",") === "get_issue,get_project,list_issues,list_labels,list_members,list_project_tasks,list_projects",
+    readNames.join(",") === "get_issue,get_page,get_project,list_issues,list_labels,list_members,list_page_comments,list_pages,list_project_tasks,list_projects",
     `read-only key serves only read tools: ${readNames.join(",")}`
   );
   const denied = await readClient.callTool({
@@ -265,7 +265,7 @@ async function main() {
   await readClient.close();
   await scopedClient.close();
   console.log(
-    "check-mcp-http: pass (22 tools, annotations, output schema, cursor pagination, mixed-case labels, read-only rejection, project allowlist, task visibility, batch rate limit, 401)"
+    "check-mcp-http: pass (28 tools, annotations, output schema, cursor pagination, mixed-case labels, read-only rejection, project allowlist, task visibility, batch rate limit, 401)"
   );
 }
 

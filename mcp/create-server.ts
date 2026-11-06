@@ -39,6 +39,18 @@ import {
 } from "../src/lib/issues";
 import { listIssueFieldValues, setTaskFieldValuesByName } from "../src/lib/task-fields";
 import type { Recurrence } from "../src/lib/constants";
+import { addPageComment, listPageComments } from "../src/lib/page-comments";
+import {
+  createPage,
+  getPage,
+  getPageUnfiltered,
+  listAllPageSummaries,
+  listPageSummaries,
+  pageAuthor,
+  updatePage,
+  type DocPage,
+} from "../src/lib/pages";
+import { pageLimit, paginateList, paginateListDesc } from "../src/lib/pagination";
 
 export type McpActor = { kind: "agent"; label: string; via: "api" | "mcp" };
 
@@ -66,6 +78,9 @@ export const MCP_READ_TOOL_NAMES = [
   "list_members",
   "get_project",
   "list_project_tasks",
+  "list_pages",
+  "get_page",
+  "list_page_comments",
 ] as const;
 
 export const MCP_WRITE_TOOL_NAMES = [
@@ -84,13 +99,14 @@ export const MCP_WRITE_TOOL_NAMES = [
   "set_review_state",
   "report_blocker",
   "restore_issue",
+  "create_page",
+  "update_page",
+  "add_page_comment",
 ] as const;
 
 const STATUS_HELP =
   "todo, in_progress, done, canceled (aliases like 'in progress', 'completed', 'cancelled' also work)";
 const PRIORITY_HELP = "none (0), low (1), medium (2), high (3), urgent (4)";
-const PAGE_DEFAULT = 50;
-const PAGE_MAX = 200;
 
 function ok(data: Record<string, unknown>) {
   return {
@@ -127,52 +143,6 @@ function parsePriority(value?: string | number): Priority | undefined {
 
 function compareText(a: string, b: string): number {
   return a < b ? -1 : a > b ? 1 : 0;
-}
-
-function pageLimit(value: number | undefined, fallback = PAGE_DEFAULT): number {
-  return Math.min(PAGE_MAX, Math.max(1, Math.trunc(value ?? fallback)));
-}
-
-type ListCursor = { k: string; id: string };
-
-function encodeCursor(cursor: ListCursor): string {
-  return Buffer.from(JSON.stringify(cursor)).toString("base64url");
-}
-
-function decodeCursor(raw: string): ListCursor {
-  try {
-    const value = JSON.parse(Buffer.from(raw, "base64url").toString("utf8")) as ListCursor;
-    if (typeof value.k !== "string" || typeof value.id !== "string") throw new Error();
-    return value;
-  } catch {
-    throw new Error("Invalid cursor. Use the nextCursor value returned by the previous call.");
-  }
-}
-
-// Keyset pagination over an in-memory, deterministically sorted list. The cursor names
-// the last row's stable sort key and id, so deleting that row between pages still
-// resumes at the next one.
-function paginate<T>(
-  items: T[],
-  limit: number,
-  cursor: string | undefined,
-  key: (item: T) => ListCursor,
-  compare: (a: T, b: T) => number
-): { page: T[]; nextCursor: string | null } {
-  const sorted = [...items].sort(compare);
-  const after = cursor ? decodeCursor(cursor) : null;
-  const rest = after
-    ? sorted.filter((item) => {
-        const current = key(item);
-        return current.k > after.k || (current.k === after.k && current.id > after.id);
-      })
-    : sorted;
-  const page = rest.slice(0, limit);
-  const last = page.at(-1);
-  return {
-    page,
-    nextCursor: rest.length > limit && last ? encodeCursor(key(last)) : null,
-  };
 }
 
 const readAnnotations = {
@@ -272,6 +242,41 @@ export function createMcpServer(options: CreateMcpServerOptions): McpServer {
       countIssuesByStatus(workspaceId, project.id),
     ]);
     return { ...project, members, memberCount: members.length, taskCounts };
+  }
+
+  // A page in a project follows the server's allowlist; a workspace page (no project)
+  // belongs to no restricted project.
+  async function assertPageAllowed(page: Pick<DocPage, "projectId">): Promise<void> {
+    if (allowedProjectIds === null || !page.projectId) return;
+    if (allowedProjectIds.includes(page.projectId)) return;
+    const project = await getProject(workspaceId, page.projectId, viewerId ?? undefined);
+    throw projectAllowedError(project?.key ?? page.projectId);
+  }
+
+  // The HTTP server reads pages as the key's person; stdio has no person and, like its
+  // issue tools, reads every page in the workspace.
+  async function readablePage(id: string): Promise<DocPage> {
+    const page = viewerId
+      ? await getPage(workspaceId, id, viewerId)
+      : await getPageUnfiltered(workspaceId, id);
+    if (!page) throw new Error(`Page "${id}" not found`);
+    await assertPageAllowed(page);
+    return page;
+  }
+
+  async function visiblePageSummaries(filter: { parentId?: string; projectId?: string; q?: string }) {
+    const pages = viewerId
+      ? await listPageSummaries(workspaceId, viewerId, filter)
+      : await listAllPageSummaries(workspaceId, filter);
+    return allowedProjectIds === null
+      ? pages
+      : pages.filter(
+          (page) => page.projectId === null || allowedProjectIds.includes(page.projectId)
+        );
+  }
+
+  async function pagePayload(page: DocPage) {
+    return { ...page, author: await pageAuthor(page.createdBy) };
   }
 
   if (enabled("list_issues")) {
@@ -576,7 +581,7 @@ export function createMcpServer(options: CreateMcpServerOptions): McpServer {
       async ({ limit, cursor }) =>
         guard(async () => {
           const labels = await listLabels(workspaceId);
-          const { page, nextCursor } = paginate(
+          const { page, nextCursor } = paginateList(
             labels,
             pageLimit(limit),
             cursor,
@@ -628,7 +633,7 @@ export function createMcpServer(options: CreateMcpServerOptions): McpServer {
             allowedProjectIds === null
               ? projects
               : projects.filter((project) => allowedProjectIds.includes(project.id));
-          const { page, nextCursor } = paginate(
+          const { page, nextCursor } = paginateList(
             allowed,
             pageLimit(limit),
             cursor,
@@ -659,7 +664,7 @@ export function createMcpServer(options: CreateMcpServerOptions): McpServer {
       async ({ limit, cursor }) =>
         guard(async () => {
           const members = await listMembers(workspaceId);
-          const { page, nextCursor } = paginate(
+          const { page, nextCursor } = paginateList(
             members,
             pageLimit(limit),
             cursor,
@@ -1030,6 +1035,218 @@ export function createMcpServer(options: CreateMcpServerOptions): McpServer {
             throw projectAllowedError(project?.key ?? row.projectId);
           }
           return ok({ restored: await restoreIssue(workspaceId, row.id) });
+        })
+    );
+  }
+
+  if (enabled("list_pages")) {
+    server.registerTool(
+      "list_pages",
+      {
+        title: "List pages",
+        description:
+          "List workspace documents (markdown pages), newest edit first, without their bodies. Filter by project, parent page or title text. Pass the previous nextCursor to read the next page.",
+        inputSchema: {
+          project: z.string().optional().describe("Project key (e.g. CORE) or id"),
+          parent: z.string().optional().describe("Parent page id; lists its direct children"),
+          q: z.string().optional().describe("Filter by text in the page title"),
+          limit: z.number().optional().describe("Max results (default 50, max 200)"),
+          cursor: z.string().optional().describe("Opaque cursor from the previous call's nextCursor"),
+        },
+        outputSchema: z.looseObject({
+          count: z.number(),
+          total: z.number(),
+          pages: z.array(itemSchema),
+          nextCursor: z.string().nullable(),
+        }),
+        annotations: readAnnotations,
+      },
+      async ({ project, parent, q, limit, cursor }) =>
+        guard(async () => {
+          const resolved = project ? await resolveProject(project) : undefined;
+          const pages = await visiblePageSummaries({
+            projectId: resolved?.id,
+            parentId: parent,
+            q,
+          });
+          const { page, nextCursor } = paginateListDesc(
+            pages,
+            pageLimit(limit),
+            cursor,
+            (item) => ({ k: item.updatedAt, id: item.id }),
+            (a, b) => compareText(b.updatedAt, a.updatedAt) || compareText(a.id, b.id)
+          );
+          return ok({ count: page.length, total: pages.length, pages: page, nextCursor });
+        })
+    );
+  }
+
+  if (enabled("get_page")) {
+    server.registerTool(
+      "get_page",
+      {
+        title: "Get page",
+        description: "Get one document's markdown body and metadata by page id.",
+        inputSchema: {
+          id: z.string().describe("Page id"),
+        },
+        outputSchema: z.looseObject({
+          id: z.string(),
+          title: z.string(),
+          doc: z.string(),
+          parentId: z.string().nullable(),
+          projectId: z.string().nullable(),
+          shared: z.boolean(),
+          revision: z.number(),
+          createdAt: z.string(),
+          updatedAt: z.string(),
+          author: itemSchema.nullable(),
+        }),
+        annotations: readAnnotations,
+      },
+      async ({ id }) =>
+        guard(async () => ok(await pagePayload(await readablePage(id))))
+    );
+  }
+
+  if (enabled("list_page_comments")) {
+    server.registerTool(
+      "list_page_comments",
+      {
+        title: "List page comments",
+        description: "List a document's comments, oldest first, one page at a time.",
+        inputSchema: {
+          id: z.string().describe("Page id"),
+          limit: z.number().optional().describe("Max results (default 50, max 200)"),
+          cursor: z.string().optional().describe("Opaque cursor from the previous call's nextCursor"),
+        },
+        outputSchema: z.looseObject({
+          comments: z.array(itemSchema),
+          nextCursor: z.string().nullable(),
+        }),
+        annotations: readAnnotations,
+      },
+      async ({ id, limit, cursor }) =>
+        guard(async () => {
+          const page = await readablePage(id);
+          // A trusted stdio server has no person; the page author can always read it.
+          const comments = await listPageComments(
+            workspaceId,
+            page.id,
+            viewerId ?? page.createdBy
+          );
+          const result = paginateList(
+            comments,
+            pageLimit(limit),
+            cursor,
+            (comment) => ({ k: comment.createdAt, id: comment.id }),
+            (a, b) => compareText(a.createdAt, b.createdAt) || compareText(a.id, b.id)
+          );
+          return ok({ comments: result.page, nextCursor: result.nextCursor });
+        })
+    );
+  }
+
+  if (enabled("create_page")) {
+    server.registerTool(
+      "create_page",
+      {
+        title: "Create page",
+        description:
+          "Create a private markdown document owned by the key's person, optionally inside a project or under a parent page. Sharing stays in the web UI.",
+        inputSchema: {
+          title: z.string().describe("Page title, e.g. Meeting notes"),
+          doc: z.string().optional().describe("Markdown body"),
+          project: z.string().optional().describe("Project key (e.g. CORE) or id"),
+          parent: z.string().optional().describe("Parent page id; the page inherits its project"),
+        },
+        annotations: createAnnotations,
+      },
+      async ({ title, doc, project, parent }) =>
+        guard(async () => {
+          const person = requirePerson("create_page");
+          const parentPage = parent ? await readablePage(parent) : undefined;
+          const resolved = project ? await resolveProject(project) : undefined;
+          const page = await createPage(
+            workspaceId,
+            person,
+            {
+              title,
+              doc,
+              projectId: resolved?.id ?? null,
+              parentId: parentPage?.id ?? null,
+            },
+            { via: "mcp" }
+          );
+          return ok(await pagePayload(page));
+        })
+    );
+  }
+
+  if (enabled("update_page")) {
+    server.registerTool(
+      "update_page",
+      {
+        title: "Update page",
+        description:
+          "Change a document's title, markdown body or icon. Pass baseRevision from get_page to refuse a save someone else already replaced.",
+        inputSchema: {
+          id: z.string().describe("Page id"),
+          title: z.string().optional(),
+          doc: z.string().optional().describe("Full replacement markdown body"),
+          icon: z.string().nullable().optional().describe("A single emoji, or null to clear it"),
+          baseRevision: z
+            .number()
+            .optional()
+            .describe("The revision this body edit started from; a stale value is refused"),
+        },
+        annotations: updateAnnotations,
+      },
+      async ({ id, title, doc, icon, baseRevision }) =>
+        guard(async () => {
+          const person = requirePerson("update_page");
+          if (title === undefined && doc === undefined && icon === undefined) {
+            throw new Error("Send at least one of title, doc or icon.");
+          }
+          const page = await readablePage(id);
+          const updated = await updatePage(
+            workspaceId,
+            page.id,
+            person,
+            { title, doc, icon, baseRevision },
+            { via: "mcp" }
+          );
+          return ok(await pagePayload(updated));
+        })
+    );
+  }
+
+  if (enabled("add_page_comment")) {
+    server.registerTool(
+      "add_page_comment",
+      {
+        title: "Add page comment",
+        description:
+          "Post a comment on a document, optionally replying to another comment. The page author and mentioned members are notified.",
+        inputSchema: {
+          id: z.string().describe("Page id"),
+          body: z.string().describe("Comment text"),
+          parentId: z.string().optional().describe("Comment id being replied to"),
+        },
+        annotations: createAnnotations,
+      },
+      async ({ id, body, parentId }) =>
+        guard(async () => {
+          const person = requirePerson("add_page_comment");
+          const page = await readablePage(id);
+          const [comment] = await addPageComment(
+            workspaceId,
+            page.id,
+            person,
+            { body, parentId: parentId ?? null },
+            { via: "mcp", incremental: true }
+          );
+          return ok({ pageId: page.id, comment });
         })
     );
   }

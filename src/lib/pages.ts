@@ -108,6 +108,62 @@ export async function listPageTree(workspaceId: string, viewerId: string): Promi
   return pageTree(await listPageMetadata(workspaceId,viewerId));
 }
 
+function filterPageQuery(items: PageMetadata[], q?: string): PageMetadata[] {
+  const needle = q?.trim().toLowerCase();
+  return needle ? items.filter((page) => page.title.toLowerCase().includes(needle)) : items;
+}
+
+function newestPageFirst(items: PageMetadata[]): PageMetadata[] {
+  return [...items].sort(
+    (a, b) => b.updatedAt.localeCompare(a.updatedAt) || a.id.localeCompare(b.id)
+  );
+}
+
+function pageSummary(page: PageMetadata): PageSummary {
+  const {
+    workspaceId: _workspaceId,
+    revision: _revision,
+    shareLevel: _shareLevel,
+    position: _position,
+    cover: _cover,
+    ...summary
+  } = page;
+  return { ...summary, depth: 0 };
+}
+
+/** Visible pages without bodies, newest edit first; the REST and MCP list order. */
+export async function listPageSummaries(
+  workspaceId: string,
+  viewerId: string,
+  filter: { parentId?: string; projectId?: string; q?: string } = {}
+): Promise<PageSummary[]> {
+  const pages = await listPageMetadata(workspaceId, viewerId, filter);
+  return newestPageFirst(filterPageQuery(pages, filter.q)).map(pageSummary);
+}
+
+/**
+ * The stdio MCP server runs under the machine account and holds the database itself,
+ * so it reads every page, exactly like its issue tools skip per-user visibility.
+ */
+export async function listAllPageSummaries(
+  workspaceId: string,
+  filter: { parentId?: string; projectId?: string; q?: string } = {}
+): Promise<PageSummary[]> {
+  const conditions = [eq(pages.workspaceId, workspaceId), isNull(pages.deletedAt)];
+  if (filter.parentId) conditions.push(eq(pages.parentId, filter.parentId));
+  if (filter.projectId) conditions.push(eq(pages.projectId, filter.projectId));
+  const rows = await getDb()
+    .select(metadataColumns)
+    .from(pages)
+    .where(and(...conditions))
+    .orderBy(pages.position, pages.createdAt);
+  const items = rows.map(({ deletedAt: _deleted, trashRoot: _trash, ...row }) => ({
+    ...row,
+    shared: row.shared === 1,
+  }));
+  return newestPageFirst(filterPageQuery(items, filter.q)).map(pageSummary);
+}
+
 export async function getPage(
   workspaceId: string,
   pageId: string,
@@ -116,6 +172,14 @@ export async function getPage(
   const page = await findPage(workspaceId, pageId);
   if (!page || !pageVisible(page, viewerId)) return null;
   return page;
+}
+
+/** Trusted local (stdio) read; the caller already holds the database. */
+export async function getPageUnfiltered(
+  workspaceId: string,
+  pageId: string
+): Promise<DocPage | null> {
+  return findPage(workspaceId, pageId);
 }
 
 // Who wrote the page, for the "Created by" line under a document's title. Read from
@@ -150,10 +214,14 @@ export async function createPage(
     doc?: string;
     // Where the starting text came from; recorded on the page and its first version.
     template?: { id: string; name: string };
-  } = {}
+  } = {},
+  // The caller's attribution for the first version, e.g. `api:<key name>` or `mcp`.
+  // The UI leaves it unset, so a page written there keeps the lazy "earlier" version.
+  options: { via?: string } = {}
 ): Promise<DocPage> {
   const db = getDb();
   const parentId: string | null = input.parentId ?? null;
+  assertDocSize(input.doc ?? "");
   let projectId: string | null = input.projectId ?? null;
   let inherit: DocPage | null = null;
   if (parentId) {
@@ -214,16 +282,16 @@ export async function createPage(
   }
   const created = await findPage(workspaceId, id);
   if (!created) throw new TacosError("Page not found", 404);
-  if (input.template) {
+  if (input.template || options.via) {
     recordVersion(
       created,
       {
         title: created.title,
         doc: created.doc,
         actorId: viewerId,
-        via: "you",
-        reason: "template",
-        templateName: input.template.name,
+        via: options.via ?? "you",
+        reason: input.template ? "template" : "edit",
+        templateName: input.template?.name,
       },
       { skipEarlier: true }
     );

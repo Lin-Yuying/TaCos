@@ -122,8 +122,8 @@ async function main() {
   const names = toolList.map((tool) => tool.name).sort();
   assert(
     names.join(",") ===
-      "add_comment,add_dependency,claim_issue,create_issue,create_label,create_project,delete_issue,get_issue,get_project,list_issues,list_labels,list_members,list_project_tasks,list_projects,release_issue,remove_dependency,report_blocker,restore_issue,set_review_state,set_task_fields,update_issue,update_project",
-    `all twenty-two tools register: ${names.join(",")}`
+      "add_comment,add_dependency,add_page_comment,claim_issue,create_issue,create_label,create_page,create_project,delete_issue,get_issue,get_page,get_project,list_issues,list_labels,list_members,list_page_comments,list_pages,list_project_tasks,list_projects,release_issue,remove_dependency,report_blocker,restore_issue,set_review_state,set_task_fields,update_issue,update_page,update_project",
+    `all twenty-eight tools register: ${names.join(",")}`
   );
   const getProjectTool = toolList.find((tool) => tool.name === "get_project");
   const listTasksTool = toolList.find((tool) => tool.name === "list_project_tasks");
@@ -265,7 +265,7 @@ async function main() {
   const readOnly = await connect({ readOnly: true });
   const readNames = (await readOnly.client.listTools()).tools.map((tool) => tool.name).sort();
   assert(
-    readNames.join(",") === "get_issue,get_project,list_issues,list_labels,list_members,list_project_tasks,list_projects",
+    readNames.join(",") === "get_issue,get_page,get_project,list_issues,list_labels,list_members,list_page_comments,list_pages,list_project_tasks,list_projects",
     `a read-only server serves only read tools: ${readNames.join(",")}`
   );
 
@@ -294,7 +294,7 @@ async function main() {
   await anon.client.close();
   await filtered.client.close();
   console.log(
-    "check-mcp-projects: pass (22 tools, 12 new tools, annotations+output schemas, project CRUD, project tasks cursor, fields, dependencies, claim/release, review, blocker, restore, allowlist, read-only, person requirement, tool filter)"
+    "check-mcp-projects: pass (28 tools, 18 new tools, annotations+output schemas, project CRUD, project tasks cursor, fields, dependencies, claim/release, review, blocker, restore, allowlist, read-only, person requirement, tool filter)"
   );
 }
 

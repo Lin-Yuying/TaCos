@@ -132,7 +132,7 @@ async function main() {
   const readOnlyNames = (await readOnly.listTools()).tools.map((tool) => tool.name).sort();
   if (
     readOnlyNames.join(",") !==
-    "get_issue,get_project,list_issues,list_labels,list_members,list_project_tasks,list_projects"
+    "get_issue,get_page,get_project,list_issues,list_labels,list_members,list_page_comments,list_pages,list_project_tasks,list_projects"
   ) {
     throw new Error(`read-only tools: ${readOnlyNames.join(",")}`);
   }
