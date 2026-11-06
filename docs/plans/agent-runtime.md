@@ -248,7 +248,7 @@ native sessions, retries, context management and a standard extensibility seam.
 | OpenAI Responses + Agents SDK | Responses API; SDK runtime | SDK | Function/hosted/MCP tools | SDK sessions | SDK usage/tracing | SDK-level retries, model providers | SDK context management |
 | Claude API + Agent SDK | Messages API; SDK loop | SDK | Built-in + MCP + custom | Resume/fork/store | Usage + cost per result | Provider retries + SDK | Auto compaction |
 | LiteLLM router | OpenAI-compatible proxy | Caller | Caller | Caller | Spend logs, budgets | Load balance, fallbacks, timeouts, retries, rpm/tpm | Caller |
-| TaCos target | Chat Completions/Responses-compatible | Built-in loop | TaCos tools via MCP | Thread + native session ids | Token ledger + token budget | Bounded retries + fallback endpoints | Compaction + meter |
+| TaCos target | Chat Completions/Responses-compatible | Built-in loop | TaCos tools via MCP | Thread + native session ids | Token ledger (observe-only) | Bounded retries + fallback endpoints | Compaction + meter |
 
 ## Comparison: integration protocols
 
@@ -270,7 +270,7 @@ Shell level (higher priority now that TaCos is a shell):
 2. **No review loop.** Agent output lands as a comment; there is no review
    request/queue, no approve/reject/redo actions tied to the run.
 3. **No workspace governance.** Project scope, harness permissions, approval
-   defaults, budgets and audit for agents are not settable by an owner/admin.
+   defaults and audit for agents are not settable by an owner/admin.
 4. **No token usage or plan visibility.** No per-agent, per-task or per-workspace
    token ledger and no display of a harness subscription's remaining quota.
    (No budget caps are wanted; usage is observe-only.)
@@ -339,7 +339,7 @@ to the shell plus the runtime seams, not to coding-agent features.
   for the built-in loop (process safety, not a budget feature); structured stop
   reasons and a Retry action.
 - Context: stable system/tool prefix for prompt caching; compact older thread
-  history into a summary when the token budget is reached; persist a
+  history into a summary when the context limit is reached; persist a
   `context_summary` and a compaction boundary step.
 
 ### Commit 3 — Token usage, subscription remaining, governance and audit
@@ -426,7 +426,7 @@ to the shell plus the runtime seams, not to coding-agent features.
 2. My Tasks / Agent tasks / filters show delegated work consistently; the agent
    appears in the task panel and in the run timeline.
 3. An owner/admin can enable/disable agent sources, limit projects, set approval
-   defaults and budgets, and see the audit list of agent actions.
+   defaults, and see the audit list of agent actions (no budget controls).
 4. Every completed/failed run records input/output/cached/reasoning tokens, model
    and duration against the agent/task/workspace; the usage pages agree with the
    ledger, and no USD or price estimate appears anywhere.
