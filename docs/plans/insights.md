@@ -21,6 +21,21 @@ The data for the first version already exists:
 - No analytics tables, queries, dashboards or export exist today. Task views
   are personal saved filters (`personal_task_views`), not shared reports.
 
+## Current implementation
+
+- No analytics tables, aggregation queries, dashboards, saved reports or CSV
+  export exist. Task views are personal saved filters (`personal_task_views`),
+  not reports.
+- Raw data available today: `issues` (status, priority, due, claim, created/
+  updated/deleted), `issue_assignees`, `comments`, `events` (created,
+  status_changed, priority_changed, assignee_changed, labels_changed,
+  reordered, blocker), `blockers`, `agent_runs` / `agent_steps` /
+  `agent_threads`.
+- Data added by the plans: token usage (#79), automation runs (#80), sharing/
+  access events (U-01), cycles/milestones (U-03).
+- Search/views exist but are filtering surfaces, not analytics; no time-in-
+  status history beyond `events`.
+
 ## Researched best practice
 
 Linear Insights (https://linear.app/docs/insights.md):

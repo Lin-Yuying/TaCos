@@ -55,6 +55,29 @@ Facts from the code:
 - **No** external guests, public/expiring links, email invites, per-task
   sharing, "shared with me" view, import/export, SSO.
 
+## Researched best practice
+
+- Notion: a private page can be shared with one person inside or outside the
+  workspace (as a guest), with everyone at the workspace, or with anyone on the
+  web through a link; access levels view/comment/edit and link expiry.
+  https://www.notion.com/help/share-your-work
+- Linear: private teams limited to members, team membership management, guest
+  role, issue sharing from a private team to specific people, and owner/admin
+  controls. https://linear.app/docs/private-teams
+- Google Drive: share with people/groups, visitor sharing for people without a
+  Google account, and link sharing with expiration and access levels.
+  https://support.google.com/drive/answer/9195194
+- Confluence: space and page permissions, anonymous access vs public links.
+  https://support.atlassian.com/confluence-cloud/
+- GitHub: repository visibility and outside collaborators.
+  https://docs.github.com/en/organizations/managing-access-to-your-organizations-repositories/adding-outside-collaborators-to-repositories-in-your-organization
+- Figma: team/org roles and link access (view/comment/edit).
+  https://help.figma.com/hc/en-us/articles/360039482274
+
+The shared shell pattern: a human owner delegates access to a named resource,
+inside or outside the workspace, at a specific level, with an expiry/revoke
+path and an access report.
+
 ## Comparison
 
 | Capability | TaCos today | Notion | Linear | Google Drive | Confluence | GitHub | Figma |
@@ -70,14 +93,6 @@ Facts from the code:
 | Who can share | Page owner only | Page owner/admin | Team owner/admin + per settings | Owner/editor | Space admin | Repo admin | File/team roles |
 | Access audit / report | Events only, no UI | Admin audit | Audit log (enterprise) | Activity/audit | Audit log | Audit log | Admin logs |
 | Export / portability | No | Yes | Yes | Yes | Yes | Yes | Yes |
-
-Sources: Notion (share with one person / team / web, expiry)
-https://www.notion.com/help/share-your-work; Linear (private teams, guests,
-issue sharing) https://linear.app/docs/private-teams; Google Drive visitor
-sharing https://support.google.com/drive/answer/9195194; Confluence permissions
-https://support.atlassian.com/confluence-cloud/; GitHub outside collaborators
-https://docs.github.com/en/organizations/managing-access-to-your-organizations-repositories/adding-outside-collaborators-to-repositories-in-your-organization;
-Figma sharing https://help.figma.com/hc/en-us/articles/360039482274.
 
 ## Gaps, in priority order
 
