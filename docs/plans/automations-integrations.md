@@ -175,17 +175,24 @@ fallback is to split commit 3 out — ask before splitting.
    agents-md, `check:harness` and `npm run build` pass.
 10. README/docs describe rules, integrations and permissions.
 
-## Open decisions (confirm before coding)
+## Decisions (accepted per recommendation, 2026-11-06)
 
-1. Rule creation permission: owner/admin only (recommended) or any member?
-2. Slack first: outgoing notifications + create-task action (recommended), or a
-   full Slack app/agent with OAuth in this PR?
-3. GitHub in this PR as "attach links from webhook" (recommended) or defer until
-   after the first rule engine ships?
-4. Scheduler: in-process interval (recommended, single process like the rest) or
-   external cron/webhook only?
-5. One PR with the four commits (recommended) or rule engine first and
-   integrations as a second PR if it grows?
+1. Only owner/admin can create, edit or delete rules; members see enabled rules
+   and their own triggered runs; agents/API/MCP cannot create rules.
+2. Slack v1 = outgoing notifications + create a task from Slack; no full Slack
+   OAuth app or marketplace distribution in this PR.
+3. GitHub is in this PR as "attach branch/PR links from a webhook"; two-way
+   issue/PR sync stays a follow-up.
+4. One PR with the four commits; the scheduler is a single in-process interval
+   (no new daemon, no external cron requirement).
+5. Each inbound webhook has a per-hook secret (an API key may additionally be
+   required), a timestamp/signature check and replay protection.
+6. Outbound webhooks block private/loopback targets by default; an owner may
+   explicitly allow them for self-hosted internal endpoints. Sign with HMAC,
+   timeout and bounded retries.
+7. Rule actions that delegate/start an agent reuse #79's delegation/review path;
+   #79 owns only delegation-start and finish/failure notifications, #80 owns the
+   general rule engine and external integrations (no duplicate trigger builders).
 
 ## Files likely touched
 
