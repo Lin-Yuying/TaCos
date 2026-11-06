@@ -169,7 +169,7 @@ export function PersonPage({
       ) : (
         <>
           <header className="flex h-12 shrink-0 items-center gap-2 border-b border-border px-10 lg:px-20 xl:px-32">
-            <span className="text-body font-medium text-muted">{t("Assigned tasks")}</span>
+            <span className="text-body font-medium text-muted">{t("Tasks")}</span>
             <span className="rounded-full bg-elevated px-2 py-0.5 text-caption text-muted">
               {shown.length}
             </span>

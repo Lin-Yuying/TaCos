@@ -1108,6 +1108,7 @@ const zh: Record<string, string> = {
   Calendar: "日历",
   Filter: "筛选",
   Sort: "排序",
+  Views: "视图",
   ID: "编号",
   Title: "标题",
   Status: "状态",

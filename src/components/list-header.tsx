@@ -1,6 +1,7 @@
 "use client";
 
 import { DebouncedInput } from "./ui/debounced-input";
+import { Menu, MenuItem } from "@/components/menu";
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Search, X } from "lucide-react";
@@ -128,6 +129,30 @@ export function ListHeader({
           );
         })}
       </div>
+      <div className="shrink-0 @min-[640px]:hidden">
+        <Menu
+          width={200}
+          trigger={<span className="text-small">{t("Views")}</span>}
+          triggerClassName="flex h-7 shrink-0 items-center rounded-full border border-border bg-elevated/40 px-2 text-small text-muted transition-colors hover:text-text"
+        >
+          {(close) => (
+            <>
+              {QUICK_VIEWS.map((item) => (
+                <MenuItem
+                  key={item.key}
+                  active={quickViewActive[item.key]}
+                  onSelect={() => {
+                    close();
+                    router.replace(buildUrl(item.overrides), { scroll: false });
+                  }}
+                >
+                  {t(item.label)}
+                </MenuItem>
+              ))}
+            </>
+          )}
+        </Menu>
+      </div>
       {projectName && (
         <span className="hidden max-w-[140px] shrink-0 truncate rounded-full bg-elevated px-2 py-0.5 text-caption text-muted @min-[420px]:inline">
           {projectName}
@@ -154,7 +179,10 @@ export function ListHeader({
           {value && (
             <button
               type="button"
-              onClick={() => setValue("")}
+              onClick={() => {
+                setValue("");
+                router.replace(buildUrl({ q: undefined }), { scroll: false });
+              }}
               className="shrink-0 text-faint hover:text-muted"
             >
               <X size={12} />
