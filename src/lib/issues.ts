@@ -2048,25 +2048,29 @@ export async function listIssues(
 export async function findIssueRow(workspaceId: string, idOrIdentifier: string): Promise<IssueRow | null> {
   const raw = idOrIdentifier.trim();
   const db = getDb();
-  const [row] = await db
-    .select()
-    .from(issues)
-    .where(
-      and(
-        eq(issues.workspaceId, workspaceId),
-        isNull(issues.deletedAt),
-        sql`EXISTS (SELECT 1 FROM projects WHERE projects.id = ${issues.projectId} AND projects.deleted_at IS NULL)`,
-        // The UI labels issues "<project name>-<number>", so accept that spelling
-        // alongside the stored key-based identifier and the row id.
-        or(
-          eq(issues.id, raw),
-          sql`${issues.identifier} = ${raw} COLLATE NOCASE`,
-          sql`(SELECT p.name FROM projects p WHERE p.id = ${issues.projectId}) || '-' || ${issues.number} = ${raw} COLLATE NOCASE`
-        )
-      )
-    )
-    .limit(1);
-  return row ?? null;
+  const scope = [eq(issues.workspaceId, workspaceId), isNull(issues.deletedAt),
+    sql`EXISTS (SELECT 1 FROM projects WHERE projects.id = ${issues.projectId} AND projects.deleted_at IS NULL)`];
+  // Most internal calls already have an id; do not mix the primary-key path with aliases.
+  const exact = await db.select().from(issues).where(and(...scope,eq(issues.id,raw))).limit(1);
+  if (exact[0]) return exact[0];
+  const numbered = await db.select().from(issues).where(and(...scope,
+    sql`${issues.identifier} = ${raw} COLLATE NOCASE`)).limit(1);
+  if (numbered[0]) return numbered[0];
+  const [legacy] = await db.select().from(issues).where(and(...scope,
+    sql`(SELECT p.name FROM projects p WHERE p.id = ${issues.projectId}) || '-' || ${issues.number} = ${raw} COLLATE NOCASE`)).limit(1);
+  return legacy ?? null;
+}
+
+/** Shared lightweight visibility check; never reads comment or activity bodies. */
+export async function findVisibleIssueRow(workspaceId: string, id: string, viewerId?: string): Promise<IssueRow | null> {
+  const row = await findIssueRow(workspaceId,id);
+  if (!row) return null;
+  if (viewerId && !(await seesAllTasks(workspaceId,viewerId))) {
+    const visible = await getDb().select({ id: projects.id }).from(projects)
+      .where(and(eq(projects.id,row.projectId),isNull(projects.deletedAt),ownProjectCondition(viewerId))).limit(1);
+    if (!visible[0]) return null;
+  }
+  return row;
 }
 
 export async function getIssueDetail(
@@ -2074,24 +2078,9 @@ export async function getIssueDetail(
   idOrIdentifier: string,
   viewerId?: string
 ): Promise<IssueDetail | null> {
-  const row = await findIssueRow(workspaceId, idOrIdentifier);
+  const row = await findVisibleIssueRow(workspaceId,idOrIdentifier,viewerId);
   if (!row) return null;
   const db = getDb();
-  if (viewerId && !(await seesAllTasks(workspaceId, viewerId))) {
-    // Same rule as the list: a member outside the project cannot open its tasks by id.
-    const [visible] = await db
-      .select({ id: projects.id })
-      .from(projects)
-      .where(
-        and(
-          eq(projects.id, row.projectId),
-          isNull(projects.deletedAt),
-          ownProjectCondition(viewerId)
-        )
-      )
-      .limit(1);
-    if (!visible) return null;
-  }
   const [withLabels] = await toIssueRows(workspaceId, [row]);
   const memberMap = await membersById(workspaceId);
   const commentRows = await db
@@ -2470,7 +2459,7 @@ export async function updateIssue(
 ): Promise<IssueDetail> {
   const row = await findIssueRow(workspaceId, idOrIdentifier);
   if (!row) throw new TacosError(`Issue "${idOrIdentifier}" not found`, 404);
-  if (actor.kind === "user" && !(await getIssueDetail(workspaceId, row.id, actor.userId))) throw new TacosError("Task not found", 404);
+  if (actor.kind === "user" && !(await findVisibleIssueRow(workspaceId, row.id, actor.userId))) throw new TacosError("Task not found", 404);
 
   const db = getDb();
   const sets: Record<string, unknown> = {};
@@ -2707,7 +2696,7 @@ export async function moveIssue(
 ): Promise<IssueDetail> {
   const row = await findIssueRow(workspaceId, idOrIdentifier);
   if (!row) throw new TacosError(`Issue "${idOrIdentifier}" not found`, 404);
-  if (actor.kind === "user" && !(await getIssueDetail(workspaceId, row.id, actor.userId))) throw new TacosError("Task not found", 404);
+  if (actor.kind === "user" && !(await findVisibleIssueRow(workspaceId, row.id, actor.userId))) throw new TacosError("Task not found", 404);
 
   const db = getDb();
   const sets: Record<string, unknown> = {};
@@ -3633,7 +3622,7 @@ export async function workspacePulse(workspaceId: string, userId: string): Promi
 /** A single checkbox changes one relationship; another editor's choices survive. */
 export async function changeIssueCollection(workspaceId: string, id: string, change: {kind: "assignee" | "label"; value: string; selected: boolean}, actor: MutationActor): Promise<IssueDetail> {
   if (actor.kind !== "user") throw new TacosError("A member is required", 403);
-  if (!(await getIssueDetail(workspaceId, id, actor.userId))) throw new TacosError("Task not found",404);
+  if (!(await findVisibleIssueRow(workspaceId, id, actor.userId))) throw new TacosError("Task not found",404);
   const db = getDb();
   const memberMap = await membersById(workspaceId);
   let added: string | null = null;

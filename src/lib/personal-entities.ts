@@ -1,7 +1,7 @@
 import { and, eq, isNotNull } from "drizzle-orm";
 import { getDb } from "@/db/client";
 import { personalEntityState, favorites, pageFavorites, workspaces } from "@/db/schema";
-import { getIssueDetail, getOverviewAccess, getProject, listFavoriteProjects, TacosError } from "@/lib/issues";
+import { findVisibleIssueRow, isFavoriteProject, getOverviewAccess, getProject, listFavoriteProjects, TacosError } from "@/lib/issues";
 import { getPage, pageLevel, isPageFavorite } from "@/lib/pages";
 import { entityHref, type EntityKind, type EntityCapabilities, type PersonalPin } from "@/lib/ui/entity-actions";
 
@@ -12,15 +12,15 @@ export async function inspectEntity(ws: string, user: string, kind: EntityKind, 
     return { title: page.title, capabilities: { rename: await pageLevel(page, user) === "edit", remove: page.createdBy === user, favorite: true, isFavorite: await isPageFavorite(id, user) } };
   }
   if (kind === "project") {
-    const project = await getProject(ws, id);
+    const project = await getProject(ws, id, user);
     if (!project) throw new TacosError("Project not found", 404);
     const access = await getOverviewAccess(ws, id, user);
-    return { title: project.name, capabilities: { rename: access.canEdit, remove: project.createdBy === user || getDb().select().from(workspaces).where(eq(workspaces.id, ws)).get()?.createdBy === user, favorite: true, isFavorite: (await listFavoriteProjects(ws, user)).some((p) => p.id === id) } };
+    return { title: project.name, capabilities: { rename: access.canEdit, remove: project.createdBy === user || getDb().select().from(workspaces).where(eq(workspaces.id, ws)).get()?.createdBy === user, favorite: true, isFavorite: await isFavoriteProject(ws,user,id) } };
   }
   if (kind !== "task") throw new TacosError("Unknown object type", 400);
-  const detail = await getIssueDetail(ws, id, user);
+  const detail = await findVisibleIssueRow(ws, id, user);
   if (!detail) throw new TacosError("Task not found", 404);
-  return { title: detail.issue.title, capabilities: { rename: true, remove: true, favorite: false, isFavorite: false } };
+  return { title: detail.title, capabilities: { rename: true, remove: true, favorite: false, isFavorite: false } };
 }
 
 export async function listPersonalPins(ws: string, user: string): Promise<PersonalPin[]> {

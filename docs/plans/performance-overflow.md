@@ -13,13 +13,13 @@ Baseline: production build and TypeScript pass; harness 88/88 plus upgrade check
 | B01 | 工作区实时 pulse 每次聚合全部历史 | pass | Transactional domain revisions; live-refresh and cross-process checks |
 | B02 | 小改动的失效范围过大，项目页提前读取未打开页签的数据 | todo | — |
 | B03 | 任务 `limit` 发生在全量查询与排序之后 | todo | — |
-| B04 | 任务 id 精确查找与兼容名称混在同一个 OR | todo | — |
-| B05 | 鉴权、置顶、批量操作反复加载完整任务详情 | todo | — |
+| B04 | 任务 id 精确查找与兼容名称混在同一个 OR | pass | Primary-key fast path; aliases and visibility checks retained |
+| B05 | 鉴权、置顶、批量操作反复加载完整任务详情 | doing | Shared lightweight visibility predicate; task inspection and pre-write checks avoid history |
 | B06 | FTS 更新和删除按未索引字段查旧记录 | todo | — |
 | B07 | 一个短词就使全文搜索整体退回包含匹配 | todo | — |
 | B08 | 提醒调度每分钟重新检查所有带提醒的未完成任务 | todo | — |
 | B09 | 通知红点每 10 秒获取用不到的 50 条正文 | todo | — |
-| B10 | 创建任务的 MAX 聚合缺乏匹配排序键的复合索引 | todo | — |
+| B10 | 创建任务的 MAX 聚合缺乏匹配排序键的复合索引 | doing | Matching composite indexes added; query-plan benchmark pending |
 | B11 | 每次 API key 验证都产生元数据写入 | todo | — |
 | F01 | 任务列表逐行查找下标，单次渲染形成平方级计算 | todo | — |
 | F02 | 列表、看板和批量候选全量挂载，表格虚拟化尚未覆盖这些入口 | todo | — |
