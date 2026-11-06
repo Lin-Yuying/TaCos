@@ -765,7 +765,11 @@ export async function assertSeesProject(workspaceId: string, idOrKey: string, vi
   }
 }
 
-export async function assertSeesIssue(workspaceId: string, idOrIdentifier: string, viewerId: string): Promise<void> {
+export async function assertSeesIssue(
+  workspaceId: string,
+  idOrIdentifier: string,
+  viewerId?: string
+): Promise<void> {
   if (await seesAllTasks(workspaceId, viewerId)) return;
   const live = await findIssueRow(workspaceId, idOrIdentifier);
   // Restoring and purging name a task that findIssueRow no longer returns.
@@ -962,11 +966,14 @@ export function deriveProjectKey(name: string, taken: Iterable<string>): string 
   return key;
 }
 
+// `createdBy` is null when an agent creates a project with no signed-in person behind
+// it (the local stdio MCP server). Such a project has no lead; the workspace owner can
+// still trash it.
 export async function createProject(input: {
   workspaceId: string;
   name: string;
   description?: string;
-  createdBy: string;
+  createdBy: string | null;
 }): Promise<Project> {
   const name = input.name.trim();
   if (!name) throw new TacosError("Project name is required");
@@ -1554,6 +1561,7 @@ export async function countUnseenDocEdits(projectId: string, userId: string): Pr
 
 export type ProjectMember = {
   id: string;
+  username: string;
   displayName: string;
   avatar: string | null;
   role: "lead" | "member";
@@ -1568,7 +1576,12 @@ export async function listProjectMembers(
   const db = getDb();
   const project = await getProject(workspaceId, projectId);
   const joined = await db
-    .select({ id: users.id, displayName: users.displayName, avatar: users.avatar })
+    .select({
+      id: users.id,
+      username: users.username,
+      displayName: users.displayName,
+      avatar: users.avatar,
+    })
     .from(projectMembers)
     .innerJoin(users, eq(users.id, projectMembers.userId))
     .where(eq(projectMembers.projectId, projectId))
@@ -1578,7 +1591,12 @@ export async function listProjectMembers(
   if (!project?.createdBy) return members;
 
   const [lead] = await db
-    .select({ id: users.id, displayName: users.displayName, avatar: users.avatar })
+    .select({
+      id: users.id,
+      username: users.username,
+      displayName: users.displayName,
+      avatar: users.avatar,
+    })
     .from(users)
     .where(eq(users.id, project.createdBy))
     .limit(1);
@@ -2844,7 +2862,14 @@ export type IssueClaim = {
 
 // H-COLLAB-01: claim is one conditional UPDATE, so two parallel claims cannot both win.
 // Assignees stay as they are. Only approved, open tasks can be claimed.
-export async function claimIssue(workspaceId: string, idOrIdentifier: string, userId: string): Promise<IssueClaim> {
+// `actor` names who did it in the timeline: an API key or MCP server claims on behalf
+// of its person, so the claim is theirs while the event keeps the key's attribution.
+export async function claimIssue(
+  workspaceId: string,
+  idOrIdentifier: string,
+  userId: string,
+  actor?: MutationActor
+): Promise<IssueClaim> {
   const row = await findIssueRow(workspaceId, idOrIdentifier);
   if (!row) throw new TacosError(`Issue "${idOrIdentifier}" not found`, 404);
   if (row.reviewStatus !== "approved") throw new TacosError("This task is waiting for review", 409);
@@ -2863,13 +2888,18 @@ export async function claimIssue(workspaceId: string, idOrIdentifier: string, us
     )
     .returning({ id: issues.id });
   if (updated.length === 0) throw new TacosError("Someone else already claimed this task", 409);
-  await recordEvent(row.id, "claimed", {}, await userActor(userId));
+  await recordEvent(row.id, "claimed", {}, actor ?? (await userActor(userId)));
   await notifyClaimWatchers(workspaceId, row.id, "claimed", userId);
   return { id: row.id, identifier: row.identifier, claimedBy: userId, claimedAt: now };
 }
 
 // Only the current claimer can release. Reassign comes in a later id with notifications.
-export async function releaseIssue(workspaceId: string, idOrIdentifier: string, userId: string): Promise<IssueClaim> {
+export async function releaseIssue(
+  workspaceId: string,
+  idOrIdentifier: string,
+  userId: string,
+  actor?: MutationActor
+): Promise<IssueClaim> {
   const row = await findIssueRow(workspaceId, idOrIdentifier);
   if (!row) throw new TacosError(`Issue "${idOrIdentifier}" not found`, 404);
   const updated = await getDb()
@@ -2878,7 +2908,7 @@ export async function releaseIssue(workspaceId: string, idOrIdentifier: string, 
     .where(and(eq(issues.workspaceId, workspaceId), eq(issues.id, row.id), eq(issues.claimedBy, userId)))
     .returning({ id: issues.id });
   if (updated.length === 0) throw new TacosError("Only the person who claimed this task can release it", 403);
-  await recordEvent(row.id, "released", {}, await userActor(userId));
+  await recordEvent(row.id, "released", {}, actor ?? (await userActor(userId)));
   await notifyClaimWatchers(workspaceId, row.id, "released", userId);
   return { id: row.id, identifier: row.identifier, claimedBy: null, claimedAt: null };
 }
@@ -2969,13 +2999,23 @@ async function blockerRecipient(workspaceId: string, row: IssueRow, actorId: str
   return [];
 }
 
+// An agent has no person of its own, so a blocker reported through an API key is
+// authored by the person the key belongs to while the event names the key.
 export async function reportBlocker(
   workspaceId: string,
   idOrIdentifier: string,
   body: string,
-  actor: MutationActor
+  actor: MutationActor,
+  options: { reportedById?: string } = {}
 ): Promise<{ id: string }> {
-  if (actor.kind !== "user") throw new TacosError("Only a member can report a blocker", 403);
+  const authorId = actor.kind === "user" ? actor.userId : options.reportedById;
+  if (!authorId) {
+    throw new TacosError(
+      "Only a member can report a blocker",
+      403,
+      "Use an API key that belongs to a member, or report from the task panel."
+    );
+  }
   const text = typeof body === "string" ? body.trim() : "";
   if (!text) throw new TacosError("Say what is blocking this task", 400);
   const row = await findIssueRow(workspaceId, idOrIdentifier);
@@ -2984,13 +3024,14 @@ export async function reportBlocker(
   await getDb().insert(blockers).values({
     id,
     issueId: row.id,
-    authorId: actor.userId,
+    authorId,
     body: text,
     createdAt: nowIso(),
   });
   await recordEvent(row.id, "blocker_reported", { body: text }, actor);
-  for (const userId of await blockerRecipient(workspaceId, row, actor.userId)) {
-    await notify({ workspaceId, userId, issueId: row.id, type: "blocker", body: actor.displayName, data: { actorName: actor.displayName } });
+  const who = actor.kind === "user" ? actor.displayName : `Agent (${actor.label})`;
+  for (const userId of await blockerRecipient(workspaceId, row, authorId)) {
+    await notify({ workspaceId, userId, issueId: row.id, type: "blocker", body: who, data: { actorName: who } });
   }
   return { id };
 }
@@ -3018,7 +3059,7 @@ export async function addDependency(
   workspaceId: string,
   idOrIdentifier: string,
   blockedBy: string,
-  viewerId: string,
+  viewerId: string | undefined,
   actor: MutationActor
 ): Promise<IssueDetail> {
   const row = await findIssueRow(workspaceId, idOrIdentifier);
@@ -3051,7 +3092,7 @@ export async function removeDependency(
   workspaceId: string,
   idOrIdentifier: string,
   blockedBy: string,
-  viewerId: string,
+  viewerId: string | undefined,
   actor: MutationActor
 ): Promise<IssueDetail> {
   const row = await findIssueRow(workspaceId, idOrIdentifier);
@@ -3143,11 +3184,14 @@ export async function listPendingReview(workspaceId: string): Promise<PendingRev
 export type ReviewDecision = "approve" | "reject";
 
 // Only a person reviews, never an agent. One conditional UPDATE so two reviewers cannot both decide.
+// External callers review as the person their key belongs to; `actor` keeps the key in
+// the timeline while `reviewedBy` stays that person.
 export async function reviewIssue(
   workspaceId: string,
   idOrIdentifier: string,
   reviewerId: string,
-  decision: ReviewDecision
+  decision: ReviewDecision,
+  actor?: MutationActor
 ): Promise<{ id: string; reviewStatus: ReviewStatus; reviewedBy: string; reviewedAt: string }> {
   if (decision !== "approve" && decision !== "reject") throw new TacosError("Unknown review decision", 400);
   const row = await findIssueRow(workspaceId, idOrIdentifier);
@@ -3160,11 +3204,12 @@ export async function reviewIssue(
     .where(and(eq(issues.workspaceId, workspaceId), eq(issues.id, row.id), eq(issues.reviewStatus, "pending")))
     .returning({ id: issues.id });
   if (updated.length === 0) throw new TacosError("This task is not waiting for review", 409);
-  await recordEvent(row.id, decision === "approve" ? "review_approved" : "review_rejected", {}, {
-    kind: "user",
-    userId: reviewerId,
-    displayName: "",
-  });
+  await recordEvent(
+    row.id,
+    decision === "approve" ? "review_approved" : "review_rejected",
+    {},
+    actor ?? (await userActor(reviewerId))
+  );
   return { id: row.id, reviewStatus, reviewedBy: reviewerId, reviewedAt: now };
 }
 
@@ -3232,6 +3277,7 @@ export type TrashedIssue = {
   title: string;
   status: Status;
   deletedAt: string;
+  projectId: string;
   projectName: string;
   projectColor: string;
 };
@@ -3245,6 +3291,7 @@ export async function listTrashedIssues(workspaceId: string): Promise<TrashedIss
       title: issues.title,
       status: issues.status,
       deletedAt: issues.deletedAt,
+      projectId: issues.projectId,
       projectName: projects.name,
       projectColor: projects.color,
     })
@@ -3259,22 +3306,42 @@ export async function listTrashedIssues(workspaceId: string): Promise<TrashedIss
     title: row.title,
     status: row.status as Status,
     deletedAt: row.deletedAt!,
+    projectId: row.projectId,
     projectName: row.projectName ?? "(no project)",
     projectColor: row.projectColor ?? DEFAULT_PROJECT_COLOR,
   }));
 }
 
-export async function restoreIssue(workspaceId: string, issueId: string) {
+/** A task in the Trash is invisible to `findIssueRow`, so restore resolves it separately. */
+export async function findTrashedIssueRow(
+  workspaceId: string,
+  idOrIdentifier: string
+): Promise<IssueRow | null> {
+  const raw = idOrIdentifier.trim();
+  if (!raw) return null;
+  const scope = [eq(issues.workspaceId, workspaceId), isNotNull(issues.deletedAt)];
+  const [exact] = await getDb()
+    .select()
+    .from(issues)
+    .where(and(...scope, eq(issues.id, raw)))
+    .limit(1);
+  if (exact) return exact;
+  const [numbered] = await getDb()
+    .select()
+    .from(issues)
+    .where(and(...scope, sql`${issues.identifier} = ${raw} COLLATE NOCASE`))
+    .limit(1);
+  return numbered ?? null;
+}
+
+export async function restoreIssue(workspaceId: string, idOrIdentifier: string) {
+  const row = await findTrashedIssueRow(workspaceId, idOrIdentifier);
+  if (!row) throw new TacosError(`Issue "${idOrIdentifier}" is not in the trash`, 404);
   await getDb()
     .update(issues)
     .set({ deletedAt: null })
-    .where(
-      and(
-        eq(issues.workspaceId, workspaceId),
-        eq(issues.id, issueId),
-        isNotNull(issues.deletedAt)
-      )
-    );
+    .where(and(eq(issues.workspaceId, workspaceId), eq(issues.id, row.id)));
+  return { id: row.id, identifier: row.identifier, title: row.title, projectId: row.projectId };
 }
 
 // Only ever called from the Trash, so the issue has to be soft-deleted first.
