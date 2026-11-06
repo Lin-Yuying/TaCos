@@ -10,7 +10,10 @@ is `docs/plans/agent-access.md` and draft PR #77.
 
 ## Decisions recorded (2026-11-06)
 
-- One PR covers all five commits below.
+- **One PR, multiple commits.** The five commit boundaries are the review and
+  verification points (each can be checked and demoed separately), but the work
+  merges as **one PR**; do not split into separate PRs. This was confirmed on
+  2026-11-06 after reviewing the PR size.
 - Delegation: the human assignee keeps ownership; an agent is delegated to the
   task (Linear-style).
 - Agent identity: workspace-level named agents plus a personal "my agent".
