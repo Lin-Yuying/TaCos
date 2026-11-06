@@ -1,3 +1,4 @@
+import { packText,unpackText } from "./compressed-text";
 import crypto from "node:crypto";
 import { and, sql, getTableColumns, desc, eq, inArray, isNotNull, isNull, lt, or } from "drizzle-orm";
 import { getDb } from "../db/client";
@@ -235,9 +236,10 @@ async function siblingPage(
   parentId: string | null,
   title: string
 ): Promise<DocPage | null> {
-  const [row]=await getDb().select().from(pages).where(and(eq(pages.workspaceId,workspaceId),
+  const rows=await getDb().select().from(pages).where(and(eq(pages.workspaceId,workspaceId),
     isNull(pages.deletedAt),siblingsOf(parentId),or(eq(pages.shared,1),eq(pages.createdBy,viewerId)),
-    sql`lower(${pages.title}) = lower(${title})`)).orderBy(pages.position,pages.createdAt).limit(1);
+    sql`1`)).orderBy(pages.position,pages.createdAt);
+  const row=rows.find(row=>row.title.toLowerCase()===title.toLowerCase());
   return row?toPage(row):null;
 }
 
@@ -261,11 +263,12 @@ function assertDocSize(doc: string): void {
 export async function importMarkdownPage(
   workspaceId: string,
   viewerId: string,
-  input: { path: string; content: string }
+  input: { path: string; content?: string; parsed?:{title:string;doc:string} }
 ): Promise<ImportedPage> {
   const segments = importSegments(input.path);
   const stem = segments.pop() ?? "Untitled";
-  const { title, doc } = splitImportedMarkdown(stem, input.content);
+  const { title, doc } = input.parsed??splitImportedMarkdown(stem, input.content??"");
+  if(typeof title!=="string"||!title.trim()||title.length>120||typeof doc!=="string")throw new TacosError("Invalid imported document",400);
   assertDocSize(doc);
 
   let parentId: string | null = null;
@@ -525,13 +528,14 @@ async function latestVersion(pageId: string) {
   return row ?? null;
 }
 
-async function recordVersion(page: DocPage, write: VersionWrite): Promise<void> {
+function recordVersion(page: DocPage, write: VersionWrite): void {
   const db = getDb();
   const at = nowIso();
-  let latest = await latestVersion(page.id);
+  const packed={text:write.doc,compressed:null};
+  let latest = db.select().from(pageVersions).where(eq(pageVersions.pageId,page.id)).orderBy(desc(pageVersions.seq)).get() ?? null;
   if (!latest && page.doc) {
     // A page written before versions existed, or created with text: keep that text.
-    await db.insert(pageVersions).values({
+    db.insert(pageVersions).values({
       id: crypto.randomUUID(),
       pageId: page.id,
       workspaceId: page.workspaceId,
@@ -543,8 +547,8 @@ async function recordVersion(page: DocPage, write: VersionWrite): Promise<void> 
       reason: "earlier",
       createdAt: page.updatedAt,
       updatedAt: page.updatedAt,
-    });
-    latest = await latestVersion(page.id);
+    }).run();
+    latest = db.select().from(pageVersions).where(eq(pageVersions.pageId,page.id)).orderBy(desc(pageVersions.seq)).get() ?? null;
   }
   if (
     latest &&
@@ -555,30 +559,30 @@ async function recordVersion(page: DocPage, write: VersionWrite): Promise<void> 
     latest.actorId === write.actorId &&
     Date.now() - Date.parse(latest.createdAt) < DOC_UPDATE_MERGE_MS
   ) {
-    await db
+    db
       .update(pageVersions)
-      .set({ title: write.title, doc: write.doc, updatedAt: at })
-      .where(eq(pageVersions.id, latest.id));
+      .set({ title: write.title, doc: packed.text,docCompressed:packed.compressed, updatedAt: at })
+      .where(eq(pageVersions.id, latest.id)).run();
     return;
   }
   const seq = (latest?.seq ?? 0) + 1;
-  await db.insert(pageVersions).values({
+  db.insert(pageVersions).values({
     id: crypto.randomUUID(),
     pageId: page.id,
     workspaceId: page.workspaceId,
     seq,
     title: write.title,
-    doc: write.doc,
+    doc: packed.text,docCompressed:packed.compressed,
     actorId: write.actorId,
     via: write.via,
     reason: write.reason,
     restoredFrom: write.restoredFrom ?? null,
     createdAt: at,
     updatedAt: at,
-  });
-  await db
+  }).run();
+  db
     .delete(pageVersions)
-    .where(and(eq(pageVersions.pageId, page.id), lt(pageVersions.seq, seq - MAX_VERSIONS_PER_PAGE + 1)));
+    .where(and(eq(pageVersions.pageId, page.id), lt(pageVersions.seq, seq - MAX_VERSIONS_PER_PAGE + 1))).run();
 }
 
 // One notice to each member newly mentioned in the text who can read the page, including
@@ -641,7 +645,8 @@ export async function updatePage(
   }
   if (Object.keys(next).length === 0) return page;
   next.updatedAt = nowIso();
-  const written = await getDb()
+  getDb().transaction(() => {
+  const written = getDb()
     .update(pages)
     .set(next)
     .where(
@@ -650,10 +655,10 @@ export async function updatePage(
         eq(pages.id, pageId),
         eq(pages.revision, page.revision)
       )
-    );
+    ).run();
   if (written.changes === 0) throw new TacosError(PAGE_CONFLICT, 409);
   if (next.doc !== undefined || next.title !== undefined) {
-    await recordVersion(page, {
+    recordVersion(page, {
       title: next.title ?? page.title,
       doc: next.doc ?? page.doc,
       actorId: viewerId,
@@ -661,6 +666,7 @@ export async function updatePage(
       reason: "edit",
     });
   }
+  });
   const updated = await findPage(workspaceId, pageId);
   if (!updated) throw new TacosError("Page not found", 404);
   if (next.doc !== undefined) await notifyDocMentions(page, updated.doc, viewerId);
@@ -763,16 +769,16 @@ export async function getPageVersionChange(
     from = spanFrom;
   }
   const [before] = await db
-    .select({ title: pageVersions.title, doc: pageVersions.doc, reason: pageVersions.reason })
+    .select({ title: pageVersions.title, doc: pageVersions.doc, docCompressed:pageVersions.docCompressed,reason: pageVersions.reason })
     .from(pageVersions)
     .where(and(eq(pageVersions.pageId, pageId), lt(pageVersions.seq, from.seq), inArray(pageVersions.reason, PAGE_TEXT_REASONS)))
     .orderBy(desc(pageVersions.seq))
     .limit(1);
   return {
     title: version.title,
-    doc: version.doc,
+    doc: await unpackText(version.doc,version.docCompressed),
     beforeTitle: before?.title ?? from.title,
-    beforeDoc: before?.doc ?? "",
+    beforeDoc: before?await unpackText(before.doc,before.docCompressed):"",
   };
 }
 
@@ -799,7 +805,7 @@ export async function restorePageVersion(
   if (!version) throw new TacosError("Version not found", 404);
   return writeBack(page, {
     title: version.title,
-    doc: version.doc,
+    doc: await unpackText(version.doc,version.docCompressed),
     actorId: viewerId,
     via: options.via ?? "you",
     reason: "restore",
@@ -860,7 +866,7 @@ export async function undoAgentEdit(
   }
   return writeBack(page, {
     title: before?.title ?? page.title,
-    doc: before?.doc ?? "",
+    doc: before?await unpackText(before.doc,before.docCompressed):"",
     actorId: viewerId,
     via: options.via ?? "you",
     reason: "undo",
@@ -986,13 +992,12 @@ export async function restorePage(
   const db = getDb();
   // A parent that is gone or still in the Trash cannot hold it: it comes back at the top.
   const parent = row.parentId ? await findPage(workspaceId, row.parentId) : null;
-  await db
-    .update(pages)
-    .set({ deletedAt: null, trashRoot: null })
-    .where(and(eq(pages.workspaceId, workspaceId), eq(pages.trashRoot, pageId)));
-  if (row.parentId && !parent) {
-    await db.update(pages).set({ parentId: null }).where(eq(pages.id, pageId));
-  }
+  db.$client.transaction(()=>{
+   const job=db.$client.prepare("SELECT state,completed FROM maintenance_jobs WHERE id=?").get(`page:${pageId}`) as {state:string;completed:number}|undefined;
+   if(job&&(job.state==="running"||job.completed>0))throw new TacosError("Permanent deletion has started. This document cannot be restored.",409);
+   db.update(pages).set({deletedAt:null,trashRoot:null}).where(and(eq(pages.workspaceId,workspaceId),eq(pages.trashRoot,pageId))).run();
+   if(row.parentId&&!parent)db.update(pages).set({parentId:null}).where(eq(pages.id,pageId)).run();
+  }).immediate();
 }
 
 /** Removes the page, its subtree and their versions for good. Author or workspace owner. */
@@ -1006,21 +1011,8 @@ export async function purgePage(
   if (row.createdBy !== viewerId && !isWorkspaceOwner) {
     throw new TacosError("Only the page owner or the workspace owner can delete it forever", 403);
   }
-  const db = getDb();
-  const ids = (
-    await db
-      .select({ id: pages.id })
-      .from(pages)
-      .where(and(eq(pages.workspaceId, workspaceId), eq(pages.trashRoot, pageId)))
-  ).map((page) => page.id);
-  await db.delete(pageCollab).where(inArray(pageCollab.pageId, ids));
-  await db.delete(pageVersions).where(inArray(pageVersions.pageId, ids));
-  await db.delete(pageComments).where(inArray(pageComments.pageId, ids));
-  await db.delete(pageAccess).where(inArray(pageAccess.pageId, ids));
-  await db.delete(pageFavorites).where(inArray(pageFavorites.pageId, ids));
-  await removePageAttachments(ids);
-  await db.delete(notifications).where(inArray(notifications.pageId, ids));
-  await db.delete(pages).where(inArray(pages.id, ids));
+  const {purgePageRecords}=await import("./permanent-cleanup");
+  await purgePageRecords(workspaceId,pageId);
 }
 
 /** Backlinks and [[Title]] need a cheap title → page lookup for the viewer. */
@@ -1074,4 +1066,10 @@ export async function pageEmbedSources(
     if (page) out[id] = page.doc;
   }
   return out;
+}
+
+export async function compressPageHistory(limit=20) {
+ const db=getDb().$client;
+ const rows=db.prepare("SELECT id,doc FROM page_versions WHERE doc_compressed IS NULL AND length(doc)>=4096 LIMIT ?").all(limit) as {id:string;doc:string}[];
+ for(const row of rows){const packed=await packText(row.doc);db.prepare("UPDATE page_versions SET doc=?,doc_compressed=? WHERE id=? AND doc=? AND doc_compressed IS NULL").run(packed.text,packed.compressed??"",row.id,row.doc);}
 }

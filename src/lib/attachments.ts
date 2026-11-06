@@ -38,6 +38,7 @@ function removeFiles(ids: string[]) {
   for (const id of ids) {
     fs.rmSync(path.join(UPLOAD_DIR, id), { force: true });
     fs.rmSync(path.join(UPLOAD_DIR, `${id}.json`), { force: true });
+    fs.rmSync(path.join(UPLOAD_DIR, `${id}.preview.webp`), { force: true });
   }
 }
 
@@ -48,7 +49,7 @@ export async function removeStaleUploads(now = Date.now(), workspaceId?:string):
   const stale = await db
     .select({ id: attachments.id })
     .from(attachments)
-    .where(and(or(eq(attachments.complete, 0), eq(attachments.pageId, AGENT_DRAFT_PAGE)), lt(attachments.createdAt, before),workspaceId?eq(attachments.workspaceId,workspaceId):undefined)).limit(100);
+    .where(and(eq(attachments.complete, 0), lt(attachments.createdAt, before),workspaceId?eq(attachments.workspaceId,workspaceId):undefined)).limit(100);
   if (!stale.length) return;
   const ids = stale.map((row) => row.id);
   for(const id of ids)await Promise.all([fs.promises.rm(path.join(UPLOAD_DIR,id),{force:true}),fs.promises.rm(path.join(UPLOAD_DIR,`${id}.json`),{force:true})]);

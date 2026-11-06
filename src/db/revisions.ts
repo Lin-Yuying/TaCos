@@ -8,8 +8,8 @@ export function ensureRevisions(db: Database.Database) {
   ) WITHOUT ROWID`);
   const direct: Record<string, string> = {
     issues: "tasks", projects: "projects", labels: "tasks", task_fields: "tasks",
-    pages: "documents", page_comments: "documents",
-    agent_threads: "threads", workspace_members: "permissions", workspaces: "permissions",
+    pages: "documents", page_comments: "documents", page_versions: "documents",
+    agent_threads: "threads", agent_runs: "threads", workspace_members: "permissions", workspaces: "permissions",
     personal_entity_state: "personal", personal_task_views: "personal",
   };
   const via: Record<string, [string, string]> = {

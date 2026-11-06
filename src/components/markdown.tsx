@@ -1,4 +1,6 @@
 "use client";
+import { SafeImage } from "./safe-image";
+import { memo } from "react";
 
 import Link from "next/link";
 import { FileText } from "lucide-react";
@@ -549,7 +551,7 @@ export function MarkdownBlock({
     case "image":
       return (
         <figure className="my-3" style={{ marginLeft: block.depth * 20 }}>
-          <img
+          <SafeImage
             src={block.src}
             alt={block.alt}
             loading="lazy"
@@ -948,7 +950,7 @@ function TableBlock({
   );
 }
 
-export function Markdown({
+function MarkdownContent({
   source,
   pages,
   issues,
@@ -1008,3 +1010,5 @@ export function Markdown({
     </div>
   );
 }
+
+export const Markdown=memo(MarkdownContent);

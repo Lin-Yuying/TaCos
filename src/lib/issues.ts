@@ -1,3 +1,4 @@
+import { recordApiKeyUsage, pendingApiKeyUsage } from "./api-key-usage";
 import { normalizeFieldValue, type TaskField } from "./task-view";
 import { TacosError } from "./tacos-error";
 import { removeWorkspaceAttachments } from "./attachments";
@@ -10,6 +11,7 @@ import {
   eq,
   gt,
   inArray,
+  getTableColumns,
   isNotNull,
   isNull,
   lt,
@@ -456,51 +458,7 @@ export async function leaveWorkspace(workspaceId: string, userId: string) {
 const WORKSPACE_TRASH_DAYS = 30;
 
 // Hard delete: only the 30-day sweep and an expired restore call this.
-async function purgeWorkspaceData(db: ReturnType<typeof getDb>, workspaceId: string) {
-  const workspacePages = db.select({ id: pages.id }).from(pages).where(eq(pages.workspaceId, workspaceId));
-  await db.delete(pageCollab).where(inArray(pageCollab.pageId, workspacePages));
-  await db.delete(pageAccess).where(inArray(pageAccess.pageId, workspacePages));
-  await db.delete(pageFavorites).where(inArray(pageFavorites.pageId, workspacePages));
-  await removeWorkspaceAttachments(workspaceId);
-  await db.delete(pageVersions).where(eq(pageVersions.workspaceId, workspaceId));
-  await db.delete(pageComments).where(eq(pageComments.workspaceId, workspaceId));
-  await db.delete(pages).where(eq(pages.workspaceId, workspaceId));
-  const workspaceIssues = await db
-    .select({ id: issues.id })
-    .from(issues)
-    .where(eq(issues.workspaceId, workspaceId));
-  await db.delete(taskFields).where(eq(taskFields.workspaceId, workspaceId));
-  for (const row of workspaceIssues) {
-    await db.delete(taskFieldValues).where(eq(taskFieldValues.issueId, row.id));
-    await db.delete(issueAssignees).where(eq(issueAssignees.issueId, row.id));
-    await db.delete(issueLabels).where(eq(issueLabels.issueId, row.id));
-    await db
-      .delete(issueDependencies)
-      .where(or(eq(issueDependencies.issueId, row.id), eq(issueDependencies.blockedById, row.id)));
-    await db.delete(blockers).where(eq(blockers.issueId, row.id));
-    await db.delete(comments).where(eq(comments.issueId, row.id));
-    await db.delete(events).where(eq(events.issueId, row.id));
-  }
-  await db.delete(issues).where(eq(issues.workspaceId, workspaceId));
-
-  const workspaceProjects = await db
-    .select({ id: projects.id })
-    .from(projects)
-    .where(eq(projects.workspaceId, workspaceId));
-  if (workspaceProjects.length > 0) {
-    const ids = workspaceProjects.map((row) => row.id);
-    await db.delete(projectMembers).where(inArray(projectMembers.projectId, ids));
-    await db.delete(favorites).where(inArray(favorites.projectId, ids));
-  }
-  await db.delete(projects).where(eq(projects.workspaceId, workspaceId));
-
-  await db.delete(labels).where(eq(labels.workspaceId, workspaceId));
-  await db.delete(notifications).where(eq(notifications.workspaceId, workspaceId));
-  await db.delete(joinCodes).where(eq(joinCodes.workspaceId, workspaceId));
-  await db.delete(apiKeys).where(eq(apiKeys.workspaceId, workspaceId));
-  await db.delete(workspaceMembers).where(eq(workspaceMembers.workspaceId, workspaceId));
-  await db.delete(workspaces).where(eq(workspaces.id, workspaceId));
-}
+async function purgeWorkspaceData(_db:ReturnType<typeof getDb>,workspaceId:string){const {purgeWorkspaceRecords}=await import("./permanent-cleanup");await purgeWorkspaceRecords(workspaceId);}
 
 // Deleting is the owner's call, so it is deliberately two-step: typing the word
 // "confirmed" moves the team to their recycle bin, where it stays restorable for
@@ -1071,10 +1029,13 @@ export async function trashProject(workspaceId: string, projectId: string, userI
 
 export async function restoreProject(workspaceId: string, projectId: string, userId: string) {
   await assertProjectOwner(workspaceId, projectId, userId);
-  await getDb()
-    .update(projects)
-    .set({ deletedAt: null })
-    .where(and(eq(projects.workspaceId, workspaceId), eq(projects.id, projectId)));
+  const db=getDb();
+  db.transaction(()=>{
+  const cleanup=db.$client.prepare("SELECT id FROM maintenance_jobs WHERE id=? AND (state='running' OR completed>0)").get(`project:${projectId}`);
+  if(cleanup)throw new TacosError("Permanent cleanup has started. This project can no longer be restored.",409);
+  db.update(projects).set({deletedAt:null}).where(and(eq(projects.workspaceId,workspaceId),eq(projects.id,projectId))).run();
+  });
+
 }
 
 // The identifier prefix stays put, so "TEST-3" keeps its number across a rename.
@@ -1649,27 +1610,8 @@ export async function removeProjectMember(
 }
 
 export async function purgeProject(workspaceId: string, projectId: string, userId: string) {
-  await assertProjectOwner(workspaceId, projectId, userId);
-  const db = getDb();
-  const rows = await db
-    .select({ id: issues.id })
-    .from(issues)
-    .where(and(eq(issues.workspaceId, workspaceId), eq(issues.projectId, projectId)));
-  for (const row of rows) {
-    await db.delete(taskFieldValues).where(eq(taskFieldValues.issueId, row.id));
-    await db.delete(issueLabels).where(eq(issueLabels.issueId, row.id));
-    await db.delete(blockers).where(eq(blockers.issueId, row.id));
-    await db
-      .delete(issueDependencies)
-      .where(or(eq(issueDependencies.issueId, row.id), eq(issueDependencies.blockedById, row.id)));
-    await db.delete(comments).where(eq(comments.issueId, row.id));
-    await db.delete(events).where(eq(events.issueId, row.id));
-    await db.delete(notifications).where(eq(notifications.issueId, row.id));
-  }
-  await db.delete(issues).where(eq(issues.projectId, projectId));
-  await db.delete(projectMembers).where(eq(projectMembers.projectId, projectId));
-  await db.delete(favorites).where(eq(favorites.projectId, projectId));
-  await db.delete(projects).where(and(eq(projects.workspaceId, workspaceId), eq(projects.id, projectId)));
+  await assertProjectOwner(workspaceId,projectId,userId);
+  const {purgeProjectRecords}=await import("./permanent-cleanup");await purgeProjectRecords(workspaceId,projectId);
 }
 
 type ProjectRow = typeof projects.$inferSelect;
@@ -1833,6 +1775,7 @@ async function membersById(workspaceId: string): Promise<Map<string, Assignee>> 
 
 async function toIssueRows(workspaceId: string, rows: IssueRow[]): Promise<IssueWithLabels[]> {
   if (rows.length === 0) return [];
+  if(rows.length>500){const out:IssueWithLabels[]=[];for(let at=0;at<rows.length;at+=500)out.push(...await toIssueRows(workspaceId,rows.slice(at,at+500)));return out;}
   const db = getDb();
   const [projectMap, memberMap] = await Promise.all([
     projectsById(workspaceId),
@@ -1907,6 +1850,9 @@ async function toIssueRows(workspaceId: string, rows: IssueRow[]): Promise<Issue
 }
 
 export type ListFilters = {
+  summary?: boolean;
+  offset?: number;
+  ids?:string[];
   status?: Status | "active" | "open" | "all";
   priority?: Priority;
   projectId?: string;
@@ -1967,6 +1913,7 @@ async function issueConditions(workspaceId: string, filters: ListFilters) {
     conditions.push(ownIssueProjectCondition(filters.viewerId));
   }
 
+  if(filters.ids){if(!filters.ids.length)return null;conditions.push(inArray(issues.id,filters.ids));}
   if (filters.sourceThreadId) {
     conditions.push(eq(issues.sourceThreadId, filters.sourceThreadId));
   }
@@ -2039,9 +1986,9 @@ async function issueRows(workspaceId: string, filters: ListFilters, extra = 0) {
   const cursorWhere = after ? or(gt(issueRank,after.rank),and(eq(issueRank,after.rank),or(
     lt(issues.position,after.position),and(eq(issues.position,after.position),or(
       lt(issues.createdAt,after.createdAt),and(eq(issues.createdAt,after.createdAt),gt(issues.id,after.id))))))) : undefined;
-  return getDb().select().from(issues).where(and(where,cursorWhere))
+  return getDb().select({...getTableColumns(issues),...(filters.summary?{description:sql<string>`''`}:{})}).from(issues).where(and(where,cursorWhere))
     .orderBy(asc(issueRank),desc(issues.position),desc(issues.createdAt),asc(issues.id))
-    .limit(filters.limit ? Math.max(1,Math.trunc(filters.limit))+extra : -1);
+    .limit(filters.limit ? Math.max(1,Math.trunc(filters.limit))+extra : -1).offset(Math.max(0,filters.offset??0));
 }
 export async function listIssues(workspaceId: string, filters: ListFilters = {}): Promise<IssueWithLabels[]> {
   return toIssueRows(workspaceId,await issueRows(workspaceId,filters));
@@ -3220,26 +3167,8 @@ export async function restoreIssue(workspaceId: string, issueId: string) {
 
 // Only ever called from the Trash, so the issue has to be soft-deleted first.
 export async function purgeIssue(workspaceId: string, issueId: string) {
-  const db = getDb();
-  await db.delete(taskFieldValues).where(eq(taskFieldValues.issueId, issueId));
-  await db.delete(issueAssignees).where(eq(issueAssignees.issueId, issueId));
-  await db.delete(issueLabels).where(eq(issueLabels.issueId, issueId));
-  await db.delete(blockers).where(eq(blockers.issueId, issueId));
-  await db
-    .delete(issueDependencies)
-    .where(or(eq(issueDependencies.issueId, issueId), eq(issueDependencies.blockedById, issueId)));
-  await db.delete(comments).where(eq(comments.issueId, issueId));
-  await db.delete(events).where(eq(events.issueId, issueId));
-  await db.delete(notifications).where(eq(notifications.issueId, issueId));
-  await db
-    .delete(issues)
-    .where(
-      and(
-        eq(issues.workspaceId, workspaceId),
-        eq(issues.id, issueId),
-        isNotNull(issues.deletedAt)
-      )
-    );
+  const {deleteTaskRecords}=await import("./permanent-cleanup");
+  getDb().$client.transaction(()=>{const row=getDb().$client.prepare("SELECT id FROM issues WHERE workspace_id=? AND id=? AND deleted_at IS NOT NULL").get(workspaceId,issueId);if(row)deleteTaskRecords([issueId]);}).immediate();
 }
 
 export async function addComment(
@@ -3505,7 +3434,7 @@ export async function verifyApiKey(rawKey: string, options: { recordUse?: boolea
     .where(and(eq(workspaceMembers.workspaceId, record.workspaceId), eq(workspaceMembers.userId, record.createdBy)))
     .limit(1);
   if (!creator) return null;
-  if (options.recordUse !== false) await db.update(apiKeys).set({ lastUsedAt: nowIso() }).where(eq(apiKeys.id, record.id));
+  if (options.recordUse !== false) {const at=nowIso();await recordApiKeyUsage(record.id,at);record.lastUsedAt=at;}
   return {
     id: record.id,
     workspaceId: record.workspaceId,
@@ -3518,7 +3447,8 @@ export async function verifyApiKey(rawKey: string, options: { recordUse?: boolea
 }
 
 export async function listApiKeys(workspaceId: string): Promise<ApiKeyRecord[]> {
-  return getDb()
+  const pending=await pendingApiKeyUsage();
+  const rows=await getDb()
     .select({
       createdBy: apiKeys.createdBy,
       id: apiKeys.id,
@@ -3531,6 +3461,7 @@ export async function listApiKeys(workspaceId: string): Promise<ApiKeyRecord[]> 
     .from(apiKeys)
     .where(eq(apiKeys.workspaceId, workspaceId))
     .orderBy(apiKeys.createdAt);
+  return rows.map(row=>({...row,lastUsedAt:row.lastUsedAt && row.lastUsedAt>(pending.get(row.id)??"")?row.lastUsedAt:pending.get(row.id)??row.lastUsedAt}));
 }
 
 export async function revokeApiKey(workspaceId: string, id: string, actorId: string) {
@@ -3590,12 +3521,16 @@ export function startDueReminderScheduler(intervalMs = 60_000) {
   reminderTimer.unref?.();
 }
 
+export async function workspaceRevisions(workspaceId:string,userId:string):Promise<Record<string,number>>{
+ const rows=await getDb().all<{domain:string;revision:number}>(sql`SELECT domain,revision FROM workspace_revisions WHERE workspace_id IN (${workspaceId},${"@user:"+userId})`);
+ return Object.fromEntries(rows.map(row=>[row.domain,row.revision]));
+}
+
 // H-COLLAB-13: a short fingerprint of what other members can change in a workspace:
 // tasks (edits, claims, deletes), activity, comments, agent messages, and this user's
 // notices. A window polls it and refreshes when it changes.
 export async function workspacePulse(workspaceId: string, userId: string): Promise<string> {
-  const db = getDb();
-  const rows = await db.all<{ workspace_id: string; domain: string; revision: number }>(sql`
+  const rows = await getDb().all<{ workspace_id: string; domain: string; revision: number }>(sql`
     SELECT workspace_id, domain, revision FROM workspace_revisions
     WHERE workspace_id IN (${workspaceId}, ${"@user:" + userId})
     ORDER BY workspace_id, domain

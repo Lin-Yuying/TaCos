@@ -12,6 +12,12 @@ import * as schema from "./schema";
 export { DATA_DIR };
 
 const DDL = `
+CREATE TABLE IF NOT EXISTS attachment_references(attachment_id TEXT NOT NULL,source TEXT NOT NULL,PRIMARY KEY(attachment_id,source));
+CREATE TABLE IF NOT EXISTS attachment_reference_checks(workspace_id TEXT PRIMARY KEY,checked_at TEXT NOT NULL);
+CREATE TABLE IF NOT EXISTS attachment_reclaim_candidates(attachment_id TEXT PRIMARY KEY,unreferenced_since TEXT NOT NULL);
+CREATE TABLE IF NOT EXISTS runner_event_batches(run_id TEXT NOT NULL,sequence INTEGER NOT NULL,body TEXT NOT NULL,accepted INTEGER NOT NULL DEFAULT 0,created_at TEXT NOT NULL,PRIMARY KEY(run_id,sequence));
+CREATE TABLE IF NOT EXISTS maintenance_jobs(id TEXT PRIMARY KEY,owner TEXT NOT NULL,lease_until INTEGER NOT NULL,state TEXT NOT NULL,completed INTEGER NOT NULL DEFAULT 0,error TEXT,updated_at TEXT NOT NULL);
+CREATE TABLE IF NOT EXISTS file_cleanup(id TEXT PRIMARY KEY,created_at TEXT NOT NULL,error TEXT);
 CREATE TABLE IF NOT EXISTS personal_task_views (
  workspace_id TEXT NOT NULL,user_id TEXT NOT NULL,scope TEXT NOT NULL,name TEXT NOT NULL,value TEXT NOT NULL,
  PRIMARY KEY(workspace_id,user_id,scope,name)
@@ -860,6 +866,9 @@ function ensureSearchIndex(sqlite: Database.Database) {
 function bootstrap(sqlite: Database.Database) {
   const hadIssueAssignees = tableExists(sqlite, "issue_assignees");
   sqlite.exec(DDL);
+  addColumnIfMissing(sqlite,"page_versions","doc_compressed","TEXT");
+  addColumnIfMissing(sqlite,"agent_runs","payload_compressed","TEXT");
+  addColumnIfMissing(sqlite,"runner_event_batches","body_compressed","TEXT");
   addColumnIfMissing(sqlite,"favorites","position","INTEGER NOT NULL DEFAULT 0");
   addColumnIfMissing(sqlite,"page_favorites","position","INTEGER NOT NULL DEFAULT 0");
   addColumnIfMissing(sqlite, "users", "avatar", "TEXT");
@@ -934,7 +943,7 @@ function bootstrap(sqlite: Database.Database) {
   sqlite.exec(`CREATE INDEX IF NOT EXISTS issues_reminder_due ON issues(reminder_next_fire) WHERE reminder_next_fire IS NOT NULL;
   CREATE TRIGGER IF NOT EXISTS reminder_schedule_ai AFTER INSERT ON issues BEGIN UPDATE issues SET reminder_next_fire=${reminderFire} WHERE id=new.id; END;
   CREATE TRIGGER IF NOT EXISTS reminder_schedule_au AFTER UPDATE OF due_date,reminder,status,deleted_at,reminder_sent_for ON issues BEGIN UPDATE issues SET reminder_next_fire=${reminderFire} WHERE id=new.id; END;
-  CREATE INDEX IF NOT EXISTS attachments_stale_idx ON attachments(workspace_id,created_at) WHERE complete=0 OR page_id='agent:draft';`);
+  CREATE INDEX IF NOT EXISTS attachments_stale_idx ON attachments(workspace_id,created_at) WHERE complete=0 OR page_id='agent-draft';`);
   if(reminderScheduleFresh)sqlite.exec(`UPDATE issues SET reminder_next_fire=${reminderFire}`);
 
 
