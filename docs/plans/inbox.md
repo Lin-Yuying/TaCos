@@ -195,9 +195,15 @@ as a follow-up (see below).
 8. A row marked Done disappears from the four tabs but appears in search, and
    is swept together with the rest after 90 days.
 
-## Open questions
+## Decisions (confirmed 2026-11-06, no open questions)
 
-- None blocking. Digest/email and per-workspace policy are follow-ups.
+- One PR covers P0-P3; commits may be split by phase.
+- Retention: 90 days, swept lazily.
+- Done rows stay searchable until the sweep.
+- Keyboard shortcuts: the full Linear set.
+- Preferences are per user with per-user mutes; workspace-level policy,
+  digest and email are follow-ups.
+- Implement exactly this in the Inbox PR; do not mix in Agent access work.
 
 ## Follow-ups (not this PR)
 
@@ -215,6 +221,6 @@ as a follow-up (see below).
   and simpler, but one person's choice changes everyone's inbox, and per-person
   mutes are impossible.
 
-Recommendation: per-user preferences with sane defaults for every member, plus
+Chosen: per-user preferences with sane defaults for every member, plus
 per-user mutes. If the workspace needs a policy, add an owner-level "defaults"
-row later instead of forcing everyone. Confirm before the PR starts.
+row later instead of forcing everyone.
