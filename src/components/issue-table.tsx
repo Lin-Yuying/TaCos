@@ -4,6 +4,7 @@ import { VirtualStack, type VirtualStackHandle } from "@/components/ui/virtual-s
 import { EntityRow } from "@/components/ui/entity-row";
 
 import Link from "next/link";
+import { Bot } from "lucide-react";
 import { useParams } from "next/navigation";
 import { useScrollMemory } from "@/lib/ui/scroll-memory";
 import { usePathname } from "next/navigation";
@@ -341,6 +342,16 @@ export function IssueTable({
                   </span>
                 ) : null}
                 <span className="min-w-0 flex-1 truncate">{issue.title}</span>
+                {issue.delegatedAgentId ? (
+                  <span
+                    title={issue.delegatedAgentName ? t("Delegated to {name}", { name: issue.delegatedAgentName }) : t("Delegated to an agent")}
+                    data-testid="task-delegated"
+                    className="flex shrink-0 items-center gap-0.5 rounded-full bg-elevated px-1.5 py-0.5 text-caption text-muted"
+                  >
+                    <Bot size={11} />
+                    {issue.delegationStatus === "review" ? t("Review") : null}
+                  </span>
+                ) : null}
                 {show("project") ? (
                   <span className="hidden w-[110px] shrink-0 truncate text-small text-muted @xl:block">
                     {issue.projectName}

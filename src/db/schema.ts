@@ -446,6 +446,13 @@ export const issues = sqliteTable(
     reviewStatus: text("review_status").notNull().default("approved"),
     reviewedBy: text("reviewed_by"),
     reviewedAt: text("reviewed_at"),
+    // #79: an agent the task is delegated to. The human assignees keep ownership.
+    delegatedAgentId: text("delegated_agent_id"),
+    delegatedBy: text("delegated_by"),
+    delegatedAt: text("delegated_at"),
+    // queued | running | review | changes_requested | approved | failed | cancelled
+    delegationStatus: text("delegation_status"),
+    delegationRunId: text("delegation_run_id"),
     createdAt: text("created_at").notNull(),
     updatedAt: text("updated_at").notNull(),
   },
@@ -688,6 +695,11 @@ export const agentThreads = sqliteTable(
     // team-2.3: one Agent turn at a time on a shared chat.
     turnUserId: text("turn_user_id"),
     turnStartedAt: text("turn_started_at"),
+    // #79: the workspace agent (or the author's personal agent) that opened this thread.
+    agentId: text("agent_id"),
+    // #79: compacted older history and the last message it covers.
+    contextSummary: text("context_summary"),
+    contextSummaryThrough: text("context_summary_through"),
     createdBy: text("created_by").notNull(),
     createdAt: text("created_at").notNull(),
     updatedAt: text("updated_at").notNull(),
@@ -804,9 +816,86 @@ export const agentRuns = sqliteTable("agent_runs", {
   // queued | running | done | failed | cancelled
   status: text("status").notNull(),
   error: text("error"),
+  // #79: who the work belongs to, and where it actually runs. "runner" waits for the
+  // member's computer; "api" runs the built-in loop here.
+  agentId: text("agent_id"),
+  source: text("source").notNull().default("runner"),
+  // null | pending | approved | changes_requested. Set when a run finishes with output.
+  reviewStatus: text("review_status"),
+  model: text("model").notNull().default(""),
+  // #79: plan usage snapshot captured when the run started; JSON SubscriptionInfo.
+  subscription: text("subscription"),
   createdAt: text("created_at").notNull(),
   finishedAt: text("finished_at"),
 });
+
+// One workspace-level named agent, or one member's personal agent. A workspace agent is
+// shared; `personal` rows belong to `createdBy` and are visible only to that member.
+export const workspaceAgents = sqliteTable(
+  "workspace_agents",
+  {
+    id: text("id").primaryKey(),
+    workspaceId: text("workspace_id").notNull(),
+    name: text("name").notNull(),
+    description: text("description").notNull().default(""),
+    // harness: one local CLI; api: the built-in loop over the owner's model API.
+    source: text("source").notNull(),
+    engine: text("engine").notNull().default(""),
+    model: text("model").notNull().default(""),
+    approval: text("approval").notNull().default("ask"),
+    // JSON array of project ids; empty means every project in the workspace.
+    projectIds: text("project_ids").notNull().default("[]"),
+    enabled: integer("enabled").notNull().default(1),
+    personal: integer("personal").notNull().default(0),
+    createdBy: text("created_by").notNull(),
+    createdAt: text("created_at").notNull(),
+    updatedAt: text("updated_at").notNull(),
+  },
+  (t) => [index("workspace_agents_workspace_idx").on(t.workspaceId)]
+);
+
+// The observe-only token ledger. One row per turn that reported usage. Nothing reads it
+// to stop a run.
+export const agentUsage = sqliteTable(
+  "agent_usage",
+  {
+    id: text("id").primaryKey(),
+    workspaceId: text("workspace_id").notNull(),
+    runId: text("run_id"),
+    threadId: text("thread_id"),
+    messageId: text("message_id"),
+    issueId: text("issue_id"),
+    agentId: text("agent_id"),
+    userId: text("user_id").notNull(),
+    engine: text("engine").notNull(),
+    model: text("model").notNull().default(""),
+    // runner | api — where the turn actually ran.
+    source: text("source").notNull().default("runner"),
+    inputTokens: integer("input_tokens").notNull().default(0),
+    outputTokens: integer("output_tokens").notNull().default(0),
+    cachedTokens: integer("cached_tokens").notNull().default(0),
+    reasoningTokens: integer("reasoning_tokens").notNull().default(0),
+    durationMs: integer("duration_ms").notNull().default(0),
+    createdAt: text("created_at").notNull(),
+  },
+  (t) => [
+    index("agent_usage_workspace_idx").on(t.workspaceId, t.createdAt),
+    index("agent_usage_agent_idx").on(t.agentId),
+    index("agent_usage_thread_idx").on(t.threadId),
+  ]
+);
+
+// A harness's own session id for one thread. Each harness only resumes its own.
+export const agentHarnessSessions = sqliteTable(
+  "agent_harness_sessions",
+  {
+    threadId: text("thread_id").notNull(),
+    engine: text("engine").notNull(),
+    sessionId: text("session_id").notNull(),
+    updatedAt: text("updated_at").notNull(),
+  },
+  (t) => [primaryKey({ columns: [t.threadId, t.engine] })]
+);
 
 // A document's shared editing state; pages.doc stays the text everything else reads.
 export const pageCollab = sqliteTable("page_collab", {

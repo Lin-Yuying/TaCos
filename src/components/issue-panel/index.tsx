@@ -21,7 +21,7 @@ import { BlockerReport } from "./blocker-report";
 import { ClaimRow } from "./claim-row";
 import { SourceChatRow } from "./source-chat-row";
 import { AdvanceButton } from "./advance-button";
-import { HandoffRow } from "./handoff-row";
+import { DelegationRow } from "./delegation-row";
 import { DescriptionSection } from "./description";
 import { ChangelogSection } from "./changelog";
 import { CommentsSection } from "./comments";
@@ -240,10 +240,9 @@ function IssuePanel({
           onError={setError}
         />
 
-        <HandoffRow
+        <DelegationRow
           workspaceId={workspaceId}
           detail={detail}
-          currentUserId={currentUserId}
           onFinished={() => setFinished((count) => count + 1)}
         />
 

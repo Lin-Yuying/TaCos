@@ -130,6 +130,13 @@ export type Issue = {
   reviewStatus: ReviewStatus;
   reviewedBy: string | null;
   reviewedAt: string | null;
+  // #79: delegation keeps the human assignees; this names the agent and its run state.
+  delegatedAgentId: string | null;
+  delegatedBy: string | null;
+  delegatedAt: string | null;
+  delegationStatus: string | null;
+  delegationRunId: string | null;
+  delegatedAgentName: string | null;
   createdAt: string;
   updatedAt: string;
 };
@@ -1846,6 +1853,17 @@ async function toIssueRows(workspaceId: string, rows: IssueRow[]): Promise<Issue
   for (const list of assigneesByIssue.values()) {
     list.sort((a, b) => a.displayName.localeCompare(b.displayName));
   }
+  // #79: one extra lookup for the agent names on this page.
+  const agentIds = [...new Set(rows.map((row) => row.delegatedAgentId).filter((id): id is string => Boolean(id)))];
+  const agentNames = new Map<string, string>();
+  if (agentIds.length) {
+    const { workspaceAgents } = await import("@/db/schema");
+    const found = await getDb()
+      .select({ id: workspaceAgents.id, name: workspaceAgents.name })
+      .from(workspaceAgents)
+      .where(inArray(workspaceAgents.id, agentIds));
+    for (const agent of found) agentNames.set(agent.id, agent.name);
+  }
   return rows.map((row) => {
     const project = projectMap.get(row.projectId);
     return {
@@ -1874,6 +1892,12 @@ async function toIssueRows(workspaceId: string, rows: IssueRow[]): Promise<Issue
       reviewStatus: row.reviewStatus as ReviewStatus,
       reviewedBy: row.reviewedBy ?? null,
       reviewedAt: row.reviewedAt ?? null,
+      delegatedAgentId: row.delegatedAgentId ?? null,
+      delegatedBy: row.delegatedBy ?? null,
+      delegatedAt: row.delegatedAt ?? null,
+      delegationStatus: row.delegationStatus ?? null,
+      delegationRunId: row.delegationRunId ?? null,
+      delegatedAgentName: row.delegatedAgentId ? (agentNames.get(row.delegatedAgentId) ?? null) : null,
       createdAt: row.createdAt,
       updatedAt: row.updatedAt,
       labels: (byIssue.get(row.id) ?? []).sort((a, b) => a.name.localeCompare(b.name)),
@@ -1904,6 +1928,9 @@ export type ListFilters = {
   sourceThreadId?: string;
   // Tasks an agent created (API or MCP), not ones a person opened in the app.
   agent?: boolean;
+  // #79: tasks delegated to any agent, or to one named agent.
+  delegated?: boolean;
+  delegatedAgentId?: string;
 };
 
 // Totals for a project's Overview page; grouped in SQL so the count stays right
@@ -1954,6 +1981,12 @@ async function issueConditions(workspaceId: string, filters: ListFilters) {
   }
   if (filters.agent) {
     conditions.push(inArray(issues.createdVia, ["api", "mcp"]));
+  }
+  if (filters.delegated) {
+    conditions.push(isNotNull(issues.delegatedAgentId));
+  }
+  if (filters.delegatedAgentId) {
+    conditions.push(eq(issues.delegatedAgentId, filters.delegatedAgentId));
   }
   if (filters.status === "active") {
     conditions.push(inArray(issues.status, ["todo", "in_progress"]));
@@ -2210,6 +2243,10 @@ export type NotificationInput = {
     | "handoff_done"
     | "handoff_failed"
     | "handoff_waiting"
+    | "delegation_started"
+    | "delegation_review"
+    | "delegation_failed"
+    | "delegation_changes_requested"
     | "blocker"
     | "view_added"
     | "view_completed"
@@ -3589,6 +3626,12 @@ export async function deleteIssue(workspaceId: string, idOrIdentifier: string): 
     reviewStatus: row.reviewStatus as ReviewStatus,
     reviewedBy: row.reviewedBy ?? null,
     reviewedAt: row.reviewedAt ?? null,
+    delegatedAgentId: row.delegatedAgentId ?? null,
+    delegatedBy: row.delegatedBy ?? null,
+    delegatedAt: row.delegatedAt ?? null,
+    delegationStatus: row.delegationStatus ?? null,
+    delegationRunId: row.delegationRunId ?? null,
+    delegatedAgentName: null,
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
   };
