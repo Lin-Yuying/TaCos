@@ -1,5 +1,7 @@
 "use client";
 
+import { useRouter } from "next/navigation";
+import { EntityRow } from "@/components/ui/entity-row";
 import { useMemo, useRef, useState } from "react";
 import { columnSizingFeature, createColumnHelper, tableFeatures, useTable } from "@tanstack/react-table";
 import { useVirtualizer } from "@tanstack/react-virtual";
@@ -59,7 +61,7 @@ function FieldCell({
         if (event.target.value !== value) onSave(event.target.value || null);
       }}
       onKeyDown={(event) => {
-        if (event.key === "Enter") event.currentTarget.blur();
+        if (event.key === "Enter" && !event.nativeEvent.isComposing) event.currentTarget.blur();
       }}
       className={CELL_INPUT}
     />
@@ -93,24 +95,29 @@ export function TaskGrid({
 }) {
   const t = useT();
   const { openIssue } = useUI();
-  const [edits, setEdits] = useState<Record<string, string | null>>({});
+  const router=useRouter();
+  const saving=useRef(new Set<string>());
   const [error, setError] = useState<string | null>(null);
   const scroller = useRef<HTMLDivElement>(null);
 
   const columns = useMemo(() => {
     const column = createColumnHelper<typeof FEATURES, IssueWithLabels>();
     const valueOf = (issueId: string, fieldId: string) => {
-      const key = `${issueId}:${fieldId}`;
-      return (key in edits ? edits[key] : values[issueId]?.[fieldId]) ?? "";
+      return values[issueId]?.[fieldId] ?? "";
     };
     const save = async (issueId: string, fieldId: string, next: string | null) => {
+      const key=`${issueId}:${fieldId}`;
+      if(saving.current.has(key))return;
+      saving.current.add(key);
+      try {
       const result = await setTaskFieldValueAction(workspaceId, issueId, fieldId, next);
       if (result.ok) {
         setError(null);
-        setEdits((current) => ({ ...current, [`${issueId}:${fieldId}`]: result.data }));
+        router.refresh();
       } else {
         setError(result.error);
       }
+      }catch{setError("Could not save. Retry.");}finally{saving.current.delete(key);}
     };
     return column.columns([
       column.display({
@@ -175,7 +182,7 @@ export function TaskGrid({
         })
       ),
     ]);
-  }, [edits, fields, t, values, workspaceId]);
+  }, [fields, t, values, workspaceId,router]);
 
   const table = useTable({ features: FEATURES, data: issues, columns });
   const rows = table.getRowModel().rows;

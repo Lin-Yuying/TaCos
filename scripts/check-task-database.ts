@@ -141,7 +141,11 @@ async function main() {
   assert((await status(() => lib.deleteTaskField(ws, "member", other.id))) === 403, "a member cannot delete another's field");
   await lib.setTaskFieldValue(ws, "i1", other.id, "x", "owner", actor);
   await lib.deleteTaskField(ws, "owner", other.id);
-  assert(!(await lib.listFieldValues(["i1"])).i1, "deleting a field removes its values");
+  assert(!(await lib.listFieldValues(["i1"])).i1, "disabled field values are hidden");
+  assert((await status(()=>lib.setTaskFieldValue(ws,"i1",other.id,"lost","owner",actor)))===409,"disabled fields reject writes");
+  await lib.restoreTaskField(ws,"owner",other.id);
+  assert((await lib.listFieldValues(["i1"])).i1[other.id]==="x","restoring a field recovers its values");
+  await lib.deleteTaskField(ws,"owner",other.id);
   await lib.deleteTaskField(ws, "owner", stage.id);
   assert((await lib.listTaskFields(ws)).length === 0, "an admin can delete a member's field");
 

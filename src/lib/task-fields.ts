@@ -1,4 +1,4 @@
-import { and, eq, inArray } from "drizzle-orm";
+import { and, eq, inArray, isNull, count } from "drizzle-orm";
 import { getDb } from "../db/client";
 import { taskFieldValues, taskFields, workspaceMembers } from "../db/schema";
 import { getIssueDetail, recordEvent, type MutationActor } from "./issues";
@@ -23,6 +23,7 @@ function toField(row: Row): TaskField {
     type: row.type as FieldType,
     options: JSON.parse(row.options) as string[],
     createdBy: row.createdBy,
+    disabledAt: row.disabledAt,
   };
 }
 
@@ -35,11 +36,11 @@ function cleanOptions(options: string[] | undefined): string[] {
   return out.slice(0, MAX_OPTIONS);
 }
 
-export async function listTaskFields(workspaceId: string): Promise<TaskField[]> {
+export async function listTaskFields(workspaceId: string, includeDisabled = false): Promise<TaskField[]> {
   const rows = await getDb()
     .select()
     .from(taskFields)
-    .where(eq(taskFields.workspaceId, workspaceId))
+    .where(and(eq(taskFields.workspaceId, workspaceId), includeDisabled ? undefined : isNull(taskFields.disabledAt)))
     .orderBy(taskFields.createdAt);
   return rows.map(toField);
 }
@@ -67,6 +68,7 @@ export async function createTaskField(
     options: JSON.stringify(options),
     createdBy: viewerId,
     createdAt: new Date().toISOString(),
+    disabledAt: null,
   };
   await getDb().insert(taskFields).values(row);
   return toField(row);
@@ -94,13 +96,14 @@ export async function deleteTaskField(workspaceId: string, viewerId: string, fie
       .limit(1);
     if (member?.role !== "admin") throw new TacosError("Only its creator or an admin can delete a field", 403);
   }
-  await db.delete(taskFieldValues).where(eq(taskFieldValues.fieldId, fieldId));
-  await db.delete(taskFields).where(eq(taskFields.id, fieldId));
+  await db.update(taskFields).set({disabledAt: new Date().toISOString()}).where(eq(taskFields.id, fieldId));
 }
 
 export async function listFieldValues(issueIds: string[]): Promise<FieldValues> {
   if (!issueIds.length) return {};
-  const rows = await getDb().select().from(taskFieldValues).where(inArray(taskFieldValues.issueId, issueIds));
+  const rows = await getDb().select({issueId:taskFieldValues.issueId, fieldId:taskFieldValues.fieldId, value:taskFieldValues.value}).from(taskFieldValues)
+    .innerJoin(taskFields, eq(taskFields.id, taskFieldValues.fieldId))
+    .where(and(inArray(taskFieldValues.issueId, issueIds), isNull(taskFields.disabledAt)));
   const out: FieldValues = {};
   for (const row of rows) (out[row.issueId] ??= {})[row.fieldId] = row.value;
   return out;
@@ -115,6 +118,7 @@ export async function setTaskFieldValue(
   actor: MutationActor
 ): Promise<string | null> {
   const field = await findField(workspaceId, fieldId);
+  if (field.disabledAt) throw new TacosError("This field is disabled. Restore it before editing.", 409);
   const detail = await getIssueDetail(workspaceId, issueId, viewerId);
   if (!detail) throw new TacosError("Issue not found", 404);
   const id = detail.issue.id;
@@ -133,4 +137,16 @@ export async function setTaskFieldValue(
   }
   await recordEvent(id, "field_changed", { field: field.name, from: old?.value ?? null, to: value }, actor);
   return value;
+}
+
+export async function taskFieldImpact(workspaceId: string, fieldId: string): Promise<number> {
+  await findField(workspaceId,fieldId);
+  return getDb().select({value:count()}).from(taskFieldValues).where(eq(taskFieldValues.fieldId,fieldId)).get()?.value ?? 0;
+}
+
+export async function restoreTaskField(workspaceId: string, viewerId: string, fieldId: string): Promise<void> {
+  const field = await findField(workspaceId,fieldId);
+  const member = getDb().select().from(workspaceMembers).where(and(eq(workspaceMembers.workspaceId,workspaceId),eq(workspaceMembers.userId,viewerId))).get();
+  if(field.createdBy !== viewerId && member?.role !== "admin") throw new TacosError("Only its creator or an admin can restore a field",403);
+  await getDb().update(taskFields).set({disabledAt:null}).where(eq(taskFields.id,fieldId));
 }

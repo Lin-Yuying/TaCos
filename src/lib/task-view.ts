@@ -12,6 +12,7 @@ export type TaskField = {
   type: FieldType;
   options: string[];
   createdBy: string;
+  disabledAt?: string | null;
 };
 
 export type FieldValues = Record<string, Record<string, string>>;

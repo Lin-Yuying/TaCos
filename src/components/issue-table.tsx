@@ -1,5 +1,7 @@
 "use client";
 
+import { EntityRow } from "@/components/ui/entity-row";
+
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -140,7 +142,24 @@ export function IssueTable({ issues }: { issues: IssueWithLabels[] }) {
   const locale = useLocale();
   const { openIssue, openIssueId, setFocused } = useUI();
   const assigneeHref = useAssigneeHref();
-  const [focusIndex, setFocusIndex] = useState<number | null>(null);
+  const groups = useMemo(
+    () =>
+      STATUS_ORDER.map((status) => ({
+        status,
+        items: issues.filter((issue) => issue.status === status),
+      })).filter((group) => group.items.length > 0),
+    [issues]
+  );
+
+  const visibleIssues = useMemo(() => groups.flatMap((group) => group.items), [groups]);
+  const [focusId, setFocusId] = useState<string | null>(null);
+  const foundIndex = visibleIssues.findIndex((issue) => issue.id === focusId);
+  const focusIndex = foundIndex < 0 ? null : foundIndex;
+  const setFocusIndex = (next: number | null | ((previous:number|null)=>number)) => setFocusId((current)=>{
+    const found = visibleIssues.findIndex((issue)=>issue.id === current);
+    const index = typeof next === "function" ? next(found < 0 ? null : found) : next;
+    return index === null ? null : visibleIssues[index]?.id ?? null;
+  });
   const rowRefs = useRef<(HTMLDivElement | null)[]>([]);
 
   useEffect(() => {
@@ -148,7 +167,7 @@ export function IssueTable({ issues }: { issues: IssueWithLabels[] }) {
       setFocused(null);
       return;
     }
-    const issue = issues[focusIndex];
+    const issue = visibleIssues[focusIndex];
     setFocused(
       issue
         ? {
@@ -160,13 +179,8 @@ export function IssueTable({ issues }: { issues: IssueWithLabels[] }) {
           }
         : null
     );
-  }, [focusIndex, issues, setFocused]);
+  }, [focusIndex, visibleIssues, setFocused]);
 
-  useEffect(() => {
-    if (focusIndex != null && focusIndex >= issues.length) {
-      setFocusIndex(issues.length > 0 ? issues.length - 1 : null);
-    }
-  }, [issues, focusIndex]);
 
   useEffect(() => {
     rowRefs.current[focusIndex ?? -1]?.scrollIntoView({ block: "nearest" });
@@ -174,15 +188,15 @@ export function IssueTable({ issues }: { issues: IssueWithLabels[] }) {
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (isTyping(e) || e.metaKey || e.ctrlKey || e.altKey) return;
+      if (e.defaultPrevented || !rowRefs.current.some((row) => row?.contains(document.activeElement)) || document.querySelector('[role="dialog"], [role="menu"][data-state="open"]') || isTyping(e) || e.metaKey || e.ctrlKey || e.altKey) return;
       if (e.key === "ArrowDown" || e.key === "j") {
         e.preventDefault();
-        setFocusIndex((i) => Math.min((i ?? -1) + 1, issues.length - 1));
+        setFocusIndex((i) => Math.min((i ?? -1) + 1, visibleIssues.length - 1));
       } else if (e.key === "ArrowUp" || e.key === "k") {
         e.preventDefault();
         setFocusIndex((i) => Math.max((i ?? 1) - 1, 0));
       } else if (e.key === "Enter") {
-        const issue = focusIndex != null ? issues[focusIndex] : undefined;
+        const issue = focusIndex != null ? visibleIssues[focusIndex] : undefined;
         if (issue) {
           e.preventDefault();
           openIssue(issue.id);
@@ -191,18 +205,9 @@ export function IssueTable({ issues }: { issues: IssueWithLabels[] }) {
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [issues, focusIndex, openIssue]);
+  }, [visibleIssues, focusIndex, openIssue]);
 
-  const groups = useMemo(
-    () =>
-      STATUS_ORDER.map((status) => ({
-        status,
-        items: issues.filter((issue) => issue.status === status),
-      })).filter((group) => group.items.length > 0),
-    [issues]
-  );
 
-  let flatIndex = -1;
 
   return (
     <div className="@container flex-1 overflow-y-auto">
@@ -217,23 +222,24 @@ export function IssueTable({ issues }: { issues: IssueWithLabels[] }) {
             <AddIssueButton status={group.status} />
           </div>
           {group.items.map((issue) => {
-            flatIndex += 1;
-            const index = flatIndex;
+            const index = visibleIssues.findIndex(item=>item.id===issue.id);
             const focused = focusIndex === index;
             const opened = openIssueId === issue.id;
             return (
+              <EntityRow key={issue.id} kind="task" id={issue.id} title={issue.title}>
               <div
                 key={issue.id}
                 ref={(el) => {
                   rowRefs.current[index] = el;
                 }}
                 role="button"
-                tabIndex={-1}
+                tabIndex={focused || focusIndex === null && index === 0 ? 0 : -1}
+                onFocus={() => setFocusIndex(index)}
                 onClick={() => {
                   setFocusIndex(index);
                   openIssue(issue.id);
                 }}
-                onMouseEnter={() => setFocusIndex(index)}
+                
                 className={`flex cursor-default items-center gap-2.5 px-4 py-[7px] text-body transition-colors @2xl:px-10 @4xl:px-20 @6xl:px-32 ${
                   focused ? "bg-row-active" : opened ? "bg-surface" : "hover:bg-elevated/40"
                 } ${opened ? "border-l-2 border-l-accent" : "border-l-2 border-l-transparent"}`}
@@ -309,6 +315,7 @@ export function IssueTable({ issues }: { issues: IssueWithLabels[] }) {
                   </span>
                 </span>
               </div>
+              </EntityRow>
             );
           })}
         </div>

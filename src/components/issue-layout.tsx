@@ -111,7 +111,7 @@ export function IssueLayout({
           {t("No tasks match this filter")}
         </div>
       ) : layout === "board" ? (
-        <IssueBoard issues={shown} workspaceId={workspaceId} currentUserId={currentUserId} />
+        <IssueBoard issues={shown} workspaceId={workspaceId} currentUserId={currentUserId} manualOrder={view.sort.length===0} />
       ) : layout === "table" ? (
         <TaskGrid
           workspaceId={workspaceId}

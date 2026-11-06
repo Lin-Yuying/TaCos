@@ -3,8 +3,11 @@
 import { useEffect, useRef, useState } from "react";
 import { useLiveTick } from "@/components/live-refresh";
 import { ISSUE_DELETED, useUI, type DeletedIssue } from "@/components/ui-context";
-import { addCommentAction, deleteIssueAction, updateIssueDetailAction } from "@/app/actions";
+import { addCommentAction, deleteIssueAction, restoreIssueAction, changeIssueCollectionAction, updateIssueDetailAction } from "@/app/actions";
 import type { Label, Member } from "@/lib/issues";
+import { EditableTitle } from "@/components/ui/editable-title";
+import { readJson } from "@/lib/ui/request";
+import { useDraft } from "@/lib/ui/draft-store";
 import { PanelHeader } from "./header";
 import { PropertiesRow } from "./properties";
 import { DueRow } from "./due-row";
@@ -31,11 +34,7 @@ export function IssuePanelHost({
   // the panel becomes an opaque sheet over the list instead of a cramped second column.
   return (
     <aside
-      className={`flex min-h-0 flex-col overflow-hidden rounded-xl border border-border bg-bg shadow-[0_1px_2px_rgba(0,0,0,0.05)] ${
-        panelExpanded
-          ? "min-w-0 flex-1"
-          : "w-[min(50%,460px)] min-w-[280px] shrink-0 @max-[600px]:absolute @max-[600px]:inset-0 @max-[600px]:z-20 @max-[600px]:w-auto @max-[600px]:min-w-0"
-      }`}
+      className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-xl border border-border bg-bg"
     >
       <IssuePanel
         key={openIssueId}
@@ -67,95 +66,59 @@ function IssuePanel({
 }) {
   const t = useT();
   const [detail, setDetail] = useState<FlatDetail | null>(null);
-  const [notFound, setNotFound] = useState(false);
+  const [attempt, setAttempt] = useState(0);
+  const queue = useRef<Promise<unknown>>(Promise.resolve());
+  const request = useRef(0);
   const [allLabels, setAllLabels] = useState<Label[]>([]);
   const [members, setMembers] = useState<Member[]>([]);
-  const [comment, setComment] = useState("");
+  const [comment, setComment] = useDraft("task-comment", id, "");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const scrollRef = useRef<HTMLDivElement | null>(null);
   // A handed-off task just ended, and its result is a new comment.
   const [finished, setFinished] = useState(0);
-  const { toast } = useUI();
+  const { toast, confirm } = useUI();
   // H-COLLAB-13: reload the task when another member changes something.
   const live = useLiveTick();
 
-  // A task that vanished underneath the panel (deleted here, on another device, or from
-  // the Inbox) has nothing left to show — close the pane and say so instead of leaving
-  // an empty "not found" card sitting in the split view.
+  const scrollToComposer = () => { const el = scrollRef.current; if (el) el.scrollTop = el.scrollHeight; };
   useEffect(() => {
-    if (!notFound) return;
-    toast(t("Task deleted — it is in Trash"));
-    onClose();
-  }, [notFound, toast, onClose, t]);
-
-  const scrollToComposer = () => {
-    const el = scrollRef.current;
-    if (!el) return;
-    el.scrollTop = el.scrollHeight;
-  };
-
-  // The panel is remounted per issue id, so loading state starts clean without resets here.
-  useEffect(() => {
-    if (live === 0 && finished === 0) return;
-    let cancelled = false;
-    fetch(`/api/internal/${workspaceId}/issues/${encodeURIComponent(id)}`)
-      .then(async (res) => {
-        if (res.status === 404) {
-          if (!cancelled) setNotFound(true);
-          return null;
-        }
-        return res.ok ? res.json() : null;
-      })
-      .then((data) => {
-        if (!cancelled && data) setDetail(data as FlatDetail);
-      })
-      .catch(() => {});
-    return () => {
-      cancelled = true;
-    };
-  }, [live, finished, id, workspaceId]);
-
-  useEffect(() => {
-    let cancelled = false;
-    fetch(`/api/internal/${workspaceId}/issues/${encodeURIComponent(id)}`)
-      .then(async (res) => {
-        if (res.status === 404) {
-          if (!cancelled) setNotFound(true);
-          return null;
-        }
-        return res.json();
-      })
-      .then((data) => {
-        if (!cancelled && data) setDetail(data as FlatDetail);
-      })
-      .catch(() => {
-        if (!cancelled) setError("Failed to load task");
-      });
-    fetch(`/api/internal/${workspaceId}/labels`)
-      .then((res) => res.json())
-      .then((data) => !cancelled && setAllLabels(data as Label[]))
-      .catch(() => {});
-    fetch(`/api/internal/${workspaceId}/members`)
-      .then((res) => res.json())
-      .then((data) => !cancelled && setMembers(data as Member[]))
-      .catch(() => {});
-    return () => {
-      cancelled = true;
-    };
-  }, [id, workspaceId]);
-
-  async function update(patch: IssuePatch) {
-    if (!detail) return false;
-    setBusy(true);
-    const result = await updateIssueDetailAction(workspaceId, detail.id, patch);
-    setBusy(false);
-    if (result.ok) {
-      setDetail({ ...result.data.issue, comments: result.data.comments, events: result.data.events });
-      return true;
+    const controller = new AbortController();
+    const seq = request.current;
+    void readJson(`/api/internal/${workspaceId}/issues/${encodeURIComponent(id)}`, (data): data is FlatDetail => !!data && typeof data === "object" && typeof (data as FlatDetail).id === "string" && Array.isArray((data as FlatDetail).comments) && Array.isArray((data as FlatDetail).labels), controller.signal)
+      .then((data) => { if (!controller.signal.aborted && seq === request.current) {setDetail(data);setError(null);} })
+      .catch((err) => { if (!controller.signal.aborted) setError(err.message); });
+    for (const kind of ["labels", "members"] as const) {
+      void readJson(`/api/internal/${workspaceId}/${kind}`, (data): data is Label[] & Member[] => Array.isArray(data), controller.signal)
+        .then((data) => {if(!controller.signal.aborted) {if(kind === "labels")setAllLabels(data);else setMembers(data);} })
+        .catch((err) => {if(!controller.signal.aborted)setError(err.message);});
     }
-    setError(result.error);
-    return false;
+    return () => controller.abort();
+  }, [id, workspaceId, live, finished, attempt]);
+
+  async function mutate(work: () => ReturnType<typeof updateIssueDetailAction>) {
+    const seq = ++request.current; setBusy(true); setError(null);
+    const pending = queue.current.then(work); queue.current = pending.catch(() => {});
+    try {
+      const result = await pending;
+      if (!result.ok) {setError(result.error);return false;}
+      if (seq === request.current) setDetail({...result.data.issue,comments:result.data.comments,events:result.data.events});
+      return true;
+    } catch {setError("Could not save. Retry.");return false;}
+    finally {if(seq === request.current)setBusy(false);}
+  }
+  async function update(patch: IssuePatch) { return mutate(() => updateIssueDetailAction(workspaceId,id,patch)); }
+  function changeCollection(change: {kind:"assignee"|"label";value:string;selected:boolean}) {
+    setDetail((current) => {
+      if(!current)return current;
+      if(change.kind === "assignee") {
+        const person=members.find((member)=>member.id===change.value);
+        return {...current,assignees:change.selected && person ? [...current.assignees.filter((p)=>p.id!==change.value),person] : current.assignees.filter((p)=>p.id!==change.value)};
+      }
+      const label=allLabels.find((label)=>label.name===change.value);
+      return {...current,labels:change.selected && label ? [...current.labels.filter((l)=>l.name!==change.value),label] : current.labels.filter((l)=>l.name!==change.value)};
+    });
+    void mutate(() => changeIssueCollectionAction(workspaceId,id,change));
   }
 
   async function submitComment() {
@@ -173,7 +136,7 @@ function IssuePanel({
   }
 
   async function remove() {
-    if (!detail) return;
+    if (!detail || !(await confirm(t("Move “{title}” to Trash?", {title:detail.title})))) return;
     const result = await deleteIssueAction(workspaceId, detail.id);
     if (!result.ok) {
       setError(result.error);
@@ -186,17 +149,11 @@ function IssuePanel({
         detail: { id: result.data, identifier: detail.identifier, title: detail.title },
       })
     );
-    toast(t("Task deleted — it is in Trash"));
+    toast(t("Task deleted — it is in Trash"), {label:t("Undo"),run:async()=>{const result=await restoreIssueAction(workspaceId,id);if(!result.ok)toast(t(result.error));}});
     onClose();
   }
 
-  if (notFound) {
-    return <div className="flex-1 p-5 text-body text-muted">{t("Loading…")}</div>;
-  }
-
-  if (!detail) {
-    return <div className="flex-1 p-5 text-body text-muted">{t("Loading…")}</div>;
-  }
+  if (!detail) return <div className="flex flex-1 flex-col items-center justify-center gap-3 p-5 text-body text-muted"><p role={error ? "alert" : "status"}>{error ? t(error) : t("Loading…")}</p>{error && <button onClick={()=>{setError(null);setAttempt((n)=>n+1);}}>{t("Retry")}</button>}<button onClick={onClose}>{t("Close")}</button></div>;
 
   const comments = [...detail.comments].sort((a, b) =>
     a.createdAt.localeCompare(b.createdAt)
@@ -224,27 +181,15 @@ function IssuePanel({
       />
 
       <div ref={scrollRef} className="flex min-h-0 flex-1 flex-col space-y-5 overflow-y-auto p-4">
-        <input
-          key={`${detail.id}-title`}
-          defaultValue={detail.title}
-          placeholder={t("Task title")}
-          onBlur={(e) => {
-            const title = e.target.value.trim();
-            if (title && title !== detail.title) void update({ title });
-          }}
-          onKeyDown={(e) => {
-            if (e.key === "Enter") {
-              e.preventDefault();
-              e.currentTarget.blur();
-            }
-          }}
-          className="w-full bg-transparent text-title font-semibold text-text"
-        />
+        {error && <div role="alert" className="text-small text-danger">{t(error)} <button onClick={()=>setAttempt((n)=>n+1)}>{t("Retry")}</button></div>}
+        <EditableTitle id={`task.${id}`} value={detail.title} onSave={(title)=>update({title})}/>
+        <button className="self-start text-small text-muted" onClick={scrollToComposer}>{t("Write a comment")}</button>
 
         <PropertiesRow
           detail={detail}
           members={members}
           allLabels={allLabels}
+          onCollection={changeCollection}
           onUpdate={update}
         />
 

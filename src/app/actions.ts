@@ -1,6 +1,8 @@
 "use server";
 
-import { createTaskField, deleteTaskField, setTaskFieldValue } from "@/lib/task-fields";
+import { changeIssueCollection } from "@/lib/issues";
+
+import { createTaskField, deleteTaskField, setTaskFieldValue, taskFieldImpact, restoreTaskField } from "@/lib/task-fields";
 import type { TaskField } from "@/lib/task-view";
 import { revalidatePath } from "next/cache";
 import { requireAdmin, requireWorkspace } from "@/lib/auth";
@@ -491,4 +493,15 @@ export async function setTaskFieldValueAction(
     refresh(workspaceId);
     return saved;
   });
+}
+
+export async function changeIssueCollectionAction(workspaceId: string, id: string, change: {kind: "assignee" | "label"; value: string; selected: boolean}) {
+  return run(async () => { const {user} = await requireWorkspace(workspaceId); const result = await changeIssueCollection(workspaceId,id,change,userActor(user)); refresh(workspaceId); return result; });
+}
+
+export async function taskFieldImpactAction(workspaceId:string,fieldId:string) {
+  return run(async()=>{await requireWorkspace(workspaceId);return taskFieldImpact(workspaceId,fieldId);});
+}
+export async function restoreTaskFieldAction(workspaceId:string,fieldId:string) {
+  return run(async()=>{const {user}=await requireWorkspace(workspaceId);await restoreTaskField(workspaceId,user.id,fieldId);refresh(workspaceId);});
 }

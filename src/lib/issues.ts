@@ -2249,6 +2249,7 @@ export async function updateIssue(
 ): Promise<IssueDetail> {
   const row = await findIssueRow(workspaceId, idOrIdentifier);
   if (!row) throw new TacosError(`Issue "${idOrIdentifier}" not found`, 404);
+  if (actor.kind === "user" && !(await getIssueDetail(workspaceId, row.id, actor.userId))) throw new TacosError("Task not found", 404);
 
   const db = getDb();
   const sets: Record<string, unknown> = {};
@@ -2397,6 +2398,7 @@ export async function moveIssue(
 ): Promise<IssueDetail> {
   const row = await findIssueRow(workspaceId, idOrIdentifier);
   if (!row) throw new TacosError(`Issue "${idOrIdentifier}" not found`, 404);
+  if (actor.kind === "user" && !(await getIssueDetail(workspaceId, row.id, actor.userId))) throw new TacosError("Task not found", 404);
 
   const db = getDb();
   const sets: Record<string, unknown> = {};
@@ -3176,4 +3178,40 @@ export async function workspacePulse(workspaceId: string, userId: string): Promi
          FROM notifications WHERE workspace_id = ${workspaceId} AND user_id = ${userId}) AS n
   `);
   return crypto.createHash("sha1").update(JSON.stringify(row ?? {})).digest("hex").slice(0, 16);
+}
+
+/** A single checkbox changes one relationship; another editor's choices survive. */
+export async function changeIssueCollection(workspaceId: string, id: string, change: {kind: "assignee" | "label"; value: string; selected: boolean}, actor: MutationActor): Promise<IssueDetail> {
+  if (actor.kind !== "user") throw new TacosError("A member is required", 403);
+  if (!(await getIssueDetail(workspaceId, id, actor.userId))) throw new TacosError("Task not found",404);
+  const db = getDb();
+  const memberMap = await membersById(workspaceId);
+  let added: string | null = null;
+  db.transaction((tx) => {
+    const now = nowIso();
+    let before: string[], after: string[];
+    if (change.kind === "assignee") {
+      if (!memberMap.has(change.value)) throw new TacosError("Assignee is not a member of this workspace",400);
+      before = tx.select().from(issueAssignees).where(eq(issueAssignees.issueId,id)).all().map((row) => row.userId);
+      if (change.selected) tx.insert(issueAssignees).values({issueId:id,userId:change.value,createdAt:now}).onConflictDoNothing().run();
+      else tx.delete(issueAssignees).where(and(eq(issueAssignees.issueId,id),eq(issueAssignees.userId,change.value))).run();
+      after = tx.select().from(issueAssignees).where(eq(issueAssignees.issueId,id)).all().map((row) => row.userId);
+      if (!before.includes(change.value) && change.selected) added = change.value;
+    } else {
+      const label = tx.select().from(labels).where(and(eq(labels.workspaceId,workspaceId),eq(labels.name,change.value))).get();
+      if (!label) throw new TacosError("Label not found",404);
+      const names = () => tx.select({name:labels.name}).from(issueLabels).innerJoin(labels,eq(labels.id,issueLabels.labelId)).where(eq(issueLabels.issueId,id)).all().map((row) => row.name);
+      before = names();
+      if (change.selected) tx.insert(issueLabels).values({issueId:id,labelId:label.id}).onConflictDoNothing().run();
+      else tx.delete(issueLabels).where(and(eq(issueLabels.issueId,id),eq(issueLabels.labelId,label.id))).run();
+      after = names();
+    }
+    if (JSON.stringify([...before].sort()) === JSON.stringify([...after].sort())) return;
+    tx.update(issues).set({updatedAt:now}).where(eq(issues.id,id)).run();
+    tx.insert(events).values({id:crypto.randomUUID(),issueId:id,type:change.kind === "assignee" ? "assignee_changed" : "labels_changed",data:JSON.stringify({from:before,to:after}),createdAt:now,...actorFields(actor)}).run();
+  });
+  const detail = await getIssueDetail(workspaceId,id,actor.userId);
+  if (!detail) throw new TacosError("Task not found",404);
+  if (added && added !== actor.userId) await notifyAssigned(workspaceId,id,detail.issue.title,added,actor);
+  return detail;
 }

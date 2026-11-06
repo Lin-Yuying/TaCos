@@ -14,11 +14,13 @@ export function PropertiesRow({
   members,
   allLabels,
   onUpdate,
+  onCollection,
 }: {
   detail: FlatDetail;
   members: Member[];
   allLabels: Label[];
   onUpdate: IssueUpdate;
+  onCollection: (change: {kind: "assignee" | "label"; value: string; selected: boolean}) => void;
 }) {
   const t = useT();
   const currentLabelNames = detail.labels.map((l) => l.name);
@@ -85,7 +87,7 @@ export function PropertiesRow({
               active={detail.assignees.length === 0}
               onSelect={() => {
                 close();
-                void onUpdate({ assigneeIds: [] });
+                for(const assignee of detail.assignees)onCollection({kind:"assignee",value:assignee.id,selected:false});
               }}
             >
               <span className="text-faint">—</span> {t("Unassigned")}
@@ -94,7 +96,7 @@ export function PropertiesRow({
               active={members.length > 0 && allAssigned}
               onSelect={() => {
                 close();
-                void onUpdate({ assigneeIds: members.map((member) => member.id) });
+                for(const member of members)if(!detail.assignees.some(a=>a.id===member.id))onCollection({kind:"assignee",value:member.id,selected:true});
               }}
             >
               <Users size={14} className="text-muted" /> {t("Everyone")}
@@ -107,12 +109,7 @@ export function PropertiesRow({
                   key={member.id}
                   active={on}
                   onSelect={() => {
-                    const next = on
-                      ? detail.assignees
-                          .filter((assignee) => assignee.id !== member.id)
-                          .map((assignee) => assignee.id)
-                      : [...detail.assignees.map((assignee) => assignee.id), member.id];
-                    void onUpdate({ assigneeIds: next });
+                    onCollection({kind:"assignee", value:member.id, selected:!on});
                   }}
                 >
                   <AssigneeAvatar
@@ -157,10 +154,7 @@ export function PropertiesRow({
                   key={label.id}
                   active={on}
                   onSelect={() => {
-                    const next = on
-                      ? currentLabelNames.filter((n) => n !== label.name)
-                      : [...currentLabelNames, label.name];
-                    void onUpdate({ labelNames: next });
+                    onCollection({kind:"label", value:label.name, selected:!on});
                   }}
                 >
                   <LabelPill name={label.name} color={label.color} small />
