@@ -80,6 +80,7 @@ value; P2 later / depends on other work.
 | Enterprise & governance | No SSO/OIDC, audit UI, retention, admin console | P2 (when team grows or TaCos is shared externally) | U-06 |
 | External agent platform | No A2A/registry/external agents | P2 (after #80) | U-07 |
 | Channels & mobile | No email/push/PWA/mobile | P2/P3 | U-08 |
+| External API/MCP coverage | Tasks/comments/labels only; no projects CRUD, pages, task extensions | P1 (after #77/U-01) | U-13a/U-13b |
 | Views & task UX | Personal saved views only; no shared views/subscriptions/display options | P2 (can pull forward) | U-09 |
 
 ## 4. Upcoming PR sequence
@@ -196,6 +197,18 @@ pre-upgrade backup, desktop update channel/notes/rollback guidance, admin
 runner/tunnel status, server upgrade preflight/rollback. Signing/notarization
 certificates stay with the owner.
 
+### U-13 — External API / MCP surface expansion
+
+Plan: `docs/plans/api-surface.md`.
+Added 2026-11-06 after reviewing what the external API/MCP actually cover.
+Benchmarks: Linear GraphQL API, Notion API, GitHub REST, Asana API.
+Scope (two implementation PRs): **U-13a** projects CRUD + project membership +
+task extensions (custom fields, dependencies, recurrence, claims, review,
+blockers, trash restore); **U-13b** pages/documents list/read/create/edit +
+page comments, aligned with U-01 sharing. All new surface reuses #77 scopes and
+project allowlists, with MCP annotations/pagination/output schemas. Attachments,
+Inbox, search and API webhooks are recorded as later follow-ups.
+
 ### Small continuous PRs
 
 - Notification channel polish (fold into U-08).
@@ -243,11 +256,11 @@ The plans are written; the owner still chooses the order. Recommended waves
 respect dependencies and put value early:
 
 1. **Foundation (small, independent)**: #78 Inbox → #77 Agent access → U-01
-   sharing/permissions.
+   sharing/permissions → U-13a external projects/task surface.
 2. **Agent and automation value**: #79 Agent → #80 automations/integrations →
    U-09 views/task UX.
-3. **Knowledge and flow**: U-04 documents → U-10 search → U-11 collaboration →
-   U-03 planning.
+3. **Knowledge and flow**: U-04 documents → U-13b external pages API → U-10
+   search → U-11 collaboration → U-03 planning.
 4. **Insight and operations**: U-02 insights → U-05 import/export → U-12
    desktop/self-host ops.
 5. **Enterprise and platform**: U-06 enterprise/governance → U-07 external
