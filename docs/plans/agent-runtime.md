@@ -484,7 +484,9 @@ adapter addition, not new UI. No open questions remain for this PR.
 
 ## Implementation record (2026-11-06, branch `feat/agent-runtime`)
 
-Status: implemented, verification pending; one PR, five commit groups as decided.
+Status: implemented; `npx tsc --noEmit`, i18n, `npm run check:harness` (128/128) and
+`npm run build` are green. Browser E2E, fresh-context review and merge are pending; one
+PR, five commit groups as decided.
 
 - **Agent identity + delegation + review.** `workspace_agents`, `issues.delegated_agent_id`
   and `delegation_status`, `src/lib/workspace-agents.ts`, `src/lib/agent-delegation.ts`.

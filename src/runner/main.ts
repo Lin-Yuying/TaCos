@@ -14,6 +14,7 @@ import { readyWithKeys, signedInHarnesses } from "@/lib/harness/gate";
 import { listComposerModels, resolveTurnModel, type ModelAccess } from "@/lib/harness/models";
 import { codexSubscription } from "@/lib/harness/adapters/codex-subscription";
 import { FIRST_CLASS_HARNESS_IDS, getHarnessAdapter, listHarnessDetect } from "@/lib/harness/registry";
+import { acpAdapter } from "@/lib/harness/adapters/acp";
 import { attachTurnFiles, fileName, type TurnFile } from "@/lib/harness/turn-files";
 import { turnTimer, writeTurnTiming, type TurnTimer } from "@/lib/harness/turn-timing";
 import type { TurnEvent } from "@/lib/harness/types";
@@ -54,7 +55,9 @@ async function capabilities(): Promise<RunnerCapabilities> {
   await warmHarnessDetectCache();
   const config = readConfig();
   const keyed = FIRST_CLASS_HARNESS_IDS.filter((id) => keysForHarness(config.endpoints, id));
-  const harnesses = listHarnessDetect();
+  // #79: ACP is opt-in and stays out of the five Settings rows, but a server still needs
+  // to know this computer can run it.
+  const harnesses = [...listHarnessDetect(), ...((process.env.TACOS_ACP_BIN ?? "").trim() ? [acpAdapter.detect()] : [])];
   const ready = harnesses.map((detect) => readyWithKeys(detect, keyed)).filter((d) => d.ready).map((d) => d.id);
   const value: RunnerCapabilities = {
     harnesses,

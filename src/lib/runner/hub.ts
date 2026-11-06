@@ -126,6 +126,7 @@ async function nextQueued(userId: string, slots:number) {
 // live token, and the token's 30 minutes start when the work starts.
 async function grantFor(row: typeof agentRuns.$inferSelect, payload: RunPayload): Promise<string | undefined> {
   if (payload.kind !== "turn") return undefined;
+  // A delegation payload is replaced with a TurnPayload by beginDelegation before this runs.
   const [project] = payload.projectId
     ? await getDb().select({ key: projects.key }).from(projects).where(eq(projects.id, payload.projectId)).limit(1)
     : [];
@@ -157,7 +158,12 @@ export async function claimRun(userId: string, signal: AbortSignal, slots=1): Pr
       if (taken.changes === 0) continue;
       // A handed-off task has been waiting for this moment, so its prompt reads the task as it is now.
       let payload = JSON.parse(row.payload) as RunPayload;
-      if (row.issueId && !hub().live.has(row.id)) {
+      if (payload.kind === "delegation") {
+        const { beginDelegation } = await import("@/lib/agent-delegation");
+        const started = await beginDelegation(row);
+        if (!started) continue;
+        payload = started;
+      } else if (row.issueId && !hub().live.has(row.id)) {
         const { beginHandoff } = await import("@/lib/agent-handoff");
         const started = await beginHandoff(row);
         if (!started) continue;
@@ -228,6 +234,36 @@ export async function startRun(input: {
   });
   wake(input.userId);
   return events;
+}
+
+/** #79: a delegated run waits for the member's computer, carrying its agent identity. */
+export async function queueDelegationRun(input: {
+  userId: string;
+  workspaceId: string;
+  threadId: string;
+  issueId: string;
+  agentId: string;
+  model: string;
+  payload: string;
+  subscription?: string | null;
+}): Promise<string> {
+  const id = crypto.randomUUID();
+  await getDb().insert(agentRuns).values({
+    id,
+    userId: input.userId,
+    workspaceId: input.workspaceId,
+    threadId: input.threadId,
+    issueId: input.issueId,
+    agentId: input.agentId,
+    source: "runner",
+    model: input.model,
+    subscription: input.subscription ?? null,
+    payload: input.payload,
+    status: "queued",
+    createdAt: new Date().toISOString(),
+  });
+  wake(input.userId);
+  return id;
 }
 
 /** A task handed to the Agent waits here, with nobody following it, until this person's computer asks. */
@@ -391,14 +427,24 @@ export async function failInterruptedRuns(): Promise<void> {
   const handoffs = await db
     .select()
     .from(agentRuns)
-    .where(and(eq(agentRuns.status, "running"), isNotNull(agentRuns.issueId)));
+    .where(and(eq(agentRuns.status, "running"), isNotNull(agentRuns.issueId), isNull(agentRuns.agentId)));
+  const delegations = await db
+    .select()
+    .from(agentRuns)
+    .where(and(eq(agentRuns.status, "running"), isNotNull(agentRuns.issueId), isNotNull(agentRuns.agentId)));
   await db
     .update(agentRuns)
     .set({ status: "failed", error: "The server restarted during this run", finishedAt: new Date().toISOString() })
     .where(or(eq(agentRuns.status, "running"), and(eq(agentRuns.status, "queued"), isNull(agentRuns.issueId))));
-  if (handoffs.length === 0) return;
-  const { noticeHandoffFailed } = await import("@/lib/agent-handoff");
-  for (const row of handoffs) await noticeHandoffFailed(row);
+  if (handoffs.length === 0 && delegations.length === 0) return;
+  if (handoffs.length) {
+    const { noticeHandoffFailed } = await import("@/lib/agent-handoff");
+    for (const row of handoffs) await noticeHandoffFailed(row);
+  }
+  if (delegations.length) {
+    const { noticeInterruptedDelegation } = await import("@/lib/agent-delegation");
+    for (const row of delegations) await noticeInterruptedDelegation(row);
+  }
 }
 
 export async function readRunPayload(userId:string,runId:string):Promise<unknown>{const row=await getDb().select().from(agentRuns).where(and(eq(agentRuns.id,runId),eq(agentRuns.userId,userId))).get();if(!row)throw new TacosError("Run not found",404);return JSON.parse(await unpackText(row.payload,row.payloadCompressed));}

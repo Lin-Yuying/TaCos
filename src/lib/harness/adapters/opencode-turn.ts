@@ -98,7 +98,11 @@ export async function* openOpencodeTurn(input: TurnInput, log?: TurnLog): AsyncG
     return;
   }
 
-  const args = ["run", "--format", "json", "--thinking", "--auto", "--dir", input.cwd, messageText(input)];
+  const args = ["run", "--format", "json", "--thinking", "--auto", "--dir", input.cwd];
+  // #79: reuse OpenCode's own session when one was saved. Without it, OpenCode starts a
+  // fresh session and TaCos replays the thread history in the prompt.
+  if (input.nativeSessionId) args.push("--session", input.nativeSessionId);
+  args.push(messageText(input));
   for (const image of input.images ?? []) args.splice(1, 0, "--file", image.path);
   if (input.model) {
     args.splice(1, 0, "--model", input.model);
@@ -136,6 +140,8 @@ export async function* openOpencodeTurn(input: TurnInput, log?: TurnLog): AsyncG
   let stderr = "";
   let sawText = false;
   let thinkingCount = 0;
+  // #79: OpenCode names its session in the event payload; save it for the next turn.
+  let announcedSession = input.nativeSessionId ?? "";
 
   const finish = (error?: string) => {
     if (finished) return;
@@ -216,6 +222,18 @@ export async function* openOpencodeTurn(input: TurnInput, log?: TurnLog): AsyncG
     }
     const type = message.type ?? "";
     const props = message.properties ?? {};
+    const sessionCandidate =
+      (typeof props.sessionID === "string" && props.sessionID) ||
+      (typeof (props.info as { sessionID?: unknown } | undefined)?.sessionID === "string"
+        ? ((props.info as { sessionID: string }).sessionID)
+        : "") ||
+      (typeof (props.part as { sessionID?: unknown } | undefined)?.sessionID === "string"
+        ? ((props.part as { sessionID: string }).sessionID)
+        : "");
+    if (sessionCandidate && sessionCandidate !== announcedSession) {
+      announcedSession = sessionCandidate;
+      push({ type: "session", id: sessionCandidate });
+    }
 
     // `opencode run --format json` writes whole parts: each text, tool or error line stands alone.
     if (type === "text") {

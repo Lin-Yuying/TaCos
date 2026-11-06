@@ -16,6 +16,7 @@ const NPM_PACKAGES: Record<HarnessId, string> = {
   opencode: "opencode-ai",
   dsh: "@deepseek-ai/dsh",
   codebuddy: "@tencent-ai/codebuddy-code",
+  acp: "",
 };
 
 const UPGRADE_CLI: Partial<Record<HarnessId, { bin: string; args: string[] }>> = {

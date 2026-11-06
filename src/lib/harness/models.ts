@@ -142,6 +142,8 @@ async function readModels(id: Exclude<HarnessId, "codex">, binary: string): Prom
       return parseCodebuddyModels(await runCli(binary, ["--help"]));
     case "dsh":
       return readDshModels(binary);
+    case "acp":
+      return [];
   }
 }
 

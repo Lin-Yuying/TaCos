@@ -126,8 +126,15 @@ export async function listAgentHarnessOptions(workspaceId: string, userId: strin
     hint: null,
   }));
   // #79: the generic ACP adapter is opt-in through TACOS_ACP_BIN, so it never appears
-  // on a machine that has not configured an ACP agent.
-  if ((process.env.TACOS_ACP_BIN ?? "").trim()) {
+  // on a machine that has not configured an ACP agent. On a server the member's computer
+  // reported it in its capabilities instead.
+  if (isServerMode()) {
+    const { capabilities } = await runnerViewFor(userId);
+    const detect = capabilities?.harnesses.find((entry) => entry.id === "acp");
+    if (detect?.ready) {
+      options.push({ id: "acp", label: detect.label, detail: detect.version, available: true, hint: null });
+    }
+  } else if ((process.env.TACOS_ACP_BIN ?? "").trim()) {
     const { getHarnessAdapter } = await import("@/lib/harness");
     const acp = getHarnessAdapter("acp");
     const detect = acp?.detect();
