@@ -163,3 +163,11 @@ Only the listed observations are claimed. Automated business checks cover more c
 Source delivery excludes dependencies, build output, databases, credentials and Git metadata; package.json and package-lock.json are retained for reproducible installation.
 
 Browser settings sample passed: section search filtered the density controls; compact applied to the document root and comfortable restored it; section navigation reached the expected settings URL anchor.
+
+## Integration with 2.3.0
+
+PRs #68 and #66 were merged into their parent branches, then main ed52d45 was merged into the combined UI branch. Resolved editor, task panel, conversation, navigation and document grouping conflicts while retaining the 2.3 security checks, task relations/recurrence, shared turn locks, attachments and editor blocks. Dragging across document sections continues to preserve visibility; explicit sharing remains a separate action.
+
+Fresh read-only task and document reviews found integration gaps. Fixed queued task relation writes, missing task 404 handling, attachment failure recovery, first-message input retention, embedded-document print titles, and restore protection during collaboration connection. Fixed pre-2.3 database upgrade ordering (parent column before its index), verified with a new isolated upgrade check. MCP smoke now forwards the requested isolated data directory to its subprocess and reports non-JSON server failures directly.
+
+Validation: TypeScript and production build pass; i18n reports zero missing strings; all 88 existing harness checks pass and the additional task upgrade check passes. Isolated MCP create/update/comment/get/delete smoke passes. Main 2.3 editor roundtrip passes, resolving the old 2.2 README baseline failure. ESLint has 24 existing/current errors (24 on unchanged 2.3 main); the two previously documented ThreadMenu ref diagnostics remain, replacing two removed IssueTable diagnostics. No lint rules were weakened. Windows/Electron, native IME and the full browser fault-injection matrix were not rerun during this integration.

@@ -18,6 +18,7 @@ import { NewIssueDialog } from "@/components/new-issue-dialog";
 import { NewProjectDialog } from "@/components/new-project-dialog";
 import { CommandPalette } from "@/components/command-palette";
 import { aiReady } from "@/lib/ai";
+import { hasAgentThreads } from "@/lib/agent-threads";
 import { getWorkspaceHarnessGate } from "@/lib/harness";
 import { harnessViewFor } from "@/lib/model-keys";
 import { resolveLocale } from "@/lib/locale";
@@ -54,7 +55,7 @@ export default async function WorkspaceLayout({
     await setLastWorkspace(user.id, active.id);
   }
   // Server-sourced so router.refresh() after create/delete updates the sidebar list.
-  const [projects, members, favorites, favoritePages, pages, aiEnabled, joinCode, harnessGate, locale] = await Promise.all([
+  const [projects, members, favorites, favoritePages, pages, aiEnabled, joinCode, harnessGate, locale, hasThreads] = await Promise.all([
     listProjects(workspaceId, user.id),
     listMembers(workspaceId),
     listFavoriteProjects(workspaceId, user.id),
@@ -64,6 +65,7 @@ export default async function WorkspaceLayout({
     getJoinCode(workspaceId),
     getWorkspaceHarnessGate(workspaceId, ...(await harnessViewFor(user.id))),
     resolveLocale(user),
+    hasAgentThreads(workspaceId, user.id),
   ]);
 
   return (
@@ -86,7 +88,7 @@ export default async function WorkspaceLayout({
           members={members}
           pages={pages}
           joinCode={joinCode}
-          agentAllowed={harnessGate.agentAllowed}
+          agentAllowed={harnessGate.agentAllowed || hasThreads}
         >
           {children}
         </WorkspaceShell>

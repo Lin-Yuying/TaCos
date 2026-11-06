@@ -7,13 +7,15 @@ import { LayoutToggle } from "@/components/issue-layout";
 import { STATUS_META } from "@/lib/constants";
 import type { Status } from "@/lib/constants";
 import { useT } from "@/components/i18n-context";
+import { PAGE_INSET } from "@/lib/page-chrome";
 
-type View = "all" | "active" | "open" | Status;
+type View = "all" | "active" | "open" | "agent" | Status;
 
 const TITLES: Record<string, string> = {
   all: "All Tasks",
   active: "Active",
   open: "Open Tasks",
+  agent: "Agent",
 };
 for (const status of ["in_progress", "todo", "done", "canceled"] as const) {
   TITLES[status] = STATUS_META[status].label;
@@ -81,12 +83,12 @@ export function ListHeader({
       : t(TITLES[view] ?? "Tasks");
 
   return (
-    <header className="flex h-12 shrink-0 items-center gap-2 overflow-hidden border-b border-border pl-4 pr-10 lg:pr-20 xl:pr-32">
-      {/* The title hangs from the card's gutter, the same column as the project page's
-          "All tasks", so switching between the two lists doesn't shift the heading sideways. */}
+    <header className={`flex h-12 shrink-0 items-center gap-2 overflow-hidden border-b border-border ${PAGE_INSET}`}>
+      {/* The title hangs from the same 52px column as the project page's "All tasks",
+          so switching between the two lists doesn't shift the heading sideways. */}
       {/* Shrinks last: the person's name and the count stay readable while the search
           field gives up width as the detail panel eats into the list. */}
-      <h1 className="min-w-0 shrink-[0.25] truncate text-body font-semibold">{heading}</h1>
+      <h1 className="min-w-[72px] shrink-[0.25] truncate text-body font-semibold">{heading}</h1>
       <span className="shrink-0 rounded-full bg-elevated px-2 py-0.5 text-caption text-muted">
         {count}
       </span>

@@ -14,7 +14,8 @@ function assert(cond: unknown, msg: string): asserts cond {
 
 const layout = read("src/app/[workspaceId]/layout.tsx");
 assert(layout.includes("getWorkspaceHarnessGate"), "layout must load harness gate");
-assert(layout.includes("agentAllowed={harnessGate.agentAllowed}"), "layout must pass agentAllowed");
+// 2.3 lets a member with existing threads reach Agent even when the harness gate is closed.
+assert(/agentAllowed=\{harnessGate\.agentAllowed[^}]*\}/.test(layout), "layout must pass the harness gate to agentAllowed");
 
 const shell = read("src/components/workspace-shell.tsx");
 assert(shell.includes("agentAllowed: boolean"), "shell must accept agentAllowed");

@@ -1,9 +1,11 @@
-import { and, eq, inArray, lt, sql } from "drizzle-orm";
+import { and, eq, inArray, lt, or, sql } from "drizzle-orm";
 import fs from "node:fs";
 import path from "node:path";
 import { attachments } from "../db/schema";
 import { getDb } from "../db/client";
+import { AGENT_DRAFT_PAGE } from "./agent-attachments.shared";
 import { DATA_DIR } from "./data-dir";
+import { sniffImage } from "./image-sniff";
 
 export type Attachment = typeof attachments.$inferSelect;
 
@@ -39,14 +41,14 @@ function removeFiles(ids: string[]) {
   }
 }
 
-/** An upload nobody finished in a day is not coming back; its space is counted until then. */
+/** An upload nobody finished, or a draft nobody sent, in a day is not coming back; its space is counted until then. */
 export async function removeStaleUploads(now = Date.now()): Promise<void> {
   const db = getDb();
   const before = new Date(now - STALE_UPLOAD_MS).toISOString();
   const stale = await db
     .select({ id: attachments.id })
     .from(attachments)
-    .where(and(eq(attachments.complete, 0), lt(attachments.createdAt, before)));
+    .where(and(or(eq(attachments.complete, 0), eq(attachments.pageId, AGENT_DRAFT_PAGE)), lt(attachments.createdAt, before)));
   if (!stale.length) return;
   const ids = stale.map((row) => row.id);
   removeFiles(ids);
@@ -74,18 +76,7 @@ export async function removeWorkspaceAttachments(workspaceId: string): Promise<v
   await db.delete(attachments).where(eq(attachments.workspaceId, workspaceId));
 }
 
-/**
- * Only these are ever shown in the page. The type comes from the file's first bytes, not what the
- * uploader said, so an HTML or SVG file named .png downloads instead of running in our origin.
- */
-export function sniffImage(head: Buffer): string | null {
-  if (head.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]))) return "image/png";
-  if (head.subarray(0, 3).equals(Buffer.from([0xff, 0xd8, 0xff]))) return "image/jpeg";
-  const ascii = head.toString("latin1");
-  if (ascii.startsWith("GIF87a") || ascii.startsWith("GIF89a")) return "image/gif";
-  if (ascii.startsWith("RIFF") && ascii.slice(8, 12) === "WEBP") return "image/webp";
-  return null;
-}
+export { sniffImage };
 
 export function attachmentImageType(id: string): string | null {
   const file = path.join(UPLOAD_DIR, id);

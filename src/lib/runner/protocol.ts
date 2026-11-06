@@ -30,6 +30,8 @@ export type TurnPayload = {
   // A task handed to the Agent runs with nobody watching, so it gets longer than a chat turn.
   timeoutMs?: number;
   approvalWaitMs?: number;
+  /** File bytes for the member runner to write into the turn folder before `openTurn`. */
+  attachments?: { id: string; name: string }[];
 };
 
 export type EditPayload = {

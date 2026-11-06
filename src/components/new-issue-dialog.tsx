@@ -197,7 +197,7 @@ export function NewIssueDialog({ workspaceId }: { workspaceId: string }) {
               value={title}
               onChange={(e) => setTitle(e.target.value)}
               onKeyDown={(e) => {
-                if (e.key === "Enter" && !e.nativeEvent.isComposing && e.nativeEvent.keyCode !== 229) {
+                if (e.key === "Enter" && !e.metaKey && !e.ctrlKey && !e.nativeEvent.isComposing && e.nativeEvent.keyCode !== 229) {
                   e.preventDefault();e.stopPropagation();
                   void submit();
                 }
@@ -463,7 +463,7 @@ export function NewIssueDialog({ workspaceId }: { workspaceId: string }) {
                     })}
                     {labels.length === 0 && (
                       <div className="px-2 py-1.5 text-small text-faint">
-                        {t("No labels yet — create some on the Labels page.")}
+                        {t("No labels yet — create some in Settings.")}
                       </div>
                     )}
                   </>

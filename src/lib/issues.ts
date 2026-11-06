@@ -20,10 +20,12 @@ import {
 import { getDb } from "../db/client";
 import {
   apiKeys,
+  blockers,
   comments,
   events,
   favorites,
   issueAssignees,
+  issueDependencies,
   issueLabels,
   taskFieldValues,
   taskFields,
@@ -53,8 +55,11 @@ import {
   DEFAULT_PROJECT_COLOR,
   REMINDER_META,
   REMINDER_PRESETS,
+  RECURRENCES,
+  RECURRENCE_META,
   STATUS_ORDER,
   type Priority,
+  type Recurrence,
   type ReminderPreset,
   type Status,
   type Via,
@@ -94,12 +99,14 @@ export type Issue = {
   status: Status;
   priority: Priority;
   projectId: string;
+  parentId: string | null;
   projectKey: string;
   projectName: string;
   assignees: Assignee[];
   // YYYY-MM-DD, chosen from the calendar in the task panel
   dueDate: string | null;
   reminder: ReminderPreset | null;
+  recurrence: Recurrence | null;
   // the person who opened it, or who ran the agent that published it
   createdBy: string | null;
   createdVia: Via;
@@ -133,10 +140,15 @@ export type ActivityEvent = {
   agentActor: string | null;
   createdAt: string;
 };
+export type IssueChild = { id: string; identifier: string; title: string; status: Status };
+export type TaskDependency = { id: string; identifier: string; title: string; status: Status };
 export type IssueDetail = {
   issue: IssueWithLabels;
   comments: Comment[];
   events: ActivityEvent[];
+  children: IssueChild[];
+  dependencies: TaskDependency[];
+  blocked: boolean;
 };
 
 type IssueRow = typeof issues.$inferSelect;
@@ -368,6 +380,13 @@ export async function resolveAssigneeIds(workspaceId: string, values: string[]):
 
 export async function setMemberRole(workspaceId: string, userId: string, role: "admin" | "member") {
   const db = getDb();
+  const [workspace] = await db
+    .select({ createdBy: workspaces.createdBy })
+    .from(workspaces)
+    .where(eq(workspaces.id, workspaceId));
+  if (workspace?.createdBy === userId && role !== "admin") {
+    throw new TacosError("The workspace owner cannot be demoted", 403);
+  }
   if (role === "member") {
     await assertNotLastAdmin(db, workspaceId, userId);
   }
@@ -392,6 +411,13 @@ async function clearAssignmentsInWorkspace(
 
 export async function removeMember(workspaceId: string, userId: string) {
   const db = getDb();
+  const [workspace] = await db
+    .select({ createdBy: workspaces.createdBy })
+    .from(workspaces)
+    .where(eq(workspaces.id, workspaceId));
+  if (workspace?.createdBy === userId) {
+    throw new TacosError("The workspace owner cannot be demoted", 403);
+  }
   await assertNotLastAdmin(db, workspaceId, userId);
   await clearAssignmentsInWorkspace(db, workspaceId, userId);
   await db
@@ -447,6 +473,10 @@ async function purgeWorkspaceData(db: ReturnType<typeof getDb>, workspaceId: str
     await db.delete(taskFieldValues).where(eq(taskFieldValues.issueId, row.id));
     await db.delete(issueAssignees).where(eq(issueAssignees.issueId, row.id));
     await db.delete(issueLabels).where(eq(issueLabels.issueId, row.id));
+    await db
+      .delete(issueDependencies)
+      .where(or(eq(issueDependencies.issueId, row.id), eq(issueDependencies.blockedById, row.id)));
+    await db.delete(blockers).where(eq(blockers.issueId, row.id));
     await db.delete(comments).where(eq(comments.issueId, row.id));
     await db.delete(events).where(eq(events.issueId, row.id));
   }
@@ -719,6 +749,21 @@ function ownProjectCondition(viewerId: string) {
   )`;
 }
 
+// Trash lists deleted projects, so ownProjectCondition's `deleted_at IS NULL`
+// can never match here. Keep its ownership rule without that clause, so a
+// member still sees and can restore projects they deleted themselves.
+function ownTrashedProjectCondition(viewerId: string) {
+  return sql`EXISTS (
+    SELECT 1 FROM projects trashed
+    WHERE trashed.id = ${projects.id} AND (
+      trashed.created_by = ${viewerId} OR EXISTS (
+        SELECT 1 FROM project_members trashed_member
+        WHERE trashed_member.project_id = trashed.id AND trashed_member.user_id = ${viewerId}
+      )
+    )
+  )`;
+}
+
 function ownIssueProjectCondition(viewerId: string) {
   return sql`EXISTS (
     SELECT 1 FROM projects visible
@@ -743,9 +788,39 @@ export async function listProjects(workspaceId: string, viewerId?: string): Prom
     .orderBy(projects.createdAt);
 }
 
+/** Writes obey the same rule as reads: a member outside a project cannot reach it by id. */
+export async function assertSeesProject(workspaceId: string, idOrKey: string, viewerId: string): Promise<void> {
+  if (await seesAllTasks(workspaceId, viewerId)) return;
+  const row = await findProjectRow(workspaceId, idOrKey);
+  // A missing project keeps the error of the operation that names it.
+  if (row && !(await getProject(workspaceId, row.id, viewerId))) {
+    throw new TacosError(`Project "${idOrKey}" not found`, 404);
+  }
+}
+
+export async function assertSeesIssue(workspaceId: string, idOrIdentifier: string, viewerId: string): Promise<void> {
+  if (await seesAllTasks(workspaceId, viewerId)) return;
+  const live = await findIssueRow(workspaceId, idOrIdentifier);
+  // Restoring and purging name a task that findIssueRow no longer returns.
+  const [row] = live
+    ? [live]
+    : await getDb()
+        .select({ projectId: issues.projectId })
+        .from(issues)
+        .where(and(eq(issues.workspaceId, workspaceId), eq(issues.id, idOrIdentifier)))
+        .limit(1);
+  if (row && !(await getProject(workspaceId, row.projectId, viewerId))) {
+    throw new TacosError(`Issue "${idOrIdentifier}" not found`, 404);
+  }
+}
+
 export type TrashedProject = Project & { deletedAt: string; issueCount: number };
 
-export async function listTrashedProjects(workspaceId: string): Promise<TrashedProject[]> {
+export async function listTrashedProjects(workspaceId: string, viewerId?: string): Promise<TrashedProject[]> {
+  const conditions = [eq(projects.workspaceId, workspaceId), isNotNull(projects.deletedAt)];
+  if (viewerId && !(await seesAllTasks(workspaceId, viewerId))) {
+    conditions.push(ownTrashedProjectCondition(viewerId));
+  }
   const rows = await getDb()
     .select({
       ...projectColumns,
@@ -753,7 +828,7 @@ export async function listTrashedProjects(workspaceId: string): Promise<TrashedP
       issueCount: sql<number>`(SELECT COUNT(*) FROM issues WHERE issues.project_id = ${projects.id})`,
     })
     .from(projects)
-    .where(and(eq(projects.workspaceId, workspaceId), isNotNull(projects.deletedAt)))
+    .where(and(...conditions))
     .orderBy(sql`${projects.deletedAt} DESC`);
   return rows.map((row) => ({ ...row, deletedAt: row.deletedAt!, issueCount: Number(row.issueCount) }));
 }
@@ -993,7 +1068,8 @@ export async function trashProject(workspaceId: string, projectId: string, userI
     );
 }
 
-export async function restoreProject(workspaceId: string, projectId: string) {
+export async function restoreProject(workspaceId: string, projectId: string, userId: string) {
+  await assertProjectOwner(workspaceId, projectId, userId);
   await getDb()
     .update(projects)
     .set({ deletedAt: null })
@@ -1581,6 +1657,10 @@ export async function purgeProject(workspaceId: string, projectId: string, userI
   for (const row of rows) {
     await db.delete(taskFieldValues).where(eq(taskFieldValues.issueId, row.id));
     await db.delete(issueLabels).where(eq(issueLabels.issueId, row.id));
+    await db.delete(blockers).where(eq(blockers.issueId, row.id));
+    await db
+      .delete(issueDependencies)
+      .where(or(eq(issueDependencies.issueId, row.id), eq(issueDependencies.blockedById, row.id)));
     await db.delete(comments).where(eq(comments.issueId, row.id));
     await db.delete(events).where(eq(events.issueId, row.id));
     await db.delete(notifications).where(eq(notifications.issueId, row.id));
@@ -1613,10 +1693,15 @@ async function findProjectRow(workspaceId: string, idOrKey: string): Promise<Pro
 // Accepts either the project id or its identifier prefix, same as the issue lookups.
 export async function getProject(
   workspaceId: string,
-  idOrKey: string
+  idOrKey: string,
+  viewerId?: string
 ): Promise<(Project & { doc: string }) | null> {
   const row = await findProjectRow(workspaceId, idOrKey);
   if (!row) return null;
+  if (viewerId && !(await seesAllTasks(workspaceId, viewerId))) {
+    const visible = await listProjects(workspaceId, viewerId);
+    if (!visible.some((project) => project.id === row.id)) return null;
+  }
   const { id, workspaceId: ws, name, key, color, icon, description, doc, createdBy } = row;
   return {
     id,
@@ -1797,11 +1882,13 @@ async function toIssueRows(workspaceId: string, rows: IssueRow[]): Promise<Issue
       status: row.status as Status,
       priority: row.priority as Priority,
       projectId: row.projectId,
+      parentId: row.parentId ?? null,
       projectKey: project?.key ?? "?",
       projectName: project?.name ?? "Unknown",
       assignees: assigneesByIssue.get(row.id) ?? [],
       dueDate: row.dueDate ?? null,
       reminder: (row.reminder as ReminderPreset | null) ?? null,
+      recurrence: (row.recurrence as Recurrence | null) ?? null,
       createdBy: row.createdBy,
       createdVia: row.createdVia as Via,
       claimedBy: row.claimedBy ?? null,
@@ -1832,6 +1919,8 @@ export type ListFilters = {
   viewerId?: string;
   // Tasks that one agent chat published (H-COLLAB-07).
   sourceThreadId?: string;
+  // Tasks an agent created (API or MCP), not ones a person opened in the app.
+  agent?: boolean;
 };
 
 // Totals for a project's Overview page; grouped in SQL so the count stays right
@@ -1881,6 +1970,9 @@ export async function listIssues(
 
   if (filters.sourceThreadId) {
     conditions.push(eq(issues.sourceThreadId, filters.sourceThreadId));
+  }
+  if (filters.agent) {
+    conditions.push(inArray(issues.createdVia, ["api", "mcp"]));
   }
   if (filters.status === "active") {
     conditions.push(inArray(issues.status, ["todo", "in_progress"]));
@@ -2012,6 +2104,50 @@ export async function getIssueDetail(
     .from(events)
     .where(eq(events.issueId, row.id))
     .orderBy(events.createdAt);
+  const childRows = await db
+    .select({
+      id: issues.id,
+      identifier: issues.identifier,
+      title: issues.title,
+      status: issues.status,
+    })
+    .from(issues)
+    .where(
+      and(
+        eq(issues.parentId, row.id),
+        isNull(issues.deletedAt),
+        ne(issues.reviewStatus, "rejected")
+      )
+    )
+    .orderBy(issues.createdAt);
+  const dependencyRows = await db
+    .select({
+      id: issues.id,
+      identifier: issues.identifier,
+      title: issues.title,
+      status: issues.status,
+      projectId: issues.projectId,
+    })
+    .from(issueDependencies)
+    .innerJoin(issues, eq(issues.id, issueDependencies.blockedById))
+    .where(
+      and(
+        eq(issueDependencies.issueId, row.id),
+        isNull(issues.deletedAt),
+        ne(issues.reviewStatus, "rejected")
+      )
+    );
+  const restrictDependencies = viewerId ? !(await seesAllTasks(workspaceId, viewerId)) : false;
+  const dependencies: TaskDependency[] = [];
+  for (const item of dependencyRows) {
+    if (restrictDependencies && !(await getProject(workspaceId, item.projectId, viewerId))) continue;
+    dependencies.push({
+      id: item.id,
+      identifier: item.identifier,
+      title: item.title,
+      status: item.status as Status,
+    });
+  }
   return {
     issue: withLabels,
     comments: commentRows.map((c) => ({
@@ -2031,6 +2167,14 @@ export async function getIssueDetail(
       agentActor: e.agentActor,
       createdAt: e.createdAt,
     })),
+    children: childRows.map((child) => ({
+      id: child.id,
+      identifier: child.identifier,
+      title: child.title,
+      status: child.status as Status,
+    })),
+    dependencies,
+    blocked: dependencies.some((item) => item.status !== "done" && item.status !== "canceled"),
   };
 }
 
@@ -2038,7 +2182,7 @@ export async function notify(input: {
   workspaceId: string;
   userId: string;
   issueId: string;
-  type: "assigned" | "commented" | "mentioned" | "due_soon" | "handoff_done" | "handoff_failed" | "handoff_waiting" | ClaimNotice;
+  type: "assigned" | "commented" | "mentioned" | "due_soon" | "handoff_done" | "handoff_failed" | "handoff_waiting" | "blocker" | ClaimNotice;
   body: string;
 }) {
   await getDb().insert(notifications).values({
@@ -2095,7 +2239,10 @@ export type CreateIssueInput = {
   labelNames?: string[];
   dueDate?: string | null;
   reminder?: ReminderPreset | null;
+  recurrence?: Recurrence | null;
   project: string;
+  // Identifier or id of the task this one belongs to.
+  parent?: string | null;
 };
 export type UpdateIssueInput = {
   title?: string;
@@ -2106,6 +2253,9 @@ export type UpdateIssueInput = {
   labelNames?: string[];
   dueDate?: string | null;
   reminder?: ReminderPreset | null;
+  recurrence?: Recurrence | null;
+  // Identifier or id of the parent task. Null or "" detaches this task.
+  parent?: string | null;
 };
 
 function normalizeDueDate(value: unknown): string | null {
@@ -2115,6 +2265,31 @@ function normalizeDueDate(value: unknown): string | null {
     throw new TacosError("Due date must be a calendar date (YYYY-MM-DD)");
   }
   return text;
+}
+
+function normalizeRecurrence(value: unknown): Recurrence | null {
+  if (value === null || value === undefined || value === "") return null;
+  const text = String(value);
+  if (!RECURRENCES.includes(text as Recurrence)) {
+    throw new TacosError("Recurrence must be daily, weekly, or monthly");
+  }
+  return text as Recurrence;
+}
+
+function addRecurrence(dueDate: string | null, recurrence: Recurrence): string | null {
+  if (!dueDate) return null;
+  const [year, month, day] = dueDate.split("-").map(Number);
+  const date = new Date(Date.UTC(year, month - 1, day));
+  if (recurrence === "daily") date.setUTCDate(date.getUTCDate() + 1);
+  if (recurrence === "weekly") date.setUTCDate(date.getUTCDate() + 7);
+  if (recurrence === "monthly") {
+    const target = new Date(Date.UTC(year, month, 1));
+    const last = new Date(Date.UTC(target.getUTCFullYear(), target.getUTCMonth() + 1, 0)).getUTCDate();
+    date.setUTCMonth(date.getUTCMonth() + 1, Math.min(day, last));
+  }
+  const monthText = String(date.getUTCMonth() + 1).padStart(2, "0");
+  const dayText = String(date.getUTCDate()).padStart(2, "0");
+  return `${date.getUTCFullYear()}-${monthText}-${dayText}`;
 }
 
 function normalizeReminder(value: unknown): ReminderPreset | null {
@@ -2133,6 +2308,32 @@ export type MoveIssueInput = {
   beforeId?: string | null;
   afterId?: string | null;
 };
+
+// A subtask stays in its parent's project. Walking the parent's ancestors refuses a loop.
+async function resolveParent(
+  workspaceId: string,
+  parent: string,
+  childId: string | null,
+  projectId: string
+): Promise<string> {
+  const row = await findIssueRow(workspaceId, parent);
+  if (!row) throw new TacosError("Parent task not found", 404);
+  if (row.projectId !== projectId) throw new TacosError("A subtask stays in its parent's project", 400);
+  if (childId && row.id === childId) throw new TacosError("A task cannot be a subtask of itself", 400);
+  const seen = new Set<string>();
+  let at: string | null = row.id;
+  while (at) {
+    if (childId && at === childId) throw new TacosError("A task cannot sit inside its own subtask", 400);
+    if (seen.has(at)) throw new TacosError("A task cannot sit inside its own subtask", 400);
+    seen.add(at);
+    const [next] = await getDb()
+      .select({ parentId: issues.parentId })
+      .from(issues)
+      .where(eq(issues.id, at));
+    at = next?.parentId ?? null;
+  }
+  return row.id;
+}
 
 export async function createIssue(
   workspaceId: string,
@@ -2158,12 +2359,18 @@ export async function createIssue(
   const description = input.description ?? "";
   const dueDate = normalizeDueDate(input.dueDate);
   const reminder = dueDate ? normalizeReminder(input.reminder) : null;
+  const recurrence = normalizeRecurrence(input.recurrence);
   const id = crypto.randomUUID();
   const now = nowIso();
   const actorUserId = actor.kind === "user" ? actor.userId : null;
   const publisherId = actor.kind === "user" ? actor.userId : actor.publishedBy ?? null;
   const reviewStatus: ReviewStatus = actor.kind === "agent" ? "pending" : "approved";
   const sourceThreadId = actor.kind === "agent" ? actor.sourceThreadId ?? null : null;
+
+  const parentId =
+    typeof input.parent === "string" && input.parent.trim()
+      ? await resolveParent(workspaceId, input.parent, null, project.id)
+      : null;
 
   const assigneeIds = [...new Set(input.assigneeIds ?? [])];
   if (assigneeIds.length > 0) {
@@ -2185,8 +2392,8 @@ export async function createIssue(
     if(value!==null)customValues.push({issueId:id,fieldId,value});
   }
   await db.run(sql`INSERT INTO issues
-    (id, workspace_id, project_id, number, identifier, title, description, status, priority, due_date, reminder, created_by, published_by, review_status, source_thread_id, created_via, created_at, updated_at, position)
-    VALUES (${id}, ${workspaceId}, ${project.id},
+    (id, workspace_id, project_id, parent_id, number, identifier, title, description, status, priority, due_date, reminder, created_by, published_by, review_status, source_thread_id, created_via, created_at, updated_at, position)
+    VALUES (${id}, ${workspaceId}, ${project.id}, ${parentId},
       (SELECT COALESCE(MAX(number), 0) + 1 FROM issues WHERE project_id = ${project.id}),
       'pending', ${title}, ${description}, ${status}, ${priority}, ${dueDate}, ${reminder},
       ${publisherId}, ${publisherId}, ${reviewStatus}, ${sourceThreadId},
@@ -2195,6 +2402,9 @@ export async function createIssue(
   await db.run(
     sql`UPDATE issues SET identifier = ${project.key} || '-' || number WHERE id = ${id}`
   );
+  if (recurrence) {
+    await db.update(issues).set({ recurrence }).where(eq(issues.id, id));
+  }
 
   const labelRecords = await getOrCreateLabels(workspaceId, input.labelNames ?? []);
   for (const label of labelRecords) {
@@ -2307,6 +2517,16 @@ export async function updateIssue(
       }
     }
   }
+  if (patch.recurrence !== undefined) {
+    const recurrence = normalizeRecurrence(patch.recurrence);
+    if (recurrence !== (row.recurrence ?? null)) {
+      sets.recurrence = recurrence;
+      changes.push({
+        type: "recurrence_changed",
+        data: { to: recurrence ? RECURRENCE_META[recurrence].label : null },
+      });
+    }
+  }
   if (patch.reminder !== undefined) {
     const effectiveDue = sets.dueDate !== undefined ? sets.dueDate : row.dueDate;
     const reminder = effectiveDue ? normalizeReminder(patch.reminder) : null;
@@ -2347,6 +2567,20 @@ export async function updateIssue(
           ),
           to: nextIds.map((userId) => memberMap.get(userId)?.displayName ?? "unknown"),
         },
+      });
+    }
+  }
+  if (patch.parent !== undefined) {
+    const next =
+      typeof patch.parent === "string" && patch.parent.trim()
+        ? await resolveParent(workspaceId, patch.parent, row.id, row.projectId)
+        : null;
+    if (next !== (row.parentId ?? null)) {
+      sets.parentId = next;
+      const parent = next ? await findIssueRow(workspaceId, next) : null;
+      changes.push({
+        type: "parent_changed",
+        data: { from: row.parentId, to: parent?.identifier ?? null },
       });
     }
   }
@@ -2396,9 +2630,73 @@ export async function updateIssue(
     }
   }
 
+  await openNextOccurrence(workspaceId, row.id, actor);
+
   const detail = await getIssueDetail(workspaceId, row.id);
   if (!detail) throw new TacosError("Issue disappeared while updating", 500);
   return detail;
+}
+
+// Marking a repeating task done opens the next one. The link is written only when it is
+// still empty, so a second completion or a second call returns the same task.
+export async function openNextOccurrence(
+  workspaceId: string,
+  idOrIdentifier: string,
+  actor: MutationActor
+): Promise<{ id: string } | null> {
+  const row = await findIssueRow(workspaceId, idOrIdentifier);
+  if (!row || row.status !== "done" || !row.recurrence) return null;
+  if (row.recurredInto) return { id: row.recurredInto };
+  const recurrence = normalizeRecurrence(row.recurrence);
+  if (!recurrence) return null;
+  const db = getDb();
+  const [project] = await db
+    .select({ key: projects.key })
+    .from(projects)
+    .where(eq(projects.id, row.projectId));
+  if (!project) return null;
+  const assigneeRows = await db
+    .select({ userId: issueAssignees.userId })
+    .from(issueAssignees)
+    .where(eq(issueAssignees.issueId, row.id));
+  const labelRows = await db
+    .select({ name: labels.name })
+    .from(issueLabels)
+    .innerJoin(labels, eq(labels.id, issueLabels.labelId))
+    .where(eq(issueLabels.issueId, row.id));
+  const created = await createIssue(
+    workspaceId,
+    {
+      title: row.title,
+      description: row.description,
+      status: "todo",
+      priority: row.priority as Priority,
+      dueDate: addRecurrence(row.dueDate, recurrence),
+      reminder: (row.reminder as ReminderPreset | null) ?? null,
+      recurrence,
+      project: project.key,
+      parent: row.parentId,
+      assigneeIds: assigneeRows.map((entry) => entry.userId),
+      labelNames: labelRows.map((entry) => entry.name),
+    },
+    actor
+  );
+  const claimed = await db
+    .update(issues)
+    .set({ recurredInto: created.issue.id })
+    .where(and(eq(issues.id, row.id), isNull(issues.recurredInto)))
+    .returning({ id: issues.id });
+  if (claimed.length > 0) return { id: created.issue.id };
+  await db.delete(issueLabels).where(eq(issueLabels.issueId, created.issue.id));
+  await db.delete(issueAssignees).where(eq(issueAssignees.issueId, created.issue.id));
+  await db.delete(events).where(eq(events.issueId, created.issue.id));
+  await db.delete(notifications).where(eq(notifications.issueId, created.issue.id));
+  await db.delete(issues).where(eq(issues.id, created.issue.id));
+  const [winner] = await db
+    .select({ recurredInto: issues.recurredInto })
+    .from(issues)
+    .where(eq(issues.id, row.id));
+  return winner?.recurredInto ? { id: winner.recurredInto } : null;
 }
 
 export async function moveIssue(
@@ -2466,6 +2764,8 @@ export async function moveIssue(
       await recordEvent(row.id, change.type, change.data, actor);
     }
   }
+
+  await openNextOccurrence(workspaceId, row.id, actor);
 
   const detail = await getIssueDetail(workspaceId, row.id);
   if (!detail) throw new TacosError("Issue disappeared while moving", 500);
@@ -2583,6 +2883,133 @@ async function notifyMentions(
   return sent;
 }
 
+// A blocker goes to the assignees, who can clear it. When the reporter is the only
+// assignee, or the task has none, it goes to the person who opened the task, then the
+// project lead, then the workspace owner. The reporter is never notified.
+async function blockerRecipient(workspaceId: string, row: IssueRow, actorId: string): Promise<string[]> {
+  const db = getDb();
+  const assignees = await db
+    .select({ userId: issueAssignees.userId })
+    .from(issueAssignees)
+    .where(eq(issueAssignees.issueId, row.id));
+  const others = assignees.map((assignee) => assignee.userId).filter((userId) => userId !== actorId);
+  if (others.length > 0) return others;
+  const [project] = await db
+    .select({ createdBy: projects.createdBy })
+    .from(projects)
+    .where(eq(projects.id, row.projectId));
+  const [workspace] = await db
+    .select({ createdBy: workspaces.createdBy })
+    .from(workspaces)
+    .where(eq(workspaces.id, workspaceId));
+  for (const userId of [row.createdBy, project?.createdBy, workspace?.createdBy]) {
+    if (userId && userId !== actorId) return [userId];
+  }
+  return [];
+}
+
+export async function reportBlocker(
+  workspaceId: string,
+  idOrIdentifier: string,
+  body: string,
+  actor: MutationActor
+): Promise<{ id: string }> {
+  if (actor.kind !== "user") throw new TacosError("Only a member can report a blocker", 403);
+  const text = typeof body === "string" ? body.trim() : "";
+  if (!text) throw new TacosError("Say what is blocking this task", 400);
+  const row = await findIssueRow(workspaceId, idOrIdentifier);
+  if (!row) throw new TacosError(`Issue "${idOrIdentifier}" not found`, 404);
+  const id = crypto.randomUUID();
+  await getDb().insert(blockers).values({
+    id,
+    issueId: row.id,
+    authorId: actor.userId,
+    body: text,
+    createdAt: nowIso(),
+  });
+  await recordEvent(row.id, "blocker_reported", { body: text }, actor);
+  for (const userId of await blockerRecipient(workspaceId, row, actor.userId)) {
+    await notify({ workspaceId, userId, issueId: row.id, type: "blocker", body: actor.displayName });
+  }
+  return { id };
+}
+
+// Walk what `blockedById` waits on. Reaching `issueId` means the new link would loop.
+async function dependencyLoops(issueId: string, blockedById: string): Promise<boolean> {
+  const db = getDb();
+  const seen = new Set<string>();
+  const pending = [blockedById];
+  while (pending.length > 0) {
+    const current = pending.pop();
+    if (!current || seen.has(current)) continue;
+    if (current === issueId) return true;
+    seen.add(current);
+    const next = await db
+      .select({ blockedById: issueDependencies.blockedById })
+      .from(issueDependencies)
+      .where(eq(issueDependencies.issueId, current));
+    pending.push(...next.map((row) => row.blockedById));
+  }
+  return false;
+}
+
+export async function addDependency(
+  workspaceId: string,
+  idOrIdentifier: string,
+  blockedBy: string,
+  viewerId: string,
+  actor: MutationActor
+): Promise<IssueDetail> {
+  const row = await findIssueRow(workspaceId, idOrIdentifier);
+  if (!row) throw new TacosError(`Issue "${idOrIdentifier}" not found`, 404);
+  const blocker = await findIssueRow(workspaceId, blockedBy);
+  if (!blocker) throw new TacosError(`Issue "${blockedBy}" not found`, 404);
+  await assertSeesIssue(workspaceId, blockedBy, viewerId);
+  if (row.id === blocker.id) throw new TacosError("A task cannot depend on itself", 400);
+  if (await dependencyLoops(row.id, blocker.id)) throw new TacosError("That dependency would loop", 400);
+  const db = getDb();
+  const [existing] = await db
+    .select({ issueId: issueDependencies.issueId })
+    .from(issueDependencies)
+    .where(and(eq(issueDependencies.issueId, row.id), eq(issueDependencies.blockedById, blocker.id)))
+    .limit(1);
+  if (!existing) {
+    await db.insert(issueDependencies).values({
+      issueId: row.id,
+      blockedById: blocker.id,
+      createdAt: nowIso(),
+    });
+    await recordEvent(row.id, "dependency_added", { task: blocker.identifier }, actor);
+  }
+  const detail = await getIssueDetail(workspaceId, row.id, viewerId);
+  if (!detail) throw new TacosError("Issue disappeared while updating", 500);
+  return detail;
+}
+
+export async function removeDependency(
+  workspaceId: string,
+  idOrIdentifier: string,
+  blockedBy: string,
+  viewerId: string,
+  actor: MutationActor
+): Promise<IssueDetail> {
+  const row = await findIssueRow(workspaceId, idOrIdentifier);
+  if (!row) throw new TacosError(`Issue "${idOrIdentifier}" not found`, 404);
+  const blocker = await findIssueRow(workspaceId, blockedBy);
+  if (!blocker) throw new TacosError(`Issue "${blockedBy}" not found`, 404);
+  await assertSeesIssue(workspaceId, blockedBy, viewerId);
+  const removed = await getDb()
+    .delete(issueDependencies)
+    .where(and(eq(issueDependencies.issueId, row.id), eq(issueDependencies.blockedById, blocker.id)))
+    .returning({ issueId: issueDependencies.issueId });
+  if (removed.length > 0) {
+    await recordEvent(row.id, "dependency_removed", { task: blocker.identifier }, actor);
+  }
+  const detail = await getIssueDetail(workspaceId, row.id, viewerId);
+  if (!detail) throw new TacosError("Issue disappeared while updating", 500);
+  return detail;
+}
+
 async function notifyClaimWatchers(workspaceId: string, issueId: string, type: ClaimNotice, actorId: string) {
   const db = getDb();
   const [issue] = await db.select({ createdBy: issues.createdBy }).from(issues).where(eq(issues.id, issueId));
@@ -2696,11 +3123,13 @@ export async function deleteIssue(workspaceId: string, idOrIdentifier: string): 
     status: row.status as Status,
     priority: row.priority as Priority,
     projectId: row.projectId,
+    parentId: row.parentId ?? null,
     projectKey: "",
     projectName: "",
     assignees: [],
     dueDate: row.dueDate ?? null,
     reminder: (row.reminder as ReminderPreset | null) ?? null,
+    recurrence: (row.recurrence as Recurrence | null) ?? null,
     createdBy: row.createdBy,
     createdVia: row.createdVia as Via,
     claimedBy: row.claimedBy ?? null,
@@ -2793,6 +3222,10 @@ export async function purgeIssue(workspaceId: string, issueId: string) {
   await db.delete(taskFieldValues).where(eq(taskFieldValues.issueId, issueId));
   await db.delete(issueAssignees).where(eq(issueAssignees.issueId, issueId));
   await db.delete(issueLabels).where(eq(issueLabels.issueId, issueId));
+  await db.delete(blockers).where(eq(blockers.issueId, issueId));
+  await db
+    .delete(issueDependencies)
+    .where(or(eq(issueDependencies.issueId, issueId), eq(issueDependencies.blockedById, issueId)));
   await db.delete(comments).where(eq(comments.issueId, issueId));
   await db.delete(events).where(eq(events.issueId, issueId));
   await db.delete(notifications).where(eq(notifications.issueId, issueId));
@@ -3016,6 +3449,7 @@ export type ApiKeyRecord = {
   id: string;
   workspaceId: string;
   name: string;
+  createdBy: string;
   createdAt: string;
   lastUsedAt: string | null;
   revokedAt: string | null;
@@ -3041,11 +3475,12 @@ export async function createApiKey(
     id: crypto.randomUUID(),
     workspaceId,
     name: trimmed,
+    createdBy,
     createdAt: nowIso(),
     lastUsedAt: null,
     revokedAt: null,
   };
-  await getDb().insert(apiKeys).values({ ...record, keyHash: sha256(key), createdBy });
+  await getDb().insert(apiKeys).values({ ...record, keyHash: sha256(key) });
   return { key, record };
 }
 
@@ -3073,6 +3508,7 @@ export async function verifyApiKey(rawKey: string): Promise<ApiKeyRecord | null>
     id: record.id,
     workspaceId: record.workspaceId,
     name: record.name,
+    createdBy: record.createdBy,
     createdAt: record.createdAt,
     lastUsedAt: record.lastUsedAt,
     revokedAt: record.revokedAt,
@@ -3082,6 +3518,7 @@ export async function verifyApiKey(rawKey: string): Promise<ApiKeyRecord | null>
 export async function listApiKeys(workspaceId: string): Promise<ApiKeyRecord[]> {
   return getDb()
     .select({
+      createdBy: apiKeys.createdBy,
       id: apiKeys.id,
       workspaceId: apiKeys.workspaceId,
       name: apiKeys.name,
@@ -3094,8 +3531,18 @@ export async function listApiKeys(workspaceId: string): Promise<ApiKeyRecord[]> 
     .orderBy(apiKeys.createdAt);
 }
 
-export async function revokeApiKey(workspaceId: string, id: string) {
-  await getDb()
+export async function revokeApiKey(workspaceId: string, id: string, actorId: string) {
+  const db = getDb();
+  const [key] = await db
+    .select({ createdBy: apiKeys.createdBy, revokedAt: apiKeys.revokedAt })
+    .from(apiKeys)
+    .where(and(eq(apiKeys.id, id), eq(apiKeys.workspaceId, workspaceId)))
+    .limit(1);
+  if (!key || key.revokedAt) return;
+  const facts = await workspaceFacts(workspaceId, actorId);
+  const allowed = key.createdBy === actorId || facts.ownerId === actorId || facts.role === "admin";
+  if (!allowed) throw new TacosError("Only the key's owner or an admin can revoke it", 403);
+  await db
     .update(apiKeys)
     .set({ revokedAt: nowIso() })
     .where(and(eq(apiKeys.id, id), eq(apiKeys.workspaceId, workspaceId)));
@@ -3185,6 +3632,8 @@ export async function workspacePulse(workspaceId: string, userId: string): Promi
          FROM comments c JOIN issues i ON i.id = c.issue_id WHERE i.workspace_id = ${workspaceId}) AS c,
       (SELECT count(*) || ':' || coalesce(max(m.created_at), '')
          FROM agent_messages m JOIN agent_threads th ON th.id = m.thread_id WHERE th.workspace_id = ${workspaceId}) AS m,
+      (SELECT count(*) || ':' || coalesce(max(updated_at), '') || ':' || coalesce(sum(turn_user_id IS NOT NULL), 0)
+         FROM agent_threads WHERE workspace_id = ${workspaceId}) AS a,
       (SELECT count(*) || ':' || coalesce(sum(read_at IS NULL), 0)
          FROM notifications WHERE workspace_id = ${workspaceId} AND user_id = ${userId}) AS n
   `);

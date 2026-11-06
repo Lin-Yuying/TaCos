@@ -15,6 +15,7 @@ import { builtinAvatarId, builtinAvatarSrc } from "@/lib/avatars";
 import type { Assignee, IssueWithLabels } from "@/lib/issues";
 import { issueRef, timeAgo } from "@/lib/format";
 import { useLocale, useT } from "@/components/i18n-context";
+import { PAGE_INSET } from "@/lib/page-chrome";
 
 function initials(displayName: string) {
   const words = displayName
@@ -216,7 +217,7 @@ export function IssueTable({ issues }: { issues: IssueWithLabels[] }) {
     <div ref={scroller} className="@container flex-1 overflow-y-auto">
       {groups.map((group) => (
         <div key={group.status}>
-          <div className="sticky top-0 z-10 flex items-center gap-2 border-b border-border bg-bg/95 px-4 py-1.5 backdrop-blur @2xl:px-10 @4xl:px-20 @6xl:px-32">
+          <div className={`sticky top-0 z-10 flex items-center gap-2 border-b border-border bg-bg/95 py-1.5 backdrop-blur ${PAGE_INSET}`}>
             {group.status!=="pinned"&&<StatusIcon status={group.status} size={13} />}
             <span className="text-small font-medium text-muted">
               {group.status==="pinned"?t("Pinned"):t(STATUS_META[group.status].label)}
@@ -242,8 +243,8 @@ export function IssueTable({ issues }: { issues: IssueWithLabels[] }) {
                   setFocusIndex(index);
                   openIssue(issue.id);
                 }}
-                
-                className={`flex cursor-default items-center gap-2.5 px-4 py-[7px] text-body transition-colors @2xl:px-10 @4xl:px-20 @6xl:px-32 ${
+                onMouseEnter={() => setFocusIndex(index)}
+                className={`flex cursor-default items-center gap-2.5 py-[7px] text-body transition-colors ${PAGE_INSET} ${
                   focused ? "bg-row-active" : opened ? "bg-surface" : "hover:bg-elevated/40"
                 } ${opened ? "border-l-2 border-l-accent" : "border-l-2 border-l-transparent"}`}
               >

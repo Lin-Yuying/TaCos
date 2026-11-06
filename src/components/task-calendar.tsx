@@ -14,6 +14,7 @@ import { updateIssueAction } from "@/app/actions";
 import { useLocale, useT } from "@/components/i18n-context";
 import { useUI } from "@/components/ui-context";
 import type { IssueWithLabels } from "@/lib/issues";
+import { PAGE_INSET } from "@/lib/page-chrome";
 
 /** The calendar view: tasks on their due dates. Dragging a task to another day moves its due date. */
 export default function TaskCalendar({
@@ -36,7 +37,7 @@ export default function TaskCalendar({
 
 
   return (
-    <div data-task-calendar className="task-calendar min-h-0 flex-1 overflow-auto px-4 py-3 text-small">
+    <div data-task-calendar className={`task-calendar min-h-0 flex-1 overflow-auto py-3 text-small ${PAGE_INSET}`}>
       {(undated > 0 || error) && (
         <div className="mb-2 text-small text-faint">
           {error ? <span className="text-danger">{t(error)}</span> : t("{count} tasks have no due date", { count: undated })}

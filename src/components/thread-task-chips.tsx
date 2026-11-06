@@ -46,7 +46,7 @@ export function ThreadTaskChips({
           className="flex max-w-[160px] items-center gap-1 rounded-full border border-border px-2 py-0.5 text-caption text-muted transition-colors hover:text-text"
         >
           <StatusIcon status={task.status} size={11} />
-          <span className="shrink-0">{task.identifier}</span>
+          <span className="shrink-0">{task.ref}</span>
           <span className="truncate">{task.title}</span>
         </button>
       ))}

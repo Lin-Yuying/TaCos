@@ -6,14 +6,18 @@ import { DetailNavigation } from "@/components/detail-navigation";
 import { useScrollMemory } from "@/lib/ui/scroll-memory";
 import { useLiveTick } from "@/components/live-refresh";
 import { ISSUE_DELETED, useUI, type DeletedIssue } from "@/components/ui-context";
-import { addCommentAction, deleteIssueAction, restoreIssueAction, changeIssueCollectionAction, updateIssueDetailAction } from "@/app/actions";
+import { getIssueDetailAction, addCommentAction, addDependencyAction, createIssueAction, removeDependencyAction, reportBlockerAction, deleteIssueAction, restoreIssueAction, changeIssueCollectionAction, updateIssueDetailAction } from "@/app/actions";
 import type { Label, Member } from "@/lib/issues";
 import { EditableTitle } from "@/components/ui/editable-title";
-import { readJson } from "@/lib/ui/request";
+import { readJson, RequestError } from "@/lib/ui/request";
 import { useDraft } from "@/lib/ui/draft-store";
 import { PanelHeader } from "./header";
 import { PropertiesRow } from "./properties";
 import { DueRow } from "./due-row";
+import { RecurrenceRow } from "./recurrence-row";
+import { Subtasks } from "./subtasks";
+import { Dependencies } from "./dependencies";
+import { BlockerReport } from "./blocker-report";
 import { ClaimRow } from "./claim-row";
 import { SourceChatRow } from "./source-chat-row";
 import { AdvanceButton } from "./advance-button";
@@ -94,7 +98,7 @@ function IssuePanel({
     const seq = request.current;
     void readJson(`/api/internal/${workspaceId}/issues/${encodeURIComponent(id)}`, (data): data is FlatDetail => !!data && typeof data === "object" && typeof (data as FlatDetail).id === "string" && Array.isArray((data as FlatDetail).comments) && Array.isArray((data as FlatDetail).labels), controller.signal)
       .then((data) => { if (!controller.signal.aborted && seq === request.current) {setDetail(data);setError(null);} })
-      .catch((err) => { if (!controller.signal.aborted) setError(err.message); });
+      .catch((err) => { if (!controller.signal.aborted) {if (err instanceof RequestError && err.status === 404) {toast(t("Task deleted — it is in Trash"));onClose();} else {if (err instanceof RequestError && err.status === 403) setDetail(null);setError(err.message);}} });
     for (const kind of ["labels", "members"] as const) {
       void readJson(`/api/internal/${workspaceId}/${kind}`, (data): data is Label[] & Member[] => Array.isArray(data), controller.signal)
         .then((data) => {if(!controller.signal.aborted) {if(kind === "labels")setAllLabels(data);else setMembers(data);} })
@@ -109,7 +113,7 @@ function IssuePanel({
     try {
       const result = await pending;
       if (!result.ok) {setError(result.error);return false;}
-      if (seq === request.current) setDetail({...result.data.issue,comments:result.data.comments,events:result.data.events});
+      if (seq === request.current) setDetail({...result.data.issue,comments:result.data.comments,events:result.data.events,children:result.data.children,dependencies:result.data.dependencies,blocked:result.data.blocked});
       return true;
     } catch {setError("Could not save. Retry.");return false;}
     finally {if(seq === request.current)setBusy(false);}
@@ -128,6 +132,23 @@ function IssuePanel({
     void mutate(() => changeIssueCollectionAction(workspaceId,id,change));
   }
 
+  async function addSubtask(title: string) {
+    if (!detail) return false;
+    return mutate(async () => {
+      const result = await createIssueAction(workspaceId, { title, project: detail!.projectKey, parent: detail.id });
+      if (!result.ok) return result;
+      return getIssueDetailAction(workspaceId, id);
+    });
+  }
+  async function addTaskDependency(identifier: string) {
+    return mutate(() => addDependencyAction(workspaceId, id, identifier));
+  }
+  async function removeTaskDependency(identifier: string) {
+    return mutate(() => removeDependencyAction(workspaceId, id, identifier));
+  }
+
+  async function submitBlocker(body: string) { return mutate(() => reportBlockerAction(workspaceId,id,body)); }
+
   async function submitComment() {
     if (!detail || !comment.trim() || busy) return;
     setBusy(true);
@@ -135,7 +156,7 @@ function IssuePanel({
     const result = await addCommentAction(workspaceId, detail.id, comment);
     if (result.ok) {
       setComment("");
-      setDetail({ ...result.data.issue, comments: result.data.comments, events: result.data.events });
+      setDetail({ ...result.data.issue, comments: result.data.comments, events: result.data.events, children: result.data.children, dependencies: result.data.dependencies, blocked: result.data.blocked });
       requestAnimationFrame(scrollToComposer);
     } else {
       setError(result.error);
@@ -207,7 +228,7 @@ function IssuePanel({
           detail={detail}
           members={members}
           currentUserId={currentUserId}
-          onDetail={(next) => setDetail({ ...next.issue, comments: next.comments, events: next.events })}
+          onDetail={(next) => setDetail({ ...next.issue, comments: next.comments, events: next.events, children: next.children, dependencies: next.dependencies, blocked: next.blocked })}
           onError={setError}
         />
 
@@ -229,6 +250,20 @@ function IssuePanel({
         <SourceChatRow workspaceId={workspaceId} threadId={detail.sourceThreadId} />
 
         <DueRow detail={detail} onUpdate={update} />
+
+        <RecurrenceRow detail={detail} onUpdate={update} />
+
+        <Subtasks children={detail.children} busy={busy} onAdd={addSubtask} />
+
+        <Dependencies
+          dependencies={detail.dependencies}
+          blocked={detail.blocked}
+          busy={busy}
+          onAdd={addTaskDependency}
+          onRemove={removeTaskDependency}
+        />
+
+        <BlockerReport events={detail.events} busy={busy} onSubmit={submitBlocker} />
 
         <DescriptionSection
           workspaceId={workspaceId}

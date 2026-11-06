@@ -16,6 +16,7 @@ import { useStoredJson } from "@/lib/use-stored-json";
 import { useUI } from "@/components/ui-context";
 import type { DocPage } from "@/lib/pages";
 import { useT } from "@/components/i18n-context";
+import { PAGE_INSET } from "@/lib/page-chrome";
 
 const MARKDOWN_FILE = /\.(md|markdown|mdx|txt)$/i;
 
@@ -30,11 +31,9 @@ function junkPath(path: string): boolean {
 
 export function DocsIndex({
   workspaceId,
-  userId,
   pages,
 }: {
   workspaceId: string;
-  userId: string;
   pages: DocPage[];
 }) {
   const t = useT();
@@ -53,8 +52,8 @@ export function DocsIndex({
   const [sort,setSort]=useStoredJson(`tacos.documents.sort.${scope}`,"updated");
   const [importResults,setImportResults]=useState<{file:File;stripRoot:boolean;status:string;error?:string}[]>([]);
   const shown=pages.filter(page=>documentPath(page.id,pages).toLowerCase().includes(query.toLowerCase())).sort((a,b)=>{const rank=(id:string)=>{const at=pins.findIndex(p=>p.kind==="document"&&p.id===id);return at<0?Infinity:at;};return (rank(a.id)-rank(b.id))||(sort==="title"?a.title.localeCompare(b.title):sort==="path"?documentPath(a.id,pages).localeCompare(documentPath(b.id,pages)):b.updatedAt.localeCompare(a.updatedAt));});
-  const mine = shown.filter((page) => page.createdBy === userId);
-  const shared = shown.filter((page) => page.createdBy !== userId);
+  const sharedPages = shown.filter((page) => page.shared);
+  const privatePages = shown.filter((page) => !page.shared);
 
   async function createPage() {
     if(creatingRef.current)return;
@@ -96,9 +95,9 @@ export function DocsIndex({
     router.refresh();
   }
 
-  useDetailSource("document",[...mine,...shared].map(page=>page.id));
-  const section = (title: string, items: DocPage[], empty: string) => (
-    <section className="mt-6 first:mt-0">
+  useDetailSource("document",[...sharedPages,...privatePages].map(page=>page.id));
+  const section = (sectionKey: "shared" | "private", title: string, items: DocPage[], empty: string) => (
+    <section data-doc-index-section={sectionKey} className="mt-6 first:mt-0">
       <h2 className="mb-2 text-small font-medium uppercase tracking-wider text-faint">{title}</h2>
       {items.length === 0 ? (
         <p className="text-body text-faint">{empty}</p>
@@ -111,7 +110,7 @@ export function DocsIndex({
               href={`/${workspaceId}/docs/${page.id}`}
               className="flex items-center gap-2 rounded-md px-2 py-1.5 text-body text-text transition-colors hover:bg-elevated/60"
             >
-              <span className="shrink-0">{page.icon ?? "📄"}</span>
+              <span className="shrink-0">{page.icon ?? <FileText size={14} className="text-muted" />}</span>
               <span className="min-w-0 flex-1"><span className="block truncate">{page.title}</span><span className="block truncate text-caption text-faint">{documentPath(page.id,pages)}</span></span>
               <span className="ml-auto flex shrink-0 items-center gap-1 text-caption text-faint">
                 {page.shared ? <Users size={11} /> : <Lock size={11} />}
@@ -127,10 +126,10 @@ export function DocsIndex({
 
   return (
     <div ref={scroller} className="flex-1 overflow-y-auto">
-      <div className="w-full px-10 py-6 lg:px-20 xl:px-32">
+      <div className={`w-full py-6 ${PAGE_INSET}`}>
         <div className="flex items-center justify-between gap-3">
           <div>
-            <h1 className="text-heading font-semibold tracking-tight">{t("Docs")}</h1>
+            <h1 className="text-heading font-semibold tracking-tight">{t("Documents")}</h1>
             <p className="mt-0.5 text-small text-muted">
               {t("Markdown documents stored with your TaCos data. Private until you share them.")}
             </p>
@@ -208,8 +207,8 @@ export function DocsIndex({
         {importResults.length>0&&<details open className="my-3 text-small"><summary>{t("Import results")}</summary><div className="max-h-48 overflow-auto">{importResults.map((result,index)=><p key={index} className={result.status==="Failed"?"text-danger":"text-muted"}>{relativePath(result.file)}: {t(result.status)} {result.error}</p>)}</div>{importResults.some(result=>result.status==="Failed")&&<button disabled={!!progress} onClick={()=>{const failed=importResults.filter(result=>result.status==="Failed");void importFiles(failed.map(result=>result.file),failed[0]?.stripRoot??false);}} className="mt-1 underline">{t("Retry failed files")}</button>}</details>}
         {error && <div className="mt-3 text-small text-danger">{t(error)}</div>}
         {!error && note && <div className="mt-3 text-small text-muted">{note}</div>}
-        {section(t("My pages"), mine, t("No pages yet — create one."))}
-        {section(t("Shared with the workspace"), shared, t("Nothing has been shared with you yet."))}
+        {section("shared", t("Shared"), sharedPages, t("No documents yet"))}
+        {section("private", t("Private"), privatePages, t("No documents yet"))}
       </div>
     </div>
   );

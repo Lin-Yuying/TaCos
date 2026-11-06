@@ -180,9 +180,13 @@ server.registerTool(
         .enum(["12h", "1d", "3d", "5d", "7d"])
         .optional()
         .describe("How long before the due date to remind"),
+      parent: z
+        .string()
+        .optional()
+        .describe("Identifier of the parent task. The subtask stays in that task's project."),
     },
   },
-  async ({ title, description, project, status, priority, assignee, assignees, labels, dueDate, reminder }) =>
+  async ({ title, description, project, status, priority, assignee, assignees, labels, dueDate, reminder, parent }) =>
     guard(async () => {
       const workspaceId = await getWorkspaceId();
       const assigneeValues = assignees ?? (assignee ? [assignee] : []);
@@ -198,6 +202,7 @@ server.registerTool(
           labelNames: labels,
           dueDate,
           reminder,
+          parent,
         },
         AGENT
       );
@@ -230,9 +235,13 @@ server.registerTool(
         .string()
         .optional()
         .describe("How long before the due date to remind: 12h, 1d, 3d, 5d, 7d; empty string clears it"),
+      parent: z
+        .string()
+        .optional()
+        .describe("Identifier of the parent task. Empty string detaches this task."),
     },
   },
-  async ({ id, title, description, status, priority, assignee, assignees, labels, dueDate, reminder }) =>
+  async ({ id, title, description, status, priority, assignee, assignees, labels, dueDate, reminder, parent }) =>
     guard(async () => {
       const workspaceId = await getWorkspaceId();
       let assigneeIds: string[] | undefined;
@@ -263,6 +272,7 @@ server.registerTool(
               : reminder === ""
                 ? null
                 : (reminder as ReminderPreset),
+          parent,
         },
         AGENT
       );

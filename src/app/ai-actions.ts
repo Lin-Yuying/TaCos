@@ -79,9 +79,9 @@ export async function saveEditModelAction(
   });
 }
 
-async function projectLabel(workspaceId: string, projectId?: string): Promise<string | undefined> {
+async function projectLabel(workspaceId: string, viewerId: string, projectId?: string): Promise<string | undefined> {
   if (!projectId) return undefined;
-  const project = await getProject(workspaceId, projectId);
+  const project = await getProject(workspaceId, projectId, viewerId);
   return project ? `${project.name} (${project.key})` : undefined;
 }
 
@@ -96,7 +96,7 @@ export async function generateTasksAction(
       userId: user.id,
       prompt: input.prompt,
       context: input.context,
-      project: await projectLabel(workspaceId, input.projectId),
+      project: await projectLabel(workspaceId, user.id, input.projectId),
     });
   });
 }
@@ -111,7 +111,7 @@ export async function draftIssueAction(
       workspaceId,
       userId: user.id,
       prompt: input.prompt,
-      project: await projectLabel(workspaceId, input.projectId),
+      project: await projectLabel(workspaceId, user.id, input.projectId),
     });
   });
 }

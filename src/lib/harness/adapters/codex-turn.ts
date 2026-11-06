@@ -426,6 +426,7 @@ export async function* openCodexTurn(input: TurnInput, log?: TurnLog): AsyncGene
           threadId,
           input: [
             { type: "text", text: input.prompt.body },
+            ...(input.images ?? []).map((image) => ({ type: "localImage", path: image.path })),
             ...(input.skills ?? []).map((skill) => ({
               type: "skill",
               name: skill.name,

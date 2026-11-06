@@ -5,7 +5,7 @@ import { EntityRow } from "@/components/ui/entity-row";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { ChevronRight, FileText, Lock, Users } from "lucide-react";
+import { ChevronRight, FileText, Loader2, Lock, Plus, Users } from "lucide-react";
 import {
   draggable,
   dropTargetForElements,
@@ -17,7 +17,7 @@ import {
   type Instruction,
 } from "@atlaskit/pragmatic-drag-and-drop-hitbox/tree-item";
 import { useUI } from "@/components/ui-context";
-import { movePageAction, previewPageMoveAction } from "@/app/pages-actions";
+import { createPageAction, movePageAction, previewPageMoveAction, setPageSharedAction } from "@/app/pages-actions";
 import { useT } from "@/components/i18n-context";
 import type { PageSummary } from "@/lib/pages";
 import { useStoredJson } from "@/lib/use-stored-json";
@@ -37,6 +37,7 @@ function DocRow({
   onToggle,
   active,
   blocked,
+  rootShared,
 }: {
   workspaceId: string;
   page: PageSummary;
@@ -48,6 +49,7 @@ function DocRow({
   active: string | null;
   // This row and its subtree: a page cannot move inside itself.
   blocked: (sourceId: string, targetId: string) => boolean;
+  rootShared: boolean;
 }) {
   const t = useT();
   const ref = useRef<HTMLDivElement>(null);
@@ -134,6 +136,7 @@ function DocRow({
             onToggle={onToggle}
             active={active}
             blocked={blocked}
+            rootShared={rootShared}
           >
             {byParent.get(child.id) ?? []}
           </DocRow>
@@ -142,7 +145,91 @@ function DocRow({
   );
 }
 
-/** The sidebar's document tree: every page in one tree — sharing is shown on the page. */
+function DocSection({
+  workspaceId,
+  sectionShared,
+  label,
+  icon,
+  roots,
+  creating,
+  createBusy,
+  onCreate,
+  rowProps,
+}: {
+  workspaceId: string;
+  sectionShared: boolean;
+  label: string;
+  icon: React.ReactNode;
+  roots: PageSummary[];
+  creating: boolean;
+  createBusy: boolean;
+  onCreate: () => void;
+  rowProps: Pick<
+    React.ComponentProps<typeof DocRow>,
+    "byParent" | "isOpen" | "onToggle" | "active" | "blocked"
+  >;
+}) {
+  const t = useT();
+  const ref = useRef<HTMLDivElement>(null);
+  const [over, setOver] = useState(false);
+
+  // The whole section is a drop target: letting go on its heading or empty space moves the
+  // page to the top level here (reorder / un-nest) without changing its sharing.
+  useEffect(() => {
+    const element = ref.current;
+    if (!element) return;
+    return dropTargetForElements({
+      element,
+      canDrop: ({ source }) => typeof source.data.pageId === "string",
+      getData: () => ({ sectionShared }),
+      onDrag: ({ location }) => setOver(location.current.dropTargets[0]?.element === element),
+      onDragLeave: () => setOver(false),
+      onDrop: () => setOver(false),
+    });
+  }, [sectionShared]);
+
+  return (
+    <div ref={ref} data-doc-section={sectionShared ? "shared" : "private"} className={`rounded-md pb-1 ${over ? "ring-1 ring-accent" : ""}`}>
+      <div className="flex items-center justify-between pr-1 pt-1">
+        <span className="flex min-w-0 items-center gap-1 px-1.5 py-0.5 text-small font-medium uppercase tracking-wider text-faint">
+          <span className="flex shrink-0 items-center justify-center">{icon}</span>
+          {label}
+        </span>
+        <button
+          type="button"
+          title={t("New document")}
+          aria-label={t("New document")}
+          aria-busy={creating}
+          disabled={createBusy}
+          onClick={onCreate}
+          className="rounded p-1 text-faint transition-colors hover:bg-elevated hover:text-text disabled:opacity-50"
+        >
+          {creating ? <Loader2 size={13} className="animate-spin" /> : <Plus size={13} />}
+        </button>
+      </div>
+      {roots.length === 0 ? (
+        <div className="px-2 py-1 text-small text-faint">{t("No documents yet")}</div>
+      ) : (
+        <div className="space-y-0.5">
+          {roots.map((page) => (
+            <DocRow
+              key={page.id}
+              workspaceId={workspaceId}
+              page={page}
+              depth={0}
+              rootShared={sectionShared}
+              {...rowProps}
+            >
+              {rowProps.byParent.get(page.id) ?? []}
+            </DocRow>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/** The sidebar's document tree: one section for shared documents, one for private ones. */
 export function DocTree({ workspaceId, pages }: { workspaceId: string; pages: PageSummary[] }) {
   const t = useT();
   const {confirm,scope,openPageId}=useUI();
@@ -153,6 +240,7 @@ export function DocTree({ workspaceId, pages }: { workspaceId: string; pages: Pa
   const [error, setError] = useState<string | null>(null);
   const root=useRef<HTMLDivElement>(null);
   const routeActive = pathname.match(new RegExp(`^/${workspaceId}/docs/([^/]+)$`))?.[1] ?? null;
+  const [creating, setCreating] = useState<"shared" | "private" | null>(null);
 
   const active=openPageId??routeActive;
   useEffect(()=>{if(active)root.current?.querySelector(`[data-doc-row="${CSS.escape(active)}"]`)?.scrollIntoView({block:"nearest"});},[active,pages]);
@@ -227,6 +315,10 @@ export function DocTree({ workspaceId, pages }: { workspaceId: string; pages: Pa
           const target = location.current.dropTargets[0];
           const pageId = source.data.pageId as string;
           if (!target) return;
+          if (typeof target.data.sectionShared === "boolean") {
+            void moveRef.current(pageId, { parentId: null, beforeId: null });
+            return;
+          }
           const rowId = target.data.rowId as string;
           const instruction = extractInstruction(target.data);
           if (!instruction) return;
@@ -248,28 +340,47 @@ export function DocTree({ workspaceId, pages }: { workspaceId: string; pages: Pa
     [byId, byParent]
   );
 
+  async function create(shared: boolean) {
+    setCreating(shared ? "shared" : "private");
+    const result = await createPageAction(workspaceId);
+    if (!result.ok) {
+      setCreating(null);
+      setError(result.error);
+      return;
+    }
+    if (shared) await setPageSharedAction(workspaceId, result.data.id, true);
+    router.push(`/${workspaceId}/docs/${result.data.id}`);
+    router.refresh();
+    setCreating(null);
+  }
+
   const roots = byParent.get(null) ?? [];
   const rowProps = { byParent, isOpen, onToggle: toggle, active, blocked };
 
   return (
     <div ref={root} data-doc-tree className="pb-1">
-      <div className="space-y-0.5 rounded-md pb-1">
-        {roots.length === 0 ? (
-          <div className="px-2 py-1 text-small text-faint">{t("No documents yet")}</div>
-        ) : (
-          roots.map((page) => (
-            <DocRow
-              key={page.id}
-              workspaceId={workspaceId}
-              page={page}
-              depth={0}
-              {...rowProps}
-            >
-              {byParent.get(page.id) ?? []}
-            </DocRow>
-          ))
-        )}
-      </div>
+      <DocSection
+        workspaceId={workspaceId}
+        sectionShared
+        label={t("Shared")}
+        icon={<Users size={11} />}
+        roots={roots.filter((page) => page.shared)}
+        creating={creating === "shared"}
+        createBusy={creating !== null}
+        onCreate={() => void create(true)}
+        rowProps={rowProps}
+      />
+      <DocSection
+        workspaceId={workspaceId}
+        sectionShared={false}
+        label={t("Private")}
+        icon={<Lock size={11} />}
+        roots={roots.filter((page) => !page.shared)}
+        creating={creating === "private"}
+        createBusy={creating !== null}
+        onCreate={() => void create(false)}
+        rowProps={rowProps}
+      />
       {error && <div className="px-2 py-1 text-small text-danger">{t(error)}</div>}
     </div>
   );

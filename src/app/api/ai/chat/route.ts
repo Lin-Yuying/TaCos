@@ -1,4 +1,5 @@
 import fs from "node:fs";
+import os from "node:os";
 import path from "node:path";
 import { DATA_DIR } from "@/db/client";
 import { requireWorkspace } from "@/lib/auth";
@@ -19,7 +20,9 @@ import {
 } from "@/lib/agent-sessions";
 import {
   appendAgentMessage,
+  claimSharedChatTurn,
   loadThreadForTurn,
+  releaseSharedChatTurn,
   setThreadEngine,
 } from "@/lib/agent-threads";
 import { openHandoffOnThread } from "@/lib/agent-handoff";
@@ -37,6 +40,9 @@ import { harnessKeysFor, harnessesWithKeys, modelAccessFor } from "@/lib/model-k
 import { readyWithKeys } from "@/lib/harness/gate";
 import type { ApprovalDecision as HarnessApprovalDecision } from "@/lib/harness";
 import { TacosError } from "@/lib/issues";
+import { bindTurnAttachments, copyTurnFiles, parseAttachmentIds } from "@/lib/agent-attachments";
+import { messageWithAttachments } from "@/lib/agent-attachments.shared";
+import { attachTurnFiles } from "@/lib/harness/turn-files";
 import { requireRunnerOnline, startRun } from "@/lib/runner/hub";
 import { isServerMode } from "@/lib/server-mode";
 
@@ -78,6 +84,7 @@ export async function POST(request: Request) {
       text?: string;
       instruction?: string;
       context?: string;
+      attachments?: unknown;
     };
     const workspaceId = typeof body.workspaceId === "string" ? body.workspaceId : "";
     if (!workspaceId) throw new TacosError("Workspace is required", 400);
@@ -148,11 +155,20 @@ export async function POST(request: Request) {
       if (thread.engine !== engine) await setThreadEngine(threadId, engine);
 
       const message = text.trim();
-      await appendAgentMessage({ threadId, role: "user", content: message, authorId: access.user.id });
+      const attachmentIds = parseAttachmentIds(body.attachments);
+      if (!message && attachmentIds.length === 0) {
+        throw new TacosError("Type a message or attach a file", 400);
+      }
+      const actorId = access.user.id;
+      await claimSharedChatTurn(threadId, actorId);
+      try {
+      const turnFiles = await bindTurnAttachments(workspaceId, actorId, threadId, attachmentIds);
+      const storedMessage = messageWithAttachments(message, turnFiles);
+      await appendAgentMessage({ threadId, role: "user", content: storedMessage, authorId: actorId });
       const assistantId = await appendAgentMessage({ threadId, role: "assistant", content: "" });
 
       const messages = agentMessages({
-        message,
+        message: storedMessage,
         history: thread.messages,
         context: await agentContext({
           workspaceId,
@@ -170,6 +186,16 @@ export async function POST(request: Request) {
       });
 
       const turn = { threadId, messageId: assistantId };
+      const flatPrompt = flattenMessages(messages);
+      const fileDir = path.join(os.tmpdir(), `tacos-attached-${assistantId}`);
+      const finishSharedTurn = () => {
+        fs.rmSync(fileDir, { recursive: true, force: true });
+        void releaseSharedChatTurn(threadId, actorId);
+      };
+      const endTurn = (also?: () => void) => () => {
+        also?.();
+        finishSharedTurn();
+      };
 
       // On a server the turn runs on this person's own computer, with their keys and logins.
       if (isServerMode()) {
@@ -182,18 +208,21 @@ export async function POST(request: Request) {
             harness: engine,
             threadId,
             projectId: thread.projectId,
-            prompt: flattenMessages(messages),
-            message,
+            prompt: flatPrompt,
+            message: storedMessage,
             model: thread.model,
             effort: thread.effort,
             approval: thread.approval,
             autoApproveTools: AGENT_TOOLS.filter((tool) => !tool.write).map((tool) => tool.name),
             neverAutoApproveTools: AGENT_TOOLS.filter((tool) => tool.delete).map((tool) => tool.name),
             proxy: runtime.proxy,
+            ...(turnFiles.length ? { attachments: turnFiles.map(({ id, name }) => ({ id, name })) } : {}),
           },
           signal: request.signal,
         });
-        return new Response(recordTurn(turnEventsToSse(events), turn), { headers: STREAM_HEADERS });
+        return new Response(recordTurn(turnEventsToSse(events), { ...turn, onEnd: endTurn() }), {
+          headers: STREAM_HEADERS,
+        });
       }
 
       const grant = issueAgentToolGrant({
@@ -201,7 +230,7 @@ export async function POST(request: Request) {
         workspaceId,
         projectId: thread.projectId,
         projectKey: thread.projectKey,
-        userId: access.user.id,
+        userId: actorId,
         approval: thread.approval,
         autoApproveTools: AGENT_TOOLS.filter((tool) => !tool.write).map((tool) => tool.name),
         neverAutoApproveTools: AGENT_TOOLS.filter((tool) => tool.delete).map((tool) => tool.name),
@@ -209,12 +238,12 @@ export async function POST(request: Request) {
       // Only Codex has skills; "@name" tokens are matched against the skills this machine
       // really has, so ordinary prose containing an @ sign is left alone.
       const skills =
-        engine === "codex" && message.includes("@") ? skillsInText(message, await listCodexSkills()) : [];
+        engine === "codex" && storedMessage.includes("@") ? skillsInText(storedMessage, await listCodexSkills()) : [];
       const origin = new URL(request.url).origin;
       const cwd = path.join(DATA_DIR, "agent", workspaceId, thread.projectId || "general");
       // A missing cwd makes spawn report ENOENT for the binary, on every harness's first turn here.
       fs.mkdirSync(cwd, { recursive: true });
-      const prompt = flattenMessages(messages);
+      const { prompt, images } = attachTurnFiles(engine, flatPrompt, copyTurnFiles(turnFiles, fileDir));
       const isTurnApproved = () =>
         Boolean(grant && (grant.autoApproveTurn || thread.approval !== "ask"));
 
@@ -235,6 +264,7 @@ export async function POST(request: Request) {
           sessionId: threadId,
           cwd,
           prompt,
+          images,
           model: turnModel.model || defaults.model || null,
           effort: turnModel.effort || defaults.effort || null,
           approval: thread.approval,
@@ -265,7 +295,7 @@ export async function POST(request: Request) {
         });
         const stream = turnEventsToSse(events);
         return new Response(
-          recordTurn(stream, { ...turn, onEnd: grant ? () => revokeAgentToolGrant(grant.token) : undefined }),
+          recordTurn(stream, { ...turn, onEnd: endTurn(grant ? () => revokeAgentToolGrant(grant.token) : undefined) }),
           { headers: STREAM_HEADERS }
         );
       }
@@ -282,6 +312,7 @@ export async function POST(request: Request) {
           sessionId: threadId,
           cwd,
           prompt,
+          images,
           model: turnModel.model,
           effort: turnModel.effort,
           approval: thread.approval,
@@ -312,7 +343,7 @@ export async function POST(request: Request) {
         });
         const stream = turnEventsToSse(events);
         return new Response(
-          recordTurn(stream, { ...turn, onEnd: grant ? () => revokeAgentToolGrant(grant.token) : undefined }),
+          recordTurn(stream, { ...turn, onEnd: endTurn(grant ? () => revokeAgentToolGrant(grant.token) : undefined) }),
           { headers: STREAM_HEADERS }
         );
       }
@@ -329,6 +360,7 @@ export async function POST(request: Request) {
           sessionId: threadId,
           cwd,
           prompt,
+          images,
           model: turnModel.model,
           effort: turnModel.effort,
           approval: thread.approval,
@@ -359,7 +391,7 @@ export async function POST(request: Request) {
         });
         const stream = turnEventsToSse(events);
         return new Response(
-          recordTurn(stream, { ...turn, onEnd: grant ? () => revokeAgentToolGrant(grant.token) : undefined }),
+          recordTurn(stream, { ...turn, onEnd: endTurn(grant ? () => revokeAgentToolGrant(grant.token) : undefined) }),
           { headers: STREAM_HEADERS }
         );
       }
@@ -376,6 +408,7 @@ export async function POST(request: Request) {
           sessionId: threadId,
           cwd,
           prompt,
+          images,
           model: turnModel.model,
           effort: turnModel.effort,
           approval: thread.approval,
@@ -406,7 +439,7 @@ export async function POST(request: Request) {
         });
         const stream = turnEventsToSse(events);
         return new Response(
-          recordTurn(stream, { ...turn, onEnd: grant ? () => revokeAgentToolGrant(grant.token) : undefined }),
+          recordTurn(stream, { ...turn, onEnd: endTurn(grant ? () => revokeAgentToolGrant(grant.token) : undefined) }),
           { headers: STREAM_HEADERS }
         );
       }
@@ -423,6 +456,7 @@ export async function POST(request: Request) {
           sessionId: threadId,
           cwd,
           prompt,
+          images,
           model: turnModel.model,
           effort: turnModel.effort,
           approval: thread.approval,
@@ -453,7 +487,7 @@ export async function POST(request: Request) {
         });
         const stream = turnEventsToSse(events);
         return new Response(
-          recordTurn(stream, { ...turn, onEnd: grant ? () => revokeAgentToolGrant(grant.token) : undefined }),
+          recordTurn(stream, { ...turn, onEnd: endTurn(grant ? () => revokeAgentToolGrant(grant.token) : undefined) }),
           { headers: STREAM_HEADERS }
         );
       }
@@ -463,6 +497,10 @@ export async function POST(request: Request) {
         400,
         "Pick a wired harness in the composer until the remaining adapters land."
       );
+      } catch (err) {
+        await releaseSharedChatTurn(threadId, actorId);
+        throw err;
+      }
     }
 
     if (!text.trim() && action !== "continue" && action !== "custom") {

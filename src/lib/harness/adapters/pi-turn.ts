@@ -99,6 +99,7 @@ export async function* openPiTurn(input: TurnInput, log?: TurnLog): AsyncGenerat
     "--no-builtin-tools",
     "--system-prompt",
     input.prompt.system,
+    ...(input.images ?? []).map((image) => `@${image.path}`),
     input.prompt.body,
   ];
   // Pi's ids are provider/model, and the model part may itself contain a slash.

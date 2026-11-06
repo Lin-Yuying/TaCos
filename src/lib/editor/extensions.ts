@@ -1,13 +1,144 @@
-import { Node, mergeAttributes, type AnyExtension } from "@tiptap/core";
+import {
+  Node,
+  createBlockMarkdownSpec,
+  mergeAttributes,
+  type AnyExtension,
+  type MarkdownLexerConfiguration,
+  type MarkdownToken,
+} from "@tiptap/core";
 import StarterKit from "@tiptap/starter-kit";
+import Color from "@tiptap/extension-color";
+import { TextStyle } from "@tiptap/extension-text-style";
+import { Details, DetailsContent, DetailsSummary } from "@tiptap/extension-details";
+import { CodeBlockLowlight } from "@tiptap/extension-code-block-lowlight";
+import { documentLowlight } from "@/lib/editor/lowlight";
 import { TaskItem, TaskList } from "@tiptap/extension-list";
 import { Table, TableCell, TableHeader, TableRow, renderTableToMarkdown } from "@tiptap/extension-table";
 import Image from "@tiptap/extension-image";
 import Mention from "@tiptap/extension-mention";
+import { deleteSelectedImage, DOC_IMAGE_CLASS } from "@/lib/editor/doc-image";
+import { documentColor } from "@/lib/markdown";
 import { mentionText } from "@/lib/mentions";
+
+const DocumentImage = Image.extend({
+  addKeyboardShortcuts() {
+    return {
+      Backspace: ({ editor }) => deleteSelectedImage(editor.state, (tr) => editor.view.dispatch(tr)),
+      Delete: ({ editor }) => deleteSelectedImage(editor.state, (tr) => editor.view.dispatch(tr)),
+    };
+  },
+}).configure({ HTMLAttributes: { class: DOC_IMAGE_CLASS } });
 
 // Stored documents stay Markdown. These nodes carry the three things TaCos adds to it,
 // so `[[page]]`, `![[page]]` and `[PROJ-1](issue:id)` come back from the editor unchanged.
+
+// A toggle is a details block. The summary stays on the opening line, and `{open}` records
+// that the section is expanded. A callout is the same kind of fence with no summary.
+function takeFence(src: string, name: string): { raw: string; header: string; body: string } | undefined {
+  const opening = new RegExp(`^:::${name}([^\\n]*)\\n`).exec(src);
+  if (!opening) return undefined;
+  const rest = src.slice(opening[0].length);
+  const lines = rest.split("\n");
+  let depth = 1;
+  let close = -1;
+  for (let i = 0; i < lines.length; i += 1) {
+    if (/^:::(?:toggle|callout)\b/.test(lines[i])) depth += 1;
+    else if (/^:::\s*$/.test(lines[i])) {
+      depth -= 1;
+      if (depth === 0) {
+        close = i;
+        break;
+      }
+    }
+  }
+  if (close < 0) return undefined;
+  const consumed = lines.slice(0, close + 1).join("\n");
+  let end = opening[0].length + consumed.length;
+  if (src[end] === "\n") end += 1;
+  return { raw: src.slice(0, end), header: opening[1], body: lines.slice(0, close).join("\n") };
+}
+
+function toggleHeader(header: string): { open: boolean; summary: string } {
+  const trimmed = header.trim();
+  const open = /^\{open\}(?:\s|$)/.test(trimmed);
+  return { open, summary: (open ? trimmed.replace(/^\{open\}\s*/, "") : trimmed).trim() };
+}
+
+const DocToggle = Details.extend({
+  markdownTokenName: "details",
+  markdownTokenizer: {
+    name: "details",
+    level: "block",
+    start: (src: string) => src.indexOf(":::toggle"),
+    tokenize: (src: string, _tokens: MarkdownToken[], lexer: MarkdownLexerConfiguration) => {
+      const taken = takeFence(src, "toggle");
+      if (!taken) return undefined;
+      const { open, summary } = toggleHeader(taken.header);
+      const tokens = taken.body.trim() ? lexer.blockTokens(taken.body) : [];
+      for (const token of tokens) {
+        if (token.text && (!token.tokens || token.tokens.length === 0)) token.tokens = lexer.inlineTokens(token.text);
+      }
+      return { type: "details", raw: taken.raw, open, summary, tokens };
+    },
+  },
+  parseMarkdown: (token, helpers) => {
+    const tokenize = helpers.tokenizeInline;
+    const summary = helpers.parseInline(tokenize ? tokenize(String(token.summary ?? "")) : []);
+    const body = helpers.parseChildren(token.tokens || []);
+    return helpers.createNode("details", { open: Boolean(token.open) }, [
+      helpers.createNode("detailsSummary", undefined, summary),
+      helpers.createNode("detailsContent", undefined, body.length > 0 ? body : [helpers.createNode("paragraph")]),
+    ]);
+  },
+  renderMarkdown: (node, helpers) => {
+    const [summary, content] = node.content ?? [];
+    const title = helpers.renderChildren(summary?.content ?? []).replace(/\n/g, " ").trim();
+    const body = helpers.renderChildren(content?.content ?? [], "\n\n").trim();
+    const flag = node.attrs?.open ? " {open}" : "";
+    const head = title ? `:::toggle${flag} ${title}` : `:::toggle${flag}`;
+    return body ? `${head}\n\n${body}\n\n:::` : `${head}\n\n:::`;
+  },
+}).configure({ persist: true });
+
+const Callout = Node.create({
+  name: "callout",
+  group: "block",
+  content: "block+",
+  defining: true,
+  parseHTML: () => [{ tag: "aside[data-callout]" }],
+  renderHTML: ({ HTMLAttributes }) => ["aside", mergeAttributes(HTMLAttributes, { "data-callout": "" }), 0],
+  ...createBlockMarkdownSpec({ nodeName: "callout" }),
+});
+
+// A text color is stored as `{color:#rrggbb}…{/color}`. The mark renders a CSS color in the
+// editor, and this syntax is what gets written so the page stays Markdown.
+const DocTextStyle = TextStyle.extend({
+  priority: 200,
+  markdownTokenName: "textColor",
+  markdownTokenizer: {
+    name: "textColor",
+    level: "inline",
+    start: (src: string) => src.indexOf("{color:"),
+    tokenize: (src: string) => {
+      const match = /^\{color:(#[0-9a-fA-F]{6}|#[0-9a-fA-F]{3})\}([^\n]*?)\{\/color\}/.exec(src);
+      const color = match ? documentColor(match[1]) : null;
+      if (!match || !color) return undefined;
+      return { type: "textColor", raw: match[0], text: match[2], color };
+    },
+  },
+  parseMarkdown: (token, helpers) => {
+    const color = documentColor(String(token.color ?? ""));
+    if (!color) return helpers.createTextNode(String(token.raw ?? token.text ?? ""));
+    const tokenize = helpers.tokenizeInline;
+    const inner = helpers.parseInline(tokenize ? tokenize(String(token.text ?? "")) : []);
+    return helpers.applyMark("textStyle", inner.length > 0 ? inner : [helpers.createTextNode("")], { color });
+  },
+  renderMarkdown: (node, helpers) => {
+    const color = documentColor(String(node.attrs?.color ?? ""));
+    const inner = helpers.renderChildren(node);
+    return color ? `{color:${color}}${inner}{/color}` : inner;
+  },
+});
 
 export const PageRef = Node.create({
   name: "pageRef",
@@ -128,16 +259,20 @@ export const DocMention = Mention.extend({
 }).configure({ HTMLAttributes: { class: "doc-mention", "data-testid": "mention-chip" } });
 
 export function documentExtensions(
-  options: { sharedHistory?: boolean; mention?: AnyExtension } = {}
+  options: { sharedHistory?: boolean; mention?: AnyExtension; embed?: AnyExtension } = {}
 ): AnyExtension[] {
   return [
     options.mention ?? DocMention,
+    DocTextStyle,
+    Color,
     StarterKit.configure({
       link: { openOnClick: false, autolink: true },
       underline: false,
+      codeBlock: false,
       // A shared document undoes through its own history, one person's changes at a time.
       ...(options.sharedHistory ? { undoRedo: false as const } : {}),
     }),
+    CodeBlockLowlight.configure({ lowlight: documentLowlight, defaultLanguage: null }),
     TaskList,
     TaskItem.configure({ nested: true }),
     // The stock table writes a leading blank line, which the reader takes as an empty block.
@@ -152,9 +287,13 @@ export function documentExtensions(
     TableRow,
     TableHeader,
     TableCell,
-    Image,
+    DocumentImage,
+    DocToggle,
+    DetailsSummary,
+    DetailsContent,
+    Callout,
     PageRef,
     IssueRef,
-    PageEmbed,
+    options.embed ?? PageEmbed,
   ];
 }

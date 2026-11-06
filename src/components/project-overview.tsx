@@ -60,6 +60,7 @@ import type {
   Project,
 } from "@/lib/issues";
 import { useLocale, useT } from "@/components/i18n-context";
+import { PAGE_INSET } from "@/lib/page-chrome";
 
 type ProjectDetail = Project & { doc: string; createdBy: string | null };
 type CommentAnchor = { quote: string; occurrence: number };
@@ -1225,7 +1226,7 @@ export function ProjectOverview({
       <div ref={scrollRef} className="h-full overflow-y-auto">
         {/* Properties and Resources live in the header now, so the document starts right
             under it. */}
-        <div className="w-full px-10 pb-8 pt-3 lg:px-20 xl:px-32">
+        <div className={`w-full pb-8 pt-3 ${PAGE_INSET}`}>
           {error && <div className="mb-2 text-small text-danger">{t(error)}</div>}
           <div>
             {orphanComments > 0 && (

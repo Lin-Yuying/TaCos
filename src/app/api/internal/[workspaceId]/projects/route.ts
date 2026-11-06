@@ -10,5 +10,5 @@ export async function GET(_req: Request, ctx: { params: Promise<{ workspaceId: s
   } catch {
     return Response.json({ error: "Forbidden" }, { status: 403 });
   }
-  return Response.json(await listProjects(workspaceId));
+  return Response.json(await listProjects(workspaceId, user.id));
 }

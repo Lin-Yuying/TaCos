@@ -13,6 +13,7 @@ import { createPageAction } from "@/app/pages-actions";
 import { timeAgo } from "@/lib/format";
 import type { PageSummary } from "@/lib/pages";
 import { useLocale, useT } from "@/components/i18n-context";
+import { PAGE_INSET } from "@/lib/page-chrome";
 
 export function ProjectDocuments({
   workspaceId,
@@ -47,7 +48,7 @@ export function ProjectDocuments({
   useDetailSource("document",pages.map(page=>page.id));
   return (
     <div ref={scroller} className="flex-1 overflow-y-auto">
-      <div className="w-full px-10 pb-8 pt-6 lg:px-20 xl:px-32">
+      <div className={`w-full pb-8 pt-6 ${PAGE_INSET}`}>
         <div className="flex items-center justify-between gap-3">
           <div>
             <h2 className="text-lead font-semibold tracking-tight">{t("Documents")}</h2>

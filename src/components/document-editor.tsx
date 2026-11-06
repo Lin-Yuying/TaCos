@@ -1,8 +1,11 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { type RefObject, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { useRouter } from "next/navigation";
-import { EditorContent, useEditor, type Editor, type Range } from "@tiptap/react";
+import { EditorContent, NodeViewWrapper, ReactNodeViewRenderer, useEditor, type Editor, type Range } from "@tiptap/react";
+import type { NodeViewProps } from "@tiptap/react";
+import { DragHandle } from "@tiptap/extension-drag-handle-react";
+import type { EditorState } from "@tiptap/pm/state";
 import { BubbleMenu } from "@tiptap/react/menus";
 import { Extension } from "@tiptap/core";
 import { Plugin, PluginKey } from "@tiptap/pm/state";
@@ -14,12 +17,16 @@ import Suggestion, { type SuggestionProps } from "@tiptap/suggestion";
 import {
   Bold,
   CheckSquare,
+  ChevronRight,
   Code,
+  GripVertical,
+  Info,
   Heading1,
   Heading2,
   Heading3,
   Image as ImageIcon,
   Italic,
+  Link as LinkIcon,
   List,
   ListOrdered,
   MessageSquare,
@@ -31,13 +38,17 @@ import {
   Type,
 } from "lucide-react";
 import { AssigneeAvatar } from "@/components/issue-table";
-import { DocMention, documentExtensions } from "@/lib/editor/extensions";
+import { DocMention, PageEmbed, documentExtensions } from "@/lib/editor/extensions";
+import { embedPreview } from "@/lib/editor/page-embed";
+import { Markdown, type PageContext } from "@/components/markdown";
+import { documentColor, documentLinkHref } from "@/lib/markdown";
 import type { Member } from "@/lib/issues";
+import { BLOCK_TURNS, canTurnBlock, turnBlock } from "@/lib/editor/block-turn";
 import { documentMarkdown, markdownToDocument } from "@/lib/editor/document-markdown";
-import { anchorFromSelection, anchorRanges } from "@/lib/editor/anchors";
+import { anchorFromSelection, anchorRanges, commentCountsByBlock } from "@/lib/editor/anchors";
 import type { DocAnchor } from "@/lib/doc-anchor";
-import type { PageContext } from "@/components/markdown";
 import type { DocCollab } from "@/components/use-doc-collab";
+import { CodeLanguageMenu } from "@/components/code-block-controls";
 import { useT } from "@/components/i18n-context";
 
 type SlashCommand = {
@@ -63,6 +74,8 @@ const COMMANDS: SlashCommand[] = [
   { label: "Numbered list", hint: "Ordered items", keywords: "ordered ol number list 有序 编号 列表", icon: ListOrdered, run: (e, r) => e.chain().focus().deleteRange(r).toggleOrderedList().run() },
   { label: "To-do list", hint: "Checkable items", keywords: "todo task checkbox check 待办 任务 清单", icon: CheckSquare, run: (e, r) => e.chain().focus().deleteRange(r).toggleTaskList().run() },
   { label: "Quote", hint: "Set text apart", keywords: "blockquote citation 引用", icon: Quote, run: (e, r) => e.chain().focus().deleteRange(r).toggleBlockquote().run() },
+  { label: "Toggle", hint: "A section that opens", keywords: "toggle details collapse disclosure", icon: ChevronRight, run: (e, r) => e.chain().focus().deleteRange(r).setDetails().run() },
+  { label: "Callout", hint: "Set a note apart", keywords: "callout note aside banner", icon: Info, run: (e, r) => e.chain().focus().insertContentAt(r, { type: "callout", content: [{ type: "paragraph" }] }).run() },
   { label: "Code", hint: "Fenced block", keywords: "code block pre 代码", icon: Code, run: (e, r) => e.chain().focus().deleteRange(r).toggleCodeBlock().run() },
   { label: "Table", hint: "Rows and columns", keywords: "table grid 表格", icon: TableIcon, run: (e, r) => e.chain().focus().deleteRange(r).insertTable({ rows: 3, cols: 3, withHeaderRow: true }).run() },
   { label: "Image or file", hint: "Upload to this document", keywords: "image picture photo attachment upload file 图片 文件 附件 上传", icon: ImageIcon, run: (e, r) => {
@@ -99,9 +112,201 @@ function menuKey<T>(event: KeyboardEvent, open: MenuState<T> | null, set: (next:
   return false;
 }
 
+const TABLE_EDITS: { label: string; run: (editor: Editor) => void }[] = [
+  { label: "Add a row below", run: (editor) => editor.chain().focus().addRowAfter().run() },
+  { label: "Delete this row", run: (editor) => editor.chain().focus().deleteRow().run() },
+  { label: "Add a column to the right", run: (editor) => editor.chain().focus().addColumnAfter().run() },
+  { label: "Delete this column", run: (editor) => editor.chain().focus().deleteColumn().run() },
+];
+
+function TableEditButtons({ editor }: { editor: Editor }) {
+  const t = useT();
+  const groups = [TABLE_EDITS.slice(0, 2), TABLE_EDITS.slice(2)];
+  return (
+    <>
+      {groups.map((group, index) => (
+        <span key={group[0].label} className="flex items-center gap-0.5">
+          {index > 0 && <span className="mx-0.5 h-4 w-px bg-border" />}
+          {group.map((action) => (
+            <button
+              key={action.label}
+              type="button"
+              title={t(action.label)}
+              aria-label={t(action.label)}
+              onMouseDown={(event) => event.preventDefault()}
+              onClick={() => action.run(editor)}
+              className="rounded px-1.5 py-1 text-small text-muted transition-colors hover:bg-elevated hover:text-text"
+            >
+              {t(action.label)}
+            </button>
+          ))}
+        </span>
+      ))}
+    </>
+  );
+}
+
+const TEXT_COLORS = [
+  ["Red", "#b42318"],
+  ["Orange", "#b54708"],
+  ["Green", "#067647"],
+  ["Blue", "#175cd3"],
+  ["Purple", "#6941c6"],
+] as const;
+
+function SelectionStyleButtons({ editor }: { editor: Editor }) {
+  const t = useT();
+  const [linkDraft, setLinkDraft] = useState<string | null>(null);
+  const current = documentColor(String(editor.getAttributes("textStyle").color ?? ""));
+  const applyLink = (value: string) => {
+    const href = documentLinkHref(value);
+    if (!href) return;
+    editor.chain().focus().extendMarkRange("link").setLink({ href }).run();
+    setLinkDraft(null);
+  };
+  return (
+    <>
+      <button
+        type="button"
+        title={t("Link")}
+        aria-label={t("Link")}
+        onMouseDown={(event) => event.preventDefault()}
+        onClick={() => {
+          const href = editor.getAttributes("link").href;
+          setLinkDraft(typeof href === "string" ? href : "");
+        }}
+        className={`rounded p-1 transition-colors hover:bg-elevated ${
+          editor.isActive("link") || linkDraft !== null ? "text-text" : "text-muted"
+        }`}
+      >
+        <LinkIcon size={14} />
+      </button>
+      {TEXT_COLORS.map(([label, color]) => (
+        <button
+          key={color}
+          type="button"
+          title={t(label)}
+          aria-label={t(label)}
+          onMouseDown={(event) => event.preventDefault()}
+          onClick={() => editor.chain().focus().setColor(color).run()}
+          className={`h-4 w-4 rounded-full border ${current === color ? "border-text" : "border-border"}`}
+          style={{ backgroundColor: color }}
+        />
+      ))}
+      <button
+        type="button"
+        title={t("Remove color")}
+        aria-label={t("Remove color")}
+        onMouseDown={(event) => event.preventDefault()}
+        onClick={() => editor.chain().focus().unsetColor().run()}
+        className="rounded p-1 text-small text-muted line-through transition-colors hover:bg-elevated hover:text-text"
+      >
+        A
+      </button>
+      {linkDraft !== null && (
+        <form
+          className="order-last flex basis-full items-center gap-1 px-1 py-1"
+          onSubmit={(event) => {
+            event.preventDefault();
+            applyLink(linkDraft);
+          }}
+        >
+          <input
+            data-testid="doc-link-field"
+            autoFocus
+            value={linkDraft}
+            onChange={(event) => setLinkDraft(event.target.value)}
+            placeholder={t("Web address")}
+            aria-label={t("Web address")}
+            className="min-w-0 flex-1 rounded border border-border bg-bg px-1 py-0.5 text-small text-text"
+          />
+          <button
+            type="submit"
+            disabled={documentLinkHref(linkDraft) === null}
+            className="rounded px-1.5 py-1 text-small text-muted transition-colors hover:bg-elevated hover:text-text disabled:opacity-40"
+          >
+            {t("Add link")}
+          </button>
+          {editor.isActive("link") && (
+            <button
+              type="button"
+              onMouseDown={(event) => event.preventDefault()}
+              onClick={() => {
+                editor.chain().focus().extendMarkRange("link").unsetLink().run();
+                setLinkDraft(null);
+              }}
+              className="rounded px-1.5 py-1 text-small text-muted transition-colors hover:bg-elevated hover:text-text"
+            >
+              {t("Remove link")}
+            </button>
+          )}
+        </form>
+      )}
+    </>
+  );
+}
+
+function dispatchTurn(editor: Editor, next: EditorState) {
+  const size = editor.state.doc.content.size;
+  editor.view.dispatch(editor.state.tr.replaceWith(0, size, next.doc.content));
+}
+
 const NO_MEMBERS: Member[] = [];
 
+class EmbedPages {
+  pages: PageContext | undefined;
+  open = (_id: string) => {};
+  private listeners = new Set<() => void>();
+  subscribe = (listener: () => void) => {
+    this.listeners.add(listener);
+    return () => this.listeners.delete(listener);
+  };
+  snapshot = () => this.pages;
+  update(pages: PageContext | undefined) {
+    if (this.pages === pages) return;
+    this.pages = pages;
+    for (const listener of this.listeners) listener();
+  }
+}
+
+function PageEmbedNode({ node, extension }: NodeViewProps) {
+  const store = extension.storage as EmbedPages;
+  const pages = useSyncExternalStore(store.subscribe, store.snapshot, () => undefined);
+  const preview = embedPreview(pages, String(node.attrs.title ?? ""), (node.attrs.pageId as string | null) ?? null);
+  const t = useT();
+  return (
+    <NodeViewWrapper
+      data-page-embed={preview.id ?? ""}
+      data-testid="doc-page-embed"
+      className="my-2"
+    >
+      <button
+        type="button"
+        data-embed-title
+        onMouseDown={(event) => event.preventDefault()}
+        onClick={() => {
+          if (preview.id) store.open(preview.id);
+        }}
+        className="text-body"
+      >
+        {preview.missing ? t("Missing page: {title}", { title: preview.label }) : preview.label}
+      </button>
+      {preview.body !== null &&
+        (preview.body.trim() ? (
+          <div className="mt-1.5">
+            <Markdown source={preview.body} pages={pages ? { ...pages, embeds: {} } : undefined} />
+          </div>
+        ) : (
+          <p className="mt-1 text-small text-faint">{t("This page is empty.")}</p>
+        ))}
+    </NodeViewWrapper>
+  );
+}
+
 export type EditorAnchor = DocAnchor & { id: string };
+
+/** Text from outside the editor, for a shared document where the page state cannot carry it. */
+export type OutsideEdit = { at: "start" | "end" | "all"; text: string };
 
 const NO_ANCHORS: EditorAnchor[] = [];
 
@@ -176,6 +381,7 @@ export function DocumentEditor({
   collab,
   editorRef,
   onEditorReady,
+  outsideEditRef,
 }: {
   editorRef?: { current: Editor | null };
   onEditorReady?:(editor:Editor|null)=>void;
@@ -197,6 +403,8 @@ export function DocumentEditor({
   onUpload?: (file: File,controls?:{signal?:AbortSignal;onProgress?:(progress:number)=>void}) => Promise<string | null>;
   // A shared document; its text comes from here and not from `value`. Fixed for the editor's life.
   collab?: Extract<DocCollab, { doc: unknown }>;
+  // Filled with the call that puts outside text into the editor and so into a shared document.
+  outsideEditRef?: RefObject<((edit: OutsideEdit) => void) | null>;
 }) {
   const t = useT();
   const router = useRouter();
@@ -205,13 +413,18 @@ export function DocumentEditor({
   const onChangeRef = useRef(onChange);
   const pagesRef = useRef(pages);
   const [menu, setMenu] = useState<MenuState | null>(null);
+  const [handleBlock, setHandleBlock] = useState<{ pos: number; name: string } | null>(null);
+  const [turnMenu, setTurnMenu] = useState<{ x: number; y: number; pos: number } | null>(null);
   const menuRef = useRef<MenuState | null>(null);
   const [mentionMenu, setMentionMenu] = useState<MenuState<Member> | null>(null);
   const mentionMenuRef = useRef<MenuState<Member> | null>(null);
   const membersRef = useRef({ members, viewerId });
   // The text block under the pointer, for the comment button in the right margin.
-  const [hovered, setHovered] = useState<{ from: number; to: number; top: number } | null>(null);
+  const [hovered, setHovered] = useState<{ from: number; to: number; top: number; block: number } | null>(null);
+  const frameRef = useRef<HTMLDivElement>(null);
+  const [marginCounts, setMarginCounts] = useState<{ from: number; top: number; count: number; ids: string[] }[]>([]);
   const [anchorStore] = useState(() => new AnchorStore());
+  const [embedPages] = useState(() => new EmbedPages());
   const locatedRef = useRef(onAnchorsLocated);
   const anchorClickRef = useRef(onAnchorClick);
   const uploadRef = useRef(onUpload);
@@ -225,6 +438,13 @@ export function DocumentEditor({
   useEffect(() => {
     onChangeRef.current = onChange;
     pagesRef.current = pages;
+    embedPages.update(pages);
+    embedPages.open = (id: string) => {
+      const ctx = pagesRef.current;
+      if (!ctx) return;
+      if (ctx.onOpen) ctx.onOpen(id);
+      else router.push(`${ctx.base}${id}`);
+    };
     menuRef.current = menu;
     mentionMenuRef.current = mentionMenu;
     membersRef.current = { members, viewerId };
@@ -305,6 +525,19 @@ export function DocumentEditor({
     []
   );
 
+  const embed = useMemo(
+    () =>
+      PageEmbed.extend({
+        addStorage() {
+          return embedPages;
+        },
+        addNodeView() {
+          return ReactNodeViewRenderer(PageEmbedNode);
+        },
+      }),
+    [embedPages],
+  );
+
   const insertRef = useRef<(files: File[], at?: number) => void>(() => {});
   const dropFiles = (files: FileList | undefined | null, at?: number) => {
     if (!files?.length || !uploadRef.current) return false;
@@ -315,7 +548,7 @@ export function DocumentEditor({
   const editor = useEditor({
     immediatelyRender: false,
     extensions: [
-      ...documentExtensions({ sharedHistory: Boolean(collab), mention }),
+      ...documentExtensions({ sharedHistory: Boolean(collab), mention, embed }),
       Placeholder.configure({ placeholder: placeholder ?? "" }), UploadMarkers, slash, CommentAnchors.configure({ store: anchorStore }),
       ...(collab
         ? [
@@ -334,7 +567,7 @@ export function DocumentEditor({
           view.posAtCoords({ left: (event as DragEvent).clientX, top: (event as DragEvent).clientY })?.pos
         ),
       handleClickOn: (_view, _pos, node) => {
-        if (node.type.name !== "pageRef" && node.type.name !== "pageEmbed") return false;
+        if (node.type.name !== "pageRef") return false;
         const ctx = pagesRef.current;
         const target = node.attrs.pageId ?? ctx?.lookup[String(node.attrs.title).toLowerCase()]?.id;
         if (!ctx || !target) return false;
@@ -396,6 +629,18 @@ export function DocumentEditor({
     return () => dom.removeEventListener(PICK_FILE_EVENT, pick);
   }, [editor]);
 
+  useEffect(() => {
+    if (!editor || !outsideEditRef) return;
+    outsideEditRef.current = ({ at, text }) => {
+      const content = markdownToDocument(markdown, text);
+      if (at === "all") editor.commands.setContent(content);
+      else editor.commands.insertContentAt(at === "start" ? 0 : editor.state.doc.content.size, content.content ?? []);
+    };
+    return () => {
+      outsideEditRef.current = null;
+    };
+  }, [editor, markdown, outsideEditRef]);
+
   // A change from outside the editor (a linked page, an accepted AI edit) replaces the text.
   // Typing never lands here because `emitted` already holds it. A shared document takes outside
   // text from the server; here `value` can be a moment behind what others just typed.
@@ -417,6 +662,15 @@ export function DocumentEditor({
     editor.view.dispatch(editor.state.tr.setMeta(anchorsKey, true));
     const ranges = anchorRanges(editor.state.doc, anchors);
     locatedRef.current?.(new Set(ranges.map((range) => range.anchor.id)));
+    const root = frameRef.current?.getBoundingClientRect();
+    setMarginCounts(
+      root
+        ? commentCountsByBlock(editor.state.doc, anchors).map((group) => ({
+            ...group,
+            top: editor.view.coordsAtPos(Math.min(group.from + 1, editor.state.doc.content.size)).top - root.top,
+          }))
+        : [],
+    );
     const active = ranges.find((range) => range.anchor.id === activeAnchor);
     if (active) {
       const { node } = editor.view.domAtPos(active.from);
@@ -444,23 +698,83 @@ export function DocumentEditor({
     }
     const from = $pos.start();
     const to = $pos.end();
+    const block = $pos.depth >= 1 ? $pos.before(1) : 0;
     const top = editor.view.coordsAtPos(from).top - event.currentTarget.getBoundingClientRect().top;
     setHovered((current) =>
-      current?.from === from && current.to === to && current.top === top ? current : { from, to, top }
+      current?.from === from && current.to === to && current.top === top && current.block === block
+        ? current
+        : { from, to, top, block }
     );
   };
 
   return (
     <div
-      className={`document-editor relative ${onComment ? "pr-7" : ""}`}
+      ref={frameRef}
+      className={`document-editor relative ${onComment || marginCounts.length > 0 ? "pr-7" : ""}`}
       onMouseMove={trackBlock}
       onMouseLeave={() => setHovered(null)}
     >
+      {editor && editable && (
+        <DragHandle
+          editor={editor}
+          className="drag-handle"
+          onNodeChange={({ node, pos }) => {
+            setHandleBlock(node ? { pos, name: node.type.name } : null);
+            if (!node) setTurnMenu(null);
+          }}
+          onElementDragStart={() => setTurnMenu(null)}
+        >
+          <button
+            type="button"
+            data-testid="doc-block-handle"
+            title={t(handleBlock && canTurnBlock(handleBlock.name) ? "Drag to move. Click to turn into." : "Drag to move.")}
+            aria-label={t(handleBlock && canTurnBlock(handleBlock.name) ? "Drag to move. Click to turn into." : "Drag to move.")}
+            onClick={(event) => {
+              if (!handleBlock || !canTurnBlock(handleBlock.name)) return;
+              const rect = event.currentTarget.getBoundingClientRect();
+              setTurnMenu({ x: rect.right + 4, y: rect.top, pos: handleBlock.pos });
+            }}
+            className="cursor-grab rounded p-0.5 text-faint hover:bg-elevated hover:text-text active:cursor-grabbing"
+          >
+            <GripVertical size={14} />
+          </button>
+        </DragHandle>
+      )}
+      {editor && turnMenu && (
+        <div
+          role="menu"
+          data-testid="doc-turn-into"
+          style={{ position: "fixed", left: turnMenu.x, top: turnMenu.y }}
+          className="z-50 max-h-72 w-48 overflow-y-auto rounded-md border border-border bg-overlay p-1 shadow-md"
+        >
+          {BLOCK_TURNS.map((item) => (
+            <button
+              key={item.turn}
+              type="button"
+              role="menuitem"
+              onMouseDown={(event) => event.preventDefault()}
+              onClick={() => {
+                const next = turnBlock(editor.state, turnMenu.pos, item.turn);
+                if (next) dispatchTurn(editor, next);
+                setTurnMenu(null);
+              }}
+              className="flex w-full rounded px-2 py-1 text-left text-body text-muted hover:bg-elevated hover:text-text"
+            >
+              {t(item.label)}
+            </button>
+          ))}
+        </div>
+      )}
       {editor && (
         <BubbleMenu
           editor={editor}
-          shouldShow={({ state, view }) => !state.selection.empty && view.hasFocus()}
-          className="flex items-center gap-0.5 rounded-md border border-border bg-overlay p-0.5 shadow-md"
+          shouldShow={({ editor: current, state, view, element }) =>
+            !state.selection.empty &&
+            !current.isActive("codeBlock") &&
+            !current.isActive("image") &&
+            (view.hasFocus() || element.contains(document.activeElement))
+          }
+          className="flex max-w-[360px] flex-wrap items-center gap-0.5 rounded-md border border-border bg-overlay p-0.5 shadow-md"
         >
           {editable && marks.map((mark) => (
             <button
@@ -476,6 +790,7 @@ export function DocumentEditor({
               <mark.icon size={14} />
             </button>
           ))}
+          {editable && <SelectionStyleButtons editor={editor} />}
           {onComment && (
             <button
               type="button"
@@ -491,6 +806,43 @@ export function DocumentEditor({
               <MessageSquare size={14} />
             </button>
           )}
+          {editable && editor.isActive("table") && (
+            <>
+              <span className="mx-0.5 h-4 w-px bg-border" />
+              <TableEditButtons editor={editor} />
+            </>
+          )}
+        </BubbleMenu>
+      )}
+      {editor && editable && (
+        <BubbleMenu
+          editor={editor}
+          pluginKey="docTableMenu"
+          shouldShow={({ editor: current, state, view }) =>
+            state.selection.empty && current.isActive("table") && view.hasFocus()
+          }
+          className="flex max-w-[320px] flex-wrap items-center gap-0.5 rounded-md border border-border bg-overlay p-0.5 shadow-md"
+          data-testid="doc-table-menu"
+        >
+          <TableEditButtons editor={editor} />
+        </BubbleMenu>
+      )}
+      {editor && editable && (
+        <BubbleMenu
+          editor={editor}
+          pluginKey="docCodeMenu"
+          shouldShow={({ editor: current, view, element }) =>
+            current.isActive("codeBlock") && (view.hasFocus() || element.contains(document.activeElement))
+          }
+          className="flex items-center rounded-md border border-border bg-overlay px-1 py-0.5 shadow-md"
+          data-testid="doc-code-menu"
+        >
+          <CodeLanguageMenu
+            lang={String(editor.getAttributes("codeBlock").language ?? "")}
+            onChange={(lang) =>
+              editor.chain().focus().updateAttributes("codeBlock", { language: lang || null }).run()
+            }
+          />
         </BubbleMenu>
       )}
       <input
@@ -510,7 +862,24 @@ export function DocumentEditor({
       ] as const).map(([label,run])=><button key={label} type="button" onClick={()=>run()} className="rounded px-2 py-1 hover:bg-elevated">{t(label)}</button>)}</div>}</div>}
       {uploads.length>0&&<div className="mb-2 space-y-1 text-small" aria-live="polite">{uploads.map(item=><div key={item.id} className="flex flex-wrap items-center gap-2"><span>{item.file.name}: {t(item.status)} {item.status==="uploading"?`${item.progress}%`:""}</span>{item.error&&<span role="alert" className="text-danger">{t(item.error)}</span>}{["queued","uploading"].includes(item.status)?<button type="button" onClick={()=>{item.controller.abort();uploadsRef.current=uploadsRef.current.map(row=>row.id===item.id?{...row,status:"cancelled"}:row);setUploads(uploadsRef.current);}}>{t("Cancel")}</button>:<><button type="button" onClick={()=>{if(editor&&!editor.isDestroyed)editor.view.dispatch(editor.state.tr.setMeta(uploadMarkersKey,{remove:item.id}));uploadsRef.current=uploadsRef.current.filter(row=>row.id!==item.id);setUploads(uploadsRef.current);}}>{t("Dismiss")}</button>{item.status!=="done"&&<button type="button" disabled={!editable} onClick={()=>void runUpload.current(item)}>{t("Retry")}</button>}</>}</div>)}</div>}
       <EditorContent editor={editor} />
-      {editor && onComment && hovered && (
+      {marginCounts.map((group) => (
+        <button
+          key={group.from}
+          type="button"
+          data-testid="doc-comment-count"
+          title={t(group.count === 1 ? "{count} comment" : "{count} comments", { count: group.count })}
+          aria-label={t(group.count === 1 ? "{count} comment" : "{count} comments", { count: group.count })}
+          style={{ top: group.top }}
+          onMouseDown={(event) => event.preventDefault()}
+          onClick={() => onAnchorClick?.(group.ids[0])}
+          className={`absolute right-0 flex h-6 min-w-6 items-center justify-center rounded px-1 text-small tabular-nums ${
+            group.ids.includes(activeAnchor ?? "") ? "bg-elevated text-text" : "text-muted hover:bg-elevated hover:text-text"
+          }`}
+        >
+          {group.count}
+        </button>
+      ))}
+      {editor && onComment && hovered && !marginCounts.some((group) => group.from === hovered.block) && (
         <button
           type="button"
           data-testid="block-comment"

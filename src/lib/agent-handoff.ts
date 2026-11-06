@@ -9,6 +9,7 @@ import {
   setAgentThreadApproval,
   setThreadEngine,
   startTaskChat,
+  taskChatOpeningMessage,
 } from "@/lib/agent-threads";
 import { AGENT_TOOLS } from "@/lib/agent-tools";
 import { recordTurn } from "@/lib/agent-turn-record";
@@ -129,15 +130,12 @@ export async function handTaskToAgent(
 
   const approval: Approval = APPROVALS.find((mode) => mode === input.approval) ?? "ask";
   // Takes the task for this person, and refuses one that someone else has taken.
-  const thread = await startTaskChat(workspaceId, detail.issue.id, userId);
+  const { thread } = await startTaskChat(workspaceId, detail.issue.id, userId);
   await setThreadEngine(thread.id, harness.id);
   await setAgentThreadApproval(workspaceId, userId, thread.id, approval);
 
   const note = input.note?.trim();
-  const message = [
-    `Work on task ${detail.issue.identifier}. Do what it asks, then say what you did and what is left.`,
-    note,
-  ]
+  const message = [taskChatOpeningMessage(detail.issue.identifier), note]
     .filter(Boolean)
     .join("\n\n");
   await appendAgentMessage({ threadId: thread.id, role: "user", content: message, authorId: userId });

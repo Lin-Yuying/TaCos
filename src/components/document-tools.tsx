@@ -153,9 +153,9 @@ export function DocumentTools({
     clone.querySelectorAll("[data-page-embed]").forEach((element) => {
       const link = target.createElement("a");
       const id = element.getAttribute("data-page-embed");
-      link.textContent = element.textContent ?? id;
+      link.textContent = element.querySelector("[data-embed-title]")?.textContent ?? id;
       const workspace = location.pathname.split("/")[1];
-      link.href = new URL(
+      if (id) link.href = new URL(
         `/${workspace}/docs/${encodeURIComponent(id ?? "")}`,
         location.origin,
       ).href;

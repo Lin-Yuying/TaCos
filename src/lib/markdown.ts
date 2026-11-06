@@ -11,6 +11,8 @@ export type Inline =
   | { type: "code"; text: string }
   | { type: "strike"; text: string }
   | { type: "link"; text: string; href: string }
+  // {color:#rrggbb}text{/color} — a text color the document editor writes and reads back
+  | { type: "color"; color: string; children: Inline[] }
   // [[Page title]] or [[Page title|page-id]] — a link to another document
   | { type: "page"; text: string; pageId?: string }
   // [PROJ-12](issue:<id>) — an inline reference to a task
@@ -32,7 +34,11 @@ export type Block =
   // ![alt](https://…) on its own line — a picture block, the way Notion imports one
   | { kind: "image"; alt: string; src: string; depth: number }
   // ![[Page title]] on its own line — the target document is inlined here
-  | { kind: "embed"; text: string; pageId?: string; depth: number };
+  | { kind: "embed"; text: string; pageId?: string; depth: number }
+  // :::toggle {open} Summary \n body \n ::: — a section that opens
+  | { kind: "toggle"; open: boolean; summary: Inline[]; body: Block[] }
+  // :::callout \n body \n ::: — a note set apart from the paragraph
+  | { kind: "callout"; body: Block[] };
 
 const HEADING = /^\s*(#{1,6})\s+(.*)$/;
 const BULLET = /^\s*[-*+]\s+/;
@@ -89,6 +95,12 @@ export function splitBlocks(src: string): string[] {
       for (let n = 0; n < placed; n += 1) blocks.push("");
       continue;
     }
+    const fenceEnd = consumeCustomFence(lines, i);
+    if (fenceEnd !== null) {
+      blocks.push(lines.slice(i, fenceEnd).join("\n"));
+      i = fenceEnd;
+      continue;
+    }
     if (FENCE.test(line)) {
       const start = i++;
       while (i < lines.length && !FENCE.test(lines[i])) i += 1;
@@ -121,9 +133,22 @@ type InlineToken = {
   href?: string;
   pageId?: string;
   issueId?: string;
+  color?: string;
 };
 
-function tokenizeInline(text: string): InlineToken[] {
+// Only #rgb and #rrggbb. Anything else stays ordinary text, so a document cannot
+// carry an arbitrary CSS color.
+export function documentColor(value: string): string | null {
+  const hex = value.trim().toLowerCase();
+  const short = /^#([0-9a-f]{3})$/.exec(hex);
+  if (short) {
+    const [r, g, b] = short[1];
+    return `#${r}${r}${g}${g}${b}${b}`;
+  }
+  return /^#[0-9a-f]{6}$/.test(hex) ? hex : null;
+}
+
+function tokenizeInline(text: string, depth = 0): InlineToken[] {
   const out: InlineToken[] = [];
   let buffer = "";
   let bufferStart = 0;
@@ -147,6 +172,25 @@ function tokenizeInline(text: string): InlineToken[] {
     }
 
     const rest = text.slice(i);
+
+    if (depth < 6) {
+      const color = rest.match(/^\{color:(#[0-9a-fA-F]{6}|#[0-9a-fA-F]{3})\}([^\n]*?)\{\/color\}/);
+      const hex = color ? documentColor(color[1]) : null;
+      if (color && hex) {
+        flush(i);
+        const open = `{color:${color[1]}}`;
+        out.push({
+          type: "color",
+          text: color[2],
+          color: hex,
+          start: i,
+          inner: i + open.length,
+          end: i + color[0].length,
+        });
+        i += color[0].length;
+        continue;
+      }
+    }
 
     const code = rest.match(/^`([^`\n]+)`/);
     if (code) {
@@ -295,9 +339,11 @@ function tokenizeInline(text: string): InlineToken[] {
   return out;
 }
 
-export function parseInline(text: string): Inline[] {
-  return tokenizeInline(text).map((token): Inline => {
+export function parseInline(text: string, depth = 0): Inline[] {
+  return tokenizeInline(text, depth).map((token): Inline => {
     switch (token.type) {
+      case "color":
+        return { type: "color", color: token.color ?? "", children: parseInline(token.text, depth + 1) };
       case "link":
         return { type: "link", text: token.text, href: token.href ?? "#" };
       case "page":
@@ -318,7 +364,13 @@ export function parseInline(text: string): Inline[] {
 
 // javascript:/data: URLs would turn a document into an attack on the reader.
 export function safeHref(href: string): string {
-  return /^(https?:|mailto:)/i.test(href.trim()) ? href.trim() : "#";
+  return documentLinkHref(href) ?? "#";
+}
+
+// The selection toolbar only stores a web or mail address. Anything else is refused.
+export function documentLinkHref(href: string): string | null {
+  const value = href.trim();
+  return /^(https?:|mailto:)/i.test(value) && !/[\s<>]/.test(value) ? value : null;
 }
 
 // Pictures may only come from the web: a document must not be able to run anything or
@@ -393,9 +445,42 @@ function parseTable(lines: string[]): Block | null {
   };
 }
 
+function consumeCustomFence(lines: string[], start: number): number | null {
+  if (!/^:::(?:toggle|callout)\b/.test(lines[start] ?? "")) return null;
+  let depth = 1;
+  for (let i = start + 1; i < lines.length; i += 1) {
+    if (/^:::(?:toggle|callout)\b/.test(lines[i])) depth += 1;
+    else if (/^:::\s*$/.test(lines[i])) {
+      depth -= 1;
+      if (depth === 0) return i + 1;
+    }
+  }
+  return null;
+}
+
+function fenceBody(lines: string[]): string {
+  const body = lines.slice(1);
+  if (/^:::\s*$/.test(body[body.length - 1] ?? "")) body.pop();
+  return body.join("\n").replace(/^\n+/, "").replace(/\n+$/, "");
+}
+
 export function parseBlock(raw: string): Block {
   const lines = raw.split("\n");
   const first = lines[0] ?? "";
+
+  const toggle = /^:::toggle(?:\s+(\{open\}))?(?:\s+(.*))?$/.exec(first);
+  if (toggle && /^:::\s*$/.test(lines[lines.length - 1] ?? "")) {
+    return {
+      kind: "toggle",
+      open: toggle[1] === "{open}",
+      summary: parseInline((toggle[2] ?? "").trim()),
+      body: parseBlocks(fenceBody(lines)),
+    };
+  }
+
+  if (/^:::callout\s*$/.test(first) && /^:::\s*$/.test(lines[lines.length - 1] ?? "")) {
+    return { kind: "callout", body: parseBlocks(fenceBody(lines)) };
+  }
 
   const fence = FENCE.exec(first);
   if (fence) {
@@ -553,6 +638,8 @@ const BLOCK_PREFIXES = [
   /^\s*[-*+]\s+/,
   /^\s*\d+[.)]\s+/,
   /^\s*>\s?/,
+  /^:::toggle(?:\s+\{open\})?\s?/,
+  /^:::callout\s*/,
 ];
 
 function blockPrefixLength(line: string): number {
@@ -597,6 +684,10 @@ function passageText(source: string): PassageMap {
   for (const line of source.split("\n")) {
     if (/^\s*```/.test(line)) {
       fenced = !fenced;
+      offset += line.length + 1;
+      continue;
+    }
+    if (!fenced && /^:::\s*$/.test(line)) {
       offset += line.length + 1;
       continue;
     }
@@ -812,6 +903,7 @@ function styleOfType(type: Inline["type"]): InlineSet | null {
     case "link":
     case "page":
     case "issue":
+    case "color":
       return null;
     default:
       return new Set();

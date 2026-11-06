@@ -37,6 +37,8 @@ export function DocCommentsPanel({
   onSelect,
   onClearDraft,
   onClose,
+  page,
+  onShare,
 }: {
   workspaceId:string;
   onChanged:(comments:PageComment[])=>void;
@@ -49,6 +51,8 @@ export function DocCommentsPanel({
   userId: string | null;
   isOwner: boolean;
   canComment: boolean;
+  page: { shared: boolean; createdBy: string };
+  onShare?: () => void;
   compact: boolean;
   // Comments whose quote can still be found in the text.
   located: Set<string>;
@@ -209,7 +213,17 @@ export function DocCommentsPanel({
           </div>
         )}
         {replyTo&&<div className="flex gap-2 text-small text-muted">{t("Reply")}: {comments.find(comment=>comment.id===replyTo)?.body.slice(0,80)}<button onClick={()=>setReplyTo(null)}>{t("Cancel")}</button></div>}
-        <fieldset disabled={busy}><MentionBox value={body} members={members} busy={busy} onChange={setBody} onSubmit={() => void submit()} focusOn={draftAnchor} /></fieldset>
+        <fieldset disabled={busy}><MentionBox
+          value={body}
+          members={members}
+          busy={busy}
+          onChange={setBody}
+          onSubmit={() => void submit()}
+          focusOn={draftAnchor}
+          page={page}
+          isOwner={isOwner}
+          onShare={onShare}
+        /></fieldset>
       </div>}
     </aside></SidePanel>
   );

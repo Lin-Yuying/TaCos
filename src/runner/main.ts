@@ -12,6 +12,8 @@ import { clearHarnessDetectCache } from "@/lib/harness/detect-bin";
 import { readyWithKeys, signedInHarnesses } from "@/lib/harness/gate";
 import { listComposerModels, resolveTurnModel, type ModelAccess } from "@/lib/harness/models";
 import { FIRST_CLASS_HARNESS_IDS, getHarnessAdapter, listHarnessDetect } from "@/lib/harness/registry";
+import { attachTurnFiles, fileName, type TurnFile } from "@/lib/harness/turn-files";
+import { turnTimer, writeTurnTiming, type TurnTimer } from "@/lib/harness/turn-timing";
 import type { TurnEvent } from "@/lib/harness/types";
 import { keysForHarness } from "@/lib/model-endpoint";
 import type { ClaimedRun, EditPayload, RunnerCapabilities, TurnPayload } from "@/lib/runner/protocol";
@@ -64,16 +66,20 @@ async function capabilities(): Promise<RunnerCapabilities> {
 }
 
 /** Sends events in order, a batch at a time, so a turn's text arrives in step with the model. */
-function eventSender(runId: string, abort: AbortController) {
+function eventSender(runId: string, abort: AbortController, clock: TurnTimer) {
   let pending: TurnEvent[] = [];
   let sending: Promise<void> = Promise.resolve();
   let timer: NodeJS.Timeout | null = null;
 
   const send = async (events: TurnEvent[]) => {
+    const startedAt = Date.now();
+    const bytes = Buffer.byteLength(JSON.stringify(events));
     for (let attempt = 0; attempt < SEND_ATTEMPTS; attempt += 1) {
+      if (attempt > 0) clock.uploadRetry();
       try {
         const response = await postJson("/api/runner/events", { runId, events });
         if (response.ok) {
+          clock.upload(Date.now() - startedAt, bytes);
           if (((await response.json()) as { cancelled?: boolean }).cancelled) abort.abort();
           return;
         }
@@ -122,19 +128,40 @@ function safeName(value: string, fallback: string): string {
   return /^[\w-]+$/.test(value) ? value : fallback;
 }
 
-function mcpShim(toolToken: string) {
+function mcpShim(toolToken: string, timingFile: string) {
   return {
     command: process.execPath,
     args: [path.join(__dirname, "agent-mcp.mjs")],
     env: {
       TACOS_AGENT_URL: SERVER,
       TACOS_AGENT_TOKEN: toolToken,
+      TACOS_TIMING_FILE: timingFile,
       ...(process.versions.electron ? { ELECTRON_RUN_AS_NODE: "1" } : {}),
     },
   };
 }
 
-async function* turnEvents(run: ClaimedRun, payload: TurnPayload, abort: AbortController): AsyncGenerator<TurnEvent> {
+async function fetchTurnFiles(payload: TurnPayload, dir: string, signal: AbortSignal): Promise<TurnFile[]> {
+  const files: TurnFile[] = [];
+  for (const attachment of payload.attachments ?? []) {
+    const response = await serverFetch(`/api/runner/files/${encodeURIComponent(attachment.id)}`, { signal });
+    if (!response.ok) throw new Error(`Could not fetch the attached file ${attachment.name}`);
+    // Two files may share a name; the id keeps them apart.
+    const folder = path.join(dir, safeName(attachment.id, "file"));
+    fs.mkdirSync(folder, { recursive: true });
+    const file = path.join(folder, fileName(attachment.name, attachment.id));
+    fs.writeFileSync(file, Buffer.from(await response.arrayBuffer()));
+    files.push({ name: attachment.name, path: file });
+  }
+  return files;
+}
+
+async function* turnEvents(
+  run: ClaimedRun,
+  payload: TurnPayload,
+  abort: AbortController,
+  timingFile: string
+): AsyncGenerator<TurnEvent> {
   const adapter = getHarnessAdapter(payload.harness);
   if (!adapter) throw new Error(`${payload.harness} is not available on this computer`);
   const config = readConfig();
@@ -157,10 +184,14 @@ async function* turnEvents(run: ClaimedRun, payload: TurnPayload, abort: AbortCo
   const defaults = payload.harness === "codex" ? codexDefaults() : { model: "", effort: "" };
   let turnApproved = false;
 
+  const fileDir = path.join(os.tmpdir(), `tacos-attached-${safeName(run.id, "run")}`);
+  try {
+  const attached = attachTurnFiles(payload.harness, payload.prompt, await fetchTurnFiles(payload, fileDir, abort.signal));
   yield* adapter.openTurn({
     sessionId: payload.threadId,
     cwd,
-    prompt: payload.prompt,
+    prompt: attached.prompt,
+    images: attached.images,
     model: turnModel.model || defaults.model || null,
     effort: turnModel.effort || defaults.effort || null,
     approval: payload.approval,
@@ -187,8 +218,11 @@ async function* turnEvents(run: ClaimedRun, payload: TurnPayload, abort: AbortCo
     proxy: config.proxy || payload.proxy,
     keys,
     timeoutMs: payload.timeoutMs,
-    mcp: run.toolToken ? mcpShim(run.toolToken) : null,
+    mcp: run.toolToken ? mcpShim(run.toolToken, timingFile) : null,
   });
+  } finally {
+    fs.rmSync(fileDir, { recursive: true, force: true });
+  }
 }
 
 async function* sseDeltas(stream: ReadableStream<Uint8Array>): AsyncGenerator<TurnEvent> {
@@ -260,12 +294,15 @@ async function* editEvents(payload: EditPayload, abort: AbortController): AsyncG
 
 async function execute(run: ClaimedRun): Promise<void> {
   const abort = new AbortController();
-  const sender = eventSender(run.id, abort);
+  const timer = turnTimer();
+  const timingFile = path.join(os.tmpdir(), `tacos-tool-timing-${safeName(run.id, "run")}.jsonl`);
+  const sender = eventSender(run.id, abort, timer);
   const stopWatching = watchCancel(run.id, abort);
   log(`run ${run.id}: ${run.payload.kind} started`);
   try {
-    const events = run.payload.kind === "turn" ? turnEvents(run, run.payload, abort) : editEvents(run.payload, abort);
+    const events = run.payload.kind === "turn" ? turnEvents(run, run.payload, abort, timingFile) : editEvents(run.payload, abort);
     for await (const event of events) {
+      timer.event(event);
       sender.push(event);
       if (event.type === "error" || event.type === "done") break;
     }
@@ -275,7 +312,8 @@ async function execute(run: ClaimedRun): Promise<void> {
   } finally {
     stopWatching();
     await sender.flush();
-    log(`run ${run.id}: finished`);
+    const harness = run.payload.kind === "turn" ? run.payload.harness : "";
+    log(`run ${run.id}: finished ${JSON.stringify(writeTurnTiming(run.id, run.payload.kind, harness, timer, timingFile))}`);
   }
 }
 

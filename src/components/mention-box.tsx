@@ -4,7 +4,8 @@ import { useEffect, useRef, useState } from "react";
 import { AssigneeAvatar } from "@/components/issue-table";
 import type { Member } from "@/lib/issues";
 import { useT } from "@/components/i18n-context";
-import { mentionText } from "@/lib/mentions";
+import { DocMentionWarning } from "@/components/doc-mention-warning";
+import { mentionText, mentionedMembersWithoutAccess, type MentionPerson } from "@/lib/mentions";
 
 /** The comment composer: "@" opens a member list, Cmd or Ctrl + Enter submits. */
 export function MentionBox({
@@ -14,6 +15,9 @@ export function MentionBox({
   onChange,
   onSubmit,
   focusOn,
+  page,
+  isOwner,
+  onShare,
 }: {
   value: string;
   members?: Member[];
@@ -22,6 +26,9 @@ export function MentionBox({
   onSubmit: () => void;
   // The caret comes here each time this changes to something.
   focusOn?: unknown;
+  page?: { shared: boolean; createdBy: string };
+  isOwner?: boolean;
+  onShare?: () => void;
 }) {
   const t = useT();
   const box = useRef<HTMLTextAreaElement>(null);
@@ -32,6 +39,10 @@ export function MentionBox({
   useEffect(() => {
     if (focusOn) box.current?.focus();
   }, [focusOn]);
+
+  const blocked = page
+    ? mentionedMembersWithoutAccess(page, members as MentionPerson[], value)
+    : [];
 
   const matches =
     query === null
@@ -65,6 +76,16 @@ export function MentionBox({
 
   return (
     <div className="relative rounded-lg border border-border bg-elevated/40 p-2">
+      {blocked.length > 0 && (
+        <div className="mb-2">
+          <DocMentionWarning
+            members={blocked}
+            shared={page!.shared}
+            isOwner={Boolean(isOwner)}
+            onShare={onShare}
+          />
+        </div>
+      )}
       {matches.length > 0 && (
         <div
           data-testid="mention-menu"

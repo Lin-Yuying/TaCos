@@ -1,8 +1,10 @@
 export type Status = "todo" | "in_progress" | "done" | "canceled";
+export type Recurrence = "daily" | "weekly" | "monthly";
 export type Priority = 0 | 1 | 2 | 3 | 4;
 export type Via = "web" | "api" | "mcp";
 
 export const STATUS_ORDER: Status[] = ["in_progress", "todo", "done", "canceled"];
+export const BOARD_STATUS_ORDER: Status[] = ["todo", "in_progress", "done", "canceled"];
 
 export const STATUS_META: Record<Status, { label: string; color: string }> = {
   todo: { label: "Todo", color: "#8a8f98" },
@@ -25,6 +27,13 @@ export const PRIORITY_NAMES: Record<Priority, string> = {
   2: "Medium",
   3: "High",
   4: "Urgent",
+};
+
+export const RECURRENCES: Recurrence[] = ["daily", "weekly", "monthly"];
+export const RECURRENCE_META: Record<Recurrence, { label: string }> = {
+  daily: { label: "Daily" },
+  weekly: { label: "Weekly" },
+  monthly: { label: "Monthly" },
 };
 
 export const LABEL_COLORS = [

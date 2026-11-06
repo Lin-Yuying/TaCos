@@ -32,6 +32,18 @@ CREATE TABLE IF NOT EXISTS users (
   created_at TEXT NOT NULL
 );
 
+CREATE TABLE IF NOT EXISTS retired_usernames (
+  username TEXT PRIMARY KEY,
+  retired_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS login_attempts (
+  id TEXT PRIMARY KEY,
+  username TEXT NOT NULL,
+  created_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS login_attempts_username_idx ON login_attempts (username, created_at);
+
 CREATE TABLE IF NOT EXISTS sessions (
   id TEXT PRIMARY KEY,
   user_id TEXT NOT NULL,
@@ -261,6 +273,7 @@ CREATE TABLE IF NOT EXISTS issues (
   id TEXT PRIMARY KEY,
   workspace_id TEXT NOT NULL,
   project_id TEXT NOT NULL,
+  parent_id TEXT,
   number INTEGER NOT NULL,
   identifier TEXT NOT NULL,
   title TEXT NOT NULL,
@@ -287,6 +300,14 @@ CREATE INDEX IF NOT EXISTS issues_workspace_idx ON issues (workspace_id);
 CREATE INDEX IF NOT EXISTS issues_project_idx ON issues (project_id);
 CREATE INDEX IF NOT EXISTS issues_status_idx ON issues (status);
 
+CREATE TABLE IF NOT EXISTS issue_dependencies (
+  issue_id TEXT NOT NULL,
+  blocked_by_id TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  PRIMARY KEY (issue_id, blocked_by_id)
+);
+CREATE INDEX IF NOT EXISTS issue_dependencies_blocked_idx ON issue_dependencies (blocked_by_id);
+
 CREATE TABLE IF NOT EXISTS issue_assignees (
   issue_id TEXT NOT NULL,
   user_id TEXT NOT NULL,
@@ -309,6 +330,15 @@ CREATE TABLE IF NOT EXISTS issue_labels (
   label_id TEXT NOT NULL,
   PRIMARY KEY (issue_id, label_id)
 );
+
+CREATE TABLE IF NOT EXISTS blockers (
+  id TEXT PRIMARY KEY,
+  issue_id TEXT NOT NULL,
+  author_id TEXT NOT NULL,
+  body TEXT NOT NULL,
+  created_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS blockers_issue_idx ON blockers (issue_id);
 
 CREATE TABLE IF NOT EXISTS comments (
   id TEXT PRIMARY KEY,
@@ -875,12 +905,16 @@ function bootstrap(sqlite: Database.Database) {
   addColumnIfMissing(sqlite, "projects", "description", "TEXT NOT NULL DEFAULT ''");
   addColumnIfMissing(sqlite, "projects", "doc", "TEXT NOT NULL DEFAULT ''");
   addColumnIfMissing(sqlite, "projects", "icon", "TEXT");
+  addColumnIfMissing(sqlite, "issues", "parent_id", "TEXT");
+  sqlite.exec("CREATE INDEX IF NOT EXISTS issues_parent_idx ON issues (parent_id)");
   addColumnIfMissing(sqlite, "issues", "deleted_at", "TEXT");
   addColumnIfMissing(sqlite, "task_fields", "disabled_at", "TEXT");
   for(const column of ["parent_id","edited_at","deleted_at"]) addColumnIfMissing(sqlite,"page_comments",column,"TEXT");
   addColumnIfMissing(sqlite, "issues", "position", "REAL NOT NULL DEFAULT 0");
   addColumnIfMissing(sqlite, "issues", "due_date", "TEXT");
   addColumnIfMissing(sqlite, "issues", "reminder", "TEXT");
+  addColumnIfMissing(sqlite, "issues", "recurrence", "TEXT");
+  addColumnIfMissing(sqlite, "issues", "recurred_into", "TEXT");
   // H-COLLAB-01: claim, source chat, publisher and review gate.
   addColumnIfMissing(sqlite, "issues", "claimed_by", "TEXT");
   addColumnIfMissing(sqlite, "issues", "claimed_at", "TEXT");
@@ -903,6 +937,8 @@ function bootstrap(sqlite: Database.Database) {
   addColumnIfMissing(sqlite, "agent_threads", "model", "TEXT NOT NULL DEFAULT ''");
   addColumnIfMissing(sqlite, "agent_threads", "effort", "TEXT NOT NULL DEFAULT ''");
   addColumnIfMissing(sqlite, "agent_threads", "approval", "TEXT NOT NULL DEFAULT 'ask'");
+  addColumnIfMissing(sqlite, "agent_threads", "turn_user_id", "TEXT");
+  addColumnIfMissing(sqlite, "agent_threads", "turn_started_at", "TEXT");
   // H-P1-08: Chat/Work mode is gone from the product. Drop the legacy column when SQLite allows it.
   dropColumnIfPresent(sqlite, "agent_threads", "mode");
   if (addColumnIfMissing(sqlite, "pages", "project_id", "TEXT")) {

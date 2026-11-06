@@ -4,7 +4,7 @@ import { useRef, useState } from "react";
 import { useUI } from "@/components/ui-context";
 import { entityHref } from "@/lib/ui/entity-actions";
 import { useRouter } from "next/navigation";
-import { RotateCcw, Trash2 } from "lucide-react";
+import { FileText, RotateCcw, Trash2 } from "lucide-react";
 import {
   purgeIssueAction,
   purgeProjectAction,
@@ -17,6 +17,7 @@ import { formatDate, issueRef } from "@/lib/format";
 import type { TrashedIssue, TrashedProject } from "@/lib/issues";
 import type { TrashedPage } from "@/lib/pages";
 import { useLocale, useT } from "@/components/i18n-context";
+import { PAGE_INSET } from "@/lib/page-chrome";
 
 export function TrashView({
   workspaceId,
@@ -73,7 +74,7 @@ export function TrashView({
   const empty = projects.length === 0 && issues.length === 0 && docs.length === 0;
 
   return (
-    <div className="flex-1 overflow-y-auto px-10 pb-10 pt-6 lg:px-20 xl:px-32">
+    <div className={`flex-1 overflow-y-auto pb-10 pt-6 ${PAGE_INSET}`}>
       <div className="space-y-4">
         {Object.entries(errors).filter(([,message])=>message).map(([id,message])=><p role="alert" key={id} className="text-small text-danger">{t(message)}</p>)}
         <p className="text-body leading-relaxed text-muted">
@@ -134,7 +135,7 @@ export function TrashView({
           <div className="divide-y divide-border rounded-lg border border-border">
             {docs.map((doc) => (
               <div key={doc.id} data-trashed-doc className="flex items-start gap-3 px-4 py-2.5">
-                <span className="mt-[1px] shrink-0 text-body leading-none">{doc.icon ?? "📄"}</span>
+                <span className="mt-[1px] shrink-0 text-body leading-none">{doc.icon ?? <FileText size={14} className="text-muted" />}</span>
                 <div className="min-w-0 flex-1">
                   <div className="truncate text-body">{doc.title}</div>
                   <div className="mt-0.5 text-small text-faint">

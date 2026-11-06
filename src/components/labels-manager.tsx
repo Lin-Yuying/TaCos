@@ -16,9 +16,11 @@ type LabelWithCount = Label & { issueCount: number };
 export function LabelsManager({
   workspaceId,
   initialLabels,
+  embedded = false,
 }: {
   workspaceId: string;
   initialLabels: LabelWithCount[];
+  embedded?: boolean;
 }) {
   const t = useT();
   const {confirm}=useUI();
@@ -47,9 +49,8 @@ export function LabelsManager({
     if(busy)return;setBusy(true);try{const result=await safeAction(async()=>deleteLabelAction(workspaceId,label.id));if(!result.ok)setError(result.error);else router.refresh();}catch{setError("Could not save. Retry.");}finally{setBusy(false);}
   }
 
-  return (
-    <div className="flex-1 overflow-y-auto p-6">
-      <div className="mx-auto max-w-xl space-y-6">
+  const body = (
+    <div className={embedded ? "space-y-6" : "mx-auto max-w-xl space-y-6"}>
         <div className="space-y-2 rounded-lg border border-border bg-surface/60 p-4">
           <div className="text-body font-medium">{t("New label")}</div>
           <div className="flex items-center gap-2">
@@ -115,7 +116,13 @@ export function LabelsManager({
             </div>
           ))}
         </div>
-      </div>
+    </div>
+  );
+
+  if (embedded) return body;
+  return (
+    <div className="flex-1 overflow-y-auto p-6">
+      {body}
     </div>
   );
 }
