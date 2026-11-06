@@ -7,7 +7,8 @@ export type NotificationPrefGroup =
   | "blockers"
   | "handoff"
   | "reminders"
-  | "views";
+  | "views"
+  | "automations";
 
 export const NOTIFICATION_EVENT_GROUPS: {
   id: NotificationPrefGroup;
@@ -34,6 +35,7 @@ export const NOTIFICATION_EVENT_GROUPS: {
   },
   { id: "reminders", label: "Due reminders", types: ["due_soon"] },
   { id: "views", label: "View subscriptions", types: ["view_added", "view_completed"] },
+  { id: "automations", label: "Automations", types: ["automation"] },
 ];
 
 // Workspace-deletion notices are always delivered; they have no preference group.

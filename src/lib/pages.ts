@@ -10,6 +10,7 @@ import { TacosError, getProject, listMembers, notify, nowIso } from "./issues";
 import { DOC_UPDATE_MERGE_MS } from "./doc-update-groups";
 import { parseDocMentions } from "./mentions";
 import { pageLinkTargets, replacePageLinks } from "./page-links";
+import { emitAutomationEvent } from "./automations/dispatch";
 
 export type DocPage = {
   id: string;
@@ -714,6 +715,10 @@ async function notifyDocMentions(page: DocPage, doc: string, authorId: string): 
 /** Someone else changed the body after this save's text was loaded. */
 export const PAGE_CONFLICT = "This document changed while you were editing it";
 
+// A document save can land every few seconds while someone types. A document.updated
+// rule runs at most once per page in this window; the run's idempotency key carries it.
+const DOCUMENT_EVENT_WINDOW_MS = 5 * 60_000;
+
 export async function updatePage(
   workspaceId: string,
   pageId: string,
@@ -784,6 +789,21 @@ export async function updatePage(
   if (!updated) throw new TacosError("Page not found", 404);
   if (next.doc !== undefined) await notifyDocMentions(page, updated.doc, viewerId);
   if (next.doc !== undefined && !options.fromCollab) collabDocWritten(pageId, updated.doc, updated.revision);
+  if (next.doc !== undefined || next.title !== undefined) {
+    const [editor] = await getDb()
+      .select({ displayName: users.displayName })
+      .from(users)
+      .where(eq(users.id, viewerId));
+    await emitAutomationEvent({
+      type: "document.updated",
+      workspaceId,
+      pageId,
+      actorUserId: viewerId,
+      actorName: editor?.displayName ?? "A member",
+      data: { title: updated.title, projectId: updated.projectId },
+      idempotencyKey: `document:${pageId}:${Math.floor(Date.now() / DOCUMENT_EVENT_WINDOW_MS)}`,
+    });
+  }
   return updated;
 }
 

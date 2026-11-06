@@ -11,6 +11,9 @@ export type NotificationData = {
   // View subscriptions: which saved view matched, and the task's new status.
   viewName?: string;
   statusLabel?: string;
+  // Automations: which rule fired and the notice the rule asked for.
+  ruleName?: string;
+  note?: string;
 };
 
 export function parseNotificationData(raw: string | null | undefined): NotificationData | null {
@@ -19,7 +22,7 @@ export function parseNotificationData(raw: string | null | undefined): Notificat
     const value = JSON.parse(raw) as unknown;
     if (!value || typeof value !== "object" || Array.isArray(value)) return null;
     const data: NotificationData = {};
-    for (const key of ["actorName", "title", "task", "date", "workspaceName", "ownerName", "viewName", "statusLabel"] as const) {
+    for (const key of ["actorName", "title", "task", "date", "workspaceName", "ownerName", "viewName", "statusLabel", "ruleName", "note"] as const) {
       const item = (value as Record<string, unknown>)[key];
       if (typeof item === "string" && item) data[key] = item;
     }

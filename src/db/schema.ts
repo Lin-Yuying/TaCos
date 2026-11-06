@@ -1006,3 +1006,75 @@ export const taskViewSubscriptions = sqliteTable(
 // Kept for the legacy personal views that were migrated into task_views. Reads and
 // writes go through task_views now; the rows stay so the migration can be audited.
 export const personalTaskViews=sqliteTable("personal_task_views",{workspaceId:text("workspace_id").notNull(),userId:text("user_id").notNull(),scope:text("scope").notNull(),name:text("name").notNull(),value:text("value").notNull()},t=>[primaryKey({columns:[t.workspaceId,t.userId,t.scope,t.name]})]);
+
+// #80: internal automations. A rule is trigger + conditions + actions; no external
+// delivery surface exists. `trigger` is text because a due trigger carries its lead
+// time (`task.due_soon:2`); everything else is one of the fixed trigger names.
+export const automationRules = sqliteTable(
+  "automation_rules",
+  {
+    id: text("id").primaryKey(),
+    workspaceId: text("workspace_id").notNull(),
+    name: text("name").notNull(),
+    enabled: integer("enabled").notNull().default(1),
+    createdBy: text("created_by").notNull(),
+    updatedBy: text("updated_by").notNull(),
+    trigger: text("trigger").notNull(),
+    // JSON array of condition objects; empty means every event of the trigger matches.
+    conditions: text("conditions").notNull().default("[]"),
+    // JSON array of action objects, executed in order.
+    actions: text("actions").notNull().default("[]"),
+    lastRunAt: text("last_run_at"),
+    // Bumped on every edit; the run log keeps the trigger it actually ran with.
+    version: integer("version").notNull().default(1),
+    createdAt: text("created_at").notNull(),
+    updatedAt: text("updated_at").notNull(),
+  },
+  (t) => [index("automation_rules_workspace_idx").on(t.workspaceId)]
+);
+
+// One row per (rule, event). The unique key makes a repeated event, a scheduler
+// restart or a retry harmless. `ruleName` is a snapshot so the log survives deletion.
+export const automationRuns = sqliteTable(
+  "automation_runs",
+  {
+    id: text("id").primaryKey(),
+    workspaceId: text("workspace_id").notNull(),
+    ruleId: text("rule_id").notNull(),
+    ruleName: text("rule_name").notNull().default(""),
+    trigger: text("trigger").notNull(),
+    // JSON snapshot of the event: type, issue/page, actor, data.
+    event: text("event").notNull(),
+    // running | success | partial | failed
+    status: text("status").notNull(),
+    actionResults: text("action_results").notNull().default("[]"),
+    error: text("error"),
+    durationMs: integer("duration_ms").notNull().default(0),
+    idempotencyKey: text("idempotency_key").notNull(),
+    triggeredBy: text("triggered_by"),
+    createdAt: text("created_at").notNull(),
+    finishedAt: text("finished_at"),
+  },
+  (t) => [
+    uniqueIndex("automation_runs_rule_event_idx").on(t.ruleId, t.idempotencyKey),
+    index("automation_runs_workspace_idx").on(t.workspaceId, t.createdAt),
+  ]
+);
+
+// Rule configuration history: who changed what, before and after.
+export const automationAudit = sqliteTable(
+  "automation_audit",
+  {
+    id: text("id").primaryKey(),
+    workspaceId: text("workspace_id").notNull(),
+    ruleId: text("rule_id").notNull(),
+    ruleName: text("rule_name").notNull().default(""),
+    // created | updated | enabled | disabled | deleted
+    action: text("action").notNull(),
+    actorId: text("actor_id").notNull(),
+    before: text("before"),
+    after: text("after"),
+    createdAt: text("created_at").notNull(),
+  },
+  (t) => [index("automation_audit_workspace_idx").on(t.workspaceId, t.createdAt)]
+);
