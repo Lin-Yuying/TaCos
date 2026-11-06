@@ -218,6 +218,8 @@ async function main() {
   assert((got.author as { id: string }).id === "m-owner", "get_page names the author");
   const gotPrivate = await callOk(full.client, "get_page", { id: ownerPrivate.id });
   assert(gotPrivate.doc === "Owner only", "the author reads a private page");
+  const gotChild = await callOk(full.client, "get_page", { id: child.id });
+  assert(gotChild.doc === "Child body", "a subpage reads its own body");
   const othersPrivate = await callErr(full.client, "get_page", { id: memberPrivate.id });
   assert(othersPrivate.isError && /not found/.test(othersPrivate.text), "another member's private page is not found");
   const missing = await callErr(full.client, "get_page", { id: "nope" });
