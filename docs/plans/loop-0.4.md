@@ -167,4 +167,5 @@ blocker (host, command, expected credential) and do not fake success.
 | #77 Agent access | merged | #84 | 110/110 checks, build, mcp:test, browser E2E + 1440/1100 shots |
 | #77 visibility fix | merged | #85 | fresh review blocker + medium findings fixed; MCP/REST visibility checks, batch rate limit, mixed-case pagination |
 | Loop setup | done | #83 | goal + this contract |
-| U-13a projects/task API | next | — | — |
+| U-13a projects/task API | merged | #86 | 113/113 checks, build, HTTP+MCP network E2E, visibility fix merged |
+| U-09 views/task UX | next | — | — |
