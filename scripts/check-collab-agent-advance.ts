@@ -49,7 +49,15 @@ async function main() {
     openingMessage: string | null;
   };
   assert(open2.thread.id === t1.id, "a second click must reopen the same chat");
-  assert(open2.openingMessage === null, "reopening must not offer another opening message");
+  // 2.3 item 6: a task chat that never ran a turn still needs its opening message.
+  assert(open2.openingMessage, "a task chat with no messages must still offer its opening message");
+  await threads.appendAgentMessage({ threadId: t1.id, role: "user", content: "Check the login bug", authorId: me.id } as never);
+  const open3 = (await threads.startTaskChat(ws, task.id, me.id)) as {
+    thread: { id: string };
+    openingMessage: string | null;
+  };
+  assert(open3.thread.id === t1.id, "a third click must reopen the same chat");
+  assert(open3.openingMessage === null, "reopening a chat with messages must not offer another opening message");
 
   let refused = false;
   try {

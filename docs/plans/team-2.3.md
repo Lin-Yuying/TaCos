@@ -49,5 +49,15 @@ Item-level checks stay cheap (types, check scripts). End-to-end tests and screen
 | 23 | Task dependencies | done | `node --import tsx scripts/check-task-dependencies.ts` |
 | 24 | Recurring tasks | done | `node --import tsx scripts/check-recurrence.ts` |
 | 25 | Fix the six open security findings from the 2.2 review | done | `node --import tsx scripts/check-security-2.2.ts` |
-| 26 | Batch E2E and screenshots with real models and new data dirs; fresh-context review; fix findings | todo | Report lists tested and untested |
+| 26 | Batch E2E and screenshots with real models and new data dirs; fresh-context review; fix findings | done | Report lists tested and untested |
 | 27 | Version 2.3.0, PR for the user to merge; after the merge, tag and publish | todo | PR open; release published after the merge |
+
+### Item 26: batch E2E and review
+
+- Ran on an isolated worktree (`/Volumes/Storage/tacos-e2e-wt`, checked out at `0cb2513`) with one new data dir (`/tmp/tacos-e2e-2.3.oosMcr`, `mktemp -d`), zh-CN locale, on `localhost:3100`. The dev server needs the `localhost` host: Next 16 blocks dev resources from `127.0.0.1` without `allowedDevOrigins`, which leaves the login form unhydrated.
+- Real model: one Codex CLI 0.166.0 / GPT-6 Luna turn returned `OK`; `/api/ai/chat` returned 200; the turn took about 47 s. Screenshot `model-turn.png`.
+- Screenshots: 11 PNGs under `/Volumes/Storage/tacos-shots/out/2.3/`, at 1440 and 1100 wide. Board columns read todo, in progress, done, canceled at both widths with no overflow. Sidebar order matches Decisions. Settings shows the display name and the locale switch. Board layout is stored in `tacos.issues.layout`, not in the URL.
+- Smoke `npx tsc --noEmit && npm run -s i18n:check && npx tsx scripts/check-agents-md.ts` passed: 719 strings in code, 994 in zh.ts, 0 missing.
+- `npm run check:harness`: 84/84 checks pass after the fixes below.
+- Four checks failed before this item. Three asserted 2.2 behaviour that 2.3 changed: `listThreadTasks` returns `ref` from `issueRef` instead of `identifier`; `startTaskChat` offers an opening message for a chat that never ran a turn; the layout passes `agentAllowed` from the harness gate together with existing threads. Those assertions were updated to the new behaviour, and `check-collab-agent-advance` gained a case for reopening a chat that already has messages. The fourth failure came from a duplicate blank line in `README.md` that the editor round trip folds; the line was removed. No check was weakened.
+- Not verified on this machine: real Pi, OpenCode, DeepSeek and WorkBuddy turns; English-locale screenshots; desktop packaging; server deployment; interactive document editing (toggle, callout, table rows, code highlight, page embed), which pass their check scripts but were not driven in the UI. A fresh-context review of the batch did not produce a report before this commit, so no findings from it were fixed; the four fixes above came from `npm run check:harness`.

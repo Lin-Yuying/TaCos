@@ -28,8 +28,12 @@ async function main() {
   const out = (await executeAgentTool(ctx, "create_task", { workspace: ctx.workspaceId, title: "From chat" })).text;
   const identifier = /Created (\S+)/.exec(out)?.[1];
 
-  const tasks = (await threads.listThreadTasks(ws, thread.id, owner.id)) as { identifier: string }[];
-  assert(tasks.some((t) => t.identifier === identifier), "chat must list the task it made");
+  // 2.3 shows the task panel's label (issueRef), whose case can differ from the identifier.
+  const tasks = (await threads.listThreadTasks(ws, thread.id, owner.id)) as { ref: string }[];
+  assert(
+    identifier && tasks.some((t) => t.ref.toLowerCase() === identifier.toLowerCase()),
+    "chat must list the task it made",
+  );
   const src = (await threads.getSourceThread(ws, thread.id, owner.id)) as { id: string; title: string } | null;
   assert(src?.id === thread.id && src.title === "Plan the sprint", "task must resolve its source chat for the owner");
   const hidden = await threads.getSourceThread(ws, thread.id, other.id);
