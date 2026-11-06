@@ -37,10 +37,10 @@ Baseline: production build and TypeScript pass; harness 88/88 plus upgrade check
 | D01 | 协作缓存每次更新都重写完整 Yjs 状态 | todo | — |
 | D02 | 每次编辑重复序列化全文和定位全部评论 | todo | — |
 | D03 | 文内搜索与目录工具重复扫描，并在滚动中测量全部标题 | todo | — |
-| D04 | 只显示摘要的目录读取并传输所有文档正文 | todo | — |
-| D05 | 路径筛选与排序为每个文档重建完整索引 | todo | — |
-| D06 | 树构建、后代遍历与移动复核反复扫描大集合 | todo | — |
-| D07 | 文件夹导入重复读取工作区，超大文件先完整解码 | todo | — |
+| D04 | 只显示摘要的目录读取并传输所有文档正文 | pass | Summary projection, joined effective permissions, parent/project SQL filters |
+| D05 | 路径筛选与排序为每个文档重建完整索引 | pass | Memoized path/search/descendant/pin indexes across index and move selectors |
+| D06 | 树构建、后代遍历与移动复核反复扫描大集合 | doing | Iterative adjacency traversal, batched subtree permissions, revision token |
+| D07 | 文件夹导入重复读取工作区，超大文件先完整解码 | doing | Indexed same-parent title lookup; streaming client size check pending |
 | D08 | 大版本差异同步计算，所有增删行一次渲染 | todo | — |
 | D09 | 评论修改后全量回传，未解决评论全量挂载 | todo | — |
 | D10 | 完成附件缺少引用回收，插入失败重试会再上传 | todo | — |
@@ -50,7 +50,7 @@ Baseline: production build and TypeScript pass; harness 88/88 plus upgrade check
 | D14 | 历史虽有上限，完整快照仍放大空间和写入量 | todo | — |
 | D15 | 本地协作数据库缺少容量和生命周期管理 | todo | — |
 | D16 | 斜杠与 @ 候选菜单缺少视口碰撞处理 | todo | — |
-| D17 | 文档树的无限视觉缩进会挤掉标题与操作空间 | todo | — |
+| D17 | 文档树的无限视觉缩进会挤掉标题与操作空间 | doing | Capped visual indent at 8 levels; real parent/depth retained |
 | D18 | 选中评论后，每次文字更新都可能重新滚回引用处 | todo | — |
 | A01 | 流式回复反复处理整个历史，折叠轨迹仍参与计算 | todo | — |
 | A02 | 修改会话设置、发送下一轮之前都加载完整历史与步骤 | todo | — |
@@ -124,3 +124,5 @@ B01: replaced history aggregates with indexed revision rows maintained by databa
 B03/B04/B10: real better-sqlite3 fixture (1000 additional mixed-status tasks with equal timestamps/positions) fully paginates without duplicate/missing ids; id/case-insensitive identifier/project-name aliases retained. SQL orders by the existing status order and position/date, with id as final tie-breaker. REST response remains an array; optional cursor and total/next-cursor headers add paging. Existing task database and visibility checks pass. UI full-set filters/bulk semantics will be retained until server equivalents are wired.
 
 B09: badge requests only unread count and preserves the existing deleted-workspace notification predicate. In-flight badge requests are bounded to one, timeout at 8s, abort on unmount and resume on visibility. B11: pure key introspection no longer changes usage metadata; exact usage recording for real API calls remains until a durable coalescing design is verified.
+
+D04–D07: directory results exclude body fields, effective edit rights join once, child/project filters run in SQL, import sibling lookups use indexed same-parent predicates. Path and descendant indexes are memoized. Server tree/descendant traversal is iterative; move confirmation compares transactional workspace document/permission/project revisions and still validates every descendant. Existing doc-access/doc-tree/personalization checks pass. Deep-chain/metadata structural coverage added separately; browser layout still pending.

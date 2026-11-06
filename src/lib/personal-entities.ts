@@ -2,14 +2,14 @@ import { and, eq, isNotNull } from "drizzle-orm";
 import { getDb } from "@/db/client";
 import { personalEntityState, favorites, pageFavorites, workspaces } from "@/db/schema";
 import { findVisibleIssueRow, isFavoriteProject, getOverviewAccess, getProject, listFavoriteProjects, TacosError } from "@/lib/issues";
-import { getPage, pageLevel, isPageFavorite } from "@/lib/pages";
+import { listPageMetadata, isPageFavorite } from "@/lib/pages";
 import { entityHref, type EntityKind, type EntityCapabilities, type PersonalPin } from "@/lib/ui/entity-actions";
 
 export async function inspectEntity(ws: string, user: string, kind: EntityKind, id: string): Promise<{ title: string; capabilities: EntityCapabilities }> {
   if (kind === "document") {
-    const page = await getPage(ws, id, user);
+    const [page] = await listPageMetadata(ws,user,{id});
     if (!page) throw new TacosError("Document not found", 404);
-    return { title: page.title, capabilities: { rename: await pageLevel(page, user) === "edit", remove: page.createdBy === user, favorite: true, isFavorite: await isPageFavorite(id, user) } };
+    return { title: page.title, capabilities: { rename: page.canEdit===true, remove: page.createdBy === user, favorite: true, isFavorite: await isPageFavorite(id, user) } };
   }
   if (kind === "project") {
     const project = await getProject(ws, id, user);

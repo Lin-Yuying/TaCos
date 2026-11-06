@@ -1,5 +1,5 @@
 import crypto from "node:crypto";
-import { and, desc, eq, inArray, isNotNull, isNull, lt, or } from "drizzle-orm";
+import { and, sql, getTableColumns, desc, eq, inArray, isNotNull, isNull, lt, or } from "drizzle-orm";
 import { getDb } from "../db/client";
 import { notifications, pageAccess, pageCollab, pageComments, pageFavorites, pageVersions, pages, users } from "../db/schema";
 import { attachmentImageType, getAttachment, removePageAttachments } from "./attachments";
@@ -29,6 +29,8 @@ export type DocPage = {
 
 // What the sidebar and the child-page list need; the body is left in the database.
 export type PageSummary = Omit<DocPage, "doc" | "workspaceId" | "revision" | "shareLevel" | "position" | "cover"> & { depth: number; canEdit?: boolean };
+
+export type PageMetadata = Omit<DocPage, "doc"> & { canEdit?: boolean };
 
 export type PageRef = { id: string; title: string; icon: string | null;path?:string };
 
@@ -71,42 +73,34 @@ export async function listPages(workspaceId: string, viewerId: string): Promise<
   return rows.map(toPage);
 }
 
-// The sidebar wants a tree in reading order, not a flat list in creation order:
-// children sit directly under their parent, indented by depth.
-export function pageTree(items: DocPage[]): PageSummary[] {
-  const byParent = new Map<string | null, DocPage[]>();
-  for (const page of items) {
-    const key = page.parentId && items.some((p) => p.id === page.parentId) ? page.parentId : null;
-    const bucket = byParent.get(key) ?? [];
-    bucket.push(page);
-    byParent.set(key, bucket);
-  }
-  const out: PageSummary[] = [];
-  const walk = (parentId: string | null, depth: number) => {
-    for (const page of byParent.get(parentId) ?? []) {
-      out.push({
-        id: page.id,
-        parentId: page.parentId,
-        projectId: page.projectId,
-        title: page.title,
-        icon: page.icon,
-        createdBy: page.createdBy,
-        shared: page.shared,
-        createdAt: page.createdAt,
-        updatedAt: page.updatedAt,
-        depth,
-      });
-      walk(page.id, Math.min(depth + 1, 6));
-    }
-  };
-  walk(null, 0);
-  return out;
+const { doc: _bodyColumn, ...metadataColumns } = getTableColumns(pages);
+export async function listPageMetadata(workspaceId: string, viewerId: string, filter: {parentId?: string;projectId?: string;id?: string} = {}): Promise<PageMetadata[]> {
+  const conditions=[eq(pages.workspaceId,workspaceId),isNull(pages.deletedAt),or(eq(pages.shared,1),eq(pages.createdBy,viewerId))];
+  if (filter.parentId) conditions.push(eq(pages.parentId,filter.parentId));
+  if (filter.projectId) conditions.push(eq(pages.projectId,filter.projectId));
+  if (filter.id) conditions.push(eq(pages.id,filter.id));
+  const rows=await getDb().select({...metadataColumns,override:pageAccess.level}).from(pages)
+    .leftJoin(pageAccess,and(eq(pageAccess.pageId,pages.id),eq(pageAccess.userId,viewerId)))
+    .where(and(...conditions)).orderBy(pages.position,pages.createdAt);
+  return rows.map(({deletedAt:_deleted,trashRoot:_trash,override,...row})=>({...row,shared:row.shared===1,canEdit:row.createdBy===viewerId||(override??row.shareLevel)==="edit"}));
 }
 
+// Iterative traversal preserves true hierarchy without quadratic parent searches or stack overflow.
+export function pageTree(items: PageMetadata[]): PageSummary[] {
+  const ids=new Set(items.map(page=>page.id));
+  const byParent=new Map<string|null,PageMetadata[]>();
+  for(const page of items){const parent=page.parentId&&ids.has(page.parentId)?page.parentId:null;const bucket=byParent.get(parent)??[];bucket.push(page);byParent.set(parent,bucket);}
+  const out:PageSummary[]=[],seen=new Set<string>();
+  const stack=(byParent.get(null)??[]).map(page=>({page,depth:0})).reverse();
+  while(stack.length){const {page,depth}=stack.pop()!;if(seen.has(page.id))continue;seen.add(page.id);
+    const {doc:_doc,workspaceId:_ws,revision:_revision,shareLevel:_level,position:_position,cover:_cover,...summary}=page as PageMetadata & {doc?:string};
+    out.push({...summary,depth});
+    const children=byParent.get(page.id)??[];for(let i=children.length-1;i>=0;i--)stack.push({page:children[i],depth:depth+1});
+  }
+  return out;
+}
 export async function listPageTree(workspaceId: string, viewerId: string): Promise<PageSummary[]> {
-  const rows = await listPages(workspaceId, viewerId);
-  const levels = new Map(await Promise.all(rows.map(async(page)=>[page.id, await pageLevel(page,viewerId)] as const)));
-  return pageTree(rows).map((page)=>({...page,canEdit:levels.get(page.id)==="edit"}));
+  return pageTree(await listPageMetadata(workspaceId,viewerId));
 }
 
 export async function getPage(
@@ -135,30 +129,10 @@ export async function listChildPages(
   parentId: string,
   viewerId: string
 ): Promise<PageSummary[]> {
-  const all = await listPages(workspaceId, viewerId);
-  return all
-    .filter((page) => page.parentId === parentId)
-    .map((page) => ({
-      id: page.id,
-      parentId: page.parentId,
-      projectId: page.projectId,
-      title: page.title,
-      icon: page.icon,
-      createdBy: page.createdBy,
-      shared: page.shared,
-      createdAt: page.createdAt,
-      updatedAt: page.updatedAt,
-      depth: 0,
-    }));
+  return pageTree(await listPageMetadata(workspaceId,viewerId,{parentId})).map(page=>({...page,depth:0}));
 }
-
-export async function listProjectPageTree(
-  workspaceId: string,
-  projectId: string,
-  viewerId: string
-): Promise<PageSummary[]> {
-  const all = await listPages(workspaceId, viewerId);
-  return pageTree(all.filter((page) => page.projectId === projectId));
+export async function listProjectPageTree(workspaceId: string,projectId: string,viewerId: string): Promise<PageSummary[]> {
+  return pageTree(await listPageMetadata(workspaceId,viewerId,{projectId}));
 }
 
 export async function createPage(
@@ -188,7 +162,7 @@ export async function createPage(
   // in a row — [[Untitled]] would otherwise always open the oldest one.
   if (title === "Untitled") {
     const existing = new Set(
-      (await listPages(workspaceId, viewerId)).map((page) => page.title.toLowerCase())
+      (await listPageMetadata(workspaceId, viewerId)).map((page) => page.title.toLowerCase())
     );
     let n = 2;
     while (existing.has(title.toLowerCase())) title = `Untitled ${n++}`;
@@ -261,12 +235,10 @@ async function siblingPage(
   parentId: string | null,
   title: string
 ): Promise<DocPage | null> {
-  const visible = await listPages(workspaceId, viewerId);
-  return (
-    visible.find(
-      (page) => page.parentId === parentId && page.title.toLowerCase() === title.toLowerCase()
-    ) ?? null
-  );
+  const [row]=await getDb().select().from(pages).where(and(eq(pages.workspaceId,workspaceId),
+    isNull(pages.deletedAt),siblingsOf(parentId),or(eq(pages.shared,1),eq(pages.createdBy,viewerId)),
+    sql`lower(${pages.title}) = lower(${title})`)).orderBy(pages.position,pages.createdAt).limit(1);
+  return row?toPage(row):null;
 }
 
 export type ImportedPage = { id: string; title: string; created: boolean };
@@ -339,19 +311,19 @@ function siblingsOf(parentId: string | null) {
 export type PageMoveTarget = { parentId: string | null; beforeId?: string | null; shared?: boolean; projectId?: string | null; confirmedImpact?: string };
 function moveVersion(workspaceId: string): string {
   const db=getDb();
-  const rows=db.select({id:pages.id,parentId:pages.parentId,projectId:pages.projectId,shared:pages.shared,shareLevel:pages.shareLevel,revision:pages.revision,deletedAt:pages.deletedAt,position:pages.position}).from(pages).where(eq(pages.workspaceId,workspaceId)).all().sort((a,b)=>a.id.localeCompare(b.id));
-  const access=db.select().from(pageAccess).all().filter((row)=>rows.some((page)=>page.id===row.pageId)).sort((a,b)=>`${a.pageId}:${a.userId}`.localeCompare(`${b.pageId}:${b.userId}`));
-  return crypto.createHash("sha256").update(JSON.stringify([rows,access])).digest("hex");
+  const versions=db.all<{domain:string;revision:number}>(sql`SELECT domain,revision FROM workspace_revisions WHERE workspace_id=${workspaceId} AND domain IN ('documents','permissions','projects') ORDER BY domain`);
+  return crypto.createHash("sha256").update(JSON.stringify(versions)).digest("hex");
 }
 async function preparePageMove(workspaceId:string,pageId:string,viewerId:string,target:PageMoveTarget) {
   const db=getDb(),page=await getPage(workspaceId,pageId,viewerId);
   if(!page)throw new TacosError("Document not found",404);
   await requirePageLevel(page,viewerId,"edit");
   const descendants=await descendantsOf(workspaceId,pageId);
+  const visible=new Map((await listPageMetadata(workspaceId,viewerId)).map(child=>[child.id,child]));
   for(const child of descendants) {
-    const readable=await getPage(workspaceId,child.id,viewerId);
+    const readable=visible.get(child.id);
     if(!readable)throw new TacosError("You cannot move every document in this subtree",403);
-    await requirePageLevel(readable,viewerId,"edit");
+    if(!readable.canEdit)throw new TacosError("You cannot edit this page",403);
   }
   const ids=[pageId,...descendants.map((child)=>child.id)];
   const parent=target.parentId?await getPage(workspaceId,target.parentId,viewerId):null;
@@ -910,25 +882,16 @@ export async function pageConflictView(
   return { doc: page.doc, revision: page.revision, by: author?.displayName ?? null };
 }
 
-export async function descendantsOf(workspaceId: string, pageId: string): Promise<DocPage[]> {
+export async function descendantsOf(workspaceId: string, pageId: string): Promise<PageMetadata[]> {
   const all = await getDb()
-    .select()
+    .select(metadataColumns)
     .from(pages)
     .where(and(eq(pages.workspaceId, workspaceId), isNull(pages.deletedAt)));
-  const out: DocPage[] = [];
-  const seen = new Set([pageId]);
-  let frontier = [pageId];
-  while (frontier.length) {
-    const next: string[] = [];
-    for (const row of all) {
-      if (row.parentId && frontier.includes(row.parentId) && !seen.has(row.id)) {
-        seen.add(row.id);
-        out.push(toPage(row));
-        next.push(row.id);
-      }
-    }
-    frontier = next;
-  }
+  const out: PageMetadata[] = [],seen=new Set([pageId]);
+  const byParent=new Map<string,typeof all>();
+  for(const row of all){if(!row.parentId)continue;const bucket=byParent.get(row.parentId)??[];bucket.push(row);byParent.set(row.parentId,bucket);}
+  const queue=[pageId];
+  for(let i=0;i<queue.length;i++)for(const row of byParent.get(queue[i])??[]){if(seen.has(row.id))continue;seen.add(row.id);out.push({...row,shared:row.shared===1});queue.push(row.id);}
   return out;
 }
 

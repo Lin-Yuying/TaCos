@@ -1014,6 +1014,7 @@ function bootstrap(sqlite: Database.Database) {
   ensureInitialAvatars(sqlite);
   ensureSearchIndex(sqlite);
   ensureRevisions(sqlite);
+  sqlite.exec("CREATE INDEX IF NOT EXISTS pages_sibling_title_idx ON pages(workspace_id,parent_id,lower(title))");
   sqlite.exec(`CREATE INDEX IF NOT EXISTS issues_identifier_idx ON issues(workspace_id,identifier COLLATE NOCASE);
     CREATE INDEX IF NOT EXISTS issues_project_number_idx ON issues(project_id,number);
     CREATE INDEX IF NOT EXISTS issues_workspace_position_idx ON issues(workspace_id,position);`);

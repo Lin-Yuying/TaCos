@@ -7,14 +7,14 @@ import { EntityRow } from "@/components/ui/entity-row";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useScrollMemory } from "@/lib/ui/scroll-memory";
-import { useRef, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { FileText, FolderOpen, Lock, Plus, Upload, Users } from "lucide-react";
 import { createPageAction, importMarkdownAction } from "@/app/pages-actions";
 import { Menu, MenuItem } from "@/components/menu";
-import { documentPath } from "@/components/ui/move-document";
+import { documentIndex } from "@/lib/ui/document-index";
 import { useStoredJson } from "@/lib/use-stored-json";
 import { useUI } from "@/components/ui-context";
-import type { DocPage } from "@/lib/pages";
+import type { PageMetadata } from "@/lib/pages";
 import { useT } from "@/components/i18n-context";
 import { PAGE_INSET } from "@/lib/page-chrome";
 
@@ -34,7 +34,7 @@ export function DocsIndex({
   pages,
 }: {
   workspaceId: string;
-  pages: DocPage[];
+  pages: PageMetadata[];
 }) {
   const t = useT();
   const router = useRouter();
@@ -51,7 +51,10 @@ export function DocsIndex({
   const [query,setQuery]=useState("");
   const [sort,setSort]=useStoredJson(`tacos.documents.sort.${scope}`,"updated");
   const [importResults,setImportResults]=useState<{file:File;stripRoot:boolean;status:string;error?:string}[]>([]);
-  const shown=pages.filter(page=>documentPath(page.id,pages).toLowerCase().includes(query.toLowerCase())).sort((a,b)=>{const rank=(id:string)=>{const at=pins.findIndex(p=>p.kind==="document"&&p.id===id);return at<0?Infinity:at;};return (rank(a.id)-rank(b.id))||(sort==="title"?a.title.localeCompare(b.title):sort==="path"?documentPath(a.id,pages).localeCompare(documentPath(b.id,pages)):b.updatedAt.localeCompare(a.updatedAt));});
+  const index=useMemo(()=>documentIndex(pages),[pages]);
+  const ranks=useMemo(()=>new Map(pins.filter(pin=>pin.kind==="document").map((pin,at)=>[pin.id,at])),[pins]);
+  const shown=useMemo(()=>pages.filter(page=>index.search.get(page.id)?.includes(query.toLowerCase())).sort((a,b)=>
+    ((ranks.get(a.id)??Infinity)-(ranks.get(b.id)??Infinity))||(sort==="title"?a.title.localeCompare(b.title):sort==="path"?(index.paths.get(a.id)??"").localeCompare(index.paths.get(b.id)??""):b.updatedAt.localeCompare(a.updatedAt))),[pages,index,query,sort,ranks]);
   const sharedPages = shown.filter((page) => page.shared);
   const privatePages = shown.filter((page) => !page.shared);
 
@@ -96,7 +99,7 @@ export function DocsIndex({
   }
 
   useDetailSource("document",[...sharedPages,...privatePages].map(page=>page.id));
-  const section = (sectionKey: "shared" | "private", title: string, items: DocPage[], empty: string) => (
+  const section = (sectionKey: "shared" | "private", title: string, items: PageMetadata[], empty: string) => (
     <section data-doc-index-section={sectionKey} className="mt-6 first:mt-0">
       <h2 className="mb-2 text-small font-medium uppercase tracking-wider text-faint">{title}</h2>
       {items.length === 0 ? (
@@ -111,7 +114,7 @@ export function DocsIndex({
               className="flex items-center gap-2 rounded-md px-2 py-1.5 text-body text-text transition-colors hover:bg-elevated/60"
             >
               <span className="shrink-0">{page.icon ?? <FileText size={14} className="text-muted" />}</span>
-              <span className="min-w-0 flex-1"><span className="block truncate">{page.title}</span><span className="block truncate text-caption text-faint">{documentPath(page.id,pages)}</span></span>
+              <span className="min-w-0 flex-1"><span className="block truncate">{page.title}</span><span className="block truncate text-caption text-faint">{index.paths.get(page.id)}</span></span>
               <span className="ml-auto flex shrink-0 items-center gap-1 text-caption text-faint">
                 {page.shared ? <Users size={11} /> : <Lock size={11} />}
                 {page.shared ? t("Shared") : t("Private")}
