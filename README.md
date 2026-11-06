@@ -215,6 +215,27 @@ The local desktop build listens on loopback only and stores its data under the O
 
 Desktop binaries are not code-signed. On Windows 11, Smart App Control blocks unsigned installers outright (there is no per-app override); use a signed build, the browser UI, or a machine where Smart App Control is off. Releases built by GitHub Actions can be signed with SignPath Foundation — see [docs/windows-signing.md](docs/windows-signing.md) for the setup.
 
+## Views, bulk edit and templates
+
+- `Views` in the task list saves a personal view by default. Tick **Share with everyone**
+  to publish it to the workspace, or create it from a project page to scope it to that
+  project. The view owner or a workspace admin can rename, share/unshare, delete and set
+  it as the scope default; a default opens automatically, and personal views stay private.
+- **Display** (or `Shift V`) sets layout, grouping, ordering, sub-issues, empty groups and
+  visible properties per view. A member opening a shared view keeps a personal display
+  override until they reset it; the owner or an admin saves the shared display.
+- The bell on a shared view subscribes you to its Inbox notifications: a task added to
+  the view and a task completed or canceled inside it. Your own actions never notify you.
+  Mute or unsubscribe from the same menu; Inbox settings include a **View subscriptions**
+  group. Delivery is the Inbox only.
+- **Select tasks** on the list, board or table opens the bulk bar: status, assignee,
+  priority, labels, due date and project. Each task is applied on its own, so the result
+  reports per-task errors; changing status still needs the task's assignee.
+- **Template** in the new-task composer fills a saved title, description, priority, labels
+  and custom fields. Templates are workspace-level; the owner or an admin curates them.
+- Tasks carry a numeric `estimate` (nullable). The task panel and composer edit it, and
+  the REST/MCP task fields accept it for planning work.
+
 ## How it fits together
 
 ```

@@ -176,3 +176,25 @@ Default one PR; if shared views + subscriptions grow, split UX polish.
 - Task view components (`list-header`, `issue-layout`, board/table), view menu,
   project sidebar; composer templates.
 - `src/lib/i18n/zh.ts`, README, new checks.
+
+## Implementation status (branch `feat/views-task-ux`, 2026-11-06)
+
+Implemented in this branch:
+
+- `task_views` replaces `personal_task_views` as the read/write model; a one-time
+  `schema_migrations` entry copies legacy personal views (context, owner, layout kept,
+  `shared=0`) and the legacy table is left for audit/rollback.
+- Shared workspace/project views with owner/admin management, duplicate, rename,
+  favorite, set/clear default, sidebar list and project-page menu.
+- Per-view layout, grouping (status/assignee/project/priority/label/due), ordering,
+  sub-issues, empty groups and property visibility; `Shift V`; personal overrides for
+  shared views; group headers show counts; board drops adopt status/assignee/priority.
+- View subscriptions deliver `view_added` / `view_completed` Inbox notices, skip the
+  actor, honour mutes and the `views` preferences group; no outbound channels.
+- Bulk edit for status/assignee/priority/labels/due/project with per-task results and
+  activity events; workspace task templates in the composer; nullable `estimate` on
+  tasks (task panel, composer, REST and MCP).
+
+Checks added: `check-views-shared.ts`, `check-views-display.ts`,
+`check-views-subscriptions.ts`, `check-tasks-bulk.ts`. Browser E2E and screenshots are
+run by the Lead after merge.
