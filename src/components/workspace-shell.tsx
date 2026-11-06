@@ -1,9 +1,12 @@
 "use client";
+import { usePrimaryModifier } from "@/lib/ui/platform";
 
 import * as ContextMenu from "@radix-ui/react-context-menu";
 import { useStoredJson } from "@/lib/use-stored-json";
-import { EntityRow } from "@/components/ui/entity-row";
+import { EntityRow,usePinned } from "@/components/ui/entity-row";
 
+import { PersonalOrder } from "@/components/personal-order";
+import { RecentDocuments } from "@/components/recent-documents";
 import Link from "next/link";
 import { tabIdentity } from "@/lib/ui/tabs";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
@@ -197,6 +200,7 @@ function SidebarNav({
   onToggleSection: (key: string) => void;
   onInvite: () => void;
 }) {
+  const shownProjects=usePinned(projects,"project");
   const t = useT();
   const pathname = usePathname();
   const searchParams = useSearchParams();
@@ -296,7 +300,7 @@ function SidebarNav({
             onToggle={() => toggleSection("favorites")}
           />
           {open("favorites") && (
-            <div className="space-y-0.5">
+            <div className="space-y-0.5"><PersonalOrder workspaceId={workspaceId} group="favorite" items={favorites.map(p=>({kind:"project" as const,id:p.id,title:p.name}))}/>
               {favorites.map((project) => (
                 <EntityRow key={project.id} kind="project" id={project.id} title={project.name}>
 <NavItem
@@ -309,6 +313,7 @@ function SidebarNav({
                 </NavItem>
 </EntityRow>
               ))}
+              {favoritePages.length>1&&<PersonalOrder workspaceId={workspaceId} group="favorite" items={favoritePages.map(p=>({kind:"document" as const,id:p.id,title:p.title}))}/>}
               {favoritePages.map((page) => (
                 <EntityRow key={page.id} kind="document" id={page.id} title={page.title}>
 <NavItem
@@ -325,7 +330,7 @@ function SidebarNav({
           )}
         </div>
       )}
-      {pins.length>0&&<section><div className="px-2 py-2 text-small text-faint">{t("Pinned")}</div>{pins.map(pin=><EntityRow key={`${pin.kind}:${pin.id}`} kind={pin.kind} id={pin.id} title={pin.title}><NavItem href={pin.href} active={false} icon={<Star size={13}/>}>{pin.title}</NavItem></EntityRow>)}</section>}
+      <RecentDocuments workspaceId={workspaceId} pages={pages}/>{pins.length>0&&<section><div className="px-2 py-2 text-small text-faint">{t("Pinned")}<PersonalOrder workspaceId={workspaceId} group="pin" items={pins}/></div>{pins.map(pin=><EntityRow key={`${pin.kind}:${pin.id}`} kind={pin.kind} id={pin.id} title={pin.title}><NavItem href={pin.href} active={false} icon={<Star size={13}/>}>{pin.title}</NavItem></EntityRow>)}</section>}
       <DocTree workspaceId={workspaceId} pages={pages} />
       {!hidden.includes("workspace") && (
         <>
@@ -391,7 +396,7 @@ function SidebarNav({
                 {t("No projects yet — create one")}
               </button>
             )}
-            {projects.map((project) => (
+            {shownProjects.map((project) => (
               <EntityRow key={project.id} kind="project" id={project.id} title={project.name}>
 <NavItem
                 key={project.id}
@@ -552,12 +557,13 @@ function WorkspaceSwitcher({
   compact?: boolean;
 }) {
   const t = useT();
+  const {confirm}=useUI();
   const [leaving, setLeaving] = useState(false);
   const [leaveError, setLeaveError] = useState<string | null>(null);
 
   async function leaveWorkspace() {
     if (
-      !window.confirm(
+      !await confirm(
         t('Leave "{name}"? A workspace admin has to invite you back with a join code.', {
           name: workspace.name,
         })
@@ -565,6 +571,7 @@ function WorkspaceSwitcher({
     )
       return;
     setLeaving(true);
+    try {
     const result = await leaveWorkspaceAction(workspace.id);
     if (!result.ok) {
       setLeaving(false);
@@ -573,6 +580,7 @@ function WorkspaceSwitcher({
     }
     const next = workspaces.find((ws) => ws.id !== workspace.id);
     window.location.href = next ? `/${next.id}` : "/onboarding";
+    }catch{setLeaving(false);setLeaveError("Could not save. Retry.");}
   }
 
   return (
@@ -890,6 +898,7 @@ function SidebarRail({
   width: number;
   agentAllowed: boolean;
 }) {
+  const shownProjects=usePinned(projects,"project");
   const t = useT();
   const pathname = usePathname();
   const searchParams = useSearchParams();
@@ -989,7 +998,7 @@ function SidebarRail({
         {projects.length > 0 && (
           <RailFlyout label={t("Projects")} icon={<Boxes size={15} />} labeled={labeled}>
             {(close) =>
-              projects.map((project) => (
+              shownProjects.map((project) => (
                 <RailFlyoutLink
                   key={project.id}
                   href={`/${workspaceId}/projects/${project.id}`}
@@ -1386,6 +1395,7 @@ function TabBar({
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const { setPaletteOpen, scope } = useUI();
+  const modifier=usePrimaryModifier();
   const [recentTabs,setRecentTabs]=useStoredJson<string[]>(`tacos.tabs.closed.${scope}`,[]);
   const [fixedTabs,setFixedTabs]=useStoredJson<string[]>(`tacos.tabs.fixed.${scope}`,[]);
   const [tabs, setTabs] = useState<string[] | null>(null);
@@ -1580,7 +1590,7 @@ function TabBar({
       <button
         type="button"
         onClick={() => setPaletteOpen(true)}
-        title={t("Open something (⌘K)")}
+        title={t("Open something ({key}K)",{key:modifier})}
         aria-label={t("Open something")}
         className="ml-1.5 shrink-0 rounded-md p-1.5 text-muted transition-colors hover:bg-elevated hover:text-text"
       >

@@ -11,6 +11,11 @@ import * as schema from "./schema";
 export { DATA_DIR };
 
 const DDL = `
+CREATE TABLE IF NOT EXISTS personal_task_views (
+ workspace_id TEXT NOT NULL,user_id TEXT NOT NULL,scope TEXT NOT NULL,name TEXT NOT NULL,value TEXT NOT NULL,
+ PRIMARY KEY(workspace_id,user_id,scope,name)
+);
+
 CREATE TABLE IF NOT EXISTS personal_entity_state (
   user_id TEXT NOT NULL, workspace_id TEXT NOT NULL, entity_type TEXT NOT NULL, entity_id TEXT NOT NULL,
   pinned_at TEXT, position INTEGER NOT NULL DEFAULT 0,
@@ -849,6 +854,8 @@ function ensureSearchIndex(sqlite: Database.Database) {
 function bootstrap(sqlite: Database.Database) {
   const hadIssueAssignees = tableExists(sqlite, "issue_assignees");
   sqlite.exec(DDL);
+  addColumnIfMissing(sqlite,"favorites","position","INTEGER NOT NULL DEFAULT 0");
+  addColumnIfMissing(sqlite,"page_favorites","position","INTEGER NOT NULL DEFAULT 0");
   addColumnIfMissing(sqlite, "users", "avatar", "TEXT");
   addColumnIfMissing(sqlite, "users", "role", "TEXT NOT NULL DEFAULT 'member'");
   addColumnIfMissing(sqlite, "users", "last_workspace_id", "TEXT");

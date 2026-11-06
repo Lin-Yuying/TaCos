@@ -66,15 +66,17 @@ export type ToastAction = { label: string; run: () => void | Promise<void> };
 type UIState = {
   scope: string;
   pins: PersonalPin[];
+  density:"compact"|"comfortable";
+  setDensity:(density:"compact"|"comfortable")=>void;
   refreshPins: () => void;
   confirm: (message: string) => Promise<boolean>;
   openIssueId: string | null;
-  openIssue: (id: string) => void;
+  openIssue: (id: string,commentId?:string) => void;
   closeIssue: () => void;
   // A document opened beside the page you were reading, the way a task opens in the
   // same right-hand pane. Only one of the two panes is up at a time.
   openPageId: string | null;
-  openPage: (id: string) => void;
+  openPage: (id: string,commentId?:string) => void;
   closePage: () => void;
   // The detail panel normally shares the main card with the list; expanded hides the
   // list so the issue takes the whole workspace.
@@ -136,6 +138,8 @@ export function UIProvider({
   const pathname = usePathname();
   const params = useSearchParams();
   const scope = `${userId}.${workspaceId}`;
+  const [density,setDensity]=useStoredJson<"compact"|"comfortable">(`tacos.density.${scope}`,"comfortable");
+  useEffect(()=>{document.documentElement.dataset.density=density;return()=>{delete document.documentElement.dataset.density;};},[density]);
   const [pins, setPins] = useState<PersonalPin[]>([]);
   const refreshPins = useCallback(() => { void listPinsAction(workspaceId).then((result) => { if (result.ok) setPins(result.data); }); }, [workspaceId]);
   useEffect(() => { refreshPins(); window.addEventListener(PERSONAL_STATE_CHANGED, refreshPins); return () => window.removeEventListener(PERSONAL_STATE_CHANGED, refreshPins); }, [refreshPins]);
@@ -144,22 +148,24 @@ export function UIProvider({
   const [openIssueId, setOpenIssueId] = useState<string | null>(null);
   const [openPageId, setOpenPageId] = useState<string | null>(null);
   const [panelExpanded, setPanelExpandedState] = useStoredJson(`tacos.panel.expanded.${scope}`, false);
-  const openIssue = useCallback((id: string) => {
-    const url = new URL(window.location.href); url.searchParams.set("issue", id);
+  const openIssue = useCallback((id: string,commentId?:string) => {
+    const url = new URL(window.location.href); url.searchParams.set("issue", id);url.searchParams.delete("doc");if(commentId)url.searchParams.set("comment",commentId);else url.searchParams.delete("comment");
     window.history.pushState(null, "", url);
     setOpenIssueId(id);
     setOpenPageId(null);
   }, []);
   const closeIssue = useCallback(() => {
-    const url = new URL(window.location.href); url.searchParams.delete("issue");
+    const url = new URL(window.location.href); url.searchParams.delete("issue");url.searchParams.delete("comment");
     window.history.pushState(null, "", url);
     setOpenIssueId(null);
   }, []);
-  const openPage = useCallback((id: string) => {
+  const openPage = useCallback((id: string,commentId?:string) => {
+    const url=new URL(window.location.href);url.searchParams.set("doc",id);url.searchParams.delete("issue");if(commentId)url.searchParams.set("comment",commentId);else url.searchParams.delete("comment");window.history.pushState(null,"",url);
     setOpenPageId(id);
     setOpenIssueId(null);
   }, []);
   const closePage = useCallback(() => {
+    const url=new URL(window.location.href);url.searchParams.delete("doc");url.searchParams.delete("comment");window.history.pushState(null,"",url);
     setOpenPageId(null);
     // An expanded pane is the only thing on screen; closing it must bring the page back.
   }, []);
@@ -191,7 +197,7 @@ export function UIProvider({
   );
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [focused, setFocused] = useState<FocusRef>(null);
-  const layoutKey = `${LAYOUT_KEY}.v2.${scope}.${pathname}`;
+  const layoutKey = `${LAYOUT_KEY}.v2.${scope}.${pathname}.view=${params.get("view")??"all"}.assignee=${params.get("assignee")??""}`;
   const [layout, setLayoutState] = useStoredJson<IssueLayout>(layoutKey, "list");
   const [toasts, setToasts] = useState<{ id: number; message: string; action?: ToastAction }[]>([]);
   const toastSeq = useRef(0);
@@ -204,7 +210,7 @@ export function UIProvider({
 
   function setLayout(next: IssueLayout) { setLayoutState(next); }
   // Native history participates in Next navigation without reloading the list.
-  useEffect(() => { setOpenIssueId(params.get("issue")); }, [params]);
+  useEffect(() => { setOpenIssueId(params.get("issue"));setOpenPageId(params.get("issue")?null:params.get("doc")); }, [params]);
   useEffect(() => {
     const failed = () => toast(t("Local storage is full. Keep this page open and copy your draft."));
     window.addEventListener("tacos:storage-error", failed);
@@ -231,7 +237,7 @@ export function UIProvider({
   return (
     <UIContext.Provider
       value={{
-        scope, confirm, pins, refreshPins,
+        scope, confirm, pins, refreshPins, density,setDensity,
         openIssueId,
         openIssue,
         closeIssue,

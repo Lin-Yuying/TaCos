@@ -1,7 +1,9 @@
 "use client";
+import { OptionSearch,matchesOption } from "@/components/ui/option-search";
 
 import { usePathname, useRouter } from "next/navigation";
 import { EntityRow } from "@/components/ui/entity-row";
+import { useScrollMemory } from "@/lib/ui/scroll-memory";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { columnSizingFeature, columnResizingFeature, createColumnHelper, tableFeatures, useTable } from "@tanstack/react-table";
 import { useVirtualizer } from "@tanstack/react-virtual";
@@ -23,7 +25,7 @@ import type { Member, UpdateIssueInput } from "@/lib/issues";
 import { fieldKey, type FieldValues, type TaskField, type TaskView } from "@/lib/task-view";
 
 const FEATURES = tableFeatures({ columnSizingFeature, columnResizingFeature });
-const ROW_HEIGHT = 34;
+
 const CELL_INPUT = "w-full min-w-0 rounded border border-transparent bg-transparent px-1 py-0.5 text-small text-text hover:border-border focus:border-border focus:outline-none";
 
 function FieldCell({id,field,value,onSave}:{id:string;field:TaskField;value:string;onSave:(next:string|null)=>Promise<boolean>}) {
@@ -61,7 +63,9 @@ export function TaskGrid({
   onViewChange: (next: TaskView) => void;
 }) {
   const t = useT();
-  const { openIssue, scope } = useUI();
+  const [memberQuery,setMemberQuery]=useState("");
+  const { openIssue, scope, density } = useUI();
+  const ROW_HEIGHT=density==="compact"?30:40;
   const pathname=usePathname();
   const [settings,setSettings]=useStoredJson<{sizes:Record<string,number>;hidden:string[];order:string[];frozen:string[]}>(`tacos.grid.${scope}.${pathname}`,{sizes:{},hidden:[],order:[],frozen:[]});
   const [members,setMembers]=useState<Member[]>([]);
@@ -73,6 +77,7 @@ export function TaskGrid({
   const saving=useRef(new Set<string>());
   const [error, setError] = useState<string | null>(null);
   const scroller = useRef<HTMLDivElement>(null);
+  useScrollMemory(scroller,`task-grid.${pathname}`);
 
   const columns = useMemo(() => {
     const column = createColumnHelper<typeof FEATURES, IssueWithLabels>();
@@ -122,7 +127,7 @@ export function TaskGrid({
         id: "assignee",
         header: t("Assignee"),
         size: 100,
-        cell: ({ row }) => <div onClick={e=>e.stopPropagation()}><Menu trigger={row.original.assignees.map(person=>person.displayName).join(", ")||t("Assignee")}>{()=> <div className="max-h-64 overflow-auto p-2">{members.map(member=><label key={member.id} className="flex gap-2 py-1"><input type="checkbox" disabled={memberBusy.includes(`${row.original.id}:${member.id}`)} checked={row.original.assignees.some(person=>person.id===member.id)} onChange={async e=>{const key=`${row.original.id}:${member.id}`;if(memberRunning.current.has(key))return;memberRunning.current.add(key);setMemberBusy(old=>[...old,key]);try{const result=await changeIssueCollectionAction(workspaceId,row.original.id,{kind:"assignee",value:member.id,selected:e.target.checked});if(!result.ok)setError(result.error);else router.refresh();}catch{setError("Could not save. Retry.");}finally{memberRunning.current.delete(key);setMemberBusy(old=>old.filter(value=>value!==key));}}}/>{member.displayName}</label>)}</div>}</Menu></div>,
+        cell: ({ row }) => <div onClick={e=>e.stopPropagation()}><Menu trigger={row.original.assignees.map(person=>person.displayName).join(", ")||t("Assignee")}>{()=> <div className="max-h-64 overflow-auto p-2"><OptionSearch value={memberQuery} onChange={setMemberQuery} selected={row.original.assignees.length}/>{members.filter(member=>matchesOption(memberQuery,member.displayName,member.username)).map(member=><label key={member.id} className="flex gap-2 py-1"><input type="checkbox" disabled={memberBusy.includes(`${row.original.id}:${member.id}`)} checked={row.original.assignees.some(person=>person.id===member.id)} onChange={async e=>{const key=`${row.original.id}:${member.id}`;if(memberRunning.current.has(key))return;memberRunning.current.add(key);setMemberBusy(old=>[...old,key]);try{const result=await changeIssueCollectionAction(workspaceId,row.original.id,{kind:"assignee",value:member.id,selected:e.target.checked});if(!result.ok)setError(result.error);else router.refresh();}catch{setError("Could not save. Retry.");}finally{memberRunning.current.delete(key);setMemberBusy(old=>old.filter(value=>value!==key));}}}/>{member.displayName}</label>)}</div>}</Menu></div>,
       }),
       column.accessor("dueDate", {
         id: "dueDate",
@@ -146,7 +151,7 @@ export function TaskGrid({
       ),
     ]);
   // Cells read current server values after every refresh.
-  }, [fields, t, values, workspaceId,router,members,memberBusy,currentUserId]);
+  }, [fields, t, values, workspaceId,router,members,memberBusy,currentUserId,memberQuery]);
 
   const ordered=[...columns].sort((a,b)=>{const ai=settings.order.indexOf(String(a.id)),bi=settings.order.indexOf(String(b.id));return (ai<0?999:ai)-(bi<0?999:bi);}).filter(column=>!settings.hidden.includes(String(column.id)));
   const table = useTable({ features: FEATURES, data: issues, columns:ordered, columnResizeMode:"onChange",state:{columnSizing:settings.sizes},onColumnSizingChange:updater=>setSettings(old=>({...old,sizes:typeof updater==="function"?updater(old.sizes):updater})) });

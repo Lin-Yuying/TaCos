@@ -1,5 +1,7 @@
 "use client";
+import { OptionSearch,matchesOption } from "@/components/ui/option-search";
 
+import { useState } from "react";
 import { Users } from "lucide-react";
 import { Menu, MenuItem } from "@/components/menu";
 import { LabelPill, PRIORITY_META, PriorityIcon } from "@/components/icons";
@@ -23,6 +25,7 @@ export function PropertiesRow({
   onCollection: (change: {kind: "assignee" | "label"; value: string; selected: boolean}) => void;
 }) {
   const t = useT();
+  const [memberQuery,setMemberQuery]=useState(""),[labelQuery,setLabelQuery]=useState("");
   const currentLabelNames = detail.labels.map((l) => l.name);
   const allAssigned = members.every((member) =>
     detail.assignees.some((assignee) => assignee.id === member.id)
@@ -102,7 +105,7 @@ export function PropertiesRow({
               <Users size={14} className="text-muted" /> {t("Everyone")}
             </MenuItem>
             <div className="my-1 border-t border-border" />
-            {members.map((member) => {
+            <OptionSearch value={memberQuery} onChange={setMemberQuery} selected={detail.assignees.length}/>{members.filter(member=>matchesOption(memberQuery,member.displayName,member.username)).map((member) => {
               const on = detail.assignees.some((assignee) => assignee.id === member.id);
               return (
                 <MenuItem
@@ -147,7 +150,7 @@ export function PropertiesRow({
       >
         {() => (
           <>
-            {allLabels.map((label) => {
+            <OptionSearch value={labelQuery} onChange={setLabelQuery} selected={detail.labels.length}/>{allLabels.filter(label=>matchesOption(labelQuery,label.name)).map((label) => {
               const on = currentLabelNames.includes(label.name);
               return (
                 <MenuItem

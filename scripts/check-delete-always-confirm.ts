@@ -44,9 +44,13 @@ assert(neverAutoCount >= 5, `every harness branch must pass delete tools (found 
 assert(consts.includes("Delete actions still ask"), "Full access detail must say delete still asks");
 assert(!consts.includes("No cards, and the agent may touch the machine"), "Full must not claim no cards");
 
-// UI delete actions always use window.confirm (independent of approval mode).
-assert(chat.includes("Delete “${thread.title") || chat.includes("title: thread.title"), "thread delete confirm required");
-assert(chat.includes("Delete “${active.title") || chat.includes("title: active.title"), "active thread delete confirm required");
+// Header and sidebar both use the same confirmed delete action.
+const threadMenu=read("src/components/thread-menu.tsx"),sidebar=read("src/components/thread-sidebar.tsx");
+assert(chat.includes("<ThreadMenu")&&chat.includes("thread={active}"),"active thread must use the shared menu");
+assert(sidebar.includes("<ThreadMenu")&&sidebar.includes("thread={thread}"),"sidebar thread must use the shared menu");
+const remove=threadMenu.split("async function remove()")[1]?.split("const actions")[0]??"";
+assert(remove.includes("await confirm(")&&remove.includes("thread.title")&&remove.includes("deleteAgentThreadAction"),"thread deletion must confirm its target before mutation");
+assert(remove.indexOf("await confirm(")<remove.indexOf("deleteAgentThreadAction"),"confirmation must precede thread deletion");
 assert(chat.includes('Delete the skill "${skillToken(skill)}"') || chat.includes('Delete the skill "{name}"'), "skill delete confirm required");
 
 console.log("check-delete-always-confirm: pass");

@@ -1,10 +1,15 @@
 "use client";
 
+import { DetailNavigation } from "@/components/detail-navigation";
+import { useScrollMemory } from "@/lib/ui/scroll-memory";
+import { DocumentTools } from "@/components/document-tools";
+import { Modal } from "@/components/ui/modal";
+import { useStoredJson } from "@/lib/use-stored-json";
 import Link from "next/link";
 import type { Editor } from "@tiptap/react";
 import { documentMarkdown, markdownToDocument } from "@/lib/editor/document-markdown";
 import { useDraft } from "@/lib/ui/draft-store";
-import { useRouter } from "next/navigation";
+import { useRouter,useSearchParams } from "next/navigation";
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
   History,
@@ -110,8 +115,14 @@ export function DocPageView({
 }) {
   const t = useT();
   const router = useRouter();
-  const { aiReady, confirm } = useUI();
+  const params=useSearchParams(),requestedComment=params.get("comment");
+  const { aiReady, confirm,scope } = useUI();
+  const [recent,setRecent]=useStoredJson<string[]>(`tacos.recent-documents.${scope}`,[]);
+  useEffect(()=>{const frame=requestAnimationFrame(()=>setRecent(old=>[page.id,...old.filter(id=>id!==page.id)].slice(0,50)));return()=>cancelAnimationFrame(frame);},[page.id,setRecent]);
+  const [readingWidth,setReadingWidth]=useStoredJson(`tacos.document.reading-width.${scope}`,880);
+  const [proposal,setProposal]=useState<{before:string;after:string}|null>(null);
   const editorRef = useRef<Editor | null>(null);
+  const [activeEditor,setActiveEditor]=useState<Editor|null>(null);
   const markdown = useMemo(() => documentMarkdown(), []);
   const [recovery, setRecovery] = useDraft<{body:string;revision:number;token:string}|null>("document",page.id,null);
   const recoveryRef = useRef(recovery); recoveryRef.current = recovery;
@@ -253,11 +264,12 @@ export function DocPageView({
       if (!result.ok) {setCommentsError(result.error);return;}
       setCommentsError(null);setComments(result.data.comments);
       setMembers(result.data.members);
+      if(requestedComment&&result.data.comments.some(comment=>comment.id===requestedComment)){setActiveComment(requestedComment);setSide("comments");}
     });
     return () => {
       live = false;
     };
-  }, [workspaceId, page.id]);
+  }, [workspaceId, page.id,requestedComment]);
 
   const anchors = useMemo<EditorAnchor[]>(
     () =>
@@ -338,7 +350,7 @@ export function DocPageView({
     const result = await setPageSharedAction(workspaceId, page.id, !shared);
     if (!result.ok) {
       setError(result.error);
-      return;
+      throw new Error(result.error);
     }
     setShared(result.data.shared);
     router.refresh();
@@ -393,10 +405,11 @@ export function DocPageView({
     });
   }
 
-  function acceptAi(text: string, action: string) {
+  function acceptAi(text: string, action: string, source:string) {
     if (!canEditBody || !editorRef.current?.isEditable) return;
+    if(contentRef.current!==source){setError("The document changed. Generate the edit again before replacing it.");return;}
     const next = action === "continue" && doc.trim() ? `${doc.replace(/\s+$/, "")}\n\n${text}` : text;
-    editorRef.current?.commands.setContent(markdownToDocument(markdown, next));
+    setProposal({before:doc,after:next});
     setAiPanel(null);
   }
 
@@ -404,6 +417,7 @@ export function DocPageView({
   // A pane is a narrow column: the header drops its labels and keeps the glyphs, or the
   // row wraps and the buttons lose their words.
   const root=useRef<HTMLDivElement>(null);
+  useScrollMemory(root,`document.${page.id}`,"[data-document-scroll]",!requestedComment);
   const [compact,setCompact]=useState(Boolean(onClose));
   useEffect(()=>{const observer=new ResizeObserver(([entry])=>setCompact(entry.contentRect.width<850));if(root.current)observer.observe(root.current);return()=>observer.disconnect();},[]);
   // References inside the pane open in the pane, so following one never loses the page
@@ -419,8 +433,9 @@ export function DocPageView({
   );
 
   return (
-    <div ref={root} className="flex min-h-0 flex-1 flex-col">
+    <div ref={root} data-document-root className="flex min-h-0 flex-1 flex-col">
       <header className="flex h-11 shrink-0 items-center gap-2 border-b border-border px-4 text-small text-muted">
+        <DetailNavigation kind="document" id={page.id} workspaceId={workspaceId} panel={!!onClose} fallback={refs.map(ref=>ref.id)}/>
         <span
           className="flex shrink-0 items-center gap-1"
           title={shared ? t("Shared with the workspace") : t("Private")}
@@ -544,7 +559,7 @@ export function DocPageView({
               shared={shared}
               compact={compact}
               members={members}
-              onToggleShared={() => void toggleShared()}
+              onToggleShared={toggleShared}
             />
           ) : (
             !canEdit && (
@@ -557,8 +572,8 @@ export function DocPageView({
             <button
               type="button"
               onClick={() => void removePage()}
-              aria-label={t("Delete page")}
-              title={t("Delete page")}
+              aria-label={t("Delete document")}
+              title={t("Delete document")}
               className="rounded-md p-1.5 text-muted transition-colors hover:bg-elevated hover:text-danger"
             >
               <Trash2 size={15} />
@@ -589,6 +604,8 @@ export function DocPageView({
         </div>
       </header>
 
+      <div className="border-b border-border px-3 py-1"><DocumentTools title={title} doc={doc} editor={activeEditor} width={readingWidth} onWidth={setReadingWidth}/></div>
+      <Modal open={!!proposal} title={t("Review changes")} onClose={()=>setProposal(null)}><h2 className="text-title">{t("Review changes")}</h2>{error&&<p role="alert" className="text-small text-danger">{t(error)}</p>}{proposal&&<div className="my-3 max-h-[60dvh] overflow-auto"><DiffLines before={proposal.before} after={proposal.after}/></div>}<button disabled={!canEditBody} onClick={()=>{if(!proposal||!editorRef.current?.isEditable)return;if(contentRef.current!==proposal.before){setError("The document changed. Generate the edit again before replacing it.");return;}editorRef.current.commands.setContent(markdownToDocument(markdown,proposal.after));setProposal(null);}} className="rounded border border-border px-3 py-1 text-body">{t("Apply changes")}</button></Modal>
       {aiPanel && (
         <AiEditPanel
           workspaceId={workspaceId}
@@ -606,10 +623,11 @@ export function DocPageView({
       )}
 
       <div className="relative flex min-h-0 flex-1">
-      <div className="min-w-0 flex-1 overflow-y-auto">
+      <div data-document-scroll className="min-w-0 flex-1 overflow-y-auto">
         {/* A pane is measured by its own width, not the window's, so the reading
             margins it would use on a full tab would leave no text at all. */}
         <div
+          style={{maxWidth:readingWidth,marginInline:"auto"}}
           className={`w-full pb-8 pt-6 ${
             onClose ? "px-5" : "px-10 lg:px-20 xl:px-32"
           }`}
@@ -706,7 +724,7 @@ export function DocPageView({
                   if (event.key === "Escape") setTitle(page.title);
                 }}
                 readOnly={!canEdit}
-                aria-label={t("Page title")}
+                aria-label={t("Document title")}
                 className={`w-full rounded-md bg-transparent font-semibold leading-tight tracking-tight text-text placeholder:text-faint hover:bg-elevated/40 focus:bg-bg focus:outline-none ${
                   compact ? "text-heading" : "text-display"
                 }`}
@@ -798,6 +816,7 @@ export function DocPageView({
             {(canEdit || doc.trim()) && (
               <DocumentEditor
                 editorRef={editorRef}
+                onEditorReady={setActiveEditor}
                 key={sharing ? "shared" : "alone"}
                 collab={sharing ? collab : undefined}
                 value={doc}
@@ -825,7 +844,7 @@ export function DocPageView({
                 onUpload={uploadFile}
               />
             )}
-            {canEdit && (
+            {canEditBody && (
               <div className="mt-4 flex items-center gap-2">
                 <Menu
                   width={240}
@@ -916,9 +935,9 @@ function PagePicker({
   const t = useT();
   const [query,setQuery]=useState("");
   const [limit,setLimit]=useState(40);
-  const matches=refs.filter(ref=>ref.title.toLowerCase().includes(query.toLowerCase())||ref.id.includes(query));
+  const matches=refs.filter(ref=>(ref.path??ref.title).toLowerCase().includes(query.toLowerCase())||ref.id.includes(query));
   if (refs.length === 0) {
-    return <div className="px-2 py-1.5 text-small text-faint">{t("No pages yet.")}</div>;
+    return <div className="px-2 py-1.5 text-small text-faint">{t("No documents yet.")}</div>;
   }
   return (
     <>
@@ -933,7 +952,7 @@ function PagePicker({
         >
           <span className="flex items-center gap-2">
             <span className="shrink-0">{ref.icon ?? "📄"}</span>
-            <span className="truncate">{ref.title}</span>
+            <span className="min-w-0"><span className="block truncate">{ref.title}</span><span className="block truncate text-caption text-faint">{ref.path??ref.id}</span></span>
           </span>
         </MenuItem>
       ))}

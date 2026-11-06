@@ -72,3 +72,5 @@ export async function batchEntityAction(ws:string,kind:EntityKind,ids:string[],o
     revalidatePath(`/${ws}`,"layout");return results;
   });
 }
+
+export async function reorderPersonalEntitiesAction(ws:string,group:"pin"|"favorite",items:{kind:EntityKind;id:string}[]){return run(async()=>{const {user}=await requireWorkspace(ws);const {reorderPersonalEntities}=await import("@/lib/personal-entities");await reorderPersonalEntities(ws,user.id,group,items);revalidatePath(`/${ws}`,"layout");});}

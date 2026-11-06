@@ -29,7 +29,7 @@ export type DocPage = {
 // What the sidebar and the child-page list need; the body is left in the database.
 export type PageSummary = Omit<DocPage, "doc" | "workspaceId" | "revision" | "shareLevel" | "position" | "cover"> & { depth: number; canEdit?: boolean };
 
-export type PageRef = { id: string; title: string; icon: string | null };
+export type PageRef = { id: string; title: string; icon: string | null;path?:string };
 
 // The one identity a shared page shows its reader: who wrote it.
 export type PageAuthor = { id: string; displayName: string; avatar: string | null };
@@ -435,7 +435,7 @@ export async function listFavoritePages(workspaceId: string, viewerId: string): 
         or(eq(pages.shared, 1), eq(pages.createdBy, viewerId))
       )
     )
-    .orderBy(pageFavorites.createdAt);
+    .orderBy(pageFavorites.position,pageFavorites.createdAt);
 }
 
 export async function isPageFavorite(pageId: string, viewerId: string): Promise<boolean> {
@@ -1046,7 +1046,7 @@ export async function purgePage(
 /** Backlinks and [[Title]] need a cheap title → page lookup for the viewer. */
 export async function listPageRefs(workspaceId: string, viewerId: string): Promise<PageRef[]> {
   const rows = await getDb()
-    .select({ id: pages.id, title: pages.title, icon: pages.icon })
+    .select({ id: pages.id, title: pages.title, icon: pages.icon,parentId:pages.parentId })
     .from(pages)
     .where(
       and(
@@ -1056,7 +1056,8 @@ export async function listPageRefs(workspaceId: string, viewerId: string): Promi
       )
     )
     .orderBy(pages.createdAt);
-  return rows;
+  const byId=new Map(rows.map(row=>[row.id,row]));
+  return rows.map(row=>{const path=[row.title],seen=new Set([row.id]);let parent=row.parentId;while(parent&&!seen.has(parent)){seen.add(parent);const ancestor=byId.get(parent);if(!ancestor)break;path.unshift(ancestor.title);parent=ancestor.parentId;}return{id:row.id,title:row.title,icon:row.icon,path:path.join(" / ")};});
 }
 
 /**

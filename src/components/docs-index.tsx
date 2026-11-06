@@ -1,10 +1,12 @@
 "use client";
 
+import { useDetailSource } from "@/components/detail-navigation";
 import { BatchSelection } from "@/components/ui/batch-selection";
 import { EntityRow } from "@/components/ui/entity-row";
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { useScrollMemory } from "@/lib/ui/scroll-memory";
 import { useRef, useState } from "react";
 import { FileText, FolderOpen, Lock, Plus, Upload, Users } from "lucide-react";
 import { createPageAction, importMarkdownAction } from "@/app/pages-actions";
@@ -45,11 +47,12 @@ export function DocsIndex({
   const importing = useRef(false);
   const creatingRef=useRef(false);
   const [creating,setCreating]=useState(false);
-  const {scope}=useUI();
+  const {scope,pins}=useUI();
+  const scroller=useRef<HTMLDivElement>(null);useScrollMemory(scroller,"documents-index");
   const [query,setQuery]=useState("");
   const [sort,setSort]=useStoredJson(`tacos.documents.sort.${scope}`,"updated");
   const [importResults,setImportResults]=useState<{file:File;stripRoot:boolean;status:string;error?:string}[]>([]);
-  const shown=pages.filter(page=>documentPath(page.id,pages).toLowerCase().includes(query.toLowerCase())).sort((a,b)=>sort==="title"?a.title.localeCompare(b.title):sort==="path"?documentPath(a.id,pages).localeCompare(documentPath(b.id,pages)):b.updatedAt.localeCompare(a.updatedAt));
+  const shown=pages.filter(page=>documentPath(page.id,pages).toLowerCase().includes(query.toLowerCase())).sort((a,b)=>{const rank=(id:string)=>{const at=pins.findIndex(p=>p.kind==="document"&&p.id===id);return at<0?Infinity:at;};return (rank(a.id)-rank(b.id))||(sort==="title"?a.title.localeCompare(b.title):sort==="path"?documentPath(a.id,pages).localeCompare(documentPath(b.id,pages)):b.updatedAt.localeCompare(a.updatedAt));});
   const mine = shown.filter((page) => page.createdBy === userId);
   const shared = shown.filter((page) => page.createdBy !== userId);
 
@@ -93,6 +96,7 @@ export function DocsIndex({
     router.refresh();
   }
 
+  useDetailSource("document",[...mine,...shared].map(page=>page.id));
   const section = (title: string, items: DocPage[], empty: string) => (
     <section className="mt-6 first:mt-0">
       <h2 className="mb-2 text-small font-medium uppercase tracking-wider text-faint">{title}</h2>
@@ -122,7 +126,7 @@ export function DocsIndex({
   );
 
   return (
-    <div className="flex-1 overflow-y-auto">
+    <div ref={scroller} className="flex-1 overflow-y-auto">
       <div className="w-full px-10 py-6 lg:px-20 xl:px-32">
         <div className="flex items-center justify-between gap-3">
           <div>
@@ -169,7 +173,7 @@ export function DocsIndex({
               disabled={creating} onClick={() => void createPage()}
               className="flex shrink-0 items-center gap-1 rounded-md border border-border px-2.5 py-1.5 text-small font-medium text-muted transition-colors hover:border-border-strong hover:text-text"
             >
-              <Plus size={13} /> {t("New page")}
+              <Plus size={13} /> {t("New document")}
             </button>
           </div>
         </div>

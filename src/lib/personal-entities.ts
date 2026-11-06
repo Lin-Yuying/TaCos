@@ -1,6 +1,6 @@
 import { and, eq, isNotNull } from "drizzle-orm";
 import { getDb } from "@/db/client";
-import { personalEntityState, workspaces } from "@/db/schema";
+import { personalEntityState, favorites, pageFavorites, workspaces } from "@/db/schema";
 import { getIssueDetail, getOverviewAccess, getProject, listFavoriteProjects, TacosError } from "@/lib/issues";
 import { getPage, pageLevel, isPageFavorite } from "@/lib/pages";
 import { entityHref, type EntityKind, type EntityCapabilities, type PersonalPin } from "@/lib/ui/entity-actions";
@@ -40,4 +40,15 @@ export async function setPersonalPin(ws: string, user: string, kind: EntityKind,
   const key = { userId: user, workspaceId: ws, entityType: kind, entityId: id };
   const now = pinned ? new Date().toISOString() : null;
   getDb().insert(personalEntityState).values({ ...key, pinnedAt: now, position: Date.now() }).onConflictDoUpdate({ target: [personalEntityState.userId, personalEntityState.workspaceId, personalEntityState.entityType, personalEntityState.entityId], set: { pinnedAt: now } }).run();
+}
+
+export async function reorderPersonalEntities(ws:string,user:string,group:"pin"|"favorite",items:{kind:EntityKind;id:string}[]){
+ if(!["pin","favorite"].includes(group)||items.length>1000||new Set(items.map(item=>`${item.kind}:${item.id}`)).size!==items.length)throw new TacosError("Invalid personal order",400);
+ const db=getDb();
+ for(const item of items){const entity=await inspectEntity(ws,user,item.kind,item.id);if(group==="favorite"&&!entity.capabilities.isFavorite)throw new TacosError("This item is no longer a favorite",409);if(group==="pin"&&!db.select().from(personalEntityState).where(and(eq(personalEntityState.workspaceId,ws),eq(personalEntityState.userId,user),eq(personalEntityState.entityType,item.kind),eq(personalEntityState.entityId,item.id),isNotNull(personalEntityState.pinnedAt))).get())throw new TacosError("This item is no longer pinned",409);}
+ db.transaction(tx=>{for(const [position,item]of items.entries()){
+  if(group==="pin")tx.update(personalEntityState).set({position}).where(and(eq(personalEntityState.workspaceId,ws),eq(personalEntityState.userId,user),eq(personalEntityState.entityType,item.kind),eq(personalEntityState.entityId,item.id))).run();
+  else if(item.kind==="project")tx.update(favorites).set({position}).where(and(eq(favorites.userId,user),eq(favorites.projectId,item.id))).run();
+  else if(item.kind==="document")tx.update(pageFavorites).set({position}).where(and(eq(pageFavorites.userId,user),eq(pageFavorites.pageId,item.id))).run();
+ }});
 }

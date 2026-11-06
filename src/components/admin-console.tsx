@@ -1,4 +1,6 @@
 "use client";
+import { safeAction } from "@/lib/ui/safe-action";
+import { useConfirmation } from "@/components/ui/confirmation";
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -35,6 +37,7 @@ export function AdminConsole({
   builtInAdminUsername: string;
 }) {
   const t = useT();
+  const {confirm,dialog}=useConfirmation();
   const locale = useLocale();
   const router = useRouter();
   const [editing, setEditing] = useState<{ id: string; field: "password" | "name" } | null>(null);
@@ -56,8 +59,8 @@ export function AdminConsole({
     setBusy(true);
     const result =
       editing.field === "password"
-        ? await adminResetPasswordAction(editing.id, draft)
-        : await adminRenameMemberAction(editing.id, draft);
+        ? await safeAction(async()=>adminResetPasswordAction(editing.id, draft))
+        : await safeAction(async()=>adminRenameMemberAction(editing.id, draft));
     setBusy(false);
     if (!result.ok) {
       setError(result.error);
@@ -73,7 +76,7 @@ export function AdminConsole({
     setBusy(true);
     setError(null);
     setNotice(null);
-    const result = await adminCreateMemberAction(form);
+    const result = await safeAction(async()=>adminCreateMemberAction(form));
     setBusy(false);
     if (!result.ok) {
       setError(result.error);
@@ -89,19 +92,19 @@ export function AdminConsole({
   }
 
   async function openAs(userId: string) {
-    const result = await switchUserAction(userId);
+    const result = await safeAction(async()=>switchUserAction(userId));
     if (result.ok) window.location.href = result.data.url;
     else setError(result.error);
   }
 
   async function remove(member: SiteMember) {
-    const ok = window.confirm(
+    const ok = await confirm(
       t("Delete {name} (@{username})?", { name: member.displayName, username: member.username }) +
         "\n\n" +
         t("Their issues stay but become unassigned, and their comments stay without an author.")
     );
     if (!ok) return;
-    const result = await adminDeleteMemberAction(member.id);
+    const result = await safeAction(async()=>adminDeleteMemberAction(member.id));
     if (!result.ok) {
       setError(result.error);
       return;
@@ -111,7 +114,7 @@ export function AdminConsole({
   }
 
   return (
-    <div className="flex h-full flex-col bg-bg">
+    <div className="flex h-full flex-col bg-bg">{dialog}
       <header className="app-titlebar flex h-12 shrink-0 items-center gap-2 border-b border-border px-4">
         <OtterMark className="h-6 w-6" />
         <h1 className="text-body font-semibold">{t("Admin console")}</h1>

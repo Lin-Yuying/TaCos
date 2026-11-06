@@ -68,7 +68,7 @@ export function EntityRow({ kind, id, title, children }: { kind: EntityKind; id:
     {label:t("Move to Trash"),disabled:!cap?.remove || busy,run:remove,danger:true},
   ];
   return <>{moveOpen&&<MoveDocument workspaceId={workspaceId} id={id} onClose={()=>setMoveOpen(false)}/>}<Context.Root onOpenChange={(open) => { if (open) void inspect(); }}>
-    <Context.Trigger asChild disabled={editing}><div className="group/entity relative min-w-0" onContextMenuCapture={(e) => { if ((e.target as HTMLElement).closest("input, textarea, [contenteditable=true]")) e.stopPropagation(); }} onKeyDown={(e) => { if (e.key === "F2" && !editing) { e.preventDefault(); e.stopPropagation(); void rename(); } }}>
+    <Context.Trigger asChild disabled={editing}><div className="density-entity group/entity relative min-w-0" onContextMenuCapture={(e) => { if ((e.target as HTMLElement).closest("input, textarea, [contenteditable=true]")) e.stopPropagation(); }} onKeyDown={(e) => { if (e.key === "F2" && !editing) { e.preventDefault(); e.stopPropagation(); void rename(); } }}>
       {editing ? <div className="flex min-h-8 items-center gap-2 p-1"><input aria-label={t("Name")} autoFocus value={draft} disabled={busy} onFocus={(e) => e.target.select()} onChange={(e) => setDraft(e.target.value)} onKeyDown={(e) => {
         e.stopPropagation(); if (e.nativeEvent.isComposing || e.nativeEvent.keyCode === 229) return;
         if (e.key === "Enter") { e.preventDefault(); void save(); }

@@ -49,7 +49,7 @@ export function AiEditPanel({
   y: number;
   target: AiEditTarget;
   onClose: () => void;
-  onAccept: (text: string, action: AiEditAction) => void;
+  onAccept: (text: string, action: AiEditAction, source:string) => void;
   onTasks?: () => void;
 }) {
   const t = useT();
@@ -99,7 +99,9 @@ export function AiEditPanel({
     rememberEngine(next);
   }
 
+  const sourceRef=useRef(target.text);
   async function run(kind: AiEditAction) {
+    sourceRef.current=target.text;
     abortRef.current?.abort();
     const controller = new AbortController();
     abortRef.current = controller;
@@ -314,7 +316,7 @@ export function AiEditPanel({
             <button
               type="button"
               disabled={busy || !result.trim()}
-              onClick={() => onAccept(result.trim(), action ?? "custom")}
+              onClick={() => onAccept(result.trim(), action ?? "custom",sourceRef.current)}
               className="flex items-center gap-1 rounded-md bg-accent px-2.5 py-1 text-small font-medium text-white transition-opacity hover:opacity-90 disabled:opacity-40"
             >
               <Check size={11} /> {target.acceptLabel}

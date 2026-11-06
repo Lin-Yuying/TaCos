@@ -1,5 +1,7 @@
 "use client";
 
+import { useScrollMemory } from "@/lib/ui/scroll-memory";
+import { useDetailSource } from "@/components/detail-navigation";
 import { BatchSelection } from "@/components/ui/batch-selection";
 import { EntityRow } from "@/components/ui/entity-row";
 
@@ -27,6 +29,7 @@ export function ProjectDocuments({
   const [error, setError] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
 
+  const scroller=useRef<HTMLDivElement>(null);useScrollMemory(scroller,`project-documents.${projectId}`);
   const creatingRef=useRef(false);
   async function createPage() {
     if(creatingRef.current)return;creatingRef.current=true;
@@ -41,8 +44,9 @@ export function ProjectDocuments({
     }catch{setError("Could not save. Retry.");}finally{creatingRef.current=false;setCreating(false);}
   }
 
+  useDetailSource("document",pages.map(page=>page.id));
   return (
-    <div className="flex-1 overflow-y-auto">
+    <div ref={scroller} className="flex-1 overflow-y-auto">
       <div className="w-full px-10 pb-8 pt-6 lg:px-20 xl:px-32">
         <div className="flex items-center justify-between gap-3">
           <div>
@@ -57,7 +61,7 @@ export function ProjectDocuments({
             disabled={creating}
             className="flex shrink-0 items-center gap-1 rounded-md border border-border px-2.5 py-1.5 text-small font-medium text-muted transition-colors hover:border-border-strong hover:text-text disabled:opacity-50"
           >
-            <Plus size={13} /> {t("New page")}
+            <Plus size={13} /> {t("New document")}
           </button>
         </div>
 

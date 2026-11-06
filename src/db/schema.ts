@@ -122,6 +122,7 @@ export const favorites = sqliteTable(
     userId: text("user_id").notNull(),
     projectId: text("project_id").notNull(),
     createdAt: text("created_at").notNull(),
+    position: integer("position").notNull().default(0),
   },
   (t) => [
     primaryKey({ columns: [t.userId, t.projectId] }),
@@ -294,6 +295,7 @@ export const pageFavorites = sqliteTable(
     userId: text("user_id").notNull(),
     pageId: text("page_id").notNull(),
     createdAt: text("created_at").notNull(),
+    position: integer("position").notNull().default(0),
   },
   (t) => [primaryKey({ columns: [t.userId, t.pageId] })]
 );
@@ -667,3 +669,5 @@ export const personalEntityState = sqliteTable("personal_entity_state", {
   entityType: text("entity_type").notNull(), entityId: text("entity_id").notNull(),
   pinnedAt: text("pinned_at"), position: integer("position").notNull().default(0),
 }, (t) => [primaryKey({ columns: [t.userId, t.workspaceId, t.entityType, t.entityId] })]);
+
+export const personalTaskViews=sqliteTable("personal_task_views",{workspaceId:text("workspace_id").notNull(),userId:text("user_id").notNull(),scope:text("scope").notNull(),name:text("name").notNull(),value:text("value").notNull()},t=>[primaryKey({columns:[t.workspaceId,t.userId,t.scope,t.name]})]);

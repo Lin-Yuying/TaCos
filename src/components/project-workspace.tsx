@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { Search, X } from "lucide-react";
 import { StatusIcon } from "@/components/icons";
@@ -78,8 +78,12 @@ export function ProjectWorkspace({
   const params = useSearchParams();
   const selectedTab = params.get("tab");
   const tab: ProjectTab = selectedTab === "documents" || selectedTab === "issues" || selectedTab === "overview" ? selectedTab : initialTab;
-  const [status, setStatus] = useState<Status | null>(null);
-  const [q, setQ] = useState("");
+  const selectedStatus=params.get("status");
+  const status:Status|null=selectedStatus&&selectedStatus in STATUS_META?selectedStatus as Status:null;
+  const q=params.get("q")??"";
+  function setQueryValue(key:string,value:string|null){const url=new URL(location.href);if(value)url.searchParams.set(key,value);else url.searchParams.delete(key);history.replaceState(null,"",url);}
+  function setStatus(status:Status|null){setQueryValue("status",status);}
+  function setQ(query:string){setQueryValue("q",query);}
   const [favorite, setFavorite] = useState(initialFavorite);
   const [icon, setIcon] = useState<string | null>(project.icon);
   const metaRows = useMetaRows();
@@ -130,7 +134,7 @@ export function ProjectWorkspace({
         onTab={(next) => {
           const url = new URL(window.location.href); url.searchParams.set("tab", next);
           window.history.pushState(null, "", url);
-          if (next === "issues") setStatus(null);
+
         }}
         onToggleFavorite={toggleFavorite}
         meta={
