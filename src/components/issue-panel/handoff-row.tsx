@@ -165,7 +165,7 @@ export function HandoffRow({
       {canHand && !form && (
         <button type="button" onClick={() => setForm(true)} data-handoff-open className={buttonClass}>
           <Bot size={13} />
-          {t("Hand to my Agent")}
+          {t("Hand to Agent in background")}
         </button>
       )}
 

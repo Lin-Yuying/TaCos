@@ -7,10 +7,12 @@ import {
   issueAssignees,
   issues,
   notifications,
+  retiredUsernames,
   runnerTokens,
   sessions,
   users,
   workspaceMembers,
+  workspaces,
 } from "@/db/schema";
 import { TacosError } from "./issues";
 import { BUILTIN_AVATARS, nextFreeAvatar } from "./avatars";
@@ -80,7 +82,12 @@ export async function createSiteMember(input: {
 
   const db = getDb();
   const taken = await db.select({ id: users.id }).from(users).where(eq(users.username, username)).limit(1);
-  if (taken.length > 0) throw new TacosError("Username is already taken", 409);
+  const retired = await db
+    .select({ username: retiredUsernames.username })
+    .from(retiredUsernames)
+    .where(eq(retiredUsernames.username, username))
+    .limit(1);
+  if (taken.length > 0 || retired.length > 0) throw new TacosError("Username is already taken", 409);
 
   const id = crypto.randomUUID();
   const existing = await db.select({ avatar: users.avatar }).from(users);
@@ -130,6 +137,23 @@ export async function deleteSiteMember(actorId: string, userId: string) {
 
   const db = getDb();
 
+  // The person who created a workspace stays its owner until someone else takes that place.
+  const owned = await db
+    .select({ id: workspaces.id })
+    .from(workspaces)
+    .where(eq(workspaces.createdBy, userId));
+  for (const workspace of owned) {
+    const [successor] = await db
+      .select({ userId: workspaceMembers.userId })
+      .from(workspaceMembers)
+      .where(and(eq(workspaceMembers.workspaceId, workspace.id), ne(workspaceMembers.userId, userId)))
+      .orderBy(workspaceMembers.createdAt)
+      .limit(1);
+    if (successor) {
+      await db.update(workspaces).set({ createdBy: successor.userId }).where(eq(workspaces.id, workspace.id));
+    }
+  }
+
   // A workspace left without any admin would be unmanageable, so hand it to the
   // longest-serving remaining member first.
   const adminOf = await db
@@ -167,6 +191,10 @@ export async function deleteSiteMember(actorId: string, userId: string) {
   await db.delete(apiKeys).where(eq(apiKeys.createdBy, userId));
   await db.delete(workspaceMembers).where(eq(workspaceMembers.userId, userId));
   await db.delete(users).where(eq(users.id, userId));
+  await db
+    .insert(retiredUsernames)
+    .values({ username: target.username, retiredAt: new Date().toISOString() })
+    .onConflictDoNothing();
 
   return { username: target.username, displayName: target.displayName };
 }

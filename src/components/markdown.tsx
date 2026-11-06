@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { FileText } from "lucide-react";
 import { splitMentions } from "@/lib/mentions";
 import {
   useEffect,
@@ -87,7 +88,7 @@ function PageChip({
     <>
       {/* The icon is chrome: the stored Markdown only has the page title, so leaving
           it in the text flow would shift every passage after the chip. */}
-      <span data-md-glyph className="shrink-0">{target.icon ?? "📄"}</span>
+      <span data-md-glyph className="shrink-0">{target.icon ?? <FileText size={14} className="inline align-[-2px] text-muted" />}</span>
       <span className="truncate underline decoration-border-strong underline-offset-2 hover:decoration-text">
         {target.title}
       </span>
@@ -129,7 +130,7 @@ export function PageRow({
 }) {
   const body = (
     <>
-      <span data-md-glyph className="shrink-0">{target.icon ?? "📄"}</span>
+      <span data-md-glyph className="shrink-0">{target.icon ?? <FileText size={14} className="inline align-[-2px] text-muted" />}</span>
       <span className="truncate underline decoration-border-strong underline-offset-2 hover:decoration-text">
         {target.title}
       </span>
@@ -294,6 +295,12 @@ function renderInline(
             {node.text}
           </code>
         );
+      case "color":
+        return (
+          <span key={key} style={{ color: node.color }}>
+            {renderInline(node.children, key, pages, issues)}
+          </span>
+        );
       case "link":
         return (
           <a
@@ -436,6 +443,27 @@ export function MarkdownBlock({
         </Tag>
       );
     }
+    case "toggle":
+      return (
+        <details className="my-2 rounded-md border border-border px-3 py-2" open={block.open}>
+          <summary className="cursor-pointer text-body font-medium">{inline(block.summary, "sum")}</summary>
+          {block.body.length > 0 && (
+            <div className="mt-2">
+              {block.body.map((child, i) => (
+                <MarkdownBlock key={i} block={child} pages={pages} issues={issues} />
+              ))}
+            </div>
+          )}
+        </details>
+      );
+    case "callout":
+      return (
+        <aside className="my-2 border-l-2 border-accent bg-surface px-3 py-2 text-body">
+          {block.body.map((child, i) => (
+            <MarkdownBlock key={i} block={child} pages={pages} issues={issues} />
+          ))}
+        </aside>
+      );
     case "quote":
       return (
         <blockquote

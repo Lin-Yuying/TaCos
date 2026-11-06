@@ -1,8 +1,8 @@
 import crypto from "node:crypto";
 import { cookies } from "next/headers";
-import { and, asc, eq, isNull } from "drizzle-orm";
-import { getDb } from "../db/client";
-import { deviceAccounts, sessions, users, workspaceMembers, workspaces } from "../db/schema";
+import { and, asc, eq, gt, isNull, lt } from "drizzle-orm";
+import { getDb, verifyPassword } from "../db/client";
+import { deviceAccounts, loginAttempts, sessions, users, workspaceMembers, workspaces } from "../db/schema";
 import { TacosError } from "./issues";
 import { asLocale, type Locale } from "./i18n";
 
@@ -19,6 +19,40 @@ export type SessionUser = {
   lastWorkspaceId: string | null;
   locale: Locale | null;
 };
+
+const LOGIN_WINDOW_MS = 15 * 60 * 1000;
+const LOGIN_ATTEMPT_LIMIT = 5;
+
+// Five misses inside fifteen minutes stop the next try, including a correct password.
+export async function signIn(
+  username: string,
+  password: string,
+  now: Date = new Date()
+): Promise<{ id: string; lastWorkspaceId: string | null }> {
+  const name = username.trim().toLowerCase();
+  const db = getDb();
+  const since = new Date(now.getTime() - LOGIN_WINDOW_MS).toISOString();
+  const recent = await db
+    .select({ id: loginAttempts.id })
+    .from(loginAttempts)
+    .where(and(eq(loginAttempts.username, name), gt(loginAttempts.createdAt, since)));
+  if (recent.length >= LOGIN_ATTEMPT_LIMIT) {
+    throw new TacosError("Too many sign-in attempts. Try again later.", 429);
+  }
+  const [user] = await db.select().from(users).where(eq(users.username, name)).limit(1);
+  if (!user || !verifyPassword(password, user.passwordHash)) {
+    // Misses for names nobody signs in with would otherwise stay forever.
+    await db.delete(loginAttempts).where(lt(loginAttempts.createdAt, since));
+    await db.insert(loginAttempts).values({
+      id: crypto.randomUUID(),
+      username: name,
+      createdAt: now.toISOString(),
+    });
+    throw new TacosError("Invalid username or password", 401);
+  }
+  await db.delete(loginAttempts).where(eq(loginAttempts.username, name));
+  return { id: user.id, lastWorkspaceId: user.lastWorkspaceId ?? null };
+}
 
 export async function createSession(userId: string): Promise<string> {
   const id = crypto.randomBytes(32).toString("hex");

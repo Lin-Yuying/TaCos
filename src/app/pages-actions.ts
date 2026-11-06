@@ -134,14 +134,27 @@ export async function listPageVersionsAction(
   });
 }
 
+/** The text a page shows when embedded; null when the viewer cannot read that page. */
+export async function pageEmbedBodyAction(
+  workspaceId: string,
+  pageId: string
+): Promise<ActionResult<string | null>> {
+  return run(async () => {
+    const { user } = await requireWorkspace(workspaceId);
+    const page = await getPage(workspaceId, pageId, user.id);
+    return page ? page.doc : null;
+  });
+}
+
 export async function getPageVersionChangeAction(
   workspaceId: string,
   pageId: string,
-  versionId: string
+  versionId: string,
+  spanFromId?: string
 ): Promise<ActionResult<PageVersionChange>> {
   return run(async () => {
     const { user } = await requireWorkspace(workspaceId);
-    return getPageVersionChange(workspaceId, pageId, user.id, versionId);
+    return getPageVersionChange(workspaceId, pageId, user.id, versionId, spanFromId);
   });
 }
 

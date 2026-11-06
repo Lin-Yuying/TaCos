@@ -7,7 +7,8 @@ import { AddIssueButton } from "@/components/add-issue-button";
 import { LabelPill, PriorityIcon, StatusIcon, ViaBadge } from "@/components/icons";
 import { AssigneeStack, useAssigneeHref } from "@/components/issue-table";
 import { useUI } from "@/components/ui-context";
-import { STATUS_META, STATUS_ORDER, type Status } from "@/lib/constants";
+import { BOARD_STATUS_ORDER, STATUS_META, type Status } from "@/lib/constants";
+import { PAGE_BOARD } from "@/lib/page-chrome";
 import { issueRef } from "@/lib/format";
 import type { IssueWithLabels } from "@/lib/issues";
 import { useT } from "@/components/i18n-context";
@@ -104,7 +105,7 @@ export function IssueBoard({
 
   const columns = useMemo(
     () =>
-      STATUS_ORDER.map((status: Status) => ({
+      BOARD_STATUS_ORDER.map((status: Status) => ({
         status,
         items: issues.filter((issue) => issue.status === status),
       })),
@@ -171,11 +172,11 @@ export function IssueBoard({
   return (
     // min-h-0 keeps the board inside the card: without it the columns' content height
     // wins over the flex budget and the last cards get clipped by the card's overflow.
-    <div className="flex min-h-0 flex-1 gap-2 overflow-x-auto px-10 py-3 lg:px-20 xl:px-32">
+    <div className={`@container flex min-h-0 flex-1 gap-1.5 overflow-x-auto ${PAGE_BOARD}`}>
       {columns.map(({ status, items }) => {
         let slot = 0;
         return (
-          <section key={status} className="flex min-h-0 min-w-[100px] flex-1 flex-col">
+          <section key={status} className="flex min-h-0 min-w-[180px] flex-1 flex-col">
             <header className="flex shrink-0 items-center gap-2 px-1 pb-2">
               <StatusIcon status={status} size={13} />
               <span className="truncate text-small font-medium text-muted">
@@ -212,7 +213,7 @@ export function IssueBoard({
               {over?.status === status && over.index === slot && !!drag && <DropLine />}
               {items.length === 0 && (
                 <div className="rounded-lg border border-dashed border-border px-3 py-4 text-center text-small text-faint">
-                  {t("No {status} issues", { status: t(STATUS_META[status].label) })}
+                  {t("No {status} tasks", { status: t(STATUS_META[status].label) })}
                 </div>
               )}
             </div>

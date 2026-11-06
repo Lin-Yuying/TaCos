@@ -247,17 +247,43 @@ html[data-desktop] .app-auth-menu {
 .document-editor .ProseMirror li[data-checked] > div { flex: 1; min-width: 0; }
 .document-editor .ProseMirror li[data-checked="true"] > div { color: var(--color-faint); text-decoration: line-through; }
 .document-editor .ProseMirror blockquote { border-left: 2px solid var(--color-border-strong); padding-left: 12px; color: var(--color-muted); }
+.document-editor .ProseMirror div[data-type="details"] { display: grid; grid-template-columns: 16px minmax(0, 1fr); column-gap: 4px; border: 1px solid var(--color-border); border-radius: 8px; padding: 8px 12px; }
+.document-editor .ProseMirror div[data-type="details"] > button { grid-column: 1; grid-row: 1; align-self: center; width: 16px; height: 16px; color: var(--color-muted); }
+.document-editor .ProseMirror div[data-type="details"] > button::before { content: ""; display: block; width: 6px; height: 6px; margin: 5px; border-right: 1.5px solid currentColor; border-bottom: 1.5px solid currentColor; transform: rotate(-45deg); transition: transform 120ms; }
+.document-editor .ProseMirror div[data-type="details"].is-open > button::before { transform: rotate(45deg); }
+.document-editor .ProseMirror div[data-type="details"] > div { display: contents; }
+.document-editor .ProseMirror div[data-type="details"] summary { grid-column: 2; grid-row: 1; font-weight: 600; }
+.document-editor .ProseMirror div[data-type="details"] div[data-type="detailsContent"] { grid-column: 1 / -1; grid-row: 2; }
+.document-editor .ProseMirror aside[data-callout] { border-left: 2px solid var(--color-accent); background: var(--color-surface); padding: 8px 12px; }
 .document-editor .ProseMirror pre { border: 1px solid var(--color-border); border-radius: 8px; background: var(--color-surface); padding: 12px; font-family: var(--font-mono); font-size: 12.5px; }
+.document-editor .ProseMirror pre .hljs-keyword,
+.document-editor .ProseMirror pre .hljs-selector-tag,
+.document-editor .ProseMirror pre .hljs-literal { color: var(--color-code-keyword); }
+.document-editor .ProseMirror pre .hljs-built_in,
+.document-editor .ProseMirror pre .hljs-type,
+.document-editor .ProseMirror pre .hljs-title,
+.document-editor .ProseMirror pre .hljs-title.function_,
+.document-editor .ProseMirror pre .hljs-function { color: var(--color-code-builtin); }
+.document-editor .ProseMirror pre .hljs-string,
+.document-editor .ProseMirror pre .hljs-attr { color: var(--color-code-string); }
+.document-editor .ProseMirror pre .hljs-number { color: var(--color-code-number); }
+.document-editor .ProseMirror pre .hljs-comment,
+.document-editor .ProseMirror pre .hljs-doctag { color: var(--color-code-comment); }
 .document-editor .ProseMirror :not(pre) > code { border-radius: 4px; background: var(--color-elevated); padding: 2px 4px; font-family: var(--font-mono); font-size: 12.5px; }
 .document-editor .ProseMirror a { color: var(--color-accent); text-decoration: underline; text-underline-offset: 2px; }
 .document-editor .ProseMirror a[data-page-ref],
 .document-editor .ProseMirror a[data-issue-ref] { cursor: pointer; }
-.document-editor .ProseMirror div[data-page-embed] { cursor: pointer; border: 1px solid var(--color-border); border-radius: 8px; background: var(--color-surface); padding: 8px 12px; font-size: 14px; color: var(--color-muted); }
+.document-editor .ProseMirror div[data-page-embed] { border: 1px solid var(--color-border); border-radius: 8px; background: var(--color-surface); padding: 8px 12px; font-size: 14px; color: var(--color-text); }
+.document-editor .ProseMirror div[data-page-embed] [data-embed-title] { color: var(--color-muted); font-weight: 600; cursor: pointer; }
 .document-editor .doc-mention { border-radius: 4px; padding: 1px 4px; font-weight: 500; color: var(--color-accent); background: color-mix(in srgb, var(--color-accent) 10%, transparent); }
 .document-editor .doc-comment-anchor { background: color-mix(in srgb, var(--color-code-number) 16%, transparent); border-bottom: 1px solid color-mix(in srgb, var(--color-code-number) 60%, transparent); }
 .document-editor .doc-comment-anchor.is-active { background: color-mix(in srgb, var(--color-code-number) 32%, transparent); }
 .document-editor .ProseMirror hr { margin: 16px 0; border-color: var(--color-border); }
-.document-editor .ProseMirror img { max-height: 520px; max-width: 100%; border-radius: 8px; border: 1px solid var(--color-border); }
+.document-editor .ProseMirror img.doc-image { max-height: 520px; max-width: 100%; border-radius: 8px; border: 1px solid var(--color-border); }
+.document-editor .ProseMirror img.doc-image.ProseMirror-selectednode {
+  border-color: var(--color-accent);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--color-accent) 40%, transparent);
+}
 .document-editor .ProseMirror table { width: 100%; border-collapse: collapse; font-size: 12.5px; table-layout: fixed; }
 .document-editor .ProseMirror th,
 .document-editor .ProseMirror td { border: 1px solid var(--color-border); padding: 4px 8px; text-align: left; vertical-align: top; }

@@ -47,7 +47,7 @@ export async function ProjectPage({
   if (!user) redirect("/login");
   await requireWorkspace(workspaceId);
 
-  const project = await getProject(workspaceId, projectId);
+  const project = await getProject(workspaceId, projectId, user.id);
   if (!project) redirect(`/${workspaceId}`);
 
   // When the owner turns off workspace-wide task visibility, a member outside this

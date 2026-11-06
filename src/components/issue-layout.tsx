@@ -57,7 +57,7 @@ function Empty() {
   const { setComposerOpen } = useUI();
   return (
     <div className="flex flex-1 flex-col items-center justify-center gap-3 text-center">
-      <div className="text-lead font-medium text-muted">{t("No issues found")}</div>
+      <div className="text-lead font-medium text-muted">{t("No tasks found")}</div>
       <div className="text-body text-faint">
         {interpolate(t("Adjust your filters, or press {key} to create one."), {
           key: <kbd className="rounded border border-border px-1 font-mono text-caption">C</kbd>,
@@ -68,7 +68,7 @@ function Empty() {
         onClick={() => setComposerOpen(true)}
         className="flex items-center gap-1 rounded-md bg-accent px-3 py-1.5 text-body font-medium text-white hover:bg-accent-hover"
       >
-        <Plus size={13} /> {t("New issue")}
+        <Plus size={13} /> {t("New task")}
       </button>
     </div>
   );

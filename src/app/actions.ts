@@ -5,6 +5,8 @@ import type { TaskField } from "@/lib/task-view";
 import { revalidatePath } from "next/cache";
 import { requireAdmin, requireWorkspace } from "@/lib/auth";
 import {
+  assertSeesIssue,
+  assertSeesProject,
   addComment,
   addOverviewComment,
   addProjectMember,
@@ -24,6 +26,9 @@ import {
   removeOverviewComment,
   removeOverviewGrant,
   releaseIssue,
+  reportBlocker,
+  addDependency,
+  removeDependency,
   removeProjectMember,
   restoreIssue,
   reviewIssue,
@@ -77,6 +82,7 @@ function userActor(user: { id: string; displayName: string }) {
 export async function createIssueAction(workspaceId: string, input: CreateIssueInput) {
   return run<IssueWithLabels>(async () => {
     const { user } = await requireWorkspace(workspaceId);
+    await assertSeesProject(workspaceId, input.project, user.id);
     const result = await createIssue(workspaceId, input, userActor(user));
     refresh(workspaceId);
     return result.issue;
@@ -86,6 +92,7 @@ export async function createIssueAction(workspaceId: string, input: CreateIssueI
 export async function updateIssueAction(workspaceId: string, idOrIdentifier: string, patch: UpdateIssueInput) {
   return run<IssueWithLabels>(async () => {
     const { user } = await requireWorkspace(workspaceId);
+    await assertSeesIssue(workspaceId, idOrIdentifier, user.id);
     const result = await updateIssue(workspaceId, idOrIdentifier, patch, userActor(user));
     refresh(workspaceId);
     return result.issue;
@@ -99,6 +106,7 @@ export async function updateIssueDetailAction(
 ) {
   return run<IssueDetail>(async () => {
     const { user } = await requireWorkspace(workspaceId);
+    await assertSeesIssue(workspaceId, idOrIdentifier, user.id);
     const result = await updateIssue(workspaceId, idOrIdentifier, patch, userActor(user));
     refresh(workspaceId);
     return result;
@@ -112,6 +120,7 @@ export async function moveIssueAction(
 ) {
   return run<IssueWithLabels>(async () => {
     const { user } = await requireWorkspace(workspaceId);
+    await assertSeesIssue(workspaceId, idOrIdentifier, user.id);
     const result = await moveIssue(workspaceId, idOrIdentifier, input, userActor(user));
     refresh(workspaceId);
     return result.issue;
@@ -128,6 +137,7 @@ async function claimedDetail(workspaceId: string, id: string, viewerId: string):
 export async function claimIssueAction(workspaceId: string, idOrIdentifier: string) {
   return run<IssueDetail>(async () => {
     const { user } = await requireWorkspace(workspaceId);
+    await assertSeesIssue(workspaceId, idOrIdentifier, user.id);
     const result = await claimIssue(workspaceId, idOrIdentifier, user.id);
     refresh(workspaceId);
     return claimedDetail(workspaceId, result.id, user.id);
@@ -137,6 +147,7 @@ export async function claimIssueAction(workspaceId: string, idOrIdentifier: stri
 export async function releaseIssueAction(workspaceId: string, idOrIdentifier: string) {
   return run<IssueDetail>(async () => {
     const { user } = await requireWorkspace(workspaceId);
+    await assertSeesIssue(workspaceId, idOrIdentifier, user.id);
     const result = await releaseIssue(workspaceId, idOrIdentifier, user.id);
     refresh(workspaceId);
     return claimedDetail(workspaceId, result.id, user.id);
@@ -146,6 +157,7 @@ export async function releaseIssueAction(workspaceId: string, idOrIdentifier: st
 export async function transferClaimAction(workspaceId: string, idOrIdentifier: string, toUserId: string) {
   return run<IssueDetail>(async () => {
     const { user } = await requireWorkspace(workspaceId);
+    await assertSeesIssue(workspaceId, idOrIdentifier, user.id);
     const result = await transferClaim(workspaceId, idOrIdentifier, user.id, toUserId);
     refresh(workspaceId);
     return claimedDetail(workspaceId, result.id, user.id);
@@ -155,6 +167,7 @@ export async function transferClaimAction(workspaceId: string, idOrIdentifier: s
 export async function reviewIssueAction(workspaceId: string, idOrIdentifier: string, decision: ReviewDecision) {
   return run<{ id: string }>(async () => {
     const { user } = await requireWorkspace(workspaceId);
+    await assertSeesIssue(workspaceId, idOrIdentifier, user.id);
     const result = await reviewIssue(workspaceId, idOrIdentifier, user.id, decision);
     refresh(workspaceId);
     return { id: result.id };
@@ -163,7 +176,8 @@ export async function reviewIssueAction(workspaceId: string, idOrIdentifier: str
 
 export async function deleteIssueAction(workspaceId: string, idOrIdentifier: string) {
   return run<string>(async () => {
-    await requireWorkspace(workspaceId);
+    const { user } = await requireWorkspace(workspaceId);
+    await assertSeesIssue(workspaceId, idOrIdentifier, user.id);
     const deleted = await deleteIssue(workspaceId, idOrIdentifier);
     refresh(workspaceId);
     return deleted.id;
@@ -172,7 +186,8 @@ export async function deleteIssueAction(workspaceId: string, idOrIdentifier: str
 
 export async function restoreIssueAction(workspaceId: string, issueId: string) {
   return run<void>(async () => {
-    await requireWorkspace(workspaceId);
+    const { user } = await requireWorkspace(workspaceId);
+    await assertSeesIssue(workspaceId, issueId, user.id);
     await restoreIssue(workspaceId, issueId);
     refresh(workspaceId);
   });
@@ -180,15 +195,49 @@ export async function restoreIssueAction(workspaceId: string, issueId: string) {
 
 export async function purgeIssueAction(workspaceId: string, issueId: string) {
   return run<void>(async () => {
-    await requireWorkspace(workspaceId);
+    const { user } = await requireWorkspace(workspaceId);
+    await assertSeesIssue(workspaceId, issueId, user.id);
     await purgeIssue(workspaceId, issueId);
     refresh(workspaceId);
+  });
+}
+
+export async function addDependencyAction(workspaceId: string, idOrIdentifier: string, blockedBy: string) {
+  return run<IssueDetail>(async () => {
+    const { user } = await requireWorkspace(workspaceId);
+    await assertSeesIssue(workspaceId, idOrIdentifier, user.id);
+    const detail = await addDependency(workspaceId, idOrIdentifier, blockedBy, user.id, userActor(user));
+    refresh(workspaceId);
+    return detail;
+  });
+}
+
+export async function removeDependencyAction(workspaceId: string, idOrIdentifier: string, blockedBy: string) {
+  return run<IssueDetail>(async () => {
+    const { user } = await requireWorkspace(workspaceId);
+    await assertSeesIssue(workspaceId, idOrIdentifier, user.id);
+    const detail = await removeDependency(workspaceId, idOrIdentifier, blockedBy, user.id, userActor(user));
+    refresh(workspaceId);
+    return detail;
+  });
+}
+
+export async function reportBlockerAction(workspaceId: string, idOrIdentifier: string, body: string) {
+  return run<IssueDetail>(async () => {
+    const { user } = await requireWorkspace(workspaceId);
+    await assertSeesIssue(workspaceId, idOrIdentifier, user.id);
+    await reportBlocker(workspaceId, idOrIdentifier, body, userActor(user));
+    const detail = await getIssueDetail(workspaceId, idOrIdentifier, user.id);
+    if (!detail) throw new TacosError("Task not found", 404);
+    refresh(workspaceId);
+    return detail;
   });
 }
 
 export async function addCommentAction(workspaceId: string, idOrIdentifier: string, body: string) {
   return run<IssueDetail>(async () => {
     const { user } = await requireWorkspace(workspaceId);
+    await assertSeesIssue(workspaceId, idOrIdentifier, user.id);
     const result = await addComment(workspaceId, idOrIdentifier, body, userActor(user));
     refresh(workspaceId);
     return result;
@@ -214,6 +263,7 @@ export async function updateProjectAction(
 ) {
   return run<Project>(async () => {
     const { user } = await requireWorkspace(workspaceId);
+    await assertSeesProject(workspaceId, projectId, user.id);
     const project = await updateProject(workspaceId, projectId, patch, user.id);
     // The Overview autosaves its body every time typing pauses; revalidating the layout
     // on that beat re-rendered the whole shell mid-sentence. Only the name, description,
@@ -240,6 +290,7 @@ export async function setOverviewGrantAction(
 ) {
   return run<void>(async () => {
     const { user } = await requireWorkspace(workspaceId);
+    await assertSeesProject(workspaceId, projectId, user.id);
     await setOverviewGrant(workspaceId, projectId, user.id, userId, role);
     refresh(workspaceId);
   });
@@ -252,6 +303,7 @@ export async function removeOverviewGrantAction(
 ) {
   return run<void>(async () => {
     const { user } = await requireWorkspace(workspaceId);
+    await assertSeesProject(workspaceId, projectId, user.id);
     await removeOverviewGrant(workspaceId, projectId, user.id, userId);
     refresh(workspaceId);
   });
@@ -265,6 +317,7 @@ export async function addOverviewCommentAction(
 ) {
   return run<OverviewComment[]>(async () => {
     const { user } = await requireWorkspace(workspaceId);
+    await assertSeesProject(workspaceId, projectId, user.id);
     const comments = await addOverviewComment(workspaceId, projectId, user.id, body, anchor);
     refresh(workspaceId);
     return comments;
@@ -278,6 +331,7 @@ export async function removeOverviewCommentAction(
 ) {
   return run<OverviewComment[]>(async () => {
     const { user } = await requireWorkspace(workspaceId);
+    await assertSeesProject(workspaceId, projectId, user.id);
     const comments = await removeOverviewComment(workspaceId, projectId, user.id, commentId);
     refresh(workspaceId);
     return comments;
@@ -291,6 +345,7 @@ export async function restoreDocEditAction(
 ) {
   return run<{ doc: string }>(async () => {
     const { user } = await requireWorkspace(workspaceId);
+    await assertSeesProject(workspaceId, projectId, user.id);
     const doc = await restoreOverviewDocEdit(workspaceId, projectId, editId, user.id);
     refresh(workspaceId);
     return { doc };
@@ -302,6 +357,7 @@ export async function restoreDocEditAction(
 export async function markDocEditsSeenAction(workspaceId: string, projectId: string) {
   return run<void>(async () => {
     const { user } = await requireWorkspace(workspaceId);
+    await assertSeesProject(workspaceId, projectId, user.id);
     await markDocEditsSeen(projectId, user.id);
   });
 }
@@ -317,7 +373,8 @@ export async function setMembersSeeAllTasksAction(workspaceId: string, enabled: 
 
 export async function addProjectMemberAction(workspaceId: string, projectId: string, userId: string) {
   return run<void>(async () => {
-    await requireWorkspace(workspaceId);
+    const { user } = await requireWorkspace(workspaceId);
+    await assertSeesProject(workspaceId, projectId, user.id);
     await addProjectMember(workspaceId, projectId, userId);
     refresh(workspaceId);
   });
@@ -329,7 +386,8 @@ export async function removeProjectMemberAction(
   userId: string
 ) {
   return run<void>(async () => {
-    await requireWorkspace(workspaceId);
+    const { user } = await requireWorkspace(workspaceId);
+    await assertSeesProject(workspaceId, projectId, user.id);
     await removeProjectMember(workspaceId, projectId, userId);
     refresh(workspaceId);
   });
@@ -340,6 +398,7 @@ export async function removeProjectMemberAction(
 export async function toggleProjectFavoriteAction(workspaceId: string, projectId: string) {
   return run<boolean>(async () => {
     const { user } = await requireWorkspace(workspaceId);
+    await assertSeesProject(workspaceId, projectId, user.id);
     const favorite = await toggleFavoriteProject(workspaceId, user.id, projectId);
     refresh(workspaceId);
     return favorite;
@@ -348,6 +407,7 @@ export async function toggleProjectFavoriteAction(workspaceId: string, projectId
 
 export async function trashProjectAction(workspaceId: string, projectId: string) {  return run<void>(async () => {
     const { user } = await requireWorkspace(workspaceId);
+    await assertSeesProject(workspaceId, projectId, user.id);
     await trashProject(workspaceId, projectId, user.id);
     refresh(workspaceId);
   });
@@ -355,8 +415,9 @@ export async function trashProjectAction(workspaceId: string, projectId: string)
 
 export async function restoreProjectAction(workspaceId: string, projectId: string) {
   return run<void>(async () => {
-    await requireWorkspace(workspaceId);
-    await restoreProject(workspaceId, projectId);
+    const { user } = await requireWorkspace(workspaceId);
+    await assertSeesProject(workspaceId, projectId, user.id);
+    await restoreProject(workspaceId, projectId, user.id);
     refresh(workspaceId);
   });
 }
@@ -417,8 +478,8 @@ export async function createApiKeyAction(workspaceId: string, name: string) {
 
 export async function revokeApiKeyAction(workspaceId: string, id: string) {
   return run<void>(async () => {
-    await requireWorkspace(workspaceId);
-    await revokeApiKey(workspaceId, id);
+    const { user } = await requireWorkspace(workspaceId);
+    await revokeApiKey(workspaceId, id, user.id);
     refresh(workspaceId);
   });
 }
@@ -432,6 +493,7 @@ export async function addProjectLinkAction(
 ) {
   return run<ProjectResource>(async () => {
     const { user } = await requireWorkspace(workspaceId);
+    await assertSeesProject(workspaceId, projectId, user.id);
     const resource = await addProjectLink(workspaceId, projectId, user.id, input);
     refresh(workspaceId);
     return resource;
@@ -441,6 +503,7 @@ export async function addProjectLinkAction(
 export async function addProjectDocAction(workspaceId: string, projectId: string, pageId: string) {
   return run<ProjectResource>(async () => {
     const { user } = await requireWorkspace(workspaceId);
+    await assertSeesProject(workspaceId, projectId, user.id);
     const resource = await addProjectDoc(workspaceId, projectId, user.id, pageId);
     refresh(workspaceId);
     return resource;
@@ -454,6 +517,7 @@ export async function removeProjectResourceAction(
 ) {
   return run<void>(async () => {
     const { user } = await requireWorkspace(workspaceId);
+    await assertSeesProject(workspaceId, projectId, user.id);
     await removeProjectResource(workspaceId, projectId, resourceId, user.id);
     refresh(workspaceId);
   });
@@ -487,6 +551,7 @@ export async function setTaskFieldValueAction(
 ) {
   return run<string | null>(async () => {
     const { user } = await requireWorkspace(workspaceId);
+    await assertSeesIssue(workspaceId, issueId, user.id);
     const saved = await setTaskFieldValue(workspaceId, issueId, fieldId, value, user.id, userActor(user));
     refresh(workspaceId);
     return saved;

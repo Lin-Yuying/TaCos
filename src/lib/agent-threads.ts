@@ -1,6 +1,8 @@
+import { removePageAttachments } from "./attachments";
 import crypto from "node:crypto";
-import { and, asc, desc, eq, inArray, isNull, or } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, isNotNull, isNull, lt, or } from "drizzle-orm";
 import { getDb } from "@/db/client";
+import { issueRef } from "@/lib/format";
 import { agentMessages, agentSteps, agentThreadFlags, agentThreads, issues, projects, users } from "@/db/schema";
 import { claimIssue, listIssues, TacosError, type Status } from "./issues";
 
@@ -34,6 +36,9 @@ export type AgentThread = {
   // Per viewer: a shared thread can be pinned by one member and not by another.
   pinnedAt: string | null;
   unread: boolean;
+  // team-2.3: who is running an Agent turn on this shared chat, if anyone.
+  turnUserId: string | null;
+  turnUserName: string | null;
 };
 
 export type AgentStepRecord = {
@@ -61,6 +66,7 @@ export type AgentMessageRecord = {
 export type AgentThreadDetail = AgentThread & { messages: AgentMessageRecord[] };
 
 const MAX_TITLE = 80;
+const STALE_SHARED_TURN_MS = 35 * 60_000;
 
 
 function asVisibility(value: unknown): AgentVisibility {
@@ -136,6 +142,16 @@ export async function startAgentThread(input: {
   return thread;
 }
 
+export async function hasAgentThreads(workspaceId: string, userId: string): Promise<boolean> {
+  const row = await getDb()
+    .select({ id: agentThreads.id })
+    .from(agentThreads)
+    .where(and(eq(agentThreads.workspaceId, workspaceId), visibleTo(userId)))
+    .limit(1)
+    .get();
+  return Boolean(row);
+}
+
 export async function listAgentThreads(
   workspaceId: string,
   userId: string,
@@ -165,6 +181,18 @@ export async function listAgentThreads(
     .orderBy(desc(agentThreads.updatedAt))
     .limit(100);
   if (rows.length === 0) return [];
+  const turnIds = [
+    ...new Set(rows.map((row) => row.thread.turnUserId).filter((id): id is string => Boolean(id))),
+  ];
+  const turnNames = new Map<string, string>();
+  if (turnIds.length) {
+    for (const u of await db
+      .select({ id: users.id, name: users.displayName })
+      .from(users)
+      .where(inArray(users.id, turnIds))) {
+      turnNames.set(u.id, u.name);
+    }
+  }
   const counts = await db
     .select({ threadId: agentMessages.threadId, id: agentMessages.id })
     .from(agentMessages)
@@ -178,7 +206,18 @@ export async function listAgentThreads(
   for (const row of counts) {
     countByThread.set(row.threadId, (countByThread.get(row.threadId) ?? 0) + 1);
   }
-  return rows.map(({ thread, ...rest }) => threadRow(thread, rest, userId, countByThread.get(thread.id) ?? 0));
+  return rows.map(({ thread, ...rest }) =>
+    threadRow(
+      thread,
+      {
+        ...rest,
+        turnUserId: thread.turnUserId ?? null,
+        turnUserName: thread.turnUserId ? (turnNames.get(thread.turnUserId) ?? null) : null,
+      },
+      userId,
+      countByThread.get(thread.id) ?? 0
+    )
+  );
 }
 
 function threadOnly(detail: AgentThreadDetail): AgentThread {
@@ -196,6 +235,8 @@ function threadRow(
     authorName: string;
     pinnedAt: string | null;
     unread: number | null;
+    turnUserId: string | null;
+    turnUserName: string | null;
   },
   userId: string,
   messageCount: number
@@ -221,6 +262,8 @@ function threadRow(
     messageCount,
     pinnedAt: meta.pinnedAt ?? null,
     unread: Boolean(meta.unread),
+    turnUserId: meta.turnUserId ?? null,
+    turnUserName: meta.turnUserName ?? null,
   };
 }
 
@@ -240,6 +283,7 @@ async function requireThreadRow(
       authorName: users.displayName,
       pinnedAt: agentThreadFlags.pinnedAt,
       unread: agentThreadFlags.unread,
+      turnUserId: agentThreads.turnUserId,
     })
     .from(agentThreads)
     .leftJoin(projects, eq(projects.id, agentThreads.projectId))
@@ -257,6 +301,15 @@ async function requireThreadRow(
     )
     .limit(1);
   if (!row) throw new TacosError("Conversation not found", 404);
+  let turnUserName: string | null = null;
+  if (row.turnUserId) {
+    const [turnUser] = await db
+      .select({ name: users.displayName })
+      .from(users)
+      .where(eq(users.id, row.turnUserId))
+      .limit(1);
+    turnUserName = turnUser?.name ?? null;
+  }
 
   const messages = await db
     .select()
@@ -292,7 +345,21 @@ async function requireThreadRow(
     }
   }
   return {
-    thread: threadRow(row.thread, row, userId, messages.length),
+    thread: threadRow(
+      row.thread,
+      {
+        projectName: row.projectName,
+        projectKey: row.projectKey,
+        projectColor: row.projectColor,
+        authorName: row.authorName,
+        pinnedAt: row.pinnedAt,
+        unread: row.unread,
+        turnUserId: row.turnUserId ?? null,
+        turnUserName,
+      },
+      userId,
+      messages.length
+    ),
     messages: messages.map((message) => ({
       id: message.id,
       role: message.role === "assistant" ? "assistant" : "user",
@@ -454,6 +521,13 @@ export async function setAgentThreadUnread(
   return threadOnly(await getAgentThread(workspaceId, userId, threadId));
 }
 
+export async function canSeeThread(workspaceId: string, userId: string, threadId: string): Promise<boolean> {
+  return requireThreadRow(workspaceId, userId, threadId).then(
+    () => true,
+    () => false
+  );
+}
+
 export async function deleteAgentThread(
   workspaceId: string,
   userId: string,
@@ -466,6 +540,7 @@ export async function deleteAgentThread(
   await db.delete(agentMessages).where(eq(agentMessages.threadId, threadId));
   await db.delete(agentThreadFlags).where(eq(agentThreadFlags.threadId, threadId));
   await db.delete(agentThreads).where(eq(agentThreads.id, threadId));
+  await removePageAttachments([`thread:${threadId}`]);
 }
 
 // --- turn accounting -------------------------------------------------------
@@ -480,6 +555,7 @@ export type TurnThread = {
   model: string;
   effort: string;
   approval: AgentApproval;
+  visibility: AgentVisibility;
   createdBy: string;
   focusIssueId: string | null;
   messages: { role: "user" | "assistant"; content: string }[];
@@ -517,10 +593,132 @@ export async function loadThreadForTurn(
     effort: thread.effort,
     // A collaborator does not get the owner's auto or full mode. Every write asks.
     approval: thread.createdBy === userId ? thread.approval : "ask",
+    visibility: thread.visibility,
     createdBy: thread.createdBy,
     focusIssueId: await focusIssueOf(thread.id),
     messages: history,
   };
+}
+
+// team-2.3: a shared chat runs one Agent turn at a time for the whole workspace.
+export async function claimSharedChatTurn(threadId: string, userId: string): Promise<void> {
+  const db = getDb();
+  const now = new Date().toISOString();
+  const staleBefore = new Date(Date.now() - STALE_SHARED_TURN_MS).toISOString();
+  const [row] = await db
+    .select({ visibility: agentThreads.visibility })
+    .from(agentThreads)
+    .where(eq(agentThreads.id, threadId))
+    .limit(1);
+  if (!row || row.visibility !== "shared") return;
+
+  // Clear a turn that stopped responding without releasing its lock.
+  await db
+    .update(agentThreads)
+    .set({ turnUserId: null, turnStartedAt: null })
+    .where(
+      and(eq(agentThreads.id, threadId), lt(agentThreads.turnStartedAt, staleBefore))
+    );
+
+  const claimed = await db
+    .update(agentThreads)
+    .set({ turnUserId: userId, turnStartedAt: now, updatedAt: now })
+    .where(
+      and(
+        eq(agentThreads.id, threadId),
+        eq(agentThreads.visibility, "shared"),
+        or(isNull(agentThreads.turnUserId), lt(agentThreads.turnStartedAt, staleBefore))
+      )
+    );
+  if (claimed.changes > 0) return;
+
+  const [busy] = await db
+    .select({ turnUserId: agentThreads.turnUserId })
+    .from(agentThreads)
+    .where(eq(agentThreads.id, threadId))
+    .limit(1);
+  let holder = "Someone else";
+  if (busy?.turnUserId) {
+    const [user] = await db
+      .select({ name: users.displayName })
+      .from(users)
+      .where(eq(users.id, busy.turnUserId))
+      .limit(1);
+    if (user?.name) holder = user.name;
+  }
+  throw new TacosError(`${holder} is using this shared chat`, 409, "Wait for their turn to finish, or fork from a message.");
+}
+
+export async function releaseSharedChatTurn(threadId: string, userId: string): Promise<void> {
+  const now = new Date().toISOString();
+  await getDb()
+    .update(agentThreads)
+    .set({ turnUserId: null, turnStartedAt: null, updatedAt: now })
+    .where(and(eq(agentThreads.id, threadId), eq(agentThreads.turnUserId, userId)));
+}
+
+/** Every turn ended with the process, so no shared chat may stay locked after a restart. */
+export async function clearSharedChatTurns(): Promise<void> {
+  await getDb()
+    .update(agentThreads)
+    .set({ turnUserId: null, turnStartedAt: null })
+    .where(isNotNull(agentThreads.turnUserId));
+}
+
+// Copy everything up to and including one message into a new private chat; the source stays as it was.
+export async function forkAgentThreadFromMessage(
+  workspaceId: string,
+  userId: string,
+  threadId: string,
+  messageId: string
+): Promise<AgentThread> {
+  const { thread, messages } = await requireThreadRow(workspaceId, userId, threadId);
+  if (thread.visibility !== "shared") {
+    throw new TacosError("Only a shared chat can be forked here", 400);
+  }
+  const end = messages.findIndex((message) => message.id === messageId);
+  if (end < 0) throw new TacosError("Message not found", 404);
+  const slice = messages.slice(0, end + 1);
+
+  const fork = await startAgentThread({
+    workspaceId,
+    projectId: thread.projectId,
+    visibility: "private",
+    engine: thread.engine,
+    model: thread.model,
+    effort: thread.effort,
+    approval: thread.approval,
+    userId,
+  });
+
+  for (const message of slice) {
+    const newMessageId = await appendAgentMessage({
+      threadId: fork.id,
+      role: message.role,
+      content: message.content,
+      authorId: message.role === "user" ? (message.authorId ?? userId) : undefined,
+    });
+    for (const step of message.steps) {
+      await appendAgentStep({
+        threadId: fork.id,
+        messageId: newMessageId,
+        kind: step.kind,
+        title: step.title,
+        detail: step.detail,
+        status: step.status,
+      });
+    }
+  }
+
+  const titleBase = thread.title.trim() || "Shared chat";
+  await getDb()
+    .update(agentThreads)
+    .set({ title: `Fork · ${titleBase}`.slice(0, MAX_TITLE), updatedAt: new Date().toISOString() })
+    .where(eq(agentThreads.id, fork.id));
+
+  const opened = await getAgentThread(workspaceId, userId, fork.id);
+  if (!opened) throw new TacosError("Could not open the conversation", 500);
+  return threadOnly(opened);
 }
 
 export async function appendAgentMessage(input: {
@@ -532,13 +730,23 @@ export async function appendAgentMessage(input: {
   const id = crypto.randomUUID();
   const now = new Date().toISOString();
   const db = getDb();
+  const [last] = await db
+    .select({ createdAt: agentMessages.createdAt })
+    .from(agentMessages)
+    .where(eq(agentMessages.threadId, input.threadId))
+    .orderBy(desc(agentMessages.createdAt))
+    .limit(1);
+  let createdAt = now;
+  if (last?.createdAt && last.createdAt >= now) {
+    createdAt = new Date(Date.parse(last.createdAt) + 1).toISOString();
+  }
   await db.insert(agentMessages).values({
     id,
     threadId: input.threadId,
     role: input.role,
     content: input.content,
     authorId: input.role === "user" ? (input.authorId ?? null) : null,
-    createdAt: now,
+    createdAt,
   });
   // The first question names the thread; later turns only bump ordering.
   const [thread] = await db
@@ -651,7 +859,7 @@ export async function getSourceThread(
   return row ?? null;
 }
 
-export type ThreadTask = { id: string; identifier: string; title: string; status: Status };
+export type ThreadTask = { id: string; ref: string; title: string; status: Status };
 
 // Tasks that a chat published. Task visibility rules apply to the viewer.
 export async function listThreadTasks(
@@ -660,16 +868,24 @@ export async function listThreadTasks(
   viewerId: string
 ): Promise<ThreadTask[]> {
   const rows = await listIssues(workspaceId, { sourceThreadId: threadId, viewerId, status: "all", limit: 50 });
-  const out = rows.map((r) => ({ id: r.id, identifier: r.identifier, title: r.title, status: r.status }));
+  const out = rows.map((r) => ({ id: r.id, ref: issueRef(r), title: r.title, status: r.status }));
   // H-COLLAB-08: a chat opened for a task also shows that task.
   const focus = await focusIssueOf(threadId);
   if (focus && !out.some((r) => r.id === focus)) {
     const [row] = await getDb()
-      .select({ id: issues.id, identifier: issues.identifier, title: issues.title, status: issues.status })
+      .select({
+        id: issues.id,
+        identifier: issues.identifier,
+        number: issues.number,
+        projectName: projects.name,
+        title: issues.title,
+        status: issues.status,
+      })
       .from(issues)
+      .leftJoin(projects, eq(projects.id, issues.projectId))
       .where(and(eq(issues.workspaceId, workspaceId), eq(issues.id, focus)))
       .limit(1);
-    if (row) out.unshift({ ...row, status: row.status as Status });
+    if (row) out.unshift({ id: row.id, ref: issueRef(row), title: row.title, status: row.status as Status });
   }
   return out;
 }
@@ -683,9 +899,23 @@ async function focusIssueOf(threadId: string): Promise<string | null> {
   return row?.focus ?? null;
 }
 
-// H-COLLAB-08: "用 Agent 推进". Claims the task when nobody has it, then opens the
-// user's chat for this task. A second click reopens the same chat.
-export async function startTaskChat(workspaceId: string, issueId: string, userId: string): Promise<AgentThread> {
+export function taskChatOpeningMessage(identifier: string): string {
+  return `Work on task ${identifier}. Do what it asks, then say what you did and what is left.`;
+}
+
+export type TaskChatStart = {
+  thread: AgentThread;
+  /** First user turn for a task chat with no messages yet; null when it already has some. */
+  openingMessage: string | null;
+};
+
+// H-COLLAB-08 / team-2.3: "Work on it in chat". Claims the task when nobody has it, then
+// opens the user's chat for this task. A second click reopens the same chat without a new opening turn.
+export async function startTaskChat(
+  workspaceId: string,
+  issueId: string,
+  userId: string
+): Promise<TaskChatStart> {
   const db = getDb();
   const [task] = await db
     .select()
@@ -713,7 +943,12 @@ export async function startTaskChat(workspaceId: string, issueId: string, userId
     .limit(1);
   if (existing) {
     const thread = await getAgentThread(workspaceId, userId, existing.id);
-    if (thread) return thread;
+    if (thread) {
+      return {
+        thread,
+        openingMessage: thread.messages.length === 0 ? taskChatOpeningMessage(task.identifier) : null,
+      };
+    }
   }
 
   const thread = await startAgentThread({
@@ -729,5 +964,5 @@ export async function startTaskChat(workspaceId: string, issueId: string, userId
     .where(eq(agentThreads.id, thread.id));
   const opened = await getAgentThread(workspaceId, userId, thread.id);
   if (!opened) throw new TacosError("Could not open the conversation", 500);
-  return opened;
+  return { thread: opened, openingMessage: taskChatOpeningMessage(task.identifier) };
 }

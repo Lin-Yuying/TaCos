@@ -71,6 +71,7 @@ export type AiEditRequest = {
   context?: string;
   history?: AiChatTurn[];
   engine?: AiEngine | AgentHarnessId | string;
+  attachments?: string[];
 };
 
 // Reads the OpenAI-compatible SSE stream from /api/ai/chat. The route sends the

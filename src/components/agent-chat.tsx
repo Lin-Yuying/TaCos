@@ -15,6 +15,7 @@ import {
   ExternalLink,
   FileText,
   Folder,
+  GitBranch,
   Info,
   Link2,
   Loader2,
@@ -23,6 +24,7 @@ import {
   PanelLeft,
   Pencil,
   Pin,
+  Paperclip,
   Plus,
   Search,
   Settings2,
@@ -38,11 +40,20 @@ import { Menu, MenuItem } from "@/components/menu";
 import { useUI } from "@/components/ui-context";
 import { ThreadTaskChips } from "@/components/thread-task-chips";
 import { Markdown } from "@/components/markdown";
+import {
+  AGENT_ATTACHMENT_MAX_COUNT,
+  AGENT_DRAFT_PAGE,
+  messageWithAttachments,
+  splitAttachments,
+  type AgentAttachment,
+} from "@/lib/agent-attachments.shared";
+import { uploadPageFile } from "@/lib/upload-client";
 import { rememberHarness, streamAiEdit, type AgentApprovalCard, type AgentStepFrame } from "@/lib/ai-client";
 import {
   createAgentSkillAction,
   deleteAgentSkillAction,
   deleteAgentThreadAction,
+  forkAgentThreadFromMessageAction,
   renameAgentThreadAction,
   setAgentThreadApprovalAction,
   setAgentThreadEngineAction,
@@ -167,13 +178,24 @@ function TurnStatus() {
   );
 }
 
+function translateTurnError(error: string, t: (key: string) => string): string {
+  const using = error.match(/^(.+) is using this shared chat$/);
+  if (using) return t("{name} is using this shared chat").replace("{name}", using[1]!);
+  const hinted = error.split(" — ");
+  if (hinted.length > 1) {
+    const head = translateTurnError(hinted[0]!, t);
+    return `${head} — ${t(hinted.slice(1).join(" — "))}`;
+  }
+  return t(error);
+}
+
 // Harness errors end with their log path. Splitting it off lets the sentence itself be translated.
 function TurnError({ error }: { error: string }) {
   const t = useT();
   const [message, log] = error.split(" Log: ");
   return (
     <div className="mb-2 px-1 text-small" data-testid="turn-error">
-      <p className="text-danger">{t(message)}</p>
+      <p className="text-danger">{translateTurnError(message, t)}</p>
       {log && <p className="mt-0.5 break-all text-caption text-faint">{t("Log: {path}", { path: log })}</p>}
     </div>
   );
@@ -895,7 +917,42 @@ function SkillManager({
   );
 }
 
+function UserMessageBody({ content, bubbleClass }: { content: string; bubbleClass: string }) {
+  const { text, files } = splitAttachments(content);
+  return (
+    <>
+      {text && <div className={bubbleClass}>{text}</div>}
+      {files.length > 0 && (
+        <div className="flex max-w-[85%] flex-wrap justify-end gap-1.5" data-testid="message-files">
+          {files.map((file) =>
+            file.image ? (
+              <a key={file.id} href={`/api/files/${file.id}`} target="_blank" rel="noreferrer" title={file.name}>
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src={`/api/files/${file.id}`} alt={file.name} className="max-h-40 rounded-lg border border-border object-contain" />
+              </a>
+            ) : (
+              <a
+                key={file.id}
+                href={`/api/files/${file.id}`}
+                className="flex max-w-[220px] items-center gap-1 rounded-full border border-border bg-elevated px-2 py-0.5 text-small text-muted hover:text-text"
+              >
+                <FileText size={14} className="shrink-0 text-faint" />
+                <span className="truncate">{file.name}</span>
+              </a>
+            )
+          )}
+        </div>
+      )}
+    </>
+  );
+}
+
+const SHARED_TURN_POLL_MS = 4000;
+
+type ComposerAttachment = { key: string; name: string; image: boolean; previewUrl?: string; id?: string };
+
 function Composer({
+  workspaceId,
   value,
   onChange,
   onSubmit,
@@ -911,9 +968,10 @@ function Composer({
   onCreateSkill,
   onDeleteSkill,
 }: {
+  workspaceId: string;
   value: string;
   onChange: (value: string) => void;
-  onSubmit: () => void;
+  onSubmit: (text: string, attachments: AgentAttachment[]) => void;
   busy?: boolean;
   onStop?: () => void;
   placeholder: string;
@@ -931,6 +989,9 @@ function Composer({
 }) {
   const t = useT();
   const box = useRef<HTMLTextAreaElement | null>(null);
+  const fileInput = useRef<HTMLInputElement | null>(null);
+  const [attachments, setAttachments] = useState<ComposerAttachment[]>([]);
+  const [attachError, setAttachError] = useState<string | null>(null);
   // The "+" menu steals focus on click, so remember where the caret was when the
   // textarea last had it.
   const caret = useRef(0);
@@ -1005,8 +1066,82 @@ function Composer({
     writeToken(at, at, `${needsSpace ? " " : ""}@${skillToken(skill)} `);
   }
 
+  // Previews stay valid while their chips are up, so they are revoked only on the way out.
+  const previews = useRef(new Set<string>());
+  useEffect(
+    () => () => {
+      for (const url of previews.current) URL.revokeObjectURL(url);
+    },
+    []
+  );
+
+  function forgetPreview(item: ComposerAttachment) {
+    if (!item.previewUrl) return;
+    URL.revokeObjectURL(item.previewUrl);
+    previews.current.delete(item.previewUrl);
+  }
+
+  function addFiles(files: FileList | File[] | null | undefined) {
+    if (!files?.length || busy) return;
+    setAttachError(null);
+    const room = AGENT_ATTACHMENT_MAX_COUNT - attachments.length;
+    const list = Array.from(files);
+    if (list.length > room) setAttachError(t("At most {n} files per message", { n: AGENT_ATTACHMENT_MAX_COUNT }));
+    for (const file of list.slice(0, Math.max(room, 0))) {
+      const image = file.type.startsWith("image/");
+      const item: ComposerAttachment = {
+        key: crypto.randomUUID(),
+        name: file.name,
+        image,
+        previewUrl: image ? URL.createObjectURL(file) : undefined,
+      };
+      if (item.previewUrl) previews.current.add(item.previewUrl);
+      setAttachments((prev) => [...prev, item]);
+      uploadPageFile(workspaceId, AGENT_DRAFT_PAGE, file).then(
+        ({ id }) => setAttachments((prev) => prev.map((entry) => (entry.key === item.key ? { ...entry, id } : entry))),
+        (err: unknown) => {
+          forgetPreview(item);
+          setAttachments((prev) => prev.filter((entry) => entry.key !== item.key));
+          setAttachError(`${file.name}: ${t(err instanceof Error ? err.message : "Upload failed")}`);
+        }
+      );
+    }
+  }
+
+  function removeAttachment(item: ComposerAttachment) {
+    forgetPreview(item);
+    setAttachments((prev) => prev.filter((entry) => entry.key !== item.key));
+  }
+
+  const uploading = attachments.some((item) => !item.id);
+
+  function submitComposer() {
+    if (busy || uploading || submitDisabled) return;
+    const text = value.trim();
+    if (!text && attachments.length === 0) return;
+    onSubmit(
+      text,
+      attachments.map(({ id, name, image }) => ({ id: id!, name, image }))
+    );
+    attachments.forEach(forgetPreview);
+    setAttachments([]);
+    setAttachError(null);
+  }
+
+  const canSend = Boolean(value.trim() || attachments.length) && !uploading;
+
   return (
-    <div className="relative rounded-[22px] border border-border bg-surface p-2 shadow-[0_1px_3px_rgba(0,0,0,0.05)] transition-colors focus-within:border-border-strong">
+    <div
+      className="relative rounded-[22px] border border-border bg-surface p-2 shadow-[0_1px_3px_rgba(0,0,0,0.05)] transition-colors focus-within:border-border-strong"
+      onDragOver={(event) => {
+        if (busy) return;
+        event.preventDefault();
+      }}
+      onDrop={(event) => {
+        event.preventDefault();
+        addFiles(event.dataTransfer.files);
+      }}
+    >
       {mention && matches.length > 0 && (
         <div
           ref={panel}
@@ -1048,6 +1183,45 @@ function Composer({
           </div>
         </div>
       )}
+      {attachments.length > 0 && (
+        <div className="mb-1 flex flex-wrap gap-1.5 px-1.5 pt-1">
+          {attachments.map((item) => (
+            <span
+              key={item.key}
+              className={`flex max-w-full items-center gap-1 rounded-full border border-border bg-elevated py-0.5 pl-1 pr-1.5 text-small text-muted ${item.id ? "" : "opacity-60"}`}
+            >
+              {item.previewUrl ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={item.previewUrl} alt="" className="h-6 w-6 shrink-0 rounded object-cover" />
+              ) : (
+                <FileText size={14} className="shrink-0 text-faint" />
+              )}
+              <span className="max-w-[160px] truncate" title={item.id ? item.name : t("Uploading…")}>
+                {item.name}
+              </span>
+              <button
+                type="button"
+                onClick={() => removeAttachment(item)}
+                className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-faint transition-colors hover:bg-surface hover:text-text"
+                aria-label={t("Remove attachment")}
+              >
+                <X size={12} />
+              </button>
+            </span>
+          ))}
+        </div>
+      )}
+      {attachError && <p className="px-2 pb-1 text-small text-danger">{attachError}</p>}
+      <input
+        ref={fileInput}
+        type="file"
+        multiple
+        className="hidden"
+        onChange={(event) => {
+          addFiles(event.target.files);
+          event.target.value = "";
+        }}
+      />
       <textarea
         ref={(el) => {
           box.current = el;
@@ -1056,6 +1230,13 @@ function Composer({
         value={value}
         rows={1}
         placeholder={placeholder}
+        onPaste={(event) => {
+          const files = event.clipboardData?.files;
+          if (files?.length) {
+            event.preventDefault();
+            addFiles(files);
+          }
+        }}
         onChange={(event) => {
           onChange(event.target.value);
           caret.current = event.target.selectionStart ?? event.target.value.length;
@@ -1089,7 +1270,7 @@ function Composer({
           }
           if (event.key === "Enter" && !event.shiftKey && !event.nativeEvent.isComposing) {
             event.preventDefault();
-            if (!busy) onSubmit();
+            if (!busy) submitComposer();
           }
         }}
         className="max-h-[220px] min-h-[30px] w-full resize-none bg-transparent px-2.5 pt-2 text-body leading-relaxed outline-none placeholder:text-faint"
@@ -1098,6 +1279,16 @@ function Composer({
           the send button never leaves it. z-10 keeps open menus above the row under the card. */}
       <div className="@container relative z-10 mt-1 px-0.5 pb-0.5">
         <div className="flex flex-wrap items-center gap-x-0.5 gap-y-1 @[340px]:flex-nowrap">
+          <button
+            type="button"
+            disabled={busy}
+            onClick={() => fileInput.current?.click()}
+            className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-muted transition-colors hover:bg-elevated hover:text-text disabled:opacity-40"
+            aria-label={t("Attach files")}
+            title={t("Attach files")}
+          >
+            <Paperclip size={15} />
+          </button>
           {onNew && (
             <Menu
               width={260}
@@ -1107,6 +1298,15 @@ function Composer({
             >
               {(close) => (
                 <>
+                  <MenuItem
+                    onSelect={() => {
+                      close();
+                      fileInput.current?.click();
+                    }}
+                  >
+                    <Paperclip size={13} /> {t("Attach files…")}
+                  </MenuItem>
+                  <div className="my-1 border-t border-border" />
                   {/* Machine-level skill folders: keep the entry above the list, which is long
                       enough to scroll on a short window. */}
                   {onCreateSkill && onDeleteSkill && (
@@ -1170,8 +1370,8 @@ function Composer({
             {actions}
             <button
               type="button"
-              onClick={() => (busy && onStop ? onStop() : onSubmit())}
-              disabled={!busy && (!value.trim() || submitDisabled)}
+              onClick={() => (busy && onStop ? onStop() : submitComposer())}
+              disabled={!busy && (!canSend || submitDisabled)}
               className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[#0d0d0d] text-white transition-opacity hover:opacity-80 disabled:bg-elevated disabled:text-faint disabled:opacity-100"
               aria-label={t(busy ? "Stop" : "Send")}
               title={t(busy ? "Stop" : "Send")}
@@ -1737,7 +1937,9 @@ function StartComposer({
   onModel,
   onApproval,
   onStart,
+  workspaceId,
 }: {
+  workspaceId: string;
   projects: ProjectOption[];
   options: AgentHarnessOption[];
   models: CodexModel[];
@@ -1759,14 +1961,13 @@ function StartComposer({
   onEngine: (engine: AgentHarnessId) => void;
   onModel: (model: string, effort: string) => void;
   onApproval: (approval: AgentApproval) => void;
-  onStart: (text: string) => void;
+  onStart: (text: string, attachments: AgentAttachment[]) => void;
 }) {
   const t = useT();
   const [text, setText] = useState("");
-  const submit = () => {
-    const message = text.trim();
-    if (!message || busy) return;
-    onStart(message);
+  const submit = (message: string, attachments: AgentAttachment[]) => {
+    if ((!message.trim() && attachments.length === 0) || busy) return;
+    onStart(message.trim(), attachments);
   };
   return (
     <div className="flex min-h-0 flex-1 flex-col overflow-y-auto">
@@ -1777,9 +1978,13 @@ function StartComposer({
           </h1>
           <div className="mt-7">
             <Composer
+              workspaceId={workspaceId}
               value={text}
               onChange={setText}
-              onSubmit={submit}
+              onSubmit={(message, attachments) => {
+                submit(message, attachments);
+                setText("");
+              }}
               placeholder={t("Message TaCos")}
               onNew={() => setText("")}
               skills={skills}
@@ -1845,6 +2050,7 @@ type AgentDraftPrefs = {
 
 export function AgentWorkspace({
   workspaceId,
+  viewerId,
   ready,
   engines,
   defaultEngine,
@@ -1857,6 +2063,7 @@ export function AgentWorkspace({
   active,
 }: {
   workspaceId: string;
+  viewerId: string;
   ready: boolean;
   engines: AgentHarnessOption[];
   defaultEngine: AgentHarnessId;
@@ -1872,6 +2079,8 @@ export function AgentWorkspace({
   const router = useRouter();
   const [starting, setStarting] = useState(false);
   const [startError, setStartError] = useState<string | null>(null);
+  // This component stays mounted across threads, so New chat would come back still busy.
+  if (starting && active) setStarting(false);
   const [drawer, setDrawer] = useState(false);
   const [draftProject, setDraftProject] = useState(projects[0]?.id ?? "");
   const [draftVisibility, setDraftVisibility] = useState<"private" | "shared">("private");
@@ -1973,7 +2182,7 @@ export function AgentWorkspace({
     }
   }
 
-  async function start(text: string) {
+  async function start(text: string, attachments: AgentAttachment[] = []) {
     setStarting(true);
     setStartError(null);
     let result: Awaited<ReturnType<typeof startAgentThreadAction>>;
@@ -2001,7 +2210,10 @@ export function AgentWorkspace({
     // The first turn has to survive the navigation into the new thread, so it waits
     // here for Conversation to pick up on mount.
     try {
-      sessionStorage.setItem(`tacos:agent:pending:${result.data.id}`, text);
+      sessionStorage.setItem(
+        `tacos:agent:pending:${result.data.id}`,
+        JSON.stringify({ text, attachments })
+      );
     } catch {
       /* no storage — the thread still opens, the message just isn't pre-sent */
     }
@@ -2082,6 +2294,7 @@ export function AgentWorkspace({
           <Conversation
             key={active.id}
             workspaceId={workspaceId}
+            viewerId={viewerId}
             active={active}
             projects={projects}
             options={options}
@@ -2143,7 +2356,8 @@ export function AgentWorkspace({
                 rememberPrefs({ visibility });
               }}
               onEngine={chooseEngine}
-              onStart={(text) => void start(text)}
+              workspaceId={workspaceId}
+              onStart={(text, attachments) => void start(text, attachments)}
             />
           </>
         )}
@@ -2155,6 +2369,7 @@ export function AgentWorkspace({
 
 function Conversation({
   workspaceId,
+  viewerId,
   active,
   projects,
   options,
@@ -2170,6 +2385,7 @@ function Conversation({
   onNew,
 }: {
   workspaceId: string;
+  viewerId: string;
   active: AgentThreadDetail;
   projects: ProjectOption[];
   options: AgentHarnessOption[];
@@ -2260,10 +2476,20 @@ function Conversation({
   const [approval, setApproval] = useState<AgentApprovalCard | null>(null);
   const [approvalBusy, setApprovalBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [forkBusy, setForkBusy] = useState<string | null>(null);
+  const turnTaken =
+    active.visibility === "shared" && Boolean(active.turnUserId) && active.turnUserId !== viewerId;
   const abort = useRef<AbortController | null>(null);
   const bottom = useRef<HTMLDivElement | null>(null);
   const box = useRef<HTMLTextAreaElement | null>(null);
   const pendingSent = useRef(false);
+
+  // Nothing tells this viewer when the other person's turn ends, so ask while it lasts.
+  useEffect(() => {
+    if (!turnTaken) return;
+    const timer = setInterval(() => router.refresh(), SHARED_TURN_POLL_MS);
+    return () => clearInterval(timer);
+  }, [turnTaken, router]);
 
   useEffect(() => {
     bottom.current?.scrollIntoView({ block: "end" });
@@ -2275,14 +2501,28 @@ function Conversation({
     if (pendingSent.current) return;
     pendingSent.current = true;
     const key = `tacos:agent:pending:${active.id}`;
-    let pending: string | null = null;
+    let pendingText = "";
+    let pendingAttachments: AgentAttachment[] = [];
     try {
-      pending = sessionStorage.getItem(key);
-      if (pending) sessionStorage.removeItem(key);
+      const raw = sessionStorage.getItem(key);
+      if (raw) {
+        sessionStorage.removeItem(key);
+        try {
+          const parsed = JSON.parse(raw) as { text?: string; attachments?: AgentAttachment[] };
+          if (parsed && typeof parsed === "object" && ("text" in parsed || "attachments" in parsed)) {
+            pendingText = typeof parsed.text === "string" ? parsed.text : "";
+            pendingAttachments = Array.isArray(parsed.attachments) ? parsed.attachments : [];
+          } else {
+            pendingText = raw;
+          }
+        } catch {
+          pendingText = raw;
+        }
+      }
     } catch {
       /* no storage — nothing to pre-send */
     }
-    if (pending) void send(pending);
+    if (pendingText.trim() || pendingAttachments.length) void send(pendingText, pendingAttachments);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -2294,9 +2534,26 @@ function Conversation({
     });
   }
 
-  async function send(text: string) {
+  async function forkAt(messageId: string) {
+    if (forkBusy) return;
+    setForkBusy(messageId);
+    setError(null);
+    try {
+      const result = await forkAgentThreadFromMessageAction(workspaceId, active.id, messageId);
+      if (!result.ok) {
+        setError(result.error);
+        return;
+      }
+      router.push(`/${workspaceId}/agent?thread=${result.data.id}`);
+      router.refresh();
+    } finally {
+      setForkBusy(null);
+    }
+  }
+
+  async function send(text: string, attachments: AgentAttachment[] = []) {
     const message = text.trim();
-    if (!message || busy) return;
+    if ((!message && attachments.length === 0) || busy || turnTaken) return;
     setInput("");
     setError(null);
     setApproval(null);
@@ -2304,14 +2561,26 @@ function Conversation({
     const startedAt = Date.now();
     setMessages((prev) => [
       ...prev,
-      { id: `local-${startedAt}`, role: "user", content: message, steps: [] },
+      {
+        id: `local-${startedAt}`,
+        role: "user",
+        content: messageWithAttachments(message, attachments),
+        steps: [],
+      },
       { id: `streaming-${startedAt}`, role: "assistant", content: "", steps: [] },
     ]);
     const controller = new AbortController();
     abort.current = controller;
     try {
       await streamAiEdit(
-        { workspaceId, action: "agent", threadId: active.id, engine, text: message },
+        {
+          workspaceId,
+          action: "agent",
+          threadId: active.id,
+          engine,
+          text: message,
+          attachments: attachments.length ? attachments.map((file) => file.id) : undefined,
+        },
         (delta) => patchLastAssistant((last) => ({ ...last, content: last.content + delta })),
         controller.signal,
         (frame) => {
@@ -2504,17 +2773,29 @@ function Conversation({
             </div>
           )}
 
-          {messages.map((message, index) =>
-            message.role === "user" ? (
+          {messages.map((message, index) => {
+            const forkButton =
+              active.visibility === "shared" ? (
+                <button
+                  type="button"
+                  disabled={forkBusy === message.id}
+                  onClick={() => void forkAt(message.id)}
+                  className="mt-1 flex items-center gap-1 text-caption text-faint transition-colors hover:text-muted disabled:opacity-50"
+                  data-testid="fork-message"
+                >
+                  <GitBranch size={11} />
+                  {t(forkBusy === message.id ? "Opening private chat…" : "Continue in private chat")}
+                </button>
+              ) : null;
+            return message.role === "user" ? (
               <div key={message.id} className="flex flex-col items-end gap-1">
                 {message.author && (
                   <span className="px-1 text-small text-faint" data-testid="message-author">
                     {message.author}
                   </span>
                 )}
-                <div className="max-w-[85%] whitespace-pre-wrap rounded-2xl rounded-br-md bg-elevated px-3.5 py-2 text-body leading-relaxed">
-                  {message.content}
-                </div>
+                <UserMessageBody content={message.content} bubbleClass={"max-w-[85%] whitespace-pre-wrap rounded-2xl rounded-br-md bg-elevated px-3.5 py-2 text-body leading-relaxed"} />
+                {forkButton}
               </div>
             ) : (
               <div key={message.id} className="min-w-0 text-body leading-relaxed">
@@ -2524,9 +2805,10 @@ function Conversation({
                 ) : busy && index === messages.length - 1 ? (
                   <TurnStatus />
                 ) : null}
+                {forkButton}
               </div>
-            )
-          )}
+            );
+          })}
 
           {approval && (
             <ApprovalPanel
@@ -2541,12 +2823,19 @@ function Conversation({
 
       <div className="shrink-0 px-4 pb-4">
         <div className="mx-auto w-full max-w-3xl">
+          {turnTaken && active.turnUserName && (
+            <p className="mb-2 text-center text-small text-muted" data-testid="shared-turn-lock">
+              {interpolate(t("{name} is using this shared chat"), { name: active.turnUserName })}
+            </p>
+          )}
           {error && <TurnError error={error} />}
           <Composer
+            workspaceId={workspaceId}
             value={input}
             onChange={setInput}
-            onSubmit={() => void send(input)}
+            onSubmit={(text, attachments) => void send(text, attachments)}
             busy={busy}
+            submitDisabled={turnTaken}
             onStop={() => abort.current?.abort()}
             placeholder={t("Message TaCos")}
             inputRef={box}

@@ -5,6 +5,7 @@ import { FileStore } from "@tus/file-store";
 import { Server } from "@tus/server";
 import { getDb } from "../db/client";
 import { attachments, workspaceMembers } from "../db/schema";
+import { AGENT_DRAFT_PAGE } from "./agent-attachments.shared";
 import {
   UPLOAD_DIR,
   getAttachment,
@@ -35,13 +36,15 @@ async function checkCreate(metadata: Record<string, string | null | undefined>, 
     .where(and(eq(workspaceMembers.workspaceId, workspaceId), eq(workspaceMembers.userId, userId)))
     .limit(1);
   if (!member) throw refuse(403, "Forbidden");
-  const page = await getPage(workspaceId, pageId, userId);
-  if (!page) throw refuse(404, "Page not found");
-  try {
-    await requirePageLevel(page, userId, "edit");
-  } catch (err) {
-    if (err instanceof TacosError) throw refuse(err.status, err.message);
-    throw err;
+  if (pageId !== AGENT_DRAFT_PAGE) {
+    const page = await getPage(workspaceId, pageId, userId);
+    if (!page) throw refuse(404, "Page not found");
+    try {
+      await requirePageLevel(page, userId, "edit");
+    } catch (err) {
+      if (err instanceof TacosError) throw refuse(err.status, err.message);
+      throw err;
+    }
   }
   if (size > maxUploadBytes()) throw refuse(413, "File is over the upload limit");
   await removeStaleUploads();

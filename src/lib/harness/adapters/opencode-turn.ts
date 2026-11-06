@@ -99,6 +99,7 @@ export async function* openOpencodeTurn(input: TurnInput, log?: TurnLog): AsyncG
   }
 
   const args = ["run", "--format", "json", "--thinking", "--auto", "--dir", input.cwd, messageText(input)];
+  for (const image of input.images ?? []) args.splice(1, 0, "--file", image.path);
   if (input.model) {
     args.splice(1, 0, "--model", input.model);
   }

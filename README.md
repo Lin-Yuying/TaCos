@@ -2,7 +2,6 @@
 
 # TaCos
 
-
 A task tracker built for teams that work alongside AI agents. 
 
 TaCos is a fast, local-first tracker where humans and agents share the same backlog. 

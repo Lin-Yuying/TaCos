@@ -193,12 +193,13 @@ export function NewIssueDialog({ workspaceId }: { workspaceId: string }) {
               value={title}
               onChange={(e) => setTitle(e.target.value)}
               onKeyDown={(e) => {
-                if (e.key === "Enter") {
+                // ⌘Enter is the dialog's own shortcut; handling it here too creates the task twice.
+                if (e.key === "Enter" && !e.metaKey && !e.ctrlKey) {
                   e.preventDefault();
                   void submit();
                 }
               }}
-              placeholder={t("Issue title")}
+              placeholder={t("Task title")}
               className="w-full bg-transparent text-title font-semibold text-text placeholder:text-faint"
             />
             <textarea
@@ -459,7 +460,7 @@ export function NewIssueDialog({ workspaceId }: { workspaceId: string }) {
                     })}
                     {labels.length === 0 && (
                       <div className="px-2 py-1.5 text-small text-faint">
-                        {t("No labels yet — create some on the Labels page.")}
+                        {t("No labels yet — create some in Settings.")}
                       </div>
                     )}
                   </>

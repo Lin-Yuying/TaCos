@@ -8,6 +8,7 @@ import { ProjectIcon, StatusIcon } from "@/components/icons";
 import { formatDate, issueRef } from "@/lib/format";
 import type { PendingReviewIssue, ReviewDecision } from "@/lib/issues";
 import { useLocale, useT } from "@/components/i18n-context";
+import { PAGE_INSET } from "@/lib/page-chrome";
 
 // H-COLLAB-03: agent-published tasks wait here until a person approves or rejects them.
 export function ReviewView({ workspaceId, issues }: { workspaceId: string; issues: PendingReviewIssue[] }) {
@@ -23,7 +24,7 @@ export function ReviewView({ workspaceId, issues }: { workspaceId: string; issue
   }
 
   return (
-    <div className="flex-1 overflow-y-auto px-10 pb-10 pt-6 lg:px-20 xl:px-32">
+    <div className={`flex-1 overflow-y-auto pb-10 pt-6 ${PAGE_INSET}`}>
       <div className="space-y-4">
         <p className="text-body leading-relaxed text-muted">
           {t("Tasks that an agent published wait here. Approve one to let anyone claim it. Reject one to remove it from the board.")}

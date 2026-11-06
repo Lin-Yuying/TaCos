@@ -67,6 +67,8 @@ function writeMcpConfig(cwd: string, mcp: NonNullable<TurnInput["mcp"]>): string
         command: mcp.command,
         args: mcp.args,
         env: mcp.env ?? {},
+        // Listed up front, so the model calls them at once instead of searching for them first.
+        alwaysLoad: true,
       },
     },
   };
@@ -82,6 +84,17 @@ function messageText(input: TurnInput): string {
 }
 
 
+function imageMessage(input: TurnInput, images: NonNullable<TurnInput["images"]>): string {
+  const content = [
+    { type: "text", text: messageText(input) },
+    ...images.map((image) => ({
+      type: "image",
+      source: { type: "base64", media_type: image.mime, data: fs.readFileSync(image.path).toString("base64") },
+    })),
+  ];
+  return JSON.stringify({ type: "user", message: { role: "user", content } });
+}
+
 export async function* openCodebuddyTurn(input: TurnInput, log?: TurnLog): AsyncGenerator<TurnEvent> {
   const binary = findHarnessBinary("codebuddy");
   if (!binary) {
@@ -96,11 +109,12 @@ export async function* openCodebuddyTurn(input: TurnInput, log?: TurnLog): Async
     "--output-format",
     "stream-json",
     "--include-partial-messages",
-    // Recent versions list MCP tools behind these two, so turning them off hides TaCos's tools and
-    // the model reports writes it never made. No built-in tool is reachable, and the tool route
-    // asks for approval, so nothing here needs a second permission check (which cannot ask anyway).
+    // Naming one tool keeps every other built-in off; an empty list would not. TaCos's tools come
+    // from the MCP config, and the tool route asks for approval, so nothing here needs a second
+    // permission check (which cannot ask anyway). ToolSearch stays off: with it, the model keeps
+    // searching for tools it already has.
     "--tools",
-    "ToolSearch,DeferExecuteTool",
+    "DeferExecuteTool",
     "--permission-mode",
     "bypassPermissions",
     "-y",
@@ -120,7 +134,10 @@ export async function* openCodebuddyTurn(input: TurnInput, log?: TurnLog): Async
   if (input.prompt.system?.trim()) {
     args.push("--system-prompt", input.prompt.system.trim());
   }
-  args.push(messageText(input));
+  // Only stdin takes images.
+  const images = input.images ?? [];
+  if (images.length) args.push("--input-format", "stream-json");
+  else args.push(messageText(input));
 
   const queue: TurnEvent[] = [];
   let wake: (() => void) | null = null;
@@ -170,8 +187,10 @@ export async function* openCodebuddyTurn(input: TurnInput, log?: TurnLog): Async
     child = spawn(binary, args, {
       cwd: input.cwd,
       env: buildEnv(input.proxy, input.mcp?.env ?? {}, own, configDir),
-      stdio: ["ignore", "pipe", "pipe"],
+      stdio: [images.length ? "pipe" : "ignore", "pipe", "pipe"],
     });
+    child.stdin?.on("error", () => {});
+    child.stdin?.end(images.length ? `${imageMessage(input, images)}\n` : undefined);
   } catch (err) {
     removeConfig();
     finish(err instanceof Error ? err.message : "Could not start WorkBuddy.");

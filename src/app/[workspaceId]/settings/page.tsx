@@ -11,6 +11,7 @@ import {
   listApiKeys,
   listDeletedWorkspaces,
   listMembers,
+  listLabelsWithCounts,
   listProjects,
 } from "@/lib/issues";
 import { getAiSettingsView } from "@/lib/ai";
@@ -36,10 +37,11 @@ async function View({ params }: { params: Promise<{ workspaceId: string }> }) {
   const user = await getSessionUser();
   if (!user) redirect("/login");
   const ws = await requireWorkspace(workspaceId);
-  const [members, projects, keys, joinCode, allWorkspaces, deletedWorkspaces, seeAll, ai, harness, modelKeys] =
+  const [members, projects, labels, keys, joinCode, allWorkspaces, deletedWorkspaces, seeAll, ai, harness, modelKeys] =
     await Promise.all([
       listMembers(workspaceId),
-      listProjects(workspaceId),
+      listProjects(workspaceId, user.id),
+      listLabelsWithCounts(workspaceId),
       listApiKeys(workspaceId),
       getJoinCode(workspaceId),
       listUserWorkspaces(ws.user.id),
@@ -60,6 +62,7 @@ async function View({ params }: { params: Promise<{ workspaceId: string }> }) {
       currentUser={ws.user}
       members={members}
       projects={projects}
+      labels={labels}
       keys={keys}
       joinCode={joinCode}
       membersSeeAllTasks={seeAll}

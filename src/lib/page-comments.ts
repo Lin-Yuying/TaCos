@@ -55,8 +55,8 @@ export async function listPageComments(
   }));
 }
 
-// A mentioned member who can read the page gets one notice; its author gets one for any
-// other comment. The person who wrote the comment gets none.
+// A mentioned member who can read the page gets one notice, including a self @; its author
+// gets one for any other comment without a mention.
 async function notifyPageComment(page: DocPage, body: string, authorId: string): Promise<void> {
   const names = parseMentions(body);
   const members = await listMembers(page.workspaceId);
@@ -76,7 +76,7 @@ async function notifyPageComment(page: DocPage, body: string, authorId: string):
   const mentioned = new Set<string>();
   for (const member of members) {
     if (!names.includes(member.username.toLowerCase())) continue;
-    if (member.id === authorId || !pageVisible(page, member.id)) continue;
+    if (!pageVisible(page, member.id)) continue;
     await send(member.id, "doc_mentioned");
     mentioned.add(member.id);
   }

@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
   History,
+  FileText,
   Link2,
   Lock,
   Maximize2,
@@ -20,7 +21,7 @@ import {
 } from "lucide-react";
 import { Menu, MenuItem } from "@/components/menu";
 import type { PageContext, PageRefEntry } from "@/components/markdown";
-import { DocumentEditor, type EditorAnchor } from "@/components/document-editor";
+import { DocumentEditor, type EditorAnchor, type OutsideEdit } from "@/components/document-editor";
 import { useDocCollab } from "@/components/use-doc-collab";
 import { DocCommentsPanel } from "@/components/doc-comments";
 import { DocShareMenu } from "@/components/doc-share";
@@ -33,6 +34,7 @@ import {
   createPageAction,
   deletePageAction,
   listPageCommentsAction,
+  pageEmbedBodyAction,
   removePageCommentAction,
   savePageDocAction,
   setPageCommentResolvedAction,
@@ -47,7 +49,9 @@ import { levelAllows, type PageLevel } from "@/lib/page-level";
 import type { Member } from "@/lib/issues";
 import type { PageComment } from "@/lib/page-comments";
 import type { DocPage, PageAuthor, PageRef, PageSummary } from "@/lib/pages";
+import { DocMentionWarning } from "@/components/doc-mention-warning";
 import { useT } from "@/components/i18n-context";
+import { mentionedMembersWithoutAccess } from "@/lib/mentions";
 
 const ICONS = ["📄", "📘", "📝", "🗂️", "🧭", "🚀", "🧪", "🌱", "🍅", "✨", "🐙", "🔭"];
 
@@ -183,6 +187,9 @@ export function DocPageView({
 
   // Typing schedules a write; the unmount path writes whatever is still pending so
   // leaving the page never costs the last keystrokes.
+  const outsideEdit = useRef<((edit: OutsideEdit) => void) | null>(null);
+  const [addedEmbeds, setAddedEmbeds] = useState<Record<string, string>>({});
+
   function editDoc(next: string) {
     setDoc(next);
     // The socket stores a shared document.
@@ -365,7 +372,20 @@ export function DocPageView({
   // Inserting at the end is predictable; the editor owns the caret and has no public
   // "insert at cursor" API, and a page reference is usually added as its own block.
   function insertRef(reference: PageRefEntry, embed: boolean) {
+    // The server read embedded pages when this page opened; a new embed needs its text now.
+    if (embed) {
+      void pageEmbedBodyAction(workspaceId, reference.id).then((result) => {
+        if (result.ok && result.data !== null) {
+          const body = result.data;
+          setAddedEmbeds((current) => ({ ...current, [reference.id]: body }));
+        }
+      });
+    }
     const syntax = embed ? `![[${reference.title}|${reference.id}]]` : `[[${reference.title}|${reference.id}]]`;
+    if (sharing) {
+      outsideEdit.current?.({ at: "end", text: syntax });
+      return;
+    }
     const next = doc.trim() ? `${doc.replace(/\s+$/, "")}\n\n${syntax}` : syntax;
     editDoc(next);
   }
@@ -374,6 +394,10 @@ export function DocPageView({
   // it; from there it is an ordinary line the editor can move anywhere.
   function placeSubpage(child: PageSummary) {
     const syntax = `[[${child.title}|${child.id}]]`;
+    if (sharing) {
+      outsideEdit.current?.({ at: "start", text: syntax });
+      return;
+    }
     editDoc(doc.trim() ? `${syntax}\n\n${doc}` : syntax);
   }
 
@@ -386,6 +410,10 @@ export function DocPageView({
   }
 
   function acceptAi(text: string, action: string) {
+    if (sharing) {
+      outsideEdit.current?.({ at: action === "continue" ? "end" : "all", text });
+      return;
+    }
     const next = action === "continue" && doc.trim() ? `${doc.replace(/\s+$/, "")}\n\n${text}` : text;
     editDoc(next);
     setAiPanel(null);
@@ -398,10 +426,14 @@ export function DocPageView({
   // References inside the pane open in the pane, so following one never loses the page
   // you were reading.
   const pageCtx = useMemo<PageContext>(
-    () => (onOpenPage ? { ...ctx, onOpen: onOpenPage } : ctx),
-    [ctx, onOpenPage]
+    () => ({ ...ctx, embeds: { ...ctx.embeds, ...addedEmbeds }, ...(onOpenPage ? { onOpen: onOpenPage } : {}) }),
+    [ctx, onOpenPage, addedEmbeds]
   );
   const placed = useMemo(() => placedPageKeys(doc), [doc]);
+  const blockedDocMentions = useMemo(
+    () => mentionedMembersWithoutAccess({ shared, createdBy: page.createdBy }, members, doc, { doc: true }),
+    [shared, page.createdBy, members, doc]
+  );
   const openComments = comments.filter((comment) => !comment.resolvedAt).length;
   const unplaced = subpages.filter(
     (child) => !placed.has(child.id) && !placed.has(child.title.toLowerCase())
@@ -421,7 +453,7 @@ export function DocPageView({
         <span className="flex min-w-0 flex-1 items-center gap-2">
           <nav data-doc-breadcrumb className="flex min-w-0 items-center gap-1 truncate">
             <Link href={`/${workspaceId}/docs`} className="shrink-0 hover:text-text">
-              {t("Docs")}
+              {t("Documents")}
             </Link>
             {ancestors.map((ancestor) => (
               <span key={ancestor.id} className="flex min-w-0 items-center gap-1">
@@ -659,7 +691,7 @@ export function DocPageView({
               triggerClassName="shrink-0 rounded-md p-1 text-display leading-none transition-colors hover:bg-elevated"
               trigger={
                 <span title={t("Change icon")}>
-                  {icon ?? "📄"}
+                  {icon ?? <FileText size={28} strokeWidth={1.5} className="text-muted" />}
                 </span>
               }
             >
@@ -754,7 +786,7 @@ export function DocPageView({
                       }}
                       className="flex min-w-0 flex-1 items-center gap-2"
                     >
-                      <span className="shrink-0">{child.icon ?? "📄"}</span>
+                      <span className="shrink-0">{child.icon ?? <FileText size={14} className="text-muted" />}</span>
                       <span className="truncate underline decoration-border-strong underline-offset-2">
                         {child.title}
                       </span>
@@ -777,6 +809,16 @@ export function DocPageView({
 
             {/* Anything you can edit opens in the editor directly — there is no
                 read/edit toggle to switch out of, so the caret is where you click. */}
+            {canEdit && blockedDocMentions.length > 0 && (
+              <div className="mb-3">
+                <DocMentionWarning
+                  members={blockedDocMentions}
+                  shared={shared}
+                  isOwner={isOwner}
+                  onShare={() => void toggleShared()}
+                />
+              </div>
+            )}
             {!canEdit && !doc.trim() && <p className="text-body text-faint">{t("This page is empty.")}</p>}
             {(canEdit || doc.trim()) && (
               <DocumentEditor
@@ -784,6 +826,7 @@ export function DocPageView({
                 collab={sharing ? collab : undefined}
                 value={doc}
                 onChange={editDoc}
+                outsideEditRef={outsideEdit}
                 pages={pageCtx}
                 editable={canEdit && collab.status !== "connecting"}
                 placeholder={t("Write something, or type / for commands…")}
@@ -877,6 +920,8 @@ export function DocPageView({
           onSelect={setActiveComment}
           onClearDraft={() => setDraftAnchor(null)}
           onClose={() => setSide(null)}
+          page={{ shared, createdBy: page.createdBy }}
+          onShare={() => void toggleShared()}
         />
       )}
       </div>
@@ -908,7 +953,7 @@ function PagePicker({
           }}
         >
           <span className="flex items-center gap-2">
-            <span className="shrink-0">{ref.icon ?? "📄"}</span>
+            <span className="shrink-0">{ref.icon ?? <FileText size={14} className="text-muted" />}</span>
             <span className="truncate">{ref.title}</span>
           </span>
         </MenuItem>

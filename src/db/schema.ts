@@ -16,6 +16,22 @@ export const users = sqliteTable("users", {
   createdAt: text("created_at").notNull(),
 });
 
+// A deleted account keeps its username so a later person cannot take it.
+export const retiredUsernames = sqliteTable("retired_usernames", {
+  username: text("username").primaryKey(),
+  retiredAt: text("retired_at").notNull(),
+});
+
+export const loginAttempts = sqliteTable(
+  "login_attempts",
+  {
+    id: text("id").primaryKey(),
+    username: text("username").notNull(),
+    createdAt: text("created_at").notNull(),
+  },
+  (t) => [index("login_attempts_username_idx").on(t.username, t.createdAt)]
+);
+
 export const sessions = sqliteTable(
   "sessions",
   {
@@ -334,6 +350,8 @@ export const issues = sqliteTable(
     id: text("id").primaryKey(),
     workspaceId: text("workspace_id").notNull(),
     projectId: text("project_id").notNull(),
+    // The task this one belongs to. Null for a top-level task.
+    parentId: text("parent_id"),
     number: integer("number").notNull(),
     identifier: text("identifier").notNull(),
     title: text("title").notNull(),
@@ -349,6 +367,10 @@ export const issues = sqliteTable(
     dueDate: text("due_date"),
     // how long before dueDate to remind: 12h | 1d | 3d | 5d | 7d
     reminder: text("reminder"),
+    // daily | weekly | monthly. Null when the task does not repeat.
+    recurrence: text("recurrence"),
+    // The next task already opened from this one. Set once, when it is marked done.
+    recurredInto: text("recurred_into"),
     // H-COLLAB-11: "<dueDate>|<preset>" of the reminder already sent. A new due date or
     // preset gives a new key, so the reminder fires again; the same key never fires twice.
     reminderSentFor: text("reminder_sent_for"),
@@ -380,11 +402,26 @@ export const issues = sqliteTable(
     index("issues_workspace_idx").on(t.workspaceId),
     index("issues_project_idx").on(t.projectId),
     index("issues_status_idx").on(t.status),
+    index("issues_parent_idx").on(t.parentId),
   ]
 );
 
 // An issue can be worked by more than one person; assigning "everyone" is just
 // one row per workspace member.
+// The task in `issueId` stays blocked until `blockedById` is done or canceled.
+export const issueDependencies = sqliteTable(
+  "issue_dependencies",
+  {
+    issueId: text("issue_id").notNull(),
+    blockedById: text("blocked_by_id").notNull(),
+    createdAt: text("created_at").notNull(),
+  },
+  (t) => [
+    primaryKey({ columns: [t.issueId, t.blockedById] }),
+    index("issue_dependencies_blocked_idx").on(t.blockedById),
+  ]
+);
+
 export const issueAssignees = sqliteTable(
   "issue_assignees",
   {
@@ -444,6 +481,19 @@ export const issueLabels = sqliteTable(
   (t) => [primaryKey({ columns: [t.issueId, t.labelId] })]
 );
 
+// A member's report that a task is stuck. The inbox notice is separate.
+export const blockers = sqliteTable(
+  "blockers",
+  {
+    id: text("id").primaryKey(),
+    issueId: text("issue_id").notNull(),
+    authorId: text("author_id").notNull(),
+    body: text("body").notNull(),
+    createdAt: text("created_at").notNull(),
+  },
+  (t) => [index("blockers_issue_idx").on(t.issueId)]
+);
+
 export const comments = sqliteTable(
   "comments",
   {
@@ -464,7 +514,8 @@ export const events = sqliteTable(
     id: text("id").primaryKey(),
     issueId: text("issue_id").notNull(),
     // created | status_changed | priority_changed | title_changed |
-    // description_changed | labels_changed | assignee_changed | reordered | commented
+    // description_changed | labels_changed | assignee_changed | reordered | commented |
+    // blocker_reported
     type: text("type").notNull(),
     data: text("data").notNull().default("{}"),
     actorId: text("actor_id"),
@@ -483,7 +534,7 @@ export const notifications = sqliteTable(
     issueId: text("issue_id").notNull(),
     // Set on a document's notice; issueId is empty then.
     pageId: text("page_id"),
-    // assigned | commented | mentioned | doc_commented | doc_mentioned
+    // assigned | commented | mentioned | doc_commented | doc_mentioned | blocker
     type: text("type").notNull(),
     body: text("body").notNull(),
     readAt: text("read_at"),
@@ -530,6 +581,9 @@ export const agentThreads = sqliteTable(
     visibility: text("visibility").notNull().default("private"),
     // H-COLLAB-08: the task that "用 Agent 推进" opened this chat for, or null.
     focusIssueId: text("focus_issue_id"),
+    // team-2.3: one Agent turn at a time on a shared chat.
+    turnUserId: text("turn_user_id"),
+    turnStartedAt: text("turn_started_at"),
     createdBy: text("created_by").notNull(),
     createdAt: text("created_at").notNull(),
     updatedAt: text("updated_at").notNull(),

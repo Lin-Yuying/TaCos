@@ -195,7 +195,7 @@ export function CommandPalette({ workspaceId }: { workspaceId: string }) {
               <Command.Item
                 value="labels"
                 onSelect={() => {
-                  router.push(`/${workspaceId}/labels`);
+                  router.push(`/${workspaceId}/settings#labels`);
                   close();
                 }}
               >

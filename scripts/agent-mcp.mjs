@@ -7,11 +7,14 @@
 //
 // TACOS_AGENT_URL    base URL of the TaCos server, e.g. http://127.0.0.1:3000
 // TACOS_AGENT_TOKEN  short-lived token issued for this turn
+// TACOS_TIMING_FILE  optional file that gets one JSON line per request, for the turn's timing log
+import { appendFileSync } from "node:fs";
 import { request as httpRequest } from "node:http";
 import { request as httpsRequest } from "node:https";
 
 const baseUrl = (process.env.TACOS_AGENT_URL || "").replace(/\/+$/, "");
 const token = process.env.TACOS_AGENT_TOKEN || "";
+const timingFile = process.env.TACOS_TIMING_FILE || "";
 const PROTOCOL_VERSION = "2024-11-05";
 
 function send(message) {
@@ -30,6 +33,7 @@ async function callServer(path, body) {
   if (!baseUrl || !token) {
     throw new Error("TaCos did not hand this session a tool grant.");
   }
+  const startedAt = Date.now();
   const response = await request(`${baseUrl}/api/agent/tools${path}`, {
     method: body ? "POST" : "GET",
     headers: {
@@ -38,6 +42,7 @@ async function callServer(path, body) {
     },
     body: body ? JSON.stringify(body) : undefined,
   });
+  noteTiming(body?.name ?? "tools/list", Date.now() - startedAt, response);
   let payload = null;
   try {
     payload = JSON.parse(response.text);
@@ -50,6 +55,17 @@ async function callServer(path, body) {
   return payload;
 }
 
+function noteTiming(tool, ms, response) {
+  if (!timingFile) return;
+  const approvalMs = Number(response.approvalMs) || 0;
+  try {
+    const line = { tool, ms: Math.max(0, ms - approvalMs), approvalMs, bytes: Buffer.byteLength(response.text) };
+    appendFileSync(timingFile, `${JSON.stringify(line)}\n`);
+  } catch {
+    /* timing never gets in the way of a tool call */
+  }
+}
+
 // A write can wait a long time for the person's answer, and fetch gives up on a silent server
 // after five minutes.
 function request(url, { method, headers, body }) {
@@ -58,7 +74,7 @@ function request(url, { method, headers, body }) {
     const req = send(url, { method, headers }, (res) => {
       const chunks = [];
       res.on("data", (chunk) => chunks.push(chunk));
-      res.on("end", () => resolve({ status: res.statusCode ?? 0, text: Buffer.concat(chunks).toString("utf8") }));
+      res.on("end", () => resolve({ status: res.statusCode ?? 0, approvalMs: res.headers["x-tacos-approval-ms"], text: Buffer.concat(chunks).toString("utf8") }));
       res.on("error", reject);
     });
     req.on("error", reject);

@@ -143,6 +143,10 @@ const TOOLS: AgentToolSpec[] = [
           description: "Usernames of workspace members to assign",
         },
         labels: { type: "array", items: { type: "string" }, description: "Label names; new ones are created" },
+        parent: {
+          type: "string",
+          description: "Identifier of the parent task. The subtask stays in that task's project.",
+        },
       },
       required: ["title"],
     },
@@ -176,6 +180,10 @@ const TOOLS: AgentToolSpec[] = [
                 items: { type: "string" },
                 description: "Label names; new ones are created",
               },
+              parent: {
+                type: "string",
+                description: "Identifier of the parent task. The subtask stays in that task's project.",
+              },
             },
             required: ["title"],
           },
@@ -197,6 +205,10 @@ const TOOLS: AgentToolSpec[] = [
         status: { type: "string", description: STATUS_HELP },
         priority: { type: "string", description: PRIORITY_LIST },
         dueDate: { type: "string", description: "YYYY-MM-DD, empty string clears it" },
+        parent: {
+          type: "string",
+          description: "Identifier of the parent task. Empty string detaches this task.",
+        },
       },
       required: ["id"],
     },
@@ -221,6 +233,10 @@ const TOOLS: AgentToolSpec[] = [
               status: { type: "string", description: STATUS_HELP },
               priority: { type: "string", description: PRIORITY_LIST },
               dueDate: { type: "string", description: "YYYY-MM-DD, empty string clears it" },
+              parent: {
+                type: "string",
+                description: "Identifier of the parent task. Empty string detaches this task.",
+              },
             },
             required: ["id"],
           },
@@ -509,6 +525,7 @@ async function createOne(ctx: AgentToolContext, args: ToolArgs): Promise<string>
         ? args.labels.map((value) => String(value).trim()).filter(Boolean)
         : [],
       project: ctx.projectKey,
+      parent: str(args.parent) || undefined,
     },
     publishingActor(ctx)
   );
@@ -524,6 +541,7 @@ async function updateOne(ctx: AgentToolContext, args: ToolArgs): Promise<string>
   const priority = asPriority(args.priority);
   if (priority !== undefined) patch.priority = priority;
   if (args.dueDate !== undefined) patch.dueDate = str(args.dueDate) || null;
+  if (args.parent !== undefined) patch.parent = str(args.parent) || null;
   if (Object.keys(patch).length === 0) throw new TacosError("Nothing to change");
   const { issue } = await requireProjectTask(ctx, str(args.id));
   const detail = await updateIssue(ctx.workspaceId, issue.identifier, patch, AGENT_ACTOR);
@@ -740,7 +758,7 @@ export async function executeAgentTool(
     case "get_overview": {
       const scope = await readScope(ctx, args);
       if (!scope.projectId) throw new TacosError("Name the project too, with project.");
-      const project = await getProject(scope.workspaceId, scope.projectId);
+      const project = await getProject(scope.workspaceId, scope.projectId, ctx.userId);
       if (!project) throw new TacosError("Project not found", 404);
       return {
         text: JSON.stringify(
