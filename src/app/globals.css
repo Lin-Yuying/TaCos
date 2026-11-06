@@ -13,6 +13,11 @@
   --color-accent: #0d0d0d;
   --color-accent-hover: #2f2f2f;
   --color-danger: #d93025;
+  /* Desktop app-update pill: the one tinted control in the chrome. */
+  --color-update-bg: #e9ebf5;
+  --color-update-bg-hover: #e2e6f3;
+  --color-update-border: #d2d8e9;
+  --color-update-text: #486eb8;
   --color-row-active: #f3f3f3;
 
   /* Code tokens stay muted enough to sit inside a page, not on top of it. */
