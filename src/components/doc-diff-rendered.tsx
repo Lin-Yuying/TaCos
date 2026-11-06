@@ -1,6 +1,7 @@
 "use client";
 
-import { useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { VirtualStack } from "@/components/ui/virtual-stack";
 import { useT } from "@/components/i18n-context";
 import { docDiffItems, type DiffSegment, type DocDiffCell, type DocDiffItem } from "@/lib/doc-diff-render";
 import { parseInline, type Block, type Inline, type TableAlign } from "@/lib/markdown";
@@ -197,6 +198,8 @@ function DiffTable({
   header: DocDiffCell[];
   rows: DocDiffCell[][];
 }) {
+  const [rowLimit,setRowLimit]=useState(100);
+  const t=useT();
   const alignOf = (a: TableAlign | null) => (a ? { textAlign: a } : undefined);
   return (
     <div className="my-2 overflow-x-auto">
@@ -215,7 +218,7 @@ function DiffTable({
           </tr>
         </thead>
         <tbody>
-          {rows.map((row, ri) => (
+          {rows.slice(0,rowLimit).map((row, ri) => (
             <tr key={ri}>
               {row.map((cell, ci) => (
                 <td key={ci} className="border border-border px-2 py-1 align-top" style={alignOf(align[ci] ?? null)}>
@@ -226,6 +229,7 @@ function DiffTable({
           ))}
         </tbody>
       </table>
+      {rowLimit<rows.length&&<button className="p-2 text-small text-accent" onClick={()=>setRowLimit(value=>value+100)}>{t("Load more")} ({rows.length-rowLimit})</button>}
     </div>
   );
 }
@@ -260,8 +264,22 @@ function DiffItem({ item }: { item: DocDiffItem }) {
 
 export function DocDiffRendered({ before, after }: { before: string; after: string }) {
   const t = useT();
-  const items = useMemo(() => docDiffItems(before, after), [before, after]);
+  const large=before.length+after.length>64000;
+  const direct=useMemo(()=>large?null:docDiffItems(before,after),[before,after,large]);
+  const [computed,setComputed]=useState<{before:string;after:string;items?:DocDiffItem[];error?:string}|null>(null);
+  const [attempt,setAttempt]=useState(0);
+  useEffect(()=>{
+    if(!large)return;
+    const worker=new Worker(new URL("../lib/workers/doc-diff.ts",import.meta.url));
+    worker.onmessage=(event:MessageEvent<{items?:DocDiffItem[];error?:string}>)=>setComputed({before,after,...event.data});
+    worker.onerror=()=>setComputed({before,after,error:"Could not load changes. Retry."});
+    worker.postMessage({before,after});return()=>worker.terminate();
+  },[before,after,large,attempt]);
+  const result=computed?.before===before&&computed.after===after?computed:null;
+  const items=direct??result?.items;
+  if(!items)return <p role="status" className="text-small text-faint">{t(result?.error??"Loading…")}{result?.error&&<button onClick={()=>setAttempt(old=>old+1)}>{t("Retry")}</button>}</p>;
   if (before === after) return <p className="text-small text-faint">{t("No text changed.")}</p>;
+  if(items.length>100)return <div data-doc-diff><VirtualStack items={items} keyFor={(_item,index)=>String(index)} estimate={42} style={{height:480,maxHeight:"65dvh",overflow:"auto"}} render={item=><DiffItem item={item}/>}/></div>;
   return (
     <div data-doc-diff className="space-y-0.5 text-small">
       {items.map((item, index) => (

@@ -1,4 +1,4 @@
-import { and, eq } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 import { AsyncLocalStorage } from "node:async_hooks";
 import fs from "node:fs";
 import { FileStore } from "@tus/file-store";
@@ -11,11 +11,13 @@ import {
   getAttachment,
   maxUploadBytes,
   removeStaleUploads,
-  usedBytes,
   workspaceQuotaBytes,
 } from "./attachments";
 import { getPage, requirePageLevel } from "./pages";
 import { TacosError } from "./tacos-error";
+
+const sweepAt=new Map<string,number>();
+function scheduleUploadSweep(workspaceId:string){if(Date.now()-(sweepAt.get(workspaceId)??0)<60000)return;sweepAt.set(workspaceId,Date.now());if(sweepAt.size>256)sweepAt.delete(sweepAt.keys().next().value!);void removeStaleUploads(Date.now(),workspaceId).catch(error=>console.error("Upload cleanup:",error));}
 
 const uploader = new AsyncLocalStorage<string>();
 
@@ -47,10 +49,7 @@ async function checkCreate(metadata: Record<string, string | null | undefined>, 
     }
   }
   if (size > maxUploadBytes()) throw refuse(413, "File is over the upload limit");
-  await removeStaleUploads();
-  if ((await usedBytes(workspaceId)) + size > workspaceQuotaBytes()) {
-    throw refuse(413, "This workspace is out of upload space");
-  }
+  scheduleUploadSweep(workspaceId);
   return { userId, workspaceId, pageId };
 }
 
@@ -71,7 +70,10 @@ function createServer() {
     onUploadCreate: async (_req, upload) => {
       const metadata = upload.metadata ?? {};
       const { userId, workspaceId, pageId } = await checkCreate(metadata, upload.size);
-      await getDb().insert(attachments).values({
+      getDb().transaction(tx=>{
+      const usage=tx.select({total:sql<number>`coalesce(sum(${attachments.size}),0)`}).from(attachments).where(eq(attachments.workspaceId,workspaceId)).get();
+      if(Number(usage?.total??0)+(upload.size??0)>workspaceQuotaBytes())throw refuse(413,"This workspace is out of upload space");
+      tx.insert(attachments).values({
         id: upload.id,
         workspaceId,
         pageId,
@@ -80,7 +82,8 @@ function createServer() {
         size: upload.size ?? 0,
         complete: 0,
         createdAt: new Date().toISOString(),
-      });
+      }).run();
+      },{behavior:"immediate"});
       return {};
     },
     onUploadFinish: async (_req, upload) => {

@@ -91,7 +91,7 @@ function DocRow({
       <div
         ref={ref}
         data-doc-row={page.id}
-        style={{ paddingLeft: depth * INDENT }}
+        style={{ paddingLeft: Math.min(depth, 8) * INDENT }}
         className={`relative flex items-center rounded-md transition-colors ${
           instruction?.type === "make-child" ? "ring-1 ring-accent" : ""
         } ${active === page.id ? "bg-elevated font-medium text-text" : "text-muted hover:bg-elevated/60 hover:text-text"}`}
@@ -250,7 +250,7 @@ export function DocTree({ workspaceId, pages }: { workspaceId: string; pages: Pa
     for (const page of pages) {
       // A parent this person cannot see leaves its child at the top level.
       const key = page.parentId && ids.has(page.parentId) ? page.parentId : null;
-      children.set(key, [...(children.get(key) ?? []), page]);
+      const bucket=children.get(key)??[];bucket.push(page);children.set(key,bucket);
     }
     return { byId: ids, byParent: children };
   }, [pages]);

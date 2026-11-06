@@ -42,6 +42,8 @@ export function ThreadSidebar({
     } | null>(null),
     [error, setError] = useState<string | null>(null),
     [busy, setBusy] = useState(false);
+  const [changed,setChanged]=useState<Record<string,AgentThread|null>>({});
+  useEffect(()=>{setChanged(old=>{const next={...old};for(const thread of threads){const local=next[thread.id];if(local && (thread.updatedAt>local.updatedAt || JSON.stringify(local)===JSON.stringify(thread)))delete next[thread.id];}return Object.keys(next).length===Object.keys(old).length?old:next;});},[threads]);
   const sequence = useRef(0),
     running = useRef(false);
   const [attempt, setAttempt] = useState(0);
@@ -114,43 +116,20 @@ export function ThreadSidebar({
     }
   }
   useEffect(() => {
-    let live = true;
-    const refresh = () => {
-      setAttempt(old=>old+1);
-      const pages = Math.max(
-        1,
-        Math.ceil((historyOffset ?? older.length) / 40),
-      );
-      void (async () => {
-        const items: AgentThread[] = [];
-        let offset: number | null = 0;
-        for (let page = 0; page < pages && offset !== null; page++) {
-          const result = await searchAgentThreadsAction(
-            workspaceId,
-            "",
-            offset,
-          );
-          if (!result.ok) throw new Error(result.error);
-          items.push(...result.data.threads);
-          offset = result.data.nextOffset;
-        }
-        if (live) {
-          setOlder(items);
-          setHistoryOffset(offset);
-        }
-      })().catch(() => {
-        if (live){retry.current=refresh;setError("Could not load conversations. Retry.");}
-      });
+    const refresh=(event:Event)=>{
+      const detail=(event as CustomEvent<{id:string;thread?:AgentThread|null}>).detail;
+      if(!detail?.id)return;
+      if("thread" in detail){
+        setChanged(old=>({...old,[detail.id]:detail.thread??null}));
+        setResult(old=>old?{...old,items:old.items.flatMap(thread=>thread.id!==detail.id?[thread]:detail.thread?[detail.thread]:[])}:old);
+      } else setAttempt(old=>old+1);
     };
-    window.addEventListener("tacos:thread-changed", refresh);
-    return () => {
-      live = false;
-      window.removeEventListener("tacos:thread-changed", refresh);
-    };
-  }, [workspaceId, historyOffset, older.length]);
+    window.addEventListener("tacos:thread-changed",refresh);
+    return()=>window.removeEventListener("tacos:thread-changed",refresh);
+  },[]);
   const all = [
     ...new Map(
-      [...older, ...threads].map((thread) => [thread.id, thread]),
+      [...older, ...threads, ...Object.values(changed).filter((thread):thread is AgentThread=>Boolean(thread))].filter(thread=>changed[thread.id]!==null).map((thread) => [thread.id, thread]),
     ).values(),
   ].sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
   const pinned = all

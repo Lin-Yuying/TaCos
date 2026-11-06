@@ -1,0 +1,30 @@
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
+import assert from "node:assert/strict";
+import {documentIndex} from "../src/lib/ui/document-index";
+process.env.TACOS_DATA_DIR=fs.mkdtempSync(path.join(os.tmpdir(),"tacos-doc-summary-"));
+async function main(){
+ const lib=await import('../src/lib/pages');
+ const {getDb}=await import('../src/db/client');
+ const {pages,pageAccess}=await import('../src/db/schema');
+ const db=getDb(),at=new Date().toISOString();
+ db.transaction(tx=>{for(let i=0;i<1000;i++)tx.insert(pages).values({id:'summary-'+i,workspaceId:'w',title:'Title '+i,doc:'X'.repeat(1000),createdBy:'owner',shared:i%2,createdAt:at,updatedAt:at,parentId:i>0&&i<31?'summary-'+(i-1):null,position:i}).run();});
+ await db.insert(pageAccess).values({pageId:'summary-1',userId:'reader',level:'view'});
+ const metadata=await lib.listPageMetadata('w','reader');
+ assert.equal(metadata.length,500);assert(metadata.every(page=>!('doc' in page)));
+ assert.equal(metadata.find(page=>page.id==='summary-1')?.canEdit,false);
+ assert.equal(metadata.find(page=>page.id==='summary-3')?.canEdit,true);
+ const legacy=await lib.listPages('w','reader');
+ assert.deepEqual(metadata.map(page=>page.id),legacy.map(page=>page.id));
+ const tree=await lib.listPageTree('w','owner');
+ assert.equal(tree.length,1000);assert.equal(tree.find(page=>page.id==='summary-30')?.depth,30);
+ assert(tree.every(page=>!('doc' in page)));
+ const index=documentIndex(tree);assert.equal(index.paths.get('summary-30')?.split(' / ').length,31);
+ assert.equal(index.descendants('summary-0').size,31);
+ const token=await lib.previewPageMove('w','summary-0','owner',{parentId:null,shared:true});
+ await lib.updatePage('w','summary-1','owner',{title:'Changed'});
+ await assert.rejects(()=>lib.movePage('w','summary-0','owner',{parentId:null,shared:true,confirmedImpact:token.token}),/changed|Review/);
+ console.log('check-performance-documents: pass (1000 summaries, body exclusion, overrides, 30-level tree, stale move rejection)');
+}
+main().catch(e=>{console.error(e);process.exit(1);});

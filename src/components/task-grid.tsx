@@ -153,9 +153,13 @@ export function TaskGrid({
   // Cells read current server values after every refresh.
   }, [fields, t, values, workspaceId,router,members,memberBusy,currentUserId,memberQuery]);
 
-  const ordered=[...columns].sort((a,b)=>{const ai=settings.order.indexOf(String(a.id)),bi=settings.order.indexOf(String(b.id));return (ai<0?999:ai)-(bi<0?999:bi);}).filter(column=>!settings.hidden.includes(String(column.id)));
-  const table = useTable({ features: FEATURES, data: issues, columns:ordered, columnResizeMode:"onChange",state:{columnSizing:settings.sizes},onColumnSizingChange:updater=>setSettings(old=>({...old,sizes:typeof updater==="function"?updater(old.sizes):updater})) });
-  const sticky=(id:string)=>settings.frozen.includes(id)?{position:"sticky" as const,left:table.getAllLeafColumns().filter(column=>settings.frozen.includes(column.id)).slice(0,table.getAllLeafColumns().filter(column=>settings.frozen.includes(column.id)).findIndex(column=>column.id===id)).reduce((sum,column)=>sum+column.getSize(),0),zIndex:2,background:"var(--color-bg)"}:{};
+  const orderRanks=new Map(settings.order.map((id,index)=>[id,index]));
+  const hiddenIds=new Set(settings.hidden),frozenIds=new Set(settings.frozen);
+  const ordered=[...columns].sort((a,b)=>(orderRanks.get(String(a.id))??999)-(orderRanks.get(String(b.id))??999)).filter(column=>!hiddenIds.has(String(column.id)));
+  const table = useTable({ features: FEATURES, data: issues, columns:ordered, columnResizeMode:"onEnd",state:{columnSizing:settings.sizes},onColumnSizingChange:updater=>setSettings(old=>({...old,sizes:typeof updater==="function"?updater(old.sizes):updater})) });
+  const frozenLeft=new Map<string,number>();let left=0;
+  for(const column of table.getAllLeafColumns())if(frozenIds.has(column.id)){frozenLeft.set(column.id,left);left+=column.getSize();}
+  const sticky=(id:string)=>frozenLeft.has(id)?{position:"sticky" as const,left:frozenLeft.get(id)!,zIndex:2,background:"var(--color-bg)"}:{};
   function reorder(id:string,delta:number){const ids=columns.map(column=>String(column.id)).sort((a,b)=>(settings.order.indexOf(a)<0?999:settings.order.indexOf(a))-(settings.order.indexOf(b)<0?999:settings.order.indexOf(b)));const at=ids.indexOf(id),next=at+delta;if(next<0||next>=ids.length)return;[ids[at],ids[next]]=[ids[next],ids[at]];setSettings(old=>({...old,order:ids}));}
   const rows = table.getRowModel().rows;
   const virtual = useVirtualizer({

@@ -4,7 +4,7 @@ import { changeIssueCollection } from "@/lib/issues";
 
 import { createTaskField, deleteTaskField, setTaskFieldValue, taskFieldImpact, restoreTaskField } from "@/lib/task-fields";
 import type { TaskField } from "@/lib/task-view";
-import { revalidatePath } from "next/cache";
+import { invalidatePath as revalidatePath } from "@/lib/revalidation";
 import { requireAdmin, requireWorkspace } from "@/lib/auth";
 import {
   assertSeesIssue,
@@ -63,8 +63,13 @@ import {
   type ProjectResource,
 } from "@/lib/resources";
 
-function refresh(workspaceId: string) {
-  revalidatePath(`/${workspaceId}`, "layout");
+function refresh(workspaceId:string,domain:"tasks"|"projects"|"layout"|"settings"="tasks",projectId?:string){
+ if(domain==="layout"){revalidatePath(`/${workspaceId}`,"layout");return;}
+ if(domain==="settings"){revalidatePath(`/${workspaceId}/settings`,"layout");return;}
+ revalidatePath(`/${workspaceId}`);
+ if(projectId){revalidatePath(`/${workspaceId}/projects/${projectId}`);revalidatePath(`/${workspaceId}/projects/${projectId}/issues`);}
+ else{revalidatePath("/[workspaceId]/projects/[projectId]","page");revalidatePath("/[workspaceId]/projects/[projectId]/issues","page");}
+ revalidatePath(`/${workspaceId}/notifications`);
 }
 
 export type ActionResult<T> = { ok: true; data: T } | { ok: false; error: string };
@@ -260,7 +265,7 @@ export async function createProjectAction(
   return run<Project>(async () => {
     const { user } = await requireWorkspace(workspaceId);
     const project = await createProject({ workspaceId, createdBy: user.id, ...input });
-    refresh(workspaceId);
+    refresh(workspaceId,"layout");
     return project;
   });
 }
@@ -283,7 +288,7 @@ export async function updateProjectAction(
       patch.color !== undefined ||
       patch.icon !== undefined
     ) {
-      refresh(workspaceId);
+      refresh(workspaceId,"projects",projectId);
     }
     return project;
   });
@@ -301,7 +306,7 @@ export async function setOverviewGrantAction(
     const { user } = await requireWorkspace(workspaceId);
     await assertSeesProject(workspaceId, projectId, user.id);
     await setOverviewGrant(workspaceId, projectId, user.id, userId, role);
-    refresh(workspaceId);
+    refresh(workspaceId,"projects",projectId);
   });
 }
 
@@ -314,7 +319,7 @@ export async function removeOverviewGrantAction(
     const { user } = await requireWorkspace(workspaceId);
     await assertSeesProject(workspaceId, projectId, user.id);
     await removeOverviewGrant(workspaceId, projectId, user.id, userId);
-    refresh(workspaceId);
+    refresh(workspaceId,"projects",projectId);
   });
 }
 
@@ -328,7 +333,7 @@ export async function addOverviewCommentAction(
     const { user } = await requireWorkspace(workspaceId);
     await assertSeesProject(workspaceId, projectId, user.id);
     const comments = await addOverviewComment(workspaceId, projectId, user.id, body, anchor);
-    refresh(workspaceId);
+    refresh(workspaceId,"projects",projectId);
     return comments;
   });
 }
@@ -342,7 +347,7 @@ export async function removeOverviewCommentAction(
     const { user } = await requireWorkspace(workspaceId);
     await assertSeesProject(workspaceId, projectId, user.id);
     const comments = await removeOverviewComment(workspaceId, projectId, user.id, commentId);
-    refresh(workspaceId);
+    refresh(workspaceId,"projects",projectId);
     return comments;
   });
 }
@@ -356,7 +361,7 @@ export async function restoreDocEditAction(
     const { user } = await requireWorkspace(workspaceId);
     await assertSeesProject(workspaceId, projectId, user.id);
     const doc = await restoreOverviewDocEdit(workspaceId, projectId, editId, user.id);
-    refresh(workspaceId);
+    refresh(workspaceId,"projects",projectId);
     return { doc };
   });
 }
@@ -376,7 +381,7 @@ export async function setMembersSeeAllTasksAction(workspaceId: string, enabled: 
   return run<void>(async () => {
     await requireAdmin(workspaceId);
     await setMembersSeeAllTasks(workspaceId, enabled);
-    refresh(workspaceId);
+    refresh(workspaceId,"layout");
   });
 }
 
@@ -385,7 +390,7 @@ export async function addProjectMemberAction(workspaceId: string, projectId: str
     const { user } = await requireWorkspace(workspaceId);
     await assertSeesProject(workspaceId, projectId, user.id);
     await addProjectMember(workspaceId, projectId, userId);
-    refresh(workspaceId);
+    refresh(workspaceId,"layout");
   });
 }
 
@@ -398,7 +403,7 @@ export async function removeProjectMemberAction(
     const { user } = await requireWorkspace(workspaceId);
     await assertSeesProject(workspaceId, projectId, user.id);
     await removeProjectMember(workspaceId, projectId, userId);
-    refresh(workspaceId);
+    refresh(workspaceId,"layout");
   });
 }
 
@@ -409,7 +414,7 @@ export async function toggleProjectFavoriteAction(workspaceId: string, projectId
     const { user } = await requireWorkspace(workspaceId);
     await assertSeesProject(workspaceId, projectId, user.id);
     const favorite = await toggleFavoriteProject(workspaceId, user.id, projectId);
-    refresh(workspaceId);
+    refresh(workspaceId,"layout");
     return favorite;
   });
 }
@@ -418,7 +423,7 @@ export async function trashProjectAction(workspaceId: string, projectId: string)
     const { user } = await requireWorkspace(workspaceId);
     await assertSeesProject(workspaceId, projectId, user.id);
     await trashProject(workspaceId, projectId, user.id);
-    refresh(workspaceId);
+    refresh(workspaceId,"layout");
   });
 }
 
@@ -427,7 +432,7 @@ export async function restoreProjectAction(workspaceId: string, projectId: strin
     const { user } = await requireWorkspace(workspaceId);
     await assertSeesProject(workspaceId, projectId, user.id);
     await restoreProject(workspaceId, projectId, user.id);
-    refresh(workspaceId);
+    refresh(workspaceId,"layout");
   });
 }
 
@@ -435,7 +440,7 @@ export async function purgeProjectAction(workspaceId: string, projectId: string)
   return run<void>(async () => {
     const { user } = await requireWorkspace(workspaceId);
     await purgeProject(workspaceId, projectId, user.id);
-    refresh(workspaceId);
+    refresh(workspaceId,"layout");
   });
 }
 
@@ -454,7 +459,7 @@ export async function saveWorkspaceIconAction(workspaceId: string, icon: string 
       stored = icon;
     }
     await setWorkspaceIcon(workspaceId, stored);
-    refresh(workspaceId);
+    refresh(workspaceId,"layout");
     return stored;
   });
 }
@@ -463,7 +468,7 @@ export async function createLabelAction(workspaceId: string, input: { name: stri
   return run<Label>(async () => {
     await requireWorkspace(workspaceId);
     const label = await createLabel(workspaceId, input);
-    refresh(workspaceId);
+    refresh(workspaceId,"layout");
     return label;
   });
 }
@@ -472,7 +477,7 @@ export async function deleteLabelAction(workspaceId: string, id: string) {
   return run<void>(async () => {
     await requireWorkspace(workspaceId);
     await deleteLabel(workspaceId, id);
-    refresh(workspaceId);
+    refresh(workspaceId,"layout");
   });
 }
 
@@ -480,7 +485,7 @@ export async function createApiKeyAction(workspaceId: string, name: string) {
   return run<{ key: string }>(async () => {
     const { user } = await requireWorkspace(workspaceId);
     const { key } = await createApiKey(workspaceId, name, user.id);
-    refresh(workspaceId);
+    refresh(workspaceId,"settings");
     return { key };
   });
 }
@@ -489,7 +494,7 @@ export async function revokeApiKeyAction(workspaceId: string, id: string) {
   return run<void>(async () => {
     const { user } = await requireWorkspace(workspaceId);
     await revokeApiKey(workspaceId, id, user.id);
-    refresh(workspaceId);
+    refresh(workspaceId,"settings");
   });
 }
 
@@ -504,7 +509,7 @@ export async function addProjectLinkAction(
     const { user } = await requireWorkspace(workspaceId);
     await assertSeesProject(workspaceId, projectId, user.id);
     const resource = await addProjectLink(workspaceId, projectId, user.id, input);
-    refresh(workspaceId);
+    refresh(workspaceId,"projects",projectId);
     return resource;
   });
 }
@@ -514,7 +519,7 @@ export async function addProjectDocAction(workspaceId: string, projectId: string
     const { user } = await requireWorkspace(workspaceId);
     await assertSeesProject(workspaceId, projectId, user.id);
     const resource = await addProjectDoc(workspaceId, projectId, user.id, pageId);
-    refresh(workspaceId);
+    refresh(workspaceId,"projects",projectId);
     return resource;
   });
 }
@@ -528,7 +533,7 @@ export async function removeProjectResourceAction(
     const { user } = await requireWorkspace(workspaceId);
     await assertSeesProject(workspaceId, projectId, user.id);
     await removeProjectResource(workspaceId, projectId, resourceId, user.id);
-    refresh(workspaceId);
+    refresh(workspaceId,"projects",projectId);
   });
 }
 

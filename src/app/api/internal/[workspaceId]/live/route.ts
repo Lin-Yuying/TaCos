@@ -1,5 +1,5 @@
 import { getSessionUser, requireWorkspace } from "@/lib/auth";
-import { workspacePulse } from "@/lib/issues";
+import { workspacePulse, workspaceRevisions } from "@/lib/issues";
 
 // H-COLLAB-13: the live pulse. The client polls it and refreshes when it changes.
 export async function GET(_req: Request, ctx: { params: Promise<{ workspaceId: string }> }) {
@@ -12,7 +12,7 @@ export async function GET(_req: Request, ctx: { params: Promise<{ workspaceId: s
     return Response.json({ error: "Forbidden" }, { status: 403 });
   }
   return Response.json(
-    { pulse: await workspacePulse(workspaceId, user.id) },
+    { pulse: await workspacePulse(workspaceId, user.id), revisions:await workspaceRevisions(workspaceId,user.id) },
     { headers: { "Cache-Control": "no-store" } }
   );
 }

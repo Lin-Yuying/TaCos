@@ -1,3 +1,4 @@
+import { imagePreviewUrl } from "@/lib/image-preview-url";
 import {
   Node,
   createBlockMarkdownSpec,
@@ -21,6 +22,12 @@ import { documentColor } from "@/lib/markdown";
 import { mentionText } from "@/lib/mentions";
 
 const DocumentImage = Image.extend({
+  addAttributes(){return {...this.parent?.(),src:{default:null,parseHTML:element=>element.getAttribute("data-original-src")??element.getAttribute("src")}};},
+  renderHTML({HTMLAttributes}){return ["img",mergeAttributes(this.options.HTMLAttributes,HTMLAttributes,{src:imagePreviewUrl(String(HTMLAttributes.src??"")),"data-original-src":HTMLAttributes.src,loading:"lazy",decoding:"async"})];},
+  addNodeView(){return ({node})=>{
+    const dom=document.createElement("span"),image=document.createElement("img"),link=document.createElement("a");dom.contentEditable="false";dom.className="block";image.className=DOC_IMAGE_CLASS;image.loading="lazy";image.decoding="async";link.className="block text-caption text-faint underline";link.textContent="Download original";link.download="";
+    const paint=(value:typeof node)=>{const src=String(value.attrs.src??"");image.src=imagePreviewUrl(src);image.alt=String(value.attrs.alt??"");if(value.attrs.title)image.title=String(value.attrs.title);link.href=src;link.hidden=imagePreviewUrl(src)===src;};paint(node);dom.append(image,link);return {dom,update(next){if(next.type!==node.type)return false;paint(next);return true;}};
+  };},
   addKeyboardShortcuts() {
     return {
       Backspace: ({ editor }) => deleteSelectedImage(editor.state, (tr) => editor.view.dispatch(tr)),

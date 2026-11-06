@@ -65,12 +65,7 @@ function rawValues(task: ViewTask, key: string, values: FieldValues): string[] {
   }
 }
 
-function isNumeric(key: string, fields: TaskField[]): boolean {
-  if (key === "priority") return true;
-  return fields.find((field) => fieldKey(field.id) === key)?.type === "number";
-}
-
-function matches(task: ViewTask, filter: ViewFilter, fields: TaskField[], values: FieldValues): boolean {
+function matches(task: ViewTask, filter: ViewFilter, numericKeys: Set<string>, values: FieldValues): boolean {
   const raw = rawValues(task, filter.key, values);
   const wanted = (filter.value ?? "").trim().toLowerCase();
   switch (filter.op) {
@@ -87,7 +82,7 @@ function matches(task: ViewTask, filter: ViewFilter, fields: TaskField[], values
     case "gt":
     case "lt": {
       if (!wanted) return true;
-      const numeric = isNumeric(filter.key, fields);
+      const numeric = numericKeys.has(filter.key);
       return raw.some((value) => {
         const order = numeric ? Number(value) - Number(wanted) : value.localeCompare(wanted);
         return filter.op === "gt" ? order > 0 : order < 0;
@@ -96,7 +91,7 @@ function matches(task: ViewTask, filter: ViewFilter, fields: TaskField[], values
   }
 }
 
-function compare(a: ViewTask, b: ViewTask, sort: ViewSort, fields: TaskField[], values: FieldValues): number {
+function compare(a: ViewTask, b: ViewTask, sort: ViewSort, numericKeys: Set<string>, values: FieldValues): number {
   const [left] = rawValues(a, sort.key, values);
   const [right] = rawValues(b, sort.key, values);
   // Tasks with nothing set stay at the bottom in both directions.
@@ -106,7 +101,7 @@ function compare(a: ViewTask, b: ViewTask, sort: ViewSort, fields: TaskField[], 
   let order: number;
   if (sort.key === "status") {
     order = STATUS_ORDER.indexOf(left as never) - STATUS_ORDER.indexOf(right as never);
-  } else if (isNumeric(sort.key, fields)) {
+  } else if (numericKeys.has(sort.key)) {
     order = Number(left) - Number(right);
   } else {
     order = left.localeCompare(right);
@@ -121,15 +116,17 @@ export function applyView<T extends ViewTask>(
   values: FieldValues
 ): T[] {
   // A saved filter can outlive its field; it then stops applying instead of emptying the list.
+  const keys=new Set(fields.map(field=>fieldKey(field.id)));
+  const numericKeys=new Set(["priority",...fields.filter(field=>field.type==="number").map(field=>fieldKey(field.id))]);
   const live = (key: string) =>
-    !key.startsWith(FIELD_PREFIX) || fields.some((field) => fieldKey(field.id) === key);
+    !key.startsWith(FIELD_PREFIX) || keys.has(key);
   const filters = view.filters.filter((filter) => live(filter.key));
   const sorts = view.sort.filter((sort) => live(sort.key));
-  const shown = tasks.filter((task) => filters.every((filter) => matches(task, filter, fields, values)));
+  const shown = tasks.filter((task) => filters.every((filter) => matches(task, filter, numericKeys, values)));
   if (!sorts.length) return shown;
   return [...shown].sort((a, b) => {
     for (const sort of sorts) {
-      const order = compare(a, b, sort, fields, values);
+      const order = compare(a, b, sort, numericKeys, values);
       if (order) return order;
     }
     return 0;

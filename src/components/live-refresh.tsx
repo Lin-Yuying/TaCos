@@ -12,23 +12,31 @@ export function LiveRefresh({ workspaceId }: { workspaceId: string }) {
   const router = useRouter();
   useEffect(() => {
     let last: string | null = null;
+    let previous:Record<string,number>|null=null;
     let stopped = false;
     let inFlight = false;
+    let request: AbortController | null = null;
     async function tick() {
       if (stopped || inFlight || document.visibilityState !== "visible") return;
       inFlight = true;
+      request = new AbortController();
+      const timeout = window.setTimeout(() => request?.abort(), 8000);
       try {
-        const res = await fetch(`/api/internal/${workspaceId}/live`, { cache: "no-store" });
-        if (!res.ok) return;
-        const { pulse } = (await res.json()) as { pulse: string };
+        const res = await fetch(`/api/internal/${workspaceId}/live`, { cache: "no-store", signal: request.signal });
+        if (!res.ok || stopped) {if(res.status===403&&!stopped)router.refresh();return;}
+        const { pulse,revisions } = (await res.json()) as { pulse: string;revisions?:Record<string,number> };
         if (last !== null && pulse !== last) {
-          router.refresh();
-          window.dispatchEvent(new CustomEvent(LIVE_EVENT));
+          const changed=revisions&&previous?Object.keys({...previous,...revisions}).filter(domain=>revisions[domain]!==previous![domain]):null;
+          const url=new URL(location.href),path=url.pathname,tab=url.searchParams.get("tab")??(path.endsWith("/issues")?"issues":"overview");
+          const relevant=!changed||changed.some(domain=>["permissions","projects","personal"].includes(domain)||(domain==="tasks"&&(!path.includes("/docs")&&!path.includes("/agent")))||(domain==="documents"&&(path.includes("/docs")||path.includes("/projects/")&&tab!=="issues"))||(domain==="threads"&&path.includes("/agent"))||(domain==="notifications"&&path.endsWith("/notifications")));
+          if(relevant)router.refresh();
+          window.dispatchEvent(new CustomEvent(LIVE_EVENT,{detail:{domains:changed}}));
         }
-        last = pulse;
+        last = pulse;previous=revisions??null;
       } catch {
         // Offline or the server restarted: try again on the next tick.
       } finally {
+        window.clearTimeout(timeout);
         inFlight = false;
       }
     }
@@ -38,6 +46,7 @@ export function LiveRefresh({ workspaceId }: { workspaceId: string }) {
     document.addEventListener("visibilitychange", onVisible);
     return () => {
       stopped = true;
+      request?.abort();
       window.clearInterval(timer);
       document.removeEventListener("visibilitychange", onVisible);
     };

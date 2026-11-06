@@ -1,5 +1,6 @@
+import { packText,unpackText } from "./compressed-text";
 import crypto from "node:crypto";
-import { and, desc, eq, inArray, isNotNull, isNull, lt, or } from "drizzle-orm";
+import { and, sql, getTableColumns, desc, eq, inArray, isNotNull, isNull, lt, or } from "drizzle-orm";
 import { getDb } from "../db/client";
 import { notifications, pageAccess, pageCollab, pageComments, pageFavorites, pageVersions, pages, users } from "../db/schema";
 import { attachmentImageType, getAttachment, removePageAttachments } from "./attachments";
@@ -29,6 +30,8 @@ export type DocPage = {
 
 // What the sidebar and the child-page list need; the body is left in the database.
 export type PageSummary = Omit<DocPage, "doc" | "workspaceId" | "revision" | "shareLevel" | "position" | "cover"> & { depth: number; canEdit?: boolean };
+
+export type PageMetadata = Omit<DocPage, "doc"> & { canEdit?: boolean };
 
 export type PageRef = { id: string; title: string; icon: string | null;path?:string };
 
@@ -71,42 +74,34 @@ export async function listPages(workspaceId: string, viewerId: string): Promise<
   return rows.map(toPage);
 }
 
-// The sidebar wants a tree in reading order, not a flat list in creation order:
-// children sit directly under their parent, indented by depth.
-export function pageTree(items: DocPage[]): PageSummary[] {
-  const byParent = new Map<string | null, DocPage[]>();
-  for (const page of items) {
-    const key = page.parentId && items.some((p) => p.id === page.parentId) ? page.parentId : null;
-    const bucket = byParent.get(key) ?? [];
-    bucket.push(page);
-    byParent.set(key, bucket);
-  }
-  const out: PageSummary[] = [];
-  const walk = (parentId: string | null, depth: number) => {
-    for (const page of byParent.get(parentId) ?? []) {
-      out.push({
-        id: page.id,
-        parentId: page.parentId,
-        projectId: page.projectId,
-        title: page.title,
-        icon: page.icon,
-        createdBy: page.createdBy,
-        shared: page.shared,
-        createdAt: page.createdAt,
-        updatedAt: page.updatedAt,
-        depth,
-      });
-      walk(page.id, Math.min(depth + 1, 6));
-    }
-  };
-  walk(null, 0);
-  return out;
+const { doc: _bodyColumn, ...metadataColumns } = getTableColumns(pages);
+export async function listPageMetadata(workspaceId: string, viewerId: string, filter: {parentId?: string;projectId?: string;id?: string} = {}): Promise<PageMetadata[]> {
+  const conditions=[eq(pages.workspaceId,workspaceId),isNull(pages.deletedAt),or(eq(pages.shared,1),eq(pages.createdBy,viewerId))];
+  if (filter.parentId) conditions.push(eq(pages.parentId,filter.parentId));
+  if (filter.projectId) conditions.push(eq(pages.projectId,filter.projectId));
+  if (filter.id) conditions.push(eq(pages.id,filter.id));
+  const rows=await getDb().select({...metadataColumns,override:pageAccess.level}).from(pages)
+    .leftJoin(pageAccess,and(eq(pageAccess.pageId,pages.id),eq(pageAccess.userId,viewerId)))
+    .where(and(...conditions)).orderBy(pages.position,pages.createdAt);
+  return rows.map(({deletedAt:_deleted,trashRoot:_trash,override,...row})=>({...row,shared:row.shared===1,canEdit:row.createdBy===viewerId||(override??row.shareLevel)==="edit"}));
 }
 
+// Iterative traversal preserves true hierarchy without quadratic parent searches or stack overflow.
+export function pageTree(items: PageMetadata[]): PageSummary[] {
+  const ids=new Set(items.map(page=>page.id));
+  const byParent=new Map<string|null,PageMetadata[]>();
+  for(const page of items){const parent=page.parentId&&ids.has(page.parentId)?page.parentId:null;const bucket=byParent.get(parent)??[];bucket.push(page);byParent.set(parent,bucket);}
+  const out:PageSummary[]=[],seen=new Set<string>();
+  const stack=(byParent.get(null)??[]).map(page=>({page,depth:0})).reverse();
+  while(stack.length){const {page,depth}=stack.pop()!;if(seen.has(page.id))continue;seen.add(page.id);
+    const {doc:_doc,workspaceId:_ws,revision:_revision,shareLevel:_level,position:_position,cover:_cover,...summary}=page as PageMetadata & {doc?:string};
+    out.push({...summary,depth});
+    const children=byParent.get(page.id)??[];for(let i=children.length-1;i>=0;i--)stack.push({page:children[i],depth:depth+1});
+  }
+  return out;
+}
 export async function listPageTree(workspaceId: string, viewerId: string): Promise<PageSummary[]> {
-  const rows = await listPages(workspaceId, viewerId);
-  const levels = new Map(await Promise.all(rows.map(async(page)=>[page.id, await pageLevel(page,viewerId)] as const)));
-  return pageTree(rows).map((page)=>({...page,canEdit:levels.get(page.id)==="edit"}));
+  return pageTree(await listPageMetadata(workspaceId,viewerId));
 }
 
 export async function getPage(
@@ -135,30 +130,10 @@ export async function listChildPages(
   parentId: string,
   viewerId: string
 ): Promise<PageSummary[]> {
-  const all = await listPages(workspaceId, viewerId);
-  return all
-    .filter((page) => page.parentId === parentId)
-    .map((page) => ({
-      id: page.id,
-      parentId: page.parentId,
-      projectId: page.projectId,
-      title: page.title,
-      icon: page.icon,
-      createdBy: page.createdBy,
-      shared: page.shared,
-      createdAt: page.createdAt,
-      updatedAt: page.updatedAt,
-      depth: 0,
-    }));
+  return pageTree(await listPageMetadata(workspaceId,viewerId,{parentId})).map(page=>({...page,depth:0}));
 }
-
-export async function listProjectPageTree(
-  workspaceId: string,
-  projectId: string,
-  viewerId: string
-): Promise<PageSummary[]> {
-  const all = await listPages(workspaceId, viewerId);
-  return pageTree(all.filter((page) => page.projectId === projectId));
+export async function listProjectPageTree(workspaceId: string,projectId: string,viewerId: string): Promise<PageSummary[]> {
+  return pageTree(await listPageMetadata(workspaceId,viewerId,{projectId}));
 }
 
 export async function createPage(
@@ -188,7 +163,7 @@ export async function createPage(
   // in a row — [[Untitled]] would otherwise always open the oldest one.
   if (title === "Untitled") {
     const existing = new Set(
-      (await listPages(workspaceId, viewerId)).map((page) => page.title.toLowerCase())
+      (await listPageMetadata(workspaceId, viewerId)).map((page) => page.title.toLowerCase())
     );
     let n = 2;
     while (existing.has(title.toLowerCase())) title = `Untitled ${n++}`;
@@ -261,12 +236,11 @@ async function siblingPage(
   parentId: string | null,
   title: string
 ): Promise<DocPage | null> {
-  const visible = await listPages(workspaceId, viewerId);
-  return (
-    visible.find(
-      (page) => page.parentId === parentId && page.title.toLowerCase() === title.toLowerCase()
-    ) ?? null
-  );
+  const rows=await getDb().select().from(pages).where(and(eq(pages.workspaceId,workspaceId),
+    isNull(pages.deletedAt),siblingsOf(parentId),or(eq(pages.shared,1),eq(pages.createdBy,viewerId)),
+    sql`1`)).orderBy(pages.position,pages.createdAt);
+  const row=rows.find(row=>row.title.toLowerCase()===title.toLowerCase());
+  return row?toPage(row):null;
 }
 
 export type ImportedPage = { id: string; title: string; created: boolean };
@@ -289,11 +263,12 @@ function assertDocSize(doc: string): void {
 export async function importMarkdownPage(
   workspaceId: string,
   viewerId: string,
-  input: { path: string; content: string }
+  input: { path: string; content?: string; parsed?:{title:string;doc:string} }
 ): Promise<ImportedPage> {
   const segments = importSegments(input.path);
   const stem = segments.pop() ?? "Untitled";
-  const { title, doc } = splitImportedMarkdown(stem, input.content);
+  const { title, doc } = input.parsed??splitImportedMarkdown(stem, input.content??"");
+  if(typeof title!=="string"||!title.trim()||title.length>120||typeof doc!=="string")throw new TacosError("Invalid imported document",400);
   assertDocSize(doc);
 
   let parentId: string | null = null;
@@ -339,19 +314,19 @@ function siblingsOf(parentId: string | null) {
 export type PageMoveTarget = { parentId: string | null; beforeId?: string | null; shared?: boolean; projectId?: string | null; confirmedImpact?: string };
 function moveVersion(workspaceId: string): string {
   const db=getDb();
-  const rows=db.select({id:pages.id,parentId:pages.parentId,projectId:pages.projectId,shared:pages.shared,shareLevel:pages.shareLevel,revision:pages.revision,deletedAt:pages.deletedAt,position:pages.position}).from(pages).where(eq(pages.workspaceId,workspaceId)).all().sort((a,b)=>a.id.localeCompare(b.id));
-  const access=db.select().from(pageAccess).all().filter((row)=>rows.some((page)=>page.id===row.pageId)).sort((a,b)=>`${a.pageId}:${a.userId}`.localeCompare(`${b.pageId}:${b.userId}`));
-  return crypto.createHash("sha256").update(JSON.stringify([rows,access])).digest("hex");
+  const versions=db.all<{domain:string;revision:number}>(sql`SELECT domain,revision FROM workspace_revisions WHERE workspace_id=${workspaceId} AND domain IN ('documents','permissions','projects') ORDER BY domain`);
+  return crypto.createHash("sha256").update(JSON.stringify(versions)).digest("hex");
 }
 async function preparePageMove(workspaceId:string,pageId:string,viewerId:string,target:PageMoveTarget) {
   const db=getDb(),page=await getPage(workspaceId,pageId,viewerId);
   if(!page)throw new TacosError("Document not found",404);
   await requirePageLevel(page,viewerId,"edit");
   const descendants=await descendantsOf(workspaceId,pageId);
+  const visible=new Map((await listPageMetadata(workspaceId,viewerId)).map(child=>[child.id,child]));
   for(const child of descendants) {
-    const readable=await getPage(workspaceId,child.id,viewerId);
+    const readable=visible.get(child.id);
     if(!readable)throw new TacosError("You cannot move every document in this subtree",403);
-    await requirePageLevel(readable,viewerId,"edit");
+    if(!readable.canEdit)throw new TacosError("You cannot edit this page",403);
   }
   const ids=[pageId,...descendants.map((child)=>child.id)];
   const parent=target.parentId?await getPage(workspaceId,target.parentId,viewerId):null;
@@ -553,13 +528,14 @@ async function latestVersion(pageId: string) {
   return row ?? null;
 }
 
-async function recordVersion(page: DocPage, write: VersionWrite): Promise<void> {
+function recordVersion(page: DocPage, write: VersionWrite): void {
   const db = getDb();
   const at = nowIso();
-  let latest = await latestVersion(page.id);
+  const packed={text:write.doc,compressed:null};
+  let latest = db.select().from(pageVersions).where(eq(pageVersions.pageId,page.id)).orderBy(desc(pageVersions.seq)).get() ?? null;
   if (!latest && page.doc) {
     // A page written before versions existed, or created with text: keep that text.
-    await db.insert(pageVersions).values({
+    db.insert(pageVersions).values({
       id: crypto.randomUUID(),
       pageId: page.id,
       workspaceId: page.workspaceId,
@@ -571,8 +547,8 @@ async function recordVersion(page: DocPage, write: VersionWrite): Promise<void> 
       reason: "earlier",
       createdAt: page.updatedAt,
       updatedAt: page.updatedAt,
-    });
-    latest = await latestVersion(page.id);
+    }).run();
+    latest = db.select().from(pageVersions).where(eq(pageVersions.pageId,page.id)).orderBy(desc(pageVersions.seq)).get() ?? null;
   }
   if (
     latest &&
@@ -583,30 +559,30 @@ async function recordVersion(page: DocPage, write: VersionWrite): Promise<void> 
     latest.actorId === write.actorId &&
     Date.now() - Date.parse(latest.createdAt) < DOC_UPDATE_MERGE_MS
   ) {
-    await db
+    db
       .update(pageVersions)
-      .set({ title: write.title, doc: write.doc, updatedAt: at })
-      .where(eq(pageVersions.id, latest.id));
+      .set({ title: write.title, doc: packed.text,docCompressed:packed.compressed, updatedAt: at })
+      .where(eq(pageVersions.id, latest.id)).run();
     return;
   }
   const seq = (latest?.seq ?? 0) + 1;
-  await db.insert(pageVersions).values({
+  db.insert(pageVersions).values({
     id: crypto.randomUUID(),
     pageId: page.id,
     workspaceId: page.workspaceId,
     seq,
     title: write.title,
-    doc: write.doc,
+    doc: packed.text,docCompressed:packed.compressed,
     actorId: write.actorId,
     via: write.via,
     reason: write.reason,
     restoredFrom: write.restoredFrom ?? null,
     createdAt: at,
     updatedAt: at,
-  });
-  await db
+  }).run();
+  db
     .delete(pageVersions)
-    .where(and(eq(pageVersions.pageId, page.id), lt(pageVersions.seq, seq - MAX_VERSIONS_PER_PAGE + 1)));
+    .where(and(eq(pageVersions.pageId, page.id), lt(pageVersions.seq, seq - MAX_VERSIONS_PER_PAGE + 1))).run();
 }
 
 // One notice to each member newly mentioned in the text who can read the page, including
@@ -669,7 +645,8 @@ export async function updatePage(
   }
   if (Object.keys(next).length === 0) return page;
   next.updatedAt = nowIso();
-  const written = await getDb()
+  getDb().transaction(() => {
+  const written = getDb()
     .update(pages)
     .set(next)
     .where(
@@ -678,10 +655,10 @@ export async function updatePage(
         eq(pages.id, pageId),
         eq(pages.revision, page.revision)
       )
-    );
+    ).run();
   if (written.changes === 0) throw new TacosError(PAGE_CONFLICT, 409);
   if (next.doc !== undefined || next.title !== undefined) {
-    await recordVersion(page, {
+    recordVersion(page, {
       title: next.title ?? page.title,
       doc: next.doc ?? page.doc,
       actorId: viewerId,
@@ -689,6 +666,7 @@ export async function updatePage(
       reason: "edit",
     });
   }
+  });
   const updated = await findPage(workspaceId, pageId);
   if (!updated) throw new TacosError("Page not found", 404);
   if (next.doc !== undefined) await notifyDocMentions(page, updated.doc, viewerId);
@@ -791,16 +769,16 @@ export async function getPageVersionChange(
     from = spanFrom;
   }
   const [before] = await db
-    .select({ title: pageVersions.title, doc: pageVersions.doc, reason: pageVersions.reason })
+    .select({ title: pageVersions.title, doc: pageVersions.doc, docCompressed:pageVersions.docCompressed,reason: pageVersions.reason })
     .from(pageVersions)
     .where(and(eq(pageVersions.pageId, pageId), lt(pageVersions.seq, from.seq), inArray(pageVersions.reason, PAGE_TEXT_REASONS)))
     .orderBy(desc(pageVersions.seq))
     .limit(1);
   return {
     title: version.title,
-    doc: version.doc,
+    doc: await unpackText(version.doc,version.docCompressed),
     beforeTitle: before?.title ?? from.title,
-    beforeDoc: before?.doc ?? "",
+    beforeDoc: before?await unpackText(before.doc,before.docCompressed):"",
   };
 }
 
@@ -827,7 +805,7 @@ export async function restorePageVersion(
   if (!version) throw new TacosError("Version not found", 404);
   return writeBack(page, {
     title: version.title,
-    doc: version.doc,
+    doc: await unpackText(version.doc,version.docCompressed),
     actorId: viewerId,
     via: options.via ?? "you",
     reason: "restore",
@@ -888,7 +866,7 @@ export async function undoAgentEdit(
   }
   return writeBack(page, {
     title: before?.title ?? page.title,
-    doc: before?.doc ?? "",
+    doc: before?await unpackText(before.doc,before.docCompressed):"",
     actorId: viewerId,
     via: options.via ?? "you",
     reason: "undo",
@@ -910,25 +888,16 @@ export async function pageConflictView(
   return { doc: page.doc, revision: page.revision, by: author?.displayName ?? null };
 }
 
-export async function descendantsOf(workspaceId: string, pageId: string): Promise<DocPage[]> {
+export async function descendantsOf(workspaceId: string, pageId: string): Promise<PageMetadata[]> {
   const all = await getDb()
-    .select()
+    .select(metadataColumns)
     .from(pages)
     .where(and(eq(pages.workspaceId, workspaceId), isNull(pages.deletedAt)));
-  const out: DocPage[] = [];
-  const seen = new Set([pageId]);
-  let frontier = [pageId];
-  while (frontier.length) {
-    const next: string[] = [];
-    for (const row of all) {
-      if (row.parentId && frontier.includes(row.parentId) && !seen.has(row.id)) {
-        seen.add(row.id);
-        out.push(toPage(row));
-        next.push(row.id);
-      }
-    }
-    frontier = next;
-  }
+  const out: PageMetadata[] = [],seen=new Set([pageId]);
+  const byParent=new Map<string,typeof all>();
+  for(const row of all){if(!row.parentId)continue;const bucket=byParent.get(row.parentId)??[];bucket.push(row);byParent.set(row.parentId,bucket);}
+  const queue=[pageId];
+  for(let i=0;i<queue.length;i++)for(const row of byParent.get(queue[i])??[]){if(seen.has(row.id))continue;seen.add(row.id);out.push({...row,shared:row.shared===1});queue.push(row.id);}
   return out;
 }
 
@@ -1023,13 +992,12 @@ export async function restorePage(
   const db = getDb();
   // A parent that is gone or still in the Trash cannot hold it: it comes back at the top.
   const parent = row.parentId ? await findPage(workspaceId, row.parentId) : null;
-  await db
-    .update(pages)
-    .set({ deletedAt: null, trashRoot: null })
-    .where(and(eq(pages.workspaceId, workspaceId), eq(pages.trashRoot, pageId)));
-  if (row.parentId && !parent) {
-    await db.update(pages).set({ parentId: null }).where(eq(pages.id, pageId));
-  }
+  db.$client.transaction(()=>{
+   const job=db.$client.prepare("SELECT state,completed FROM maintenance_jobs WHERE id=?").get(`page:${pageId}`) as {state:string;completed:number}|undefined;
+   if(job&&(job.state==="running"||job.completed>0))throw new TacosError("Permanent deletion has started. This document cannot be restored.",409);
+   db.update(pages).set({deletedAt:null,trashRoot:null}).where(and(eq(pages.workspaceId,workspaceId),eq(pages.trashRoot,pageId))).run();
+   if(row.parentId&&!parent)db.update(pages).set({parentId:null}).where(eq(pages.id,pageId)).run();
+  }).immediate();
 }
 
 /** Removes the page, its subtree and their versions for good. Author or workspace owner. */
@@ -1043,21 +1011,8 @@ export async function purgePage(
   if (row.createdBy !== viewerId && !isWorkspaceOwner) {
     throw new TacosError("Only the page owner or the workspace owner can delete it forever", 403);
   }
-  const db = getDb();
-  const ids = (
-    await db
-      .select({ id: pages.id })
-      .from(pages)
-      .where(and(eq(pages.workspaceId, workspaceId), eq(pages.trashRoot, pageId)))
-  ).map((page) => page.id);
-  await db.delete(pageCollab).where(inArray(pageCollab.pageId, ids));
-  await db.delete(pageVersions).where(inArray(pageVersions.pageId, ids));
-  await db.delete(pageComments).where(inArray(pageComments.pageId, ids));
-  await db.delete(pageAccess).where(inArray(pageAccess.pageId, ids));
-  await db.delete(pageFavorites).where(inArray(pageFavorites.pageId, ids));
-  await removePageAttachments(ids);
-  await db.delete(notifications).where(inArray(notifications.pageId, ids));
-  await db.delete(pages).where(inArray(pages.id, ids));
+  const {purgePageRecords}=await import("./permanent-cleanup");
+  await purgePageRecords(workspaceId,pageId);
 }
 
 /** Backlinks and [[Title]] need a cheap title → page lookup for the viewer. */
@@ -1111,4 +1066,10 @@ export async function pageEmbedSources(
     if (page) out[id] = page.doc;
   }
   return out;
+}
+
+export async function compressPageHistory(limit=20) {
+ const db=getDb().$client;
+ const rows=db.prepare("SELECT id,doc FROM page_versions WHERE doc_compressed IS NULL AND length(doc)>=4096 LIMIT ?").all(limit) as {id:string;doc:string}[];
+ for(const row of rows){const packed=await packText(row.doc);db.prepare("UPDATE page_versions SET doc=?,doc_compressed=? WHERE id=? AND doc=? AND doc_compressed IS NULL").run(packed.text,packed.compressed??"",row.id,row.doc);}
 }

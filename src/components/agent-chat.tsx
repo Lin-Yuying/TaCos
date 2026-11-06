@@ -1,11 +1,12 @@
 "use client";
 
+import { loadAgentHistoryAction,loadAgentStepDetailAction } from "@/app/agent-actions";
 import { ThreadSidebar } from "@/components/thread-sidebar";
 import { ThreadMenu } from "@/components/thread-menu";
 import { useStoredJson } from "@/lib/use-stored-json";
 import { useDraft } from "@/lib/ui/draft-store";
 
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { createContext,useContext,useCallback,memo, useEffect, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -111,6 +112,7 @@ function toUi(thread: AgentThreadDetail | null): UiMessage[] {
       kind: step.kind,
       title: step.title,
       detail: step.detail ?? undefined,
+      detailAvailable:step.detailAvailable,
       status: step.status,
     })),
   }));
@@ -131,7 +133,7 @@ function stepDetail(step: AgentStepFrame): string {
 
 // Thinking keeps its own rows. Runs of tools and commands fold into one group, open while the
 // turn is on its last run and shut once something follows; a group the user opens stays open.
-function StepList({ steps, live }: { steps: AgentStepFrame[]; live: boolean }) {
+function StepListContent({ steps, live }: { steps: AgentStepFrame[]; live: boolean }) {
   const t = useT();
   const runs: AgentStepFrame[][] = [];
   for (const step of steps) {
@@ -146,7 +148,7 @@ function StepList({ steps, live }: { steps: AgentStepFrame[]; live: boolean }) {
         const failed = run.filter((step) => step.status === "error" || step.status === "denied").length;
         const running = run.some((step) => step.status === "running");
         return (
-          <details key={run[0].key} className="group/run" open={live && index === runs.length - 1 ? true : undefined}>
+          <StepGroup key={run[0].key} run={run} live={live && index===runs.length-1}>
             <summary className="flex cursor-pointer list-none items-center gap-1.5 rounded px-1 py-0.5 text-small text-muted transition-colors hover:bg-elevated hover:text-text">
               <ChevronRight size={12} className="shrink-0 text-faint transition-transform group-open/run:rotate-90" />
               <span>{t("{count} steps", { count: String(run.length) })}</span>
@@ -157,18 +159,19 @@ function StepList({ steps, live }: { steps: AgentStepFrame[]; live: boolean }) {
                 </span>
               )}
             </summary>
-            <div className="ml-3 space-y-0.5">
-              {run.map((step) => (
-                <StepLine key={step.key} step={step} />
-              ))}
-            </div>
-          </details>
+          </StepGroup>
         );
       })}
     </div>
   );
 }
 
+const StepList=memo(StepListContent);
+function StepGroup({run,live,children}:{run:AgentStepFrame[];live:boolean;children:ReactNode}){
+ const [opened,setOpened]=useState<boolean|null>(null);const open=opened??live;
+ return <details className="group/run" open={open} onToggle={event=>{if(event.currentTarget.open!==open)setOpened(event.currentTarget.open);}}>{children}{open&&<div className="ml-3 space-y-0.5">{run.map(step=><StepLine key={step.key} step={step}/>)}</div>}</details>;
+}
+const StepContext=createContext<{workspaceId:string;threadId:string}|null>(null);
 function TurnStatus() {
   const t = useT();
   const [seconds, setSeconds] = useState(0);
@@ -206,28 +209,33 @@ function TurnError({ error }: { error: string }) {
   );
 }
 
-function StepLine({ step }: { step: AgentStepFrame }) {
+function StepLineContent({ step:source }: { step: AgentStepFrame }) {
+  const context=useContext(StepContext);
+  const [loaded,setLoaded]=useState<string|null|undefined>(undefined),[loadError,setLoadError]=useState<string|null>(null);
+  const step=loaded===undefined?source:{...source,detail:loaded??undefined};
+  const load=()=>{if(!source.detail&&source.detailAvailable&&loaded===undefined&&context)void loadAgentStepDetailAction(context.workspaceId,context.threadId,source.key).then(result=>{if(result.ok){setLoaded(result.data);setLoadError(null);}else setLoadError(result.error);});};
   const t = useT();
+  const [expanded,setExpanded]=useState(false);
   if (step.kind === "thinking") {
     return (
-      <details className="group/step" data-testid="thinking-step">
+      <details className="group/step" data-testid="thinking-step" onToggle={event=>{setExpanded(event.currentTarget.open);if(event.currentTarget.open)load();}}>
         <summary className="flex cursor-pointer list-none items-center gap-1.5 rounded px-1 py-0.5 text-small text-muted transition-colors hover:bg-elevated hover:text-text">
           <Sparkles size={12} className="shrink-0 text-faint" />
           <span className="shrink-0">{t("Thinking")}</span>
           <span className="min-w-0 truncate text-faint">{step.title}</span>
         </summary>
-        <div className="mb-1 ml-5 mt-1 border-l border-border pl-3 text-small text-muted">
+        {expanded&&<div className="mb-1 ml-5 mt-1 border-l border-border pl-3 text-small text-muted">
           <Markdown source={step.detail ?? step.title} />
-        </div>
+        </div>}
       </details>
     );
   }
   const Icon =
     step.kind === "command" ? Terminal : step.kind === "file" ? FileText : step.kind === "tool" ? Wrench : Info;
-  const detail = stepDetail(step);
+  const detail = expanded?(loadError??stepDetail(step)):"";
   const failed = step.status === "error" || step.status === "denied";
   return (
-    <details className="group/step">
+    <details className="group/step" onToggle={event=>{setExpanded(event.currentTarget.open);if(event.currentTarget.open)load();}}>
       <summary className="flex cursor-pointer list-none items-center gap-1.5 rounded px-1 py-0.5 text-small text-muted transition-colors hover:bg-elevated [&::-webkit-details-marker]:hidden">
         <Icon size={12} className="shrink-0 text-faint" />
         <span className="min-w-0 truncate font-mono text-small">{step.title}</span>
@@ -250,6 +258,8 @@ function StepLine({ step }: { step: AgentStepFrame }) {
   );
 }
 
+const StepLine=memo(StepLineContent);
+
 function ApprovalPanel({
   card,
   busy,
@@ -269,14 +279,14 @@ function ApprovalPanel({
           {card.tool}
         </span>
       </div>
-      <p className="mt-1.5 text-small leading-relaxed text-muted">{card.message}</p>
-      {card.description && <p className="mt-1 text-small leading-relaxed text-faint">{card.description}</p>}
+      <p className="mt-1.5 break-words [overflow-wrap:anywhere] text-small leading-relaxed text-muted">{card.message}</p>
+      {card.description && <p className="mt-1 break-words [overflow-wrap:anywhere] text-small leading-relaxed text-faint">{card.description}</p>}
       {card.params && (
-        <pre className="mt-2 max-h-40 overflow-auto whitespace-pre-wrap rounded-md border border-border bg-bg p-2 font-mono text-caption leading-relaxed text-muted">
+        <pre className="mt-2 max-h-40 overflow-auto whitespace-pre-wrap [overflow-wrap:anywhere] rounded-md border border-border bg-bg p-2 font-mono text-caption leading-relaxed text-muted">
           {card.params}
         </pre>
       )}
-      <div className="mt-2.5 flex items-center justify-end gap-2">
+      <div className="mt-2.5 flex flex-wrap items-center justify-end gap-2">
         <button
           type="button"
           onClick={() => onAnswer(card.requestId, "decline")}
@@ -1952,25 +1962,30 @@ function Conversation({
 }) {
   const t = useT();
   const router = useRouter();
-  const [messages, setMessages] = useState<UiMessage[]>(() => toUi(active));
+  const [{messages,historyCursor,restore:historyRestore},setHistory] = useState(()=>({messages:toUi(active),historyCursor:active.historyCursor??null,restore:null as {beforeHeight:number}|null}));
+  const setMessages=useCallback((update:UiMessage[]|((previous:UiMessage[])=>UiMessage[]))=>setHistory(previous=>({...previous,messages:typeof update==="function"?update(previous.messages):update})),[]);
+  const [liveMessage,setLiveMessage]=useState<UiMessage|null>(null);
+  const liveMessageRef=useRef<UiMessage|null>(null);
+  const [loadingHistory,setLoadingHistory]=useState(false);
+  const loadHistory=async()=>{if(!historyCursor||loadingHistory)return;setLoadingHistory(true);const beforeHeight=chatScroll.current?.scrollHeight??0,firstId=messages[0]?.id;setFollow(false);try{const result=await loadAgentHistoryAction(workspaceId,active.id,historyCursor);if(!result.ok){setError(result.error);return;}setHistory(previous=>{if(previous.historyCursor!==historyCursor||previous.messages[0]?.id!==firstId)return previous;const ids=new Set(previous.messages.map(row=>row.id));return {messages:[...toUi(result.data).filter(row=>!ids.has(row.id)),...previous.messages],historyCursor:result.data.historyCursor??null,restore:{beforeHeight}};});}catch(error){setError(error instanceof Error?error.message:"Could not load messages. Retry.");}finally{setLoadingHistory(false);}};
   const {confirm,toast}=useUI();
   const [failedAccepted,setFailedAccepted]=useDraft("agent-failed-accepted",active.id,false);
   const [failedText,setFailedText]=useDraft<string|null>("agent-failed-turn",active.id,null);
   const [failedAttachments,setFailedAttachments]=useDraft<AgentAttachment[]>("agent-failed-attachments",active.id,[]);
   const [follow,setFollow]=useState(true);
-  const following=useRef(true),running=useRef(false),chatScroll=useRef<HTMLDivElement>(null);
+  const running=useRef(false),chatScroll=useRef<HTMLDivElement>(null);
+  useEffect(()=>{if(!historyRestore)return;const frame=requestAnimationFrame(()=>{if(chatScroll.current)chatScroll.current.scrollTop+=chatScroll.current.scrollHeight-historyRestore.beforeHeight;});return()=>cancelAnimationFrame(frame);},[historyRestore]);
   const [input, setInput] = useDraft("agent", active.id, "");
   const [busy, setBusy] = useState(false);
   // H-COLLAB-13: a live refresh brings new server messages (another member's turn).
   // Take them when no turn of ours is running; a running turn owns the list, and a
   // snapshot from during that turn is stale for good, so it counts as seen. A reply is
   // filled in on its existing row, so the key has to change with the row's content.
-  const lastServerMessage = active.messages.at(-1);
-  const serverKey = `${active.id}:${active.messages.length}:${lastServerMessage?.id ?? ""}:${lastServerMessage?.content.length ?? 0}`;
+  const serverKey = active.messages;
   const [seenKey, setSeenKey] = useState(serverKey);
   if (serverKey !== seenKey) {
     setSeenKey(serverKey);
-    if (!busy) setMessages(toUi(active));
+    if (!busy) setHistory(previous=>{const refreshed=toUi(active),ids=new Set(refreshed.map(row=>row.id)),overlap=previous.messages.findIndex(row=>row.id===refreshed[0]?.id);return overlap<0?{messages:refreshed,historyCursor:active.historyCursor??null,restore:null}:{messages:[...previous.messages.slice(0,overlap).filter(row=>!ids.has(row.id)),...refreshed],historyCursor:previous.historyCursor,restore:null};});
   }
   // Harness is a turn preference on this session. New chat creates a new session.
   const [engine, setEngine] = useState<AgentHarnessId>(() => {
@@ -2048,8 +2063,101 @@ function Conversation({
   }, [turnTaken, router]);
 
   useEffect(() => {
-    if(following.current)bottom.current?.scrollIntoView({ block: "end" });
-  }, [messages, approval]);
+    if(follow)bottom.current?.scrollIntoView({ block: "end" });
+  }, [messages,liveMessage, approval,follow]);
+
+  const stepIndexes=useRef(new WeakMap<AgentStepFrame[],Map<string,number>>());
+  const patchQueue=useRef<((message:UiMessage)=>UiMessage)[]>([]),patchFrame=useRef(0);
+  const flushPatches=()=>{cancelAnimationFrame(patchFrame.current);patchFrame.current=0;const patches=patchQueue.current;patchQueue.current=[];if(!patches.length)return;const last=liveMessageRef.current;if(!last)return;const next=patches.reduce((message,patch)=>patch(message),last);liveMessageRef.current=next;setLiveMessage(next);};
+  useEffect(()=>()=>cancelAnimationFrame(patchFrame.current),[]);
+  function patchLastAssistant(patch:(message:UiMessage)=>UiMessage){patchQueue.current.push(patch);if(!patchFrame.current)patchFrame.current=requestAnimationFrame(flushPatches);}
+
+  const forkAt=useCallback(async(messageId: string) => {
+    if (forkBusy) return;
+    setForkBusy(messageId);
+    setError(null);
+    try {
+      const result = await forkAgentThreadFromMessageAction(workspaceId, active.id, messageId);
+      if (!result.ok) {
+        setError(result.error);
+        return;
+      }
+      router.push(`/${workspaceId}/agent?thread=${result.data.id}`);
+      router.refresh();
+    } finally {
+      setForkBusy(null);
+    }
+  },[forkBusy,workspaceId,active.id,router]);
+  const editMessage=useCallback((text:string)=>{setInput(text);box.current?.focus();},[setInput]);
+
+  async function send(text: string, attachments: AgentAttachment[] = []) {
+    const message = text.trim();
+    if ((!message && attachments.length === 0) || running.current || turnTaken) return;
+    running.current=true;setFollow(true);
+    setError(null);
+    setApproval(null);
+    setBusy(true);
+    const startedAt = Date.now();
+    setMessages((prev) => [
+      ...prev,
+      {
+        id: `local-${startedAt}`,
+        role: "user",
+        content: messageWithAttachments(message, attachments),
+        steps: [],
+      },
+    ]);
+    const initial:UiMessage={id:`streaming-${startedAt}`,role:"assistant",content:"",steps:[]};liveMessageRef.current=initial;setLiveMessage(initial);
+    const controller = new AbortController();
+    abort.current = controller;
+    let accepted = false;
+    try {
+      await streamAiEdit(
+        {
+          workspaceId,
+          action: "agent",
+          threadId: active.id,
+          engine,
+          text: message,
+          attachments: attachments.length ? attachments.map((file) => file.id) : undefined,
+        },
+        (delta) => { if (!accepted) {accepted=true;setInput(current=>current.trim()===message?"":current);} patchLastAssistant((last) => ({ ...last, content: last.content + delta })); },
+        controller.signal,
+        (frame) => {
+          if (!accepted) {accepted=true;setInput(current=>current.trim()===message?"":current);}
+          if (frame.type === "step") {
+            patchLastAssistant((last) => {
+              const key = frame.step.key || `${frame.step.kind}|${frame.step.title}`;
+              let indexes=stepIndexes.current.get(last.steps);if(!indexes){indexes=new Map(last.steps.map((step,index)=>[step.key,index]));stepIndexes.current.set(last.steps,indexes);}
+              const existing = indexes.get(key)??-1;
+              if (existing < 0){const steps=[...last.steps,frame.step];const extended=new Map(indexes);extended.set(key,steps.length-1);stepIndexes.current.set(steps,extended);return {...last,steps};}
+              const steps = [...last.steps];
+              steps[existing] = { ...steps[existing], ...frame.step };stepIndexes.current.set(steps,indexes);
+              return { ...last, steps };
+            });
+          } else if (frame.type === "approval") {
+            setApproval(frame.request);
+          } else if (frame.type === "approval_done") {
+            setApproval((current) => (current?.requestId === frame.requestId ? null : current));
+          }
+        }
+      );
+      setInput(current=>current.trim()===message?"":current);setFailedText(null);setFailedAttachments([]);setFailedAccepted(false);
+    } catch (err) {
+      flushPatches();
+      setFailedText(message);setFailedAttachments(attachments);setFailedAccepted(accepted);
+      const aborted = err instanceof Error && err.name === "AbortError";
+      if (!aborted) setError(err instanceof Error ? err.message : "The agent could not answer");
+    } finally {
+      flushPatches();
+      const final=liveMessageRef.current;if(final&&(final.content.trim()||final.steps.length))setMessages(previous=>[...previous,final]);liveMessageRef.current=null;setLiveMessage(null);
+      abort.current = null;
+      running.current=false;setBusy(false);
+      setApproval(null);
+      router.refresh();
+      box.current?.focus();
+    }
+  }
 
   // A conversation created from the empty-state composer hands its first message over in
   // sessionStorage: creating the thread navigates away from the component that typed it.
@@ -2081,103 +2189,6 @@ function Conversation({
     if (pendingText.trim() || pendingAttachments.length) void send(pendingText, pendingAttachments);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
-
-  function patchLastAssistant(patch: (message: UiMessage) => UiMessage) {
-    setMessages((prev) => {
-      const last = prev[prev.length - 1];
-      if (!last || last.role !== "assistant") return prev;
-      return [...prev.slice(0, -1), patch(last)];
-    });
-  }
-
-  async function forkAt(messageId: string) {
-    if (forkBusy) return;
-    setForkBusy(messageId);
-    setError(null);
-    try {
-      const result = await forkAgentThreadFromMessageAction(workspaceId, active.id, messageId);
-      if (!result.ok) {
-        setError(result.error);
-        return;
-      }
-      router.push(`/${workspaceId}/agent?thread=${result.data.id}`);
-      router.refresh();
-    } finally {
-      setForkBusy(null);
-    }
-  }
-
-  async function send(text: string, attachments: AgentAttachment[] = []) {
-    const message = text.trim();
-    if ((!message && attachments.length === 0) || running.current || turnTaken) return;
-    running.current=true;following.current=true;setFollow(true);
-    setError(null);
-    setApproval(null);
-    setBusy(true);
-    const startedAt = Date.now();
-    setMessages((prev) => [
-      ...prev,
-      {
-        id: `local-${startedAt}`,
-        role: "user",
-        content: messageWithAttachments(message, attachments),
-        steps: [],
-      },
-      { id: `streaming-${startedAt}`, role: "assistant", content: "", steps: [] },
-    ]);
-    const controller = new AbortController();
-    abort.current = controller;
-    let accepted = false;
-    try {
-      await streamAiEdit(
-        {
-          workspaceId,
-          action: "agent",
-          threadId: active.id,
-          engine,
-          text: message,
-          attachments: attachments.length ? attachments.map((file) => file.id) : undefined,
-        },
-        (delta) => { if (!accepted) {accepted=true;setInput(current=>current.trim()===message?"":current);} patchLastAssistant((last) => ({ ...last, content: last.content + delta })); },
-        controller.signal,
-        (frame) => {
-          if (!accepted) {accepted=true;setInput(current=>current.trim()===message?"":current);}
-          if (frame.type === "step") {
-            patchLastAssistant((last) => {
-              const key = frame.step.key || `${frame.step.kind}|${frame.step.title}`;
-              const existing = last.steps.findIndex((step) => step.key === key);
-              if (existing < 0) return { ...last, steps: [...last.steps, frame.step] };
-              const steps = [...last.steps];
-              steps[existing] = { ...steps[existing], ...frame.step };
-              return { ...last, steps };
-            });
-          } else if (frame.type === "approval") {
-            setApproval(frame.request);
-          } else if (frame.type === "approval_done") {
-            setApproval((current) => (current?.requestId === frame.requestId ? null : current));
-          }
-        }
-      );
-      setInput(current=>current.trim()===message?"":current);setFailedText(null);setFailedAttachments([]);setFailedAccepted(false);
-    } catch (err) {
-      setFailedText(message);setFailedAttachments(attachments);setFailedAccepted(accepted);
-      const aborted = err instanceof Error && err.name === "AbortError";
-      setMessages((prev) => {
-        const last = prev[prev.length - 1];
-        if (last?.role === "assistant" && !last.content.trim() && last.steps.length === 0) {
-          return prev.slice(0, -1);
-        }
-        return prev;
-      });
-      if (!aborted) setError(err instanceof Error ? err.message : "The agent could not answer");
-    } finally {
-      abort.current = null;
-      running.current=false;setBusy(false);
-      setApproval(null);
-      router.refresh();
-      box.current?.focus();
-    }
-  }
 
   async function answer(requestId: string, decision: "accept" | "decline" | "accept-turn") {
     setApprovalBusy(true);
@@ -2219,7 +2230,7 @@ function Conversation({
           {active.visibility === "shared" && <Users size={11} className="shrink-0 text-faint" />}
           {!active.mine && <span className="shrink-0 text-faint">· {active.createdByName}</span>}
         </div>
-        <div className="absolute left-1/2 -translate-x-1/2">
+        <div className="min-w-0 flex-1 overflow-x-auto">
           <ThreadTaskChips workspaceId={workspaceId} threadId={active.id} busy={busy} />
         </div>
         <div className="flex shrink-0 items-center">
@@ -2227,7 +2238,7 @@ function Conversation({
         </div>
       </header>
 
-      <div ref={chatScroll} onScroll={e=>{const element=e.currentTarget;following.current=element.scrollHeight-element.scrollTop-element.clientHeight<80;setFollow(following.current);}} className="min-h-0 flex-1 overflow-y-auto">
+      <div ref={chatScroll} onScroll={e=>{const element=e.currentTarget;setFollow(element.scrollHeight-element.scrollTop-element.clientHeight<80);}} className="min-h-0 flex-1 overflow-y-auto">
         <div className="mx-auto flex w-full max-w-3xl flex-col gap-6 px-5 pb-8 pt-4">
           {messages.length === 0 && (
             <div className="pt-16 text-center">
@@ -2254,43 +2265,9 @@ function Conversation({
             </div>
           )}
 
-          {messages.map((message, index) => {
-            const forkButton =
-              active.visibility === "shared" ? (
-                <button
-                  type="button"
-                  disabled={forkBusy === message.id}
-                  onClick={() => void forkAt(message.id)}
-                  className="mt-1 flex items-center gap-1 text-caption text-faint transition-colors hover:text-muted disabled:opacity-50"
-                  data-testid="fork-message"
-                >
-                  <GitBranch size={11} />
-                  {t(forkBusy === message.id ? "Opening private chat…" : "Continue in private chat")}
-                </button>
-              ) : null;
-            return message.role === "user" ? (
-              <div key={message.id} className="flex flex-col items-end gap-1">
-                {message.author && (
-                  <span className="px-1 text-small text-faint" data-testid="message-author">
-                    {message.author}
-                  </span>
-                )}
-                <UserMessageBody content={message.content} bubbleClass={"max-w-[85%] whitespace-pre-wrap rounded-2xl rounded-br-md bg-elevated px-3.5 py-2 text-body leading-relaxed"} />
-                {forkButton}
-<div className="flex gap-3 text-small text-faint"><button disabled={busy} onClick={()=>{setInput(message.content);box.current?.focus();}}>{t("Edit and resend")}</button><button onClick={()=>void navigator.clipboard.writeText(message.content).then(()=>toast(t("Copied"))).catch(()=>toast(t("Could not copy the link")))}>{t("Copy")}</button></div>
-              </div>
-            ) : (
-              <div key={message.id} className="min-w-0 text-body leading-relaxed">
-                {message.steps.length > 0 && <StepList steps={message.steps} live={busy && index === messages.length - 1} />}
-                {message.content ? (
-                  <Markdown source={message.content} />
-                ) : busy && index === messages.length - 1 ? (
-                  <TurnStatus />
-                ) : null}
-                {forkButton}
-              </div>
-            );
-          })}
+          {historyCursor&&<button disabled={loadingHistory} onClick={()=>void loadHistory()} className="text-small text-muted">{t(loadingHistory?"Loading…":"Load earlier messages")}</button>}
+          <MessageList messages={messages} live={false} visibility={active.visibility} forkBusy={forkBusy} workspaceId={workspaceId} threadId={active.id} busy={busy} onFork={forkAt} onEdit={editMessage} onCopy={toast}/>
+          {liveMessage&&<MessageList messages={[liveMessage]} live visibility={active.visibility} forkBusy={forkBusy} workspaceId={workspaceId} threadId={active.id} busy={busy} onFork={forkAt} onEdit={editMessage} onCopy={toast}/>}
 
           {approval && (
             <ApprovalPanel
@@ -2305,7 +2282,7 @@ function Conversation({
 
       <div className="shrink-0 px-4 pb-4">
         <div className="mx-auto w-full max-w-3xl">
-          {!follow&&<button className="mb-2 rounded border border-border px-3 py-1 text-small" onClick={()=>{following.current=true;setFollow(true);bottom.current?.scrollIntoView({block:"end"});}}>{t("Jump to latest")}</button>}
+          {!follow&&<button className="mb-2 rounded border border-border px-3 py-1 text-small" onClick={()=>{setFollow(true);bottom.current?.scrollIntoView({block:"end"});}}>{t("Jump to latest")}</button>}
           {turnTaken && active.turnUserName && (
             <p className="mb-2 text-center text-small text-muted" data-testid="shared-turn-lock">
               {interpolate(t("{name} is using this shared chat"), { name: active.turnUserName })}
@@ -2380,3 +2357,43 @@ function Conversation({
     </div>
   );
 }
+
+const MessageList=memo(function MessageList({messages,live,visibility,forkBusy,workspaceId,threadId,busy,onFork,onEdit,onCopy}:{messages:UiMessage[];live:boolean;visibility:string;forkBusy:string|null;workspaceId:string;threadId:string;busy:boolean;onFork:(id:string)=>void;onEdit:(text:string)=>void;onCopy:(text:string)=>void}){
+ const t=useT();return <>{messages.map((message,index)=>{
+            const forkButton =
+              visibility === "shared" ? (
+                <button
+                  type="button"
+                  disabled={forkBusy === message.id}
+                  onClick={() => void onFork(message.id)}
+                  className="mt-1 flex items-center gap-1 text-caption text-faint transition-colors hover:text-muted disabled:opacity-50"
+                  data-testid="fork-message"
+                >
+                  <GitBranch size={11} />
+                  {t(forkBusy === message.id ? "Opening private chat…" : "Continue in private chat")}
+                </button>
+              ) : null;
+            return message.role === "user" ? (
+              <div key={message.id} className="flex flex-col items-end gap-1">
+                {message.author && (
+                  <span className="px-1 text-small text-faint" data-testid="message-author">
+                    {message.author}
+                  </span>
+                )}
+                <UserMessageBody content={message.content} bubbleClass={"max-w-[85%] whitespace-pre-wrap [overflow-wrap:anywhere] rounded-2xl rounded-br-md bg-elevated px-3.5 py-2 text-body leading-relaxed"} />
+                {forkButton}
+<div className="flex gap-3 text-small text-faint"><button disabled={busy} onClick={()=>{onEdit(message.content);}}>{t("Edit and resend")}</button><button onClick={()=>void navigator.clipboard.writeText(message.content).then(()=>onCopy(t("Copied"))).catch(()=>onCopy(t("Could not copy the link")))}>{t("Copy")}</button></div>
+              </div>
+            ) : (
+              <div key={message.id} style={{contentVisibility:"auto",containIntrinsicSize:"auto 150px"}} className="min-w-0 text-body leading-relaxed">
+                {message.steps.length > 0 && <StepContext.Provider value={{workspaceId,threadId:threadId}}><StepList steps={message.steps} live={live && index === messages.length - 1} /></StepContext.Provider>}
+                {message.content ? (
+                  <Markdown source={message.content} />
+                ) : live && index === messages.length - 1 ? (
+                  <TurnStatus />
+                ) : null}
+                {forkButton}
+              </div>
+            );
+})}</>;
+});

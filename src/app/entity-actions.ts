@@ -1,5 +1,5 @@
 "use server";
-import { revalidatePath } from "next/cache";
+import { invalidatePath as revalidatePath,withInvalidationBatch } from "@/lib/revalidation";
 import { requireWorkspace } from "@/lib/auth";
 import { inspectEntity, listPersonalPins, setPersonalPin } from "@/lib/personal-entities";
 import { changeIssueCollection, updateIssue, updateProject, TacosError } from "@/lib/issues";
@@ -31,7 +31,7 @@ export async function renameEntityAction(ws: string, kind: EntityKind, id: strin
 }
 
 export async function batchEntityAction(ws:string,kind:EntityKind,ids:string[],operation:string,value?:string) {
-  return run(async()=>{
+  return withInvalidationBatch(()=>run(async()=>{
     const {user}=await requireWorkspace(ws);
     if(!ids.length||ids.length>100)throw new TacosError("Select between 1 and 100 items",400);
     const {deleteIssueAction,updateIssueAction,toggleProjectFavoriteAction,trashProjectAction}=await import("./actions");
@@ -39,7 +39,7 @@ export async function batchEntityAction(ws:string,kind:EntityKind,ids:string[],o
     const results=[];
     if(operation==="move"&&kind==="document") {
       const {movePages}=await import("@/lib/pages"),target=JSON.parse(value??"{}") as {parentId:string|null;tokens:Record<string,string>};
-      await movePages(ws,user.id,ids,{parentId:target.parentId},target.tokens??{});revalidatePath(`/${ws}`,"layout");return ids.map(id=>({id,ok:true,error:undefined,deletedIds:undefined as string[]|undefined}));
+      await movePages(ws,user.id,ids,{parentId:target.parentId},target.tokens??{});revalidatePath(`/${ws}/docs`,"layout");return ids.map(id=>({id,ok:true,error:undefined,deletedIds:undefined as string[]|undefined}));
     }
     const alreadyDeleted=new Set<string>();
     for(const id of [...new Set(ids)]) {
@@ -69,8 +69,8 @@ export async function batchEntityAction(ws:string,kind:EntityKind,ids:string[],o
         results.push({id,ok:result.ok,error:result.error,deletedIds:operation==="trash"&&Array.isArray(result.data)?result.data as string[]:undefined});
       }catch(error){results.push({id,ok:false,error:error instanceof Error?error.message:"Could not save. Retry."});}
     }
-    revalidatePath(`/${ws}`,"layout");return results;
-  });
+    revalidatePath(`/${ws}`,operation==="pin"||operation==="favorite"?"layout":"page");return results;
+  }));
 }
 
 export async function reorderPersonalEntitiesAction(ws:string,group:"pin"|"favorite",items:{kind:EntityKind;id:string}[]){return run(async()=>{const {user}=await requireWorkspace(ws);const {reorderPersonalEntities}=await import("@/lib/personal-entities");await reorderPersonalEntities(ws,user.id,group,items);revalidatePath(`/${ws}`,"layout");});}

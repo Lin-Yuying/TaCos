@@ -153,6 +153,13 @@ function tokenizeInline(text: string, depth = 0): InlineToken[] {
   let buffer = "";
   let bufferStart = 0;
   let i = 0;
+  // Closing delimiters are indexed once, including failed URL suffixes. Long runs
+  // of unmatched opening brackets never rescan the remaining line.
+  const nextClose = new Int32Array(text.length + 1), nextLine = new Int32Array(text.length + 1), nextPipe = new Int32Array(text.length + 1);
+  let close=text.length, line=text.length, pipe=text.length;
+  nextClose[text.length]=nextLine[text.length]=nextPipe[text.length]=text.length;
+  for(let at=text.length-1;at>=0;at--){if(text[at]==="]")close=at;if(text[at]==="\n")line=at;if(text[at]==="|")pipe=at;nextClose[at]=close;nextLine[at]=line;nextPipe[at]=pipe;}
+  const urls = new Map<number, RegExpExecArray | null>();
 
   const flush = (end: number) => {
     if (buffer) {
@@ -174,7 +181,7 @@ function tokenizeInline(text: string, depth = 0): InlineToken[] {
     const rest = text.slice(i);
 
     if (depth < 6) {
-      const color = rest.match(/^\{color:(#[0-9a-fA-F]{6}|#[0-9a-fA-F]{3})\}([^\n]*?)\{\/color\}/);
+      const color = text[i] === '{' ? rest.match(/^\{color:(#[0-9a-fA-F]{6}|#[0-9a-fA-F]{3})\}([^\n]*?)\{\/color\}/) : null;
       const hex = color ? documentColor(color[1]) : null;
       if (color && hex) {
         flush(i);
@@ -192,7 +199,7 @@ function tokenizeInline(text: string, depth = 0): InlineToken[] {
       }
     }
 
-    const code = rest.match(/^`([^`\n]+)`/);
+    const code = text[i] === '`' ? rest.match(/^`([^`\n]+)`/) : null;
     if (code) {
       flush(i);
       out.push({ type: "code", text: code[1], start: i, inner: i + 1, end: i + code[0].length });
@@ -200,7 +207,7 @@ function tokenizeInline(text: string, depth = 0): InlineToken[] {
       continue;
     }
 
-    const boldItalic = rest.match(/^\*\*\*([^*\n]+)\*\*\*/);
+    const boldItalic = text[i] === '*' ? rest.match(/^\*\*\*([^*\n]+)\*\*\*/) : null;
     if (boldItalic) {
       flush(i);
       out.push({
@@ -214,7 +221,7 @@ function tokenizeInline(text: string, depth = 0): InlineToken[] {
       continue;
     }
 
-    const bold = rest.match(/^\*\*([^*\n]+)\*\*/);
+    const bold = text[i] === '*' ? rest.match(/^\*\*([^*\n]+)\*\*/) : null;
     if (bold) {
       flush(i);
       out.push({ type: "bold", text: bold[1], start: i, inner: i + 2, end: i + bold[0].length });
@@ -224,7 +231,7 @@ function tokenizeInline(text: string, depth = 0): InlineToken[] {
 
     // Underscore variants exist so the formatter can wrap text that already contains a
     // `*` (stray or from an older edit) without producing unparseable markers.
-    const boldItalicUnderscore = rest.match(/^___([^_\n]+)___/);
+    const boldItalicUnderscore = text[i] === '_' ? rest.match(/^___([^_\n]+)___/) : null;
     if (boldItalicUnderscore) {
       flush(i);
       out.push({
@@ -238,7 +245,7 @@ function tokenizeInline(text: string, depth = 0): InlineToken[] {
       continue;
     }
 
-    const boldUnderscore = rest.match(/^__([^_\n]+)__/);
+    const boldUnderscore = text[i] === '_' ? rest.match(/^__([^_\n]+)__/) : null;
     if (boldUnderscore) {
       flush(i);
       out.push({
@@ -252,7 +259,7 @@ function tokenizeInline(text: string, depth = 0): InlineToken[] {
       continue;
     }
 
-    const strike = rest.match(/^~~([^~\n]+)~~/);
+    const strike = text[i] === '~' ? rest.match(/^~~([^~\n]+)~~/) : null;
     if (strike) {
       flush(i);
       out.push({ type: "strike", text: strike[1], start: i, inner: i + 2, end: i + strike[0].length });
@@ -260,7 +267,7 @@ function tokenizeInline(text: string, depth = 0): InlineToken[] {
       continue;
     }
 
-    const italic = rest.match(/^\*([^*\n]+)\*/) ?? rest.match(/^_([^_\n]+)_/);
+    const italic = text[i] === "*" ? rest.match(/^\*([^*\n]+)\*/) : text[i] === "_" ? rest.match(/^_([^_\n]+)_/) : null;
     if (italic) {
       flush(i);
       out.push({ type: "italic", text: italic[1], start: i, inner: i + 1, end: i + italic[0].length });
@@ -268,38 +275,30 @@ function tokenizeInline(text: string, depth = 0): InlineToken[] {
       continue;
     }
 
-    // Must come before the generic link rule: both start with "[text](...)".
-    const issue = rest.match(/^\[([^\]\n]+)\]\(issue:([^)\s]+)\)/);
-    if (issue) {
-      flush(i);
-      out.push({
-        type: "issue",
-        text: issue[1],
-        issueId: issue[2],
-        start: i,
-        inner: i + 1,
-        end: i + issue[0].length,
-      });
-      i += issue[0].length;
-      continue;
+    if (text[i] === "[") {
+      const closing=nextClose[i+1];
+      if(closing<nextLine[i+1]) {
+        if(!urls.has(closing))urls.set(closing,/^\]\(([^)\s]+)\)/.exec(text.slice(closing)));
+        const url=urls.get(closing);
+        if(url){
+          flush(i);const label=text.slice(i+1,closing),href=url[1];
+          if(label && href.startsWith("issue:") && href.length>6)out.push({type:"issue",text:label,issueId:href.slice(6),start:i,inner:i+1,end:closing+url[0].length});
+          else out.push({type:"link",text:label||href,href:safeHref(href),start:i,inner:i+1,end:closing+url[0].length});
+          i=closing+url[0].length;continue;
+        }
+        if(text[i+1]==="[" && text[closing+1]==="]"){
+          const separator=nextPipe[i+2];
+          const titleEnd=Math.min(separator,closing);
+          if(titleEnd>i+2 && (separator>=closing || (separator+1<closing && nextPipe[separator+1]>=closing))){
+            flush(i);const raw=text.slice(i+2,titleEnd),title=raw.trim();
+            out.push({type:"page",text:title,pageId:separator<closing?text.slice(separator+1,closing).trim():undefined,start:i,inner:i+2+raw.indexOf(title),end:closing+2});
+            i=closing+2;continue;
+          }
+        }
+      }
     }
 
-    const link = rest.match(/^\[([^\]\n]*)\]\(([^)\s]+)\)/);
-    if (link) {
-      flush(i);
-      out.push({
-        type: "link",
-        text: link[1] || link[2],
-        href: safeHref(link[2]),
-        start: i,
-        inner: i + 1,
-        end: i + link[0].length,
-      });
-      i += link[0].length;
-      continue;
-    }
-
-    const autoLink = rest.match(/^<(https?:\/\/[^>\s]+)>/);
+    const autoLink = text[i] === '<' ? rest.match(/^<(https?:\/\/[^>\s]+)>/) : null;
     if (autoLink) {
       flush(i);
       out.push({
@@ -311,22 +310,6 @@ function tokenizeInline(text: string, depth = 0): InlineToken[] {
         end: i + autoLink[0].length,
       });
       i += autoLink[0].length;
-      continue;
-    }
-
-    const page = rest.match(/^\[\[([^\]\n|]+)(?:\|([^\]\n|]+))?\]\]/);
-    if (page) {
-      flush(i);
-      const title = page[1].trim();
-      out.push({
-        type: "page",
-        text: title,
-        pageId: page[2]?.trim(),
-        start: i,
-        inner: i + 2 + page[1].indexOf(title),
-        end: i + page[0].length,
-      });
-      i += page[0].length;
       continue;
     }
 

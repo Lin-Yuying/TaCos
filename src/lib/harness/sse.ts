@@ -1,107 +1,29 @@
 import type { ApprovalDecision, TurnEvent } from "./types";
-
 const ENCODER = new TextEncoder();
-
 function browserDecision(decision: ApprovalDecision): "accept" | "decline" | "accept-turn" {
-  if (decision === "allow") return "accept";
-  if (decision === "allow_turn") return "accept-turn";
-  return "decline";
+  return decision === "allow" ? "accept" : decision === "allow_turn" ? "accept-turn" : "decline";
 }
-
-/** Map harness TurnEvent values to the Agent SSE frames the browser already reads. */
+/** Pull one event at a time: a slow reader stops pulling the upstream iterator. */
 export function turnEventsToSse(events: AsyncIterable<TurnEvent>): ReadableStream<Uint8Array> {
-  let stopped = false;
-  let closed = false;
-
+  const iterator=events[Symbol.asyncIterator]();let stopped=false;
+  const frame=(payload:unknown)=>`data: ${JSON.stringify(payload)}\n\n`;
   return new ReadableStream<Uint8Array>({
-    async start(controller) {
-      const write = (chunk: string) => {
-        if (stopped || closed) return;
-        try {
-          controller.enqueue(ENCODER.encode(chunk));
-        } catch {
-          closed = true;
-        }
-      };
-      const delta = (text: string) => {
-        write(`data: ${JSON.stringify({ choices: [{ delta: { content: text } }] })}\n\n`);
-      };
-      const frame = (payload: Record<string, unknown>) => {
-        write(`data: ${JSON.stringify({ tacos: payload })}\n\n`);
-      };
-      const error = (message: string) => {
-        write(`data: ${JSON.stringify({ error: { message } })}\n\n`);
-        close();
-      };
-      const done = () => {
-        write("data: [DONE]\n\n");
-        close();
-      };
-      const close = () => {
-        if (closed) return;
-        closed = true;
-        try {
-          controller.close();
-        } catch {
-          /* already closed */
-        }
-      };
-
+    async pull(controller){
+      if(stopped)return;
       try {
-        for await (const event of events) {
-          if (stopped || closed) break;
-          if (event.type === "delta") {
-            delta(event.text);
-          } else if (event.type === "step") {
-            frame({
-              type: "step",
-              step: {
-                key: event.id,
-                kind: event.kind ?? "info",
-                title: event.title,
-                detail: event.detail,
-                status: event.status,
-              },
-            });
-          } else if (event.type === "approval") {
-            frame({
-              type: "approval",
-              request: {
-                requestId: event.requestId,
-                tool: event.tool,
-                message: event.message,
-                description: event.description ?? null,
-                params:
-                  event.params === undefined || event.params === null
-                    ? null
-                    : typeof event.params === "string"
-                      ? event.params
-                      : JSON.stringify(event.params, null, 2),
-              },
-            });
-          } else if (event.type === "approval_done") {
-            frame({
-              type: "approval_done",
-              requestId: event.requestId,
-              decision: browserDecision(event.decision),
-            });
-          } else if (event.type === "error") {
-            error(event.message);
-            return;
-          } else if (event.type === "done") {
-            done();
-            return;
-          }
-        }
-        if (!closed) done();
-      } catch (err) {
-        if (!closed) {
-          error(err instanceof Error ? err.message : "The harness turn failed.");
-        }
-      }
+        const next=await iterator.next();if(stopped)return;
+        const event=next.value;
+        let chunk:string;
+        if(next.done || event.type==="done")chunk="data: [DONE]\n\n";
+        else if(event.type==="error")chunk=frame({error:{message:event.message}});
+        else if(event.type==="delta")chunk=frame({choices:[{delta:{content:event.text}}]});
+        else if(event.type==="step")chunk=frame({tacos:{type:"step",step:{key:event.id,kind:event.kind??"info",title:event.title,detail:event.detail,status:event.status}}});
+        else if(event.type==="approval")chunk=frame({tacos:{type:"approval",request:{requestId:event.requestId,tool:event.tool,message:event.message,description:event.description??null,params:event.params==null?null:typeof event.params==="string"?event.params:JSON.stringify(event.params,null,2)}}});
+        else chunk=frame({tacos:{type:"approval_done",requestId:event.requestId,decision:browserDecision(event.decision)}});
+        controller.enqueue(ENCODER.encode(chunk));
+        if(next.done || event.type==="done" || event.type==="error") {stopped=true;controller.close();await iterator.return?.();}
+      }catch(error){if(!stopped){stopped=true;controller.enqueue(ENCODER.encode(frame({error:{message:error instanceof Error?error.message:"The harness turn failed."}})));controller.close();await iterator.return?.();}}
     },
-    cancel() {
-      stopped = true;
-    },
-  });
+    async cancel(){stopped=true;await iterator.return?.();},
+  },{highWaterMark:64*1024,size:chunk=>chunk.byteLength});
 }

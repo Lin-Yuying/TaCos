@@ -276,6 +276,7 @@ export const pageVersions = sqliteTable(
     seq: integer("seq").notNull(),
     title: text("title").notNull(),
     doc: text("doc").notNull(),
+    docCompressed: text("doc_compressed"),
     actorId: text("actor_id").notNull(),
     // you | mcp
     via: text("via").notNull(),
@@ -702,6 +703,7 @@ export const agentRuns = sqliteTable("agent_runs", {
   threadId: text("thread_id"),
   issueId: text("issue_id"),
   payload: text("payload").notNull(),
+  payloadCompressed: text("payload_compressed"),
   // queued | running | done | failed | cancelled
   status: text("status").notNull(),
   error: text("error"),

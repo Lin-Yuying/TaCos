@@ -173,9 +173,11 @@ export async function* openDshTurn(input: TurnInput, log?: TurnLog): AsyncGenera
   const promptText = messageText(input);
 
   const queue: TurnEvent[] = [];
+  let queuedBytes=0;
   let wake: (() => void) | null = null;
   const push = (event: TurnEvent) => {
-    queue.push(event);
+    queue.push(event);queuedBytes+=Buffer.byteLength(JSON.stringify(event));
+    if(queuedBytes>=1024*1024)child?.stdout?.pause();
     wake?.();
   };
 
@@ -244,7 +246,7 @@ export async function* openDshTurn(input: TurnInput, log?: TurnLog): AsyncGenera
     child.stderr.setEncoding("utf8");
     child.stderr.on("data", (chunk: string) => {
       stderr = `${stderr}${chunk}`.slice(-4_000);
-      log?.write(chunk);
+      if(log){child?.stderr?.pause();void log?.write(chunk).finally(()=>child?.stderr?.resume());}
     });
   }
 
@@ -316,22 +318,17 @@ export async function* openDshTurn(input: TurnInput, log?: TurnLog): AsyncGenera
     }
   }
 
-  input.signal?.addEventListener(
-    "abort",
-    () => {
-      clearTimeout(timer);
-      finish("The turn was cancelled.");
-    },
-    { once: true }
-  );
+  const onAbort=()=>{clearTimeout(timer);finish("The turn was cancelled.");};
+  input.signal?.addEventListener("abort",onAbort,{once:true});
   if (input.signal?.aborted) {
     clearTimeout(timer);
     finish("The turn was cancelled.");
   }
 
+  try {
   while (true) {
     while (queue.length > 0) {
-      const event = queue.shift()!;
+      const event = queue.shift()!;queuedBytes-=Buffer.byteLength(JSON.stringify(event));if(queuedBytes<256*1024)child?.stdout?.resume();
       yield event;
       if (event.type === "done" || event.type === "error") {
         clearTimeout(timer);
@@ -350,4 +347,6 @@ export async function* openDshTurn(input: TurnInput, log?: TurnLog): AsyncGenera
     });
     wake = null;
   }
+  } finally {clearTimeout(timer);unsubscribe();input.signal?.removeEventListener("abort",onAbort);child?.kill();queue.length=0;}
+
 }

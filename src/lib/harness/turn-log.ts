@@ -4,14 +4,15 @@
  * Error events that reach the user name that file, so the person can open it.
  * Default dir: ~/.tacos/logs/harness. Set TACOS_LOG_DIR to change the root.
  */
-import fs from "node:fs";
+import { createLogStream } from "../../../electron/log-stream.mjs";
 import os from "node:os";
 import path from "node:path";
 import type { HarnessId, TurnEvent, TurnInput } from "./types";
 
 export type TurnLog = {
   path: string;
-  write(chunk: string): void;
+  write(chunk: string): Promise<void>;
+  close(): Promise<void>;
 };
 
 export function harnessLogDir(): string {
@@ -27,24 +28,13 @@ export function openTurnLog(harness: HarnessId, sessionId: string): TurnLog {
   const dir = harnessLogDir();
   const stamp = new Date().toISOString().replace(/[:.]/g, "-");
   const file = path.join(dir, `${harness}-${safe(sessionId)}-${stamp}.log`);
-  let ok = true;
-  try {
-    fs.mkdirSync(dir, { recursive: true });
-    fs.writeFileSync(file, `# TaCos ${harness} turn ${sessionId} ${new Date().toISOString()}\n`);
-  } catch {
-    ok = false;
-  }
-  return {
-    path: file,
-    write(chunk: string) {
-      if (!ok) return;
-      try {
-        fs.appendFileSync(file, chunk);
-      } catch {
-        ok = false;
-      }
-    },
-  };
+  const stream=createLogStream(file);
+  let failed=false;
+  stream.on("error",error=>{failed=true;console.error("Could not write harness log:",error.message);});
+  const write=(chunk:string)=>new Promise<void>(resolve=>{if(failed||stream.writableEnded||stream.destroyed)return resolve();stream.write(chunk,()=>resolve());});
+  void write(`# TaCos ${harness} turn ${sessionId} ${new Date().toISOString()}\n`);
+  return {path:file,write,close(){return new Promise<void>(resolve=>{if(failed||stream.closed)return resolve();stream.end(resolve);stream.once("error",()=>resolve());});}};
+
 }
 
 export function withLogPath(message: string, logPath: string): string {
@@ -60,7 +50,7 @@ export async function* loggedTurn(
   const log = openTurnLog(harness, input.sessionId);
   try {
     for await (const event of run(log)) {
-      if (event.type !== "delta") log.write(`[event] ${JSON.stringify(event)}\n`);
+      if (event.type !== "delta") await log.write(`[event] ${JSON.stringify(event)}\n`);
       if (event.type === "error") {
         yield { ...event, message: withLogPath(event.message, log.path) };
         continue;
@@ -69,8 +59,8 @@ export async function* loggedTurn(
     }
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
-    log.write(`[throw] ${message}\n`);
+    await log.write(`[throw] ${message}\n`);
     yield { type: "error", message: withLogPath(`${harness} turn failed: ${message}`, log.path) };
     yield { type: "done" };
-  }
+  } finally {await log.close();}
 }

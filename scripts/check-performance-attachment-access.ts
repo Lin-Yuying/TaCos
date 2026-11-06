@@ -1,0 +1,33 @@
+import assert from "node:assert/strict";
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
+process.env.TACOS_DATA_DIR=fs.mkdtempSync(path.join(os.tmpdir(),"tacos-attachment-access-"));
+async function main(){
+ const {getDb}=await import("../src/db/client"),db=getDb().$client;
+ const {auditAttachmentReferences,canReadRetainedAttachment,reclaimRetainedAttachments,RETAINED_ATTACHMENT_GRACE_MS}=await import("../src/lib/attachment-references");
+ const {deletePageRecords}=await import("../src/lib/permanent-cleanup");
+ const p=db.prepare("SELECT p.id,p.workspace_id AS ws,w.created_by AS user FROM projects p JOIN workspaces w ON w.id=p.workspace_id LIMIT 1").get() as {id:string;ws:string;user:string};
+ const other=db.prepare("SELECT user_id AS id FROM workspace_members WHERE workspace_id=? AND user_id<>? LIMIT 1").get(p.ws,p.user) as {id:string};
+ const insert=db.prepare("INSERT INTO pages(id,workspace_id,title,doc,created_by,shared,created_at,updated_at) VALUES(?,?,?,?,?,?,'a','a')");
+ const file="retained-file-fixture";
+ insert.run("attachment-origin",p.ws,"Origin",`![image](/api/files/${file})`,p.user,0);
+ insert.run("attachment-reference",p.ws,"Private reference",`![image](/api/files/${file})`,p.user,0);
+ db.prepare("INSERT INTO attachments(id,workspace_id,page_id,uploader_id,name,size,complete,created_at) VALUES(?,?,'attachment-origin',?,'image.png',12,1,'a')").run(file,p.ws,p.user);
+ await auditAttachmentReferences(p.ws);db.transaction(()=>deletePageRecords(["attachment-origin"])).immediate();
+ assert.equal((db.prepare("SELECT page_id AS id FROM attachments WHERE id=?").get(file) as {id:string}).id,"retained:attachment-origin");
+ assert(await canReadRetainedAttachment(p.ws,p.user,file));assert.equal(await canReadRetainedAttachment(p.ws,other.id,file),false);
+ db.prepare("UPDATE pages SET shared=1 WHERE id='attachment-reference'").run();assert(await canReadRetainedAttachment(p.ws,other.id,file));
+ db.prepare("UPDATE pages SET shared=0 WHERE id='attachment-reference'").run();assert.equal(await canReadRetainedAttachment(p.ws,other.id,file),false);
+ db.prepare("UPDATE pages SET doc='' WHERE id='attachment-reference'").run();assert.equal(await canReadRetainedAttachment(p.ws,p.user,file),false,"stale inventory cannot authorize a removed reference");
+ db.prepare("INSERT INTO page_versions(id,page_id,workspace_id,seq,title,doc,actor_id,via,reason,created_at,updated_at) VALUES('retained-version','attachment-reference',?,1,'Before',?,?,'you','edit','a','a')").run(p.ws,`![image](/api/files/${file})`,p.user);
+ await auditAttachmentReferences(p.ws);assert(await canReadRetainedAttachment(p.ws,p.user,file));assert.equal(await canReadRetainedAttachment(p.ws,other.id,file),false);
+ assert.equal(await canReadRetainedAttachment(p.ws,"non-member",file),false);
+ db.prepare("UPDATE pages SET deleted_at='now' WHERE id='attachment-reference'").run();assert.equal(await canReadRetainedAttachment(p.ws,p.user,file),false);
+ // Trash and retained history still pin files, even though they do not grant a live download.
+ assert.equal(await reclaimRetainedAttachments(p.ws,Date.now()+2*RETAINED_ATTACHMENT_GRACE_MS),0);
+ db.prepare("DELETE FROM page_versions WHERE id='retained-version'").run();await auditAttachmentReferences(p.ws);
+ assert.equal(await reclaimRetainedAttachments(p.ws),0);assert.equal(await reclaimRetainedAttachments(p.ws,Date.now()+RETAINED_ATTACHMENT_GRACE_MS+1000),1);
+ assert(db.prepare("SELECT id FROM file_cleanup WHERE id=?").get(file));
+ console.log("check-performance-attachment-access: pass (cross-reference retained, private/shared/revoked/stale/history/Trash/non-member access, grace-period reclamation)");
+}main().catch(error=>{console.error(error);process.exit(1);});

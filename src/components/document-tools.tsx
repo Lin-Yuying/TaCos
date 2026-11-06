@@ -1,4 +1,5 @@
 "use client";
+import { documentIndex, searchDocument } from "@/lib/editor/document-index";
 import { documentMarkdown } from "@/lib/editor/document-markdown";
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { Editor } from "@tiptap/react";
@@ -22,82 +23,25 @@ export function DocumentTools({
   const t = useT(),
     { toast } = useUI();
   const [query, setQuery] = useState(""),
-    [outline, setOutline] = useState<
-      { title: string; level: number; pos: number }[]
-    >([]),
     [matches, setMatches] = useState<{ from: number; to: number }[]>([]),
     [index, setIndex] = useState(0),
     [active, setActive] = useState<number | null>(null);
   const root = useRef<HTMLDivElement>(null);
+  const [revision,setRevision]=useState(0);
+  useEffect(()=>{if(!editor)return;const changed=()=>setRevision(value=>value+1);editor.on("update",changed);return()=>{editor.off("update",changed);};},[editor]);
+  const indexed=useMemo(()=>editor?documentIndex(editor.state.doc):null,[editor,revision]);
+  const outline=indexed?.headings??[];
+  useEffect(()=>{let cancelled=false;const timer=setTimeout(()=>{if(!cancelled)setMatches(indexed?searchDocument(indexed,query):[]);},100);return()=>{cancelled=true;clearTimeout(timer);};},[indexed,query]);
   useEffect(() => {
-    if (!editor) return;
-    const update = () => {
-      const headings: { title: string; level: number; pos: number }[] = [],
-        found: { from: number; to: number }[] = [];
-      editor.state.doc.descendants((node, pos) => {
-        if (node.type.name === "heading")
-          headings.push({
-            title: node.textContent,
-            level: node.attrs.level,
-            pos,
-          });
-        if (query && node.isTextblock) {
-          let text = "";
-          const positions: number[] = [];
-          node.descendants((child, offset) => {
-            if (child.isText) {
-              for (let at = 0; at < (child.text ?? "").length; at++) {
-                text += child.text![at];
-                positions.push(pos + 1 + offset + at);
-              }
-            }
-          });
-          const needle = query.toLocaleLowerCase();
-          for (
-            let at = 0;
-            at + query.length <= text.length && found.length < 500;
-            at++
-          ) {
-            if (
-              text.slice(at, at + query.length).toLocaleLowerCase() !== needle
-            )
-              continue;
-            if (positions[at] !== undefined)
-              found.push({
-                from: positions[at],
-                to: positions[at + query.length - 1] + 1,
-              });
-            at += query.length - 1;
-          }
-        }
-      });
-      setOutline(headings);
-      setMatches(found);
-    };
-    update();
-    editor.on("update", update);
-    return () => {
-      editor.off("update", update);
-    };
-  }, [editor, query, doc]);
-  useEffect(() => {
-    const scroller = root.current
-      ?.closest("[data-document-root]")
-      ?.querySelector("[data-document-scroll]");
-    if (!scroller) return;
-    const onScroll = () => {
-      const top = scroller.getBoundingClientRect().top;
-      const headings = [
-        ...scroller.querySelectorAll(".tiptap h1,.tiptap h2,.tiptap h3"),
-      ];
-      let at = 0;
-      for (const [index, heading] of headings.entries())
-        if (heading.getBoundingClientRect().top < top + 120) at = index;
-      setActive(at);
-    };
-    scroller.addEventListener("scroll", onScroll);
-    return () => scroller.removeEventListener("scroll", onScroll);
-  }, [outline]);
+    const scroller=root.current?.closest("[data-document-root]")?.querySelector("[data-document-scroll]");
+    if(!scroller)return;
+    let offsets:number[]=[],frame=0;
+    const measure=()=>{const top=scroller.getBoundingClientRect().top;offsets=[...scroller.querySelectorAll(".tiptap h1,.tiptap h2,.tiptap h3")].map(heading=>heading.getBoundingClientRect().top-top+scroller.scrollTop);onScroll();};
+    const onScroll=()=>{if(frame)return;frame=requestAnimationFrame(()=>{frame=0;const target=scroller.scrollTop+120;let low=0,high=offsets.length;while(low<high){const middle=(low+high)>>>1;if(offsets[middle]<=target)low=middle+1;else high=middle;}setActive(Math.max(0,low-1));});};
+    const observer=new ResizeObserver(measure);observer.observe(scroller);const content=scroller.querySelector(".tiptap");if(content)observer.observe(content);
+    measure();scroller.addEventListener("scroll",onScroll,{passive:true});
+    return()=>{observer.disconnect();scroller.removeEventListener("scroll",onScroll);cancelAnimationFrame(frame);};
+  },[indexed]);
   useEffect(()=>{CSS.highlights?.delete("document-find");return()=>{CSS.highlights?.delete("document-find");};},[query,editor]);
   function locate(from: number, to = from) {
     if (!editor) return;
@@ -226,7 +170,8 @@ export function DocumentTools({
               onKeyDown={(e) => {
                 if (e.key === "Enter" && !e.nativeEvent.isComposing) {
                   e.preventDefault();
-                  find(e.shiftKey ? -1 : 1);
+                  const fresh=indexed?searchDocument(indexed,query):[];setMatches(fresh);
+                  if(fresh.length){const next=index<0?(e.shiftKey?fresh.length-1:0):(index+(e.shiftKey?-1:1)+fresh.length)%fresh.length;setIndex(next);locate(fresh[next].from,fresh[next].to);}
                 }
               }}
               className="w-full rounded border border-border bg-bg p-1"
@@ -240,7 +185,7 @@ export function DocumentTools({
               </button>
               <span>
                 {matches.length ? Math.max(0, index + 1) : 0} / {matches.length}
-                {matches.length === 500 ? "+" : ""}
+
               </span>
             </div>
           </div>

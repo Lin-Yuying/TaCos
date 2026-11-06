@@ -5,12 +5,14 @@ import { ProjectPage } from "@/components/project-page";
 // pills themselves switch tabs without navigating.
 export default function ProjectIssuesRoute({
   params,
+  searchParams,
 }: {
   params: Promise<{ workspaceId: string; projectId: string }>;
+  searchParams: Promise<Record<string,string|string[]|undefined>>;
 }) {
   return (
     <Suspense fallback={<div className="p-6 text-body text-muted">Loading…</div>}>
-      <ProjectPage params={params} initialTab="issues" />
+      <ProjectPage searchParams={searchParams} params={params} initialTab="issues" />
     </Suspense>
   );
 }

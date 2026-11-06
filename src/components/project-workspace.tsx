@@ -1,7 +1,9 @@
 "use client";
 
+import type {TaskQuery,queryTaskView} from "@/lib/task-query";
+import { DebouncedInput } from "./ui/debounced-input";
 import { useMemo, useState } from "react";
-import { useSearchParams } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { Search, X } from "lucide-react";
 import { StatusIcon } from "@/components/icons";
 import { IssueLayout, LayoutToggle } from "@/components/issue-layout";
@@ -52,9 +54,10 @@ export function ProjectWorkspace({
   resources,
   trashedTitles,
   fields,
-  fieldValues,
+  fieldValues,taskQuery,taskPage,
 }: {
   fields: TaskField[];
+  taskQuery?:TaskQuery;taskPage?:Awaited<ReturnType<typeof queryTaskView>>;
   fieldValues: FieldValues;
   workspaceId: string;
   project: ProjectDetail;
@@ -77,12 +80,13 @@ export function ProjectWorkspace({
 }) {
   const t = useT();
   const params = useSearchParams();
+  const router=useRouter();
   const selectedTab = params.get("tab");
-  const tab: ProjectTab = selectedTab === "documents" || selectedTab === "issues" || selectedTab === "overview" ? selectedTab : initialTab;
+  const tab: ProjectTab = !access.canView?"issues":selectedTab === "documents" || selectedTab === "issues" || selectedTab === "overview" ? selectedTab : initialTab;
   const selectedStatus=params.get("status");
   const status:Status|null=selectedStatus&&selectedStatus in STATUS_META?selectedStatus as Status:null;
   const q=params.get("q")??"";
-  function setQueryValue(key:string,value:string|null){const url=new URL(location.href);if(value)url.searchParams.set(key,value);else url.searchParams.delete(key);history.replaceState(null,"",url);}
+  function setQueryValue(key:string,value:string|null){const url=new URL(location.href);if(value)url.searchParams.set(key,value);else url.searchParams.delete(key);router.replace(url.pathname+url.search,{scroll:false});}
   function setStatus(status:Status|null){setQueryValue("status",status);}
   function setQ(query:string){setQueryValue("q",query);}
   const [favorite, setFavorite] = useState(initialFavorite);
@@ -111,7 +115,7 @@ export function ProjectWorkspace({
 
   const shown = useMemo(() => {
     const needle = q.trim().toLowerCase();
-    return issues.filter(
+    return taskQuery?issues:issues.filter(
       (issue) =>
         (!status || issue.status === status) &&
         (!needle ||
@@ -119,7 +123,7 @@ export function ProjectWorkspace({
           issue.identifier.toLowerCase().includes(needle) ||
           issueRef(issue).toLowerCase().includes(needle))
     );
-  }, [issues, status, q]);
+  }, [issues, status, q,taskQuery]);
 
   return (
     <div className="flex min-h-0 min-w-0 flex-1 flex-col">
@@ -134,14 +138,14 @@ export function ProjectWorkspace({
         onPickIcon={pickIcon}
         onTab={(next) => {
           const url = new URL(window.location.href); url.searchParams.set("tab", next);
-          window.history.pushState(null, "", url);
+          router.push(url.pathname+url.search,{scroll:false});
 
         }}
         onToggleFavorite={toggleFavorite}
         meta={
           // Overview grants and resources are overview-only facts: without a grant the
           // reader never saw these rows, so the header keeps it that way.
-          access.canView ? (
+          access.canView && tab==="overview" ? (
             <ProjectMeta
               workspaceId={workspaceId}
               projectId={project.id}
@@ -157,7 +161,7 @@ export function ProjectWorkspace({
           ) : undefined
         }
         metaMenu={
-          access.canView ? (
+          access.canView && tab==="overview" ? (
             <MetaRowsMenu hidden={metaRows.hidden} onToggle={metaRows.toggle} />
           ) : undefined
         }
@@ -185,7 +189,7 @@ export function ProjectWorkspace({
         <>
           {/* The list's own row is a header, so it hangs from the same 52px column as
               the project title and Properties; the board below keeps the reading gutters. */}
-          <header className={`flex h-12 shrink-0 items-center gap-2 border-b border-border ${PAGE_INSET}`}>
+          <header className={`flex min-h-12 shrink-0 flex-wrap items-center gap-2 border-b border-border ${PAGE_INSET}`}>
             {status ? (
               <button
                 type="button"
@@ -200,14 +204,14 @@ export function ProjectWorkspace({
               <span className="whitespace-nowrap text-body font-medium text-muted">{t("All tasks")}</span>
             )}
             <span className="rounded-full bg-elevated px-2 py-0.5 text-caption text-muted">
-              {shown.length}
+              {taskPage?.total??shown.length}
             </span>
             <div className="ml-auto flex min-w-0 items-center gap-2">
               <div className="flex w-60 min-w-0 shrink items-center gap-2 rounded-md border border-border bg-elevated/50 px-2 py-1.5 focus-within:border-border-strong">
                 <Search size={13} className="shrink-0 text-faint" />
-                <input
+                <DebouncedInput
                   value={q}
-                  onChange={(e) => setQ(e.target.value)}
+                  onCommit={setQ}
                   placeholder={t("Search tasks…")}
                   className="w-full bg-transparent text-body text-text placeholder:text-faint"
                 />
@@ -226,6 +230,8 @@ export function ProjectWorkspace({
             </div>
           </header>
           <IssueLayout
+            serverQuery={taskQuery}
+            initialPage={taskPage}
             issues={shown}
             workspaceId={workspaceId}
             currentUserId={currentUserId}

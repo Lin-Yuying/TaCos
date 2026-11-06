@@ -38,20 +38,21 @@ function removeFiles(ids: string[]) {
   for (const id of ids) {
     fs.rmSync(path.join(UPLOAD_DIR, id), { force: true });
     fs.rmSync(path.join(UPLOAD_DIR, `${id}.json`), { force: true });
+    fs.rmSync(path.join(UPLOAD_DIR, `${id}.preview.webp`), { force: true });
   }
 }
 
 /** An upload nobody finished, or a draft nobody sent, in a day is not coming back; its space is counted until then. */
-export async function removeStaleUploads(now = Date.now()): Promise<void> {
+export async function removeStaleUploads(now = Date.now(), workspaceId?:string): Promise<void> {
   const db = getDb();
   const before = new Date(now - STALE_UPLOAD_MS).toISOString();
   const stale = await db
     .select({ id: attachments.id })
     .from(attachments)
-    .where(and(or(eq(attachments.complete, 0), eq(attachments.pageId, AGENT_DRAFT_PAGE)), lt(attachments.createdAt, before)));
+    .where(and(eq(attachments.complete, 0), lt(attachments.createdAt, before),workspaceId?eq(attachments.workspaceId,workspaceId):undefined)).limit(100);
   if (!stale.length) return;
   const ids = stale.map((row) => row.id);
-  removeFiles(ids);
+  for(const id of ids)await Promise.all([fs.promises.rm(path.join(UPLOAD_DIR,id),{force:true}),fs.promises.rm(path.join(UPLOAD_DIR,`${id}.json`),{force:true})]);
   await db.delete(attachments).where(inArray(attachments.id, ids));
 }
 

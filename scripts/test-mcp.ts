@@ -1,3 +1,6 @@
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
 
@@ -9,8 +12,9 @@ function textOf(result: unknown): any {
 }
 
 async function main() {
+  const dataDir=fs.mkdtempSync(path.join(os.tmpdir(),"tacos-mcp-smoke-"));
   const transport = new StdioClientTransport({
-    env: Object.fromEntries(Object.entries(process.env).filter((entry): entry is [string,string] => entry[1] !== undefined)),
+    env: {...Object.fromEntries(Object.entries(process.env).filter((entry): entry is [string,string] => entry[1] !== undefined)),TACOS_DATA_DIR:dataDir,TACOS_SEED_DEMO:"1"},
     command: process.execPath,
     args: ["node_modules/tsx/dist/cli.mjs", "mcp/server.ts"],
   });

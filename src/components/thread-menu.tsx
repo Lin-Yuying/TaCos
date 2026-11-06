@@ -42,7 +42,7 @@ export function ThreadMenu({
   const running = useRef(false);
   const [moving, setMoving] = useState(false);
   async function run(
-    work: () => Promise<{ ok: boolean; error?: string }>,
+    work: () => Promise<{ ok: boolean; error?: string; data?: AgentThread | {id:string} | void }>,
     done?: () => void,
   ) {
     if (running.current) return;
@@ -58,7 +58,7 @@ export function ThreadMenu({
         done?.();
         window.dispatchEvent(
           new CustomEvent("tacos:thread-changed", {
-            detail: { id: thread.id },
+            detail: { id: thread.id, thread: result.data && "workspaceId" in result.data ? result.data : null },
           }),
         );
         router.refresh();

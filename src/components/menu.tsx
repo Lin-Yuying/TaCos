@@ -19,7 +19,7 @@ export function Menu({ trigger, children, align = "left", width = 200, offset = 
     <Dropdown.Portal><Dropdown.Content align={align === "left" ? "start" : "end"} alignOffset={offset} sideOffset={6} collisionPadding={8}
       onKeyDown={(e)=>{if(e.key!=="Escape"&&(e.target as HTMLElement).closest("input,textarea,[contenteditable=true]"))e.stopPropagation();}}
       onEscapeKeyDown={(e) => e.stopPropagation()}
-      style={{ width, maxHeight: "var(--radix-dropdown-menu-content-available-height)" }}
+      style={{ width, maxWidth: "min(calc(100vw - 16px), var(--radix-dropdown-menu-content-available-width))", maxHeight: "var(--radix-dropdown-menu-content-available-height)" }}
       className="z-[80] overflow-y-auto rounded-lg border border-border bg-overlay p-1 text-body shadow-xl">
       {children(() => setOpen(false))}
     </Dropdown.Content></Dropdown.Portal>

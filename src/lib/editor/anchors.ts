@@ -5,7 +5,9 @@ type Segment = { offset: number; pos: number; length: number };
 
 // The document as plain text, with a way back to editor positions. Blocks are separated
 // by one line break; an inline node such as a page link counts as one character.
+const textCache = new WeakMap<PMNode, { text: string; segments: Segment[] }>();
 function docText(doc: PMNode): { text: string; segments: Segment[] } {
+  const cached=textCache.get(doc);if(cached)return cached;
   let text = "";
   const segments: Segment[] = [];
   doc.descendants((node, pos) => {
@@ -20,7 +22,7 @@ function docText(doc: PMNode): { text: string; segments: Segment[] } {
     }
     return true;
   });
-  return { text, segments };
+  const result={text,segments};textCache.set(doc,result);return result;
 }
 
 function posAt(segments: Segment[], offset: number): number | null {
@@ -67,6 +69,7 @@ export function commentCountsByBlock<T extends DocAnchor & { id: string }>(
 
 /** Editor range of each anchor that can still be found. */
 export function anchorRanges<T extends DocAnchor>(doc: PMNode, anchors: T[]): Array<{ anchor: T; from: number; to: number }> {
+  if (!anchors.length) return [];
   const { text, segments } = docText(doc);
   const out: Array<{ anchor: T; from: number; to: number }> = [];
   for (const anchor of anchors) {

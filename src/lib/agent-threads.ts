@@ -1,6 +1,5 @@
-import { removePageAttachments } from "./attachments";
 import crypto from "node:crypto";
-import { sql, and, asc, desc, eq, inArray, isNotNull, isNull, lt, or } from "drizzle-orm";
+import { getTableColumns, sql, and, asc, desc, eq, inArray, isNotNull, isNull, lt, or } from "drizzle-orm";
 import { getDb } from "@/db/client";
 import { issueRef } from "@/lib/format";
 import { agentMessages, agentSteps, agentThreadFlags, agentThreads, issues, projects, users } from "@/db/schema";
@@ -46,6 +45,7 @@ export type AgentStepRecord = {
   kind: "command" | "file" | "tool" | "info" | "thinking";
   title: string;
   detail: string | null;
+  detailAvailable?:boolean;
   status: "running" | "done" | "error" | "denied";
   createdAt: string;
 };
@@ -63,7 +63,7 @@ export type AgentMessageRecord = {
   steps: AgentStepRecord[];
 };
 
-export type AgentThreadDetail = AgentThread & { messages: AgentMessageRecord[] };
+export type AgentThreadDetail = AgentThread & { messages: AgentMessageRecord[];historyCursor?:{createdAt:string;id:string}|null };
 
 const MAX_TITLE = 80;
 const STALE_SHARED_TURN_MS = 35 * 60_000;
@@ -196,17 +196,17 @@ export async function listAgentThreads(
     }
   }
   const counts = await db
-    .select({ threadId: agentMessages.threadId, id: agentMessages.id })
+    .select({ threadId: agentMessages.threadId, count: sql<number>`count(*)` })
     .from(agentMessages)
     .where(
       inArray(
         agentMessages.threadId,
         rows.map((row) => row.thread.id)
       )
-    );
+    ).groupBy(agentMessages.threadId);
   const countByThread = new Map<string, number>();
   for (const row of counts) {
-    countByThread.set(row.threadId, (countByThread.get(row.threadId) ?? 0) + 1);
+    countByThread.set(row.threadId, Number(row.count));
   }
   return rows.map(({ thread, ...rest }) =>
     threadRow(
@@ -273,7 +273,11 @@ function threadRow(
 async function requireThreadRow(
   workspaceId: string,
   userId: string,
-  threadId: string
+  threadId: string,
+  history: "none" | "all" | number = "none",
+  before?: {createdAt:string;id:string},
+  includeEmpty=false,
+  stepMode:"full"|"summary"|"none"="full"
 ): Promise<{ thread: AgentThread; messages: AgentMessageRecord[] }> {
   const db = getDb();
   const [row] = await db
@@ -313,16 +317,17 @@ async function requireThreadRow(
     turnUserName = turnUser?.name ?? null;
   }
 
-  const messages = await db
-    .select()
-    .from(agentMessages)
-    .where(eq(agentMessages.threadId, threadId))
-    .orderBy(asc(agentMessages.createdAt), asc(agentMessages.id));
-  const steps = await db
-    .select()
-    .from(agentSteps)
-    .where(eq(agentSteps.threadId, threadId))
-    .orderBy(asc(agentSteps.createdAt), asc(agentSteps.id));
+  const [total]=await db.select({count:sql<number>`count(*)`}).from(agentMessages).where(eq(agentMessages.threadId,threadId));
+  const messages = history === "none" ? [] : await db.select().from(agentMessages)
+    .where(and(eq(agentMessages.threadId,threadId), typeof history === "number" && !includeEmpty ? sql`length(trim(${agentMessages.content}, char(9)||char(10)||char(11)||char(12)||char(13)||char(32)||char(160)||char(5760)||char(8192)||char(8193)||char(8194)||char(8195)||char(8196)||char(8197)||char(8198)||char(8199)||char(8200)||char(8201)||char(8202)||char(8232)||char(8233)||char(8239)||char(8287)||char(12288)||char(65279)))>0` : undefined,
+      before?or(lt(agentMessages.createdAt,before.createdAt),and(eq(agentMessages.createdAt,before.createdAt),lt(agentMessages.id,before.id))):undefined))
+    .orderBy(history === "all"?asc(agentMessages.createdAt):desc(agentMessages.createdAt),history === "all"?asc(agentMessages.id):desc(agentMessages.id))
+    .limit(typeof history === "number"?history:-1);
+  if(typeof history === "number")messages.reverse();
+  const steps = [];
+  if(history!=="none"&&stepMode!=="none")for(let at=0;at<messages.length;at+=500)steps.push(...await db.select({...getTableColumns(agentSteps),detail:stepMode==="summary"?sql<string|null>`NULL`:agentSteps.detail,detailAvailable:sql<number>`length(${agentSteps.detail})>0`}).from(agentSteps)
+    .where(inArray(agentSteps.messageId,messages.slice(at,at+500).map(message=>message.id)))
+    .orderBy(asc(agentSteps.createdAt),asc(agentSteps.id)));
   const stepsByMessage = new Map<string, AgentStepRecord[]>();
   for (const step of steps) {
     const list = stepsByMessage.get(step.messageId) ?? [];
@@ -331,6 +336,7 @@ async function requireThreadRow(
       kind: asStepKind(step.kind),
       title: step.title,
       detail: step.detail ?? null,
+      detailAvailable:Boolean(step.detailAvailable),
       status: asStepStatus(step.status),
       createdAt: step.createdAt,
     });
@@ -360,7 +366,7 @@ async function requireThreadRow(
         turnUserName,
       },
       userId,
-      messages.length
+      Number(total.count)
     ),
     messages: messages.map((message) => ({
       id: message.id,
@@ -380,8 +386,19 @@ export async function getAgentThread(
   userId: string,
   threadId: string
 ): Promise<AgentThreadDetail> {
-  const { thread, messages } = await requireThreadRow(workspaceId, userId, threadId);
+  const { thread, messages } = await requireThreadRow(workspaceId, userId, threadId, "all");
   return { ...thread, messages };
+}
+
+export async function getAgentThreadPage(workspaceId:string,userId:string,threadId:string,before?:{createdAt:string;id:string}):Promise<AgentThreadDetail>{
+ const {thread,messages}=await requireThreadRow(workspaceId,userId,threadId,41,before,true,"summary");
+ const hasMore=messages.length>40;if(hasMore)messages.shift();const first=messages[0];
+ return {...thread,messages,historyCursor:hasMore&&first?{createdAt:first.createdAt,id:first.id}:null};
+}
+export async function getAgentStepDetail(workspaceId:string,userId:string,threadId:string,stepId:string):Promise<string|null>{
+ await requireThreadRow(workspaceId,userId,threadId);
+ const row=await getDb().select({detail:agentSteps.detail}).from(agentSteps).where(and(eq(agentSteps.threadId,threadId),eq(agentSteps.id,stepId))).get();
+ if(!row)throw new TacosError("Step not found",404);return row.detail;
 }
 
 export async function renameAgentThread(
@@ -398,7 +415,7 @@ export async function renameAgentThread(
     .update(agentThreads)
     .set({ title: next, updatedAt: new Date().toISOString() })
     .where(eq(agentThreads.id, threadId));
-  return threadOnly(await getAgentThread(workspaceId, userId, threadId));
+  return (await requireThreadRow(workspaceId,userId,threadId)).thread;
 }
 
 export async function setAgentThreadVisibility(
@@ -413,7 +430,7 @@ export async function setAgentThreadVisibility(
     .update(agentThreads)
     .set({ visibility: asVisibility(visibility), updatedAt: new Date().toISOString() })
     .where(eq(agentThreads.id, threadId));
-  return threadOnly(await getAgentThread(workspaceId, userId, threadId));
+  return (await requireThreadRow(workspaceId,userId,threadId)).thread;
 }
 
 
@@ -437,7 +454,7 @@ export async function setAgentThreadModel(
       updatedAt: new Date().toISOString(),
     })
     .where(eq(agentThreads.id, threadId));
-  return threadOnly(await getAgentThread(workspaceId, userId, threadId));
+  return (await requireThreadRow(workspaceId,userId,threadId)).thread;
 }
 
 export async function setAgentThreadApproval(
@@ -452,7 +469,7 @@ export async function setAgentThreadApproval(
     .update(agentThreads)
     .set({ approval: asApproval(approval), updatedAt: new Date().toISOString() })
     .where(eq(agentThreads.id, threadId));
-  return threadOnly(await getAgentThread(workspaceId, userId, threadId));
+  return (await requireThreadRow(workspaceId,userId,threadId)).thread;
 }
 
 // Rebinding a conversation is how the composer's project chip works: the next turn reads
@@ -483,7 +500,7 @@ export async function setAgentThreadProject(
       updatedAt: new Date().toISOString(),
     })
     .where(eq(agentThreads.id, threadId));
-  return threadOnly(await getAgentThread(workspaceId, userId, threadId));
+  return (await requireThreadRow(workspaceId,userId,threadId)).thread;
 }
 
 // Pinning is a viewer preference, so anyone who can read the thread may set it — including
@@ -502,7 +519,7 @@ export async function setAgentThreadPinned(
       target: [agentThreadFlags.threadId, agentThreadFlags.userId],
       set: { pinnedAt: pinned ? new Date().toISOString() : null },
     });
-  return threadOnly(await getAgentThread(workspaceId, userId, threadId));
+  return (await requireThreadRow(workspaceId,userId,threadId)).thread;
 }
 
 export async function setAgentThreadUnread(
@@ -520,7 +537,7 @@ export async function setAgentThreadUnread(
       target: [agentThreadFlags.threadId, agentThreadFlags.userId],
       set: { unread: flag },
     });
-  return threadOnly(await getAgentThread(workspaceId, userId, threadId));
+  return (await requireThreadRow(workspaceId,userId,threadId)).thread;
 }
 
 export async function canSeeThread(workspaceId: string, userId: string, threadId: string): Promise<boolean> {
@@ -537,12 +554,10 @@ export async function deleteAgentThread(
 ): Promise<void> {
   const { thread } = await requireThreadRow(workspaceId, userId, threadId);
   if (!thread.mine) throw new TacosError("Only the author can delete this conversation", 403);
-  const db = getDb();
-  await db.delete(agentSteps).where(eq(agentSteps.threadId, threadId));
-  await db.delete(agentMessages).where(eq(agentMessages.threadId, threadId));
-  await db.delete(agentThreadFlags).where(eq(agentThreadFlags.threadId, threadId));
-  await db.delete(agentThreads).where(eq(agentThreads.id, threadId));
-  await removePageAttachments([`thread:${threadId}`]);
+  const {auditAttachmentReferences,attachmentReferenceRevision}=await import("./attachment-references");const checked=(await auditAttachmentReferences(workspaceId)).revision;
+  const {deleteThreadRecords,processFileCleanup}=await import("./permanent-cleanup");
+  getDb().$client.transaction(()=>{if(attachmentReferenceRevision(workspaceId)!==checked)throw new TacosError("Content changed during the scan. Retry.",409);deleteThreadRecords([threadId]);}).immediate();
+  await processFileCleanup();
 }
 
 // --- turn accounting -------------------------------------------------------
@@ -571,9 +586,9 @@ export async function loadThreadForTurn(
   threadId: string,
   historyLimit = 30
 ): Promise<TurnThread> {
-  const { thread, messages } = await requireThreadRow(workspaceId, userId, threadId);
+  const { thread, messages } = await requireThreadRow(workspaceId, userId, threadId, Math.max(1,historyLimit),undefined,false,"none");
   // H-COLLAB-09: in a chat with more than one writer, the model sees who wrote each message.
-  const multi = messages.some((m) => m.authorId && m.authorId !== thread.createdBy);
+  const multi = Boolean(await getDb().select({id:agentMessages.id}).from(agentMessages).where(and(eq(agentMessages.threadId,threadId),sql`${agentMessages.authorId} IS NOT NULL AND ${agentMessages.authorId} <> ${thread.createdBy}`)).limit(1).get());
   const history = messages
     .filter((message) => message.content.trim())
     .slice(-historyLimit)
@@ -674,7 +689,7 @@ export async function forkAgentThreadFromMessage(
   threadId: string,
   messageId: string
 ): Promise<AgentThread> {
-  const { thread, messages } = await requireThreadRow(workspaceId, userId, threadId);
+  const { thread, messages } = await requireThreadRow(workspaceId, userId, threadId, "all");
   if (thread.visibility !== "shared") {
     throw new TacosError("Only a shared chat can be forked here", 400);
   }
@@ -841,7 +856,7 @@ export async function setAgentThreadEngine(
     .update(agentThreads)
     .set({ engine: next, ...pref, updatedAt: new Date().toISOString() })
     .where(eq(agentThreads.id, threadId));
-  return threadOnly(await getAgentThread(workspaceId, userId, threadId));
+  return (await requireThreadRow(workspaceId,userId,threadId)).thread;
 }
 
 // H-COLLAB-07: a task and the chat that published it link to each other.

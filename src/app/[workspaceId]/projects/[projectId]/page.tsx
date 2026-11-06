@@ -3,12 +3,14 @@ import { ProjectPage } from "@/components/project-page";
 
 export default function ProjectPageRoute({
   params,
+  searchParams,
 }: {
   params: Promise<{ workspaceId: string; projectId: string }>;
+  searchParams: Promise<Record<string,string|string[]|undefined>>;
 }) {
   return (
     <Suspense fallback={<div className="p-6 text-body text-muted">Loading…</div>}>
-      <ProjectPage params={params} initialTab="overview" />
+      <ProjectPage searchParams={searchParams} params={params} initialTab="overview" />
     </Suspense>
   );
 }

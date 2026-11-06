@@ -1,3 +1,4 @@
+import { recordApiKeyUsage, pendingApiKeyUsage } from "./api-key-usage";
 import { normalizeFieldValue, type TaskField } from "./task-view";
 import { TacosError } from "./tacos-error";
 import { removeWorkspaceAttachments } from "./attachments";
@@ -5,10 +6,12 @@ import crypto from "node:crypto";
 import { mentionText, parseMentions } from "./mentions";
 import {
   and,
+  asc,
   desc,
   eq,
   gt,
   inArray,
+  getTableColumns,
   isNotNull,
   isNull,
   lt,
@@ -455,51 +458,7 @@ export async function leaveWorkspace(workspaceId: string, userId: string) {
 const WORKSPACE_TRASH_DAYS = 30;
 
 // Hard delete: only the 30-day sweep and an expired restore call this.
-async function purgeWorkspaceData(db: ReturnType<typeof getDb>, workspaceId: string) {
-  const workspacePages = db.select({ id: pages.id }).from(pages).where(eq(pages.workspaceId, workspaceId));
-  await db.delete(pageCollab).where(inArray(pageCollab.pageId, workspacePages));
-  await db.delete(pageAccess).where(inArray(pageAccess.pageId, workspacePages));
-  await db.delete(pageFavorites).where(inArray(pageFavorites.pageId, workspacePages));
-  await removeWorkspaceAttachments(workspaceId);
-  await db.delete(pageVersions).where(eq(pageVersions.workspaceId, workspaceId));
-  await db.delete(pageComments).where(eq(pageComments.workspaceId, workspaceId));
-  await db.delete(pages).where(eq(pages.workspaceId, workspaceId));
-  const workspaceIssues = await db
-    .select({ id: issues.id })
-    .from(issues)
-    .where(eq(issues.workspaceId, workspaceId));
-  await db.delete(taskFields).where(eq(taskFields.workspaceId, workspaceId));
-  for (const row of workspaceIssues) {
-    await db.delete(taskFieldValues).where(eq(taskFieldValues.issueId, row.id));
-    await db.delete(issueAssignees).where(eq(issueAssignees.issueId, row.id));
-    await db.delete(issueLabels).where(eq(issueLabels.issueId, row.id));
-    await db
-      .delete(issueDependencies)
-      .where(or(eq(issueDependencies.issueId, row.id), eq(issueDependencies.blockedById, row.id)));
-    await db.delete(blockers).where(eq(blockers.issueId, row.id));
-    await db.delete(comments).where(eq(comments.issueId, row.id));
-    await db.delete(events).where(eq(events.issueId, row.id));
-  }
-  await db.delete(issues).where(eq(issues.workspaceId, workspaceId));
-
-  const workspaceProjects = await db
-    .select({ id: projects.id })
-    .from(projects)
-    .where(eq(projects.workspaceId, workspaceId));
-  if (workspaceProjects.length > 0) {
-    const ids = workspaceProjects.map((row) => row.id);
-    await db.delete(projectMembers).where(inArray(projectMembers.projectId, ids));
-    await db.delete(favorites).where(inArray(favorites.projectId, ids));
-  }
-  await db.delete(projects).where(eq(projects.workspaceId, workspaceId));
-
-  await db.delete(labels).where(eq(labels.workspaceId, workspaceId));
-  await db.delete(notifications).where(eq(notifications.workspaceId, workspaceId));
-  await db.delete(joinCodes).where(eq(joinCodes.workspaceId, workspaceId));
-  await db.delete(apiKeys).where(eq(apiKeys.workspaceId, workspaceId));
-  await db.delete(workspaceMembers).where(eq(workspaceMembers.workspaceId, workspaceId));
-  await db.delete(workspaces).where(eq(workspaces.id, workspaceId));
-}
+async function purgeWorkspaceData(_db:ReturnType<typeof getDb>,workspaceId:string){const {purgeWorkspaceRecords}=await import("./permanent-cleanup");await purgeWorkspaceRecords(workspaceId);}
 
 // Deleting is the owner's call, so it is deliberately two-step: typing the word
 // "confirmed" moves the team to their recycle bin, where it stays restorable for
@@ -1070,10 +1029,13 @@ export async function trashProject(workspaceId: string, projectId: string, userI
 
 export async function restoreProject(workspaceId: string, projectId: string, userId: string) {
   await assertProjectOwner(workspaceId, projectId, userId);
-  await getDb()
-    .update(projects)
-    .set({ deletedAt: null })
-    .where(and(eq(projects.workspaceId, workspaceId), eq(projects.id, projectId)));
+  const db=getDb();
+  db.transaction(()=>{
+  const cleanup=db.$client.prepare("SELECT id FROM maintenance_jobs WHERE id=? AND (state='running' OR completed>0)").get(`project:${projectId}`);
+  if(cleanup)throw new TacosError("Permanent cleanup has started. This project can no longer be restored.",409);
+  db.update(projects).set({deletedAt:null}).where(and(eq(projects.workspaceId,workspaceId),eq(projects.id,projectId))).run();
+  });
+
 }
 
 // The identifier prefix stays put, so "TEST-3" keeps its number across a rename.
@@ -1648,27 +1610,8 @@ export async function removeProjectMember(
 }
 
 export async function purgeProject(workspaceId: string, projectId: string, userId: string) {
-  await assertProjectOwner(workspaceId, projectId, userId);
-  const db = getDb();
-  const rows = await db
-    .select({ id: issues.id })
-    .from(issues)
-    .where(and(eq(issues.workspaceId, workspaceId), eq(issues.projectId, projectId)));
-  for (const row of rows) {
-    await db.delete(taskFieldValues).where(eq(taskFieldValues.issueId, row.id));
-    await db.delete(issueLabels).where(eq(issueLabels.issueId, row.id));
-    await db.delete(blockers).where(eq(blockers.issueId, row.id));
-    await db
-      .delete(issueDependencies)
-      .where(or(eq(issueDependencies.issueId, row.id), eq(issueDependencies.blockedById, row.id)));
-    await db.delete(comments).where(eq(comments.issueId, row.id));
-    await db.delete(events).where(eq(events.issueId, row.id));
-    await db.delete(notifications).where(eq(notifications.issueId, row.id));
-  }
-  await db.delete(issues).where(eq(issues.projectId, projectId));
-  await db.delete(projectMembers).where(eq(projectMembers.projectId, projectId));
-  await db.delete(favorites).where(eq(favorites.projectId, projectId));
-  await db.delete(projects).where(and(eq(projects.workspaceId, workspaceId), eq(projects.id, projectId)));
+  await assertProjectOwner(workspaceId,projectId,userId);
+  const {purgeProjectRecords}=await import("./permanent-cleanup");await purgeProjectRecords(workspaceId,projectId);
 }
 
 type ProjectRow = typeof projects.$inferSelect;
@@ -1832,6 +1775,7 @@ async function membersById(workspaceId: string): Promise<Map<string, Assignee>> 
 
 async function toIssueRows(workspaceId: string, rows: IssueRow[]): Promise<IssueWithLabels[]> {
   if (rows.length === 0) return [];
+  if(rows.length>500){const out:IssueWithLabels[]=[];for(let at=0;at<rows.length;at+=500)out.push(...await toIssueRows(workspaceId,rows.slice(at,at+500)));return out;}
   const db = getDb();
   const [projectMap, memberMap] = await Promise.all([
     projectsById(workspaceId),
@@ -1906,6 +1850,9 @@ async function toIssueRows(workspaceId: string, rows: IssueRow[]): Promise<Issue
 }
 
 export type ListFilters = {
+  summary?: boolean;
+  offset?: number;
+  ids?:string[];
   status?: Status | "active" | "open" | "all";
   priority?: Priority;
   projectId?: string;
@@ -1914,6 +1861,7 @@ export type ListFilters = {
   q?: string;
   label?: string;
   limit?: number;
+  cursor?: string;
   // The signed-in user. Omitted by agents, which are unrestricted; when present it
   // applies the workspace's task-visibility setting.
   viewerId?: string;
@@ -1952,10 +1900,7 @@ export async function countIssuesByStatus(
   return counts;
 }
 
-export async function listIssues(
-  workspaceId: string,
-  filters: ListFilters = {}
-): Promise<IssueWithLabels[]> {
+async function issueConditions(workspaceId: string, filters: ListFilters) {
   const db = getDb();
   // Issues under a trashed project disappear with it, and come back on restore.
   const conditions = [
@@ -1968,6 +1913,7 @@ export async function listIssues(
     conditions.push(ownIssueProjectCondition(filters.viewerId));
   }
 
+  if(filters.ids){if(!filters.ids.length)return null;conditions.push(inArray(issues.id,filters.ids));}
   if (filters.sourceThreadId) {
     conditions.push(eq(issues.sourceThreadId, filters.sourceThreadId));
   }
@@ -2018,55 +1964,73 @@ export async function listIssues(
       .from(labels)
       .where(and(eq(labels.workspaceId, workspaceId), sql`${labels.name} = ${filters.label} COLLATE NOCASE`))
       .limit(1);
-    if (!labelRow) return [];
-    const matched = await db
-      .select({ issueId: issueLabels.issueId })
-      .from(issueLabels)
-      .where(eq(issueLabels.labelId, labelRow.id));
-    const ids = matched.map((m) => m.issueId);
-    if (ids.length === 0) return [];
-    conditions.push(inArray(issues.id, ids));
+    if (!labelRow) return null;
+    conditions.push(sql`EXISTS (SELECT 1 FROM issue_labels WHERE issue_id=${issues.id} AND label_id=${labelRow.id})`);
   }
+  return and(...conditions);
+}
 
-  const rows = await db
-    .select()
-    .from(issues)
-    .where(and(...conditions));
-  const sorted = rows.sort((a, b) => {
-    const sa = STATUS_ORDER.indexOf(a.status as Status);
-    const sb = STATUS_ORDER.indexOf(b.status as Status);
-    if (sa !== sb) return sa - sb;
-    // Manual board order wins: new issues are created at the top and dragging a card
-    // persists its slot, so priority is no longer the sort key here.
-    if (a.position !== b.position) return b.position - a.position;
-    return b.createdAt.localeCompare(a.createdAt);
-  });
-  const limited = filters.limit ? sorted.slice(0, filters.limit) : sorted;
-  return toIssueRows(workspaceId, limited);
+const issueRank = sql<number>`CASE ${issues.status} WHEN 'in_progress' THEN 0 WHEN 'todo' THEN 1 WHEN 'done' THEN 2 WHEN 'canceled' THEN 3 ELSE -1 END`;
+type IssueCursor = { rank: number; position: number; createdAt: string; id: string };
+function decodeIssueCursor(value: string): IssueCursor {
+  try {
+    const row = JSON.parse(Buffer.from(value,"base64url").toString("utf8")) as IssueCursor;
+    if (!Number.isInteger(row.rank) || !Number.isFinite(row.position) || typeof row.createdAt!=="string" || typeof row.id!=="string") throw new Error();
+    return row;
+  } catch { throw new TacosError("Invalid task cursor",400); }
+}
+async function issueRows(workspaceId: string, filters: ListFilters, extra = 0) {
+  const where = await issueConditions(workspaceId,filters);
+  if (!where) return [];
+  const after = filters.cursor ? decodeIssueCursor(filters.cursor) : null;
+  const cursorWhere = after ? or(gt(issueRank,after.rank),and(eq(issueRank,after.rank),or(
+    lt(issues.position,after.position),and(eq(issues.position,after.position),or(
+      lt(issues.createdAt,after.createdAt),and(eq(issues.createdAt,after.createdAt),gt(issues.id,after.id))))))) : undefined;
+  return getDb().select({...getTableColumns(issues),...(filters.summary?{description:sql<string>`''`}:{})}).from(issues).where(and(where,cursorWhere))
+    .orderBy(asc(issueRank),desc(issues.position),desc(issues.createdAt),asc(issues.id))
+    .limit(filters.limit ? Math.max(1,Math.trunc(filters.limit))+extra : -1).offset(Math.max(0,filters.offset??0));
+}
+export async function listIssues(workspaceId: string, filters: ListFilters = {}): Promise<IssueWithLabels[]> {
+  return toIssueRows(workspaceId,await issueRows(workspaceId,filters));
+}
+export async function listIssuesPage(workspaceId: string, filters: ListFilters = {}) {
+  const limit = Math.min(200,Math.max(1,Math.trunc(filters.limit ?? 100)));
+  const rows = await issueRows(workspaceId,{...filters,limit},1);
+  const hasMore = rows.length>limit;
+  const current = rows.slice(0,limit);
+  const last = current.at(-1);
+  const where = await issueConditions(workspaceId,filters);
+  const count = where ? getDb().select({n:sql<number>`count(*)`}).from(issues).where(where).get()?.n ?? 0 : 0;
+  return { items: await toIssueRows(workspaceId,current), total: Number(count), nextCursor: hasMore&&last
+    ? Buffer.from(JSON.stringify({rank:STATUS_ORDER.indexOf(last.status as Status),position:last.position,createdAt:last.createdAt,id:last.id})).toString("base64url") : null };
 }
 
 export async function findIssueRow(workspaceId: string, idOrIdentifier: string): Promise<IssueRow | null> {
   const raw = idOrIdentifier.trim();
   const db = getDb();
-  const [row] = await db
-    .select()
-    .from(issues)
-    .where(
-      and(
-        eq(issues.workspaceId, workspaceId),
-        isNull(issues.deletedAt),
-        sql`EXISTS (SELECT 1 FROM projects WHERE projects.id = ${issues.projectId} AND projects.deleted_at IS NULL)`,
-        // The UI labels issues "<project name>-<number>", so accept that spelling
-        // alongside the stored key-based identifier and the row id.
-        or(
-          eq(issues.id, raw),
-          sql`${issues.identifier} = ${raw} COLLATE NOCASE`,
-          sql`(SELECT p.name FROM projects p WHERE p.id = ${issues.projectId}) || '-' || ${issues.number} = ${raw} COLLATE NOCASE`
-        )
-      )
-    )
-    .limit(1);
-  return row ?? null;
+  const scope = [eq(issues.workspaceId, workspaceId), isNull(issues.deletedAt),
+    sql`EXISTS (SELECT 1 FROM projects WHERE projects.id = ${issues.projectId} AND projects.deleted_at IS NULL)`];
+  // Most internal calls already have an id; do not mix the primary-key path with aliases.
+  const exact = await db.select().from(issues).where(and(...scope,eq(issues.id,raw))).limit(1);
+  if (exact[0]) return exact[0];
+  const numbered = await db.select().from(issues).where(and(...scope,
+    sql`${issues.identifier} = ${raw} COLLATE NOCASE`)).limit(1);
+  if (numbered[0]) return numbered[0];
+  const [legacy] = await db.select().from(issues).where(and(...scope,
+    sql`(SELECT p.name FROM projects p WHERE p.id = ${issues.projectId}) || '-' || ${issues.number} = ${raw} COLLATE NOCASE`)).limit(1);
+  return legacy ?? null;
+}
+
+/** Shared lightweight visibility check; never reads comment or activity bodies. */
+export async function findVisibleIssueRow(workspaceId: string, id: string, viewerId?: string): Promise<IssueRow | null> {
+  const row = await findIssueRow(workspaceId,id);
+  if (!row) return null;
+  if (viewerId && !(await seesAllTasks(workspaceId,viewerId))) {
+    const visible = await getDb().select({ id: projects.id }).from(projects)
+      .where(and(eq(projects.id,row.projectId),isNull(projects.deletedAt),ownProjectCondition(viewerId))).limit(1);
+    if (!visible[0]) return null;
+  }
+  return row;
 }
 
 export async function getIssueDetail(
@@ -2074,24 +2038,9 @@ export async function getIssueDetail(
   idOrIdentifier: string,
   viewerId?: string
 ): Promise<IssueDetail | null> {
-  const row = await findIssueRow(workspaceId, idOrIdentifier);
+  const row = await findVisibleIssueRow(workspaceId,idOrIdentifier,viewerId);
   if (!row) return null;
   const db = getDb();
-  if (viewerId && !(await seesAllTasks(workspaceId, viewerId))) {
-    // Same rule as the list: a member outside the project cannot open its tasks by id.
-    const [visible] = await db
-      .select({ id: projects.id })
-      .from(projects)
-      .where(
-        and(
-          eq(projects.id, row.projectId),
-          isNull(projects.deletedAt),
-          ownProjectCondition(viewerId)
-        )
-      )
-      .limit(1);
-    if (!visible) return null;
-  }
   const [withLabels] = await toIssueRows(workspaceId, [row]);
   const memberMap = await membersById(workspaceId);
   const commentRows = await db
@@ -2470,7 +2419,7 @@ export async function updateIssue(
 ): Promise<IssueDetail> {
   const row = await findIssueRow(workspaceId, idOrIdentifier);
   if (!row) throw new TacosError(`Issue "${idOrIdentifier}" not found`, 404);
-  if (actor.kind === "user" && !(await getIssueDetail(workspaceId, row.id, actor.userId))) throw new TacosError("Task not found", 404);
+  if (actor.kind === "user" && !(await findVisibleIssueRow(workspaceId, row.id, actor.userId))) throw new TacosError("Task not found", 404);
 
   const db = getDb();
   const sets: Record<string, unknown> = {};
@@ -2707,7 +2656,7 @@ export async function moveIssue(
 ): Promise<IssueDetail> {
   const row = await findIssueRow(workspaceId, idOrIdentifier);
   if (!row) throw new TacosError(`Issue "${idOrIdentifier}" not found`, 404);
-  if (actor.kind === "user" && !(await getIssueDetail(workspaceId, row.id, actor.userId))) throw new TacosError("Task not found", 404);
+  if (actor.kind === "user" && !(await findVisibleIssueRow(workspaceId, row.id, actor.userId))) throw new TacosError("Task not found", 404);
 
   const db = getDb();
   const sets: Record<string, unknown> = {};
@@ -3218,26 +3167,8 @@ export async function restoreIssue(workspaceId: string, issueId: string) {
 
 // Only ever called from the Trash, so the issue has to be soft-deleted first.
 export async function purgeIssue(workspaceId: string, issueId: string) {
-  const db = getDb();
-  await db.delete(taskFieldValues).where(eq(taskFieldValues.issueId, issueId));
-  await db.delete(issueAssignees).where(eq(issueAssignees.issueId, issueId));
-  await db.delete(issueLabels).where(eq(issueLabels.issueId, issueId));
-  await db.delete(blockers).where(eq(blockers.issueId, issueId));
-  await db
-    .delete(issueDependencies)
-    .where(or(eq(issueDependencies.issueId, issueId), eq(issueDependencies.blockedById, issueId)));
-  await db.delete(comments).where(eq(comments.issueId, issueId));
-  await db.delete(events).where(eq(events.issueId, issueId));
-  await db.delete(notifications).where(eq(notifications.issueId, issueId));
-  await db
-    .delete(issues)
-    .where(
-      and(
-        eq(issues.workspaceId, workspaceId),
-        eq(issues.id, issueId),
-        isNotNull(issues.deletedAt)
-      )
-    );
+  const {deleteTaskRecords}=await import("./permanent-cleanup");
+  getDb().$client.transaction(()=>{const row=getDb().$client.prepare("SELECT id FROM issues WHERE workspace_id=? AND id=? AND deleted_at IS NOT NULL").get(workspaceId,issueId);if(row)deleteTaskRecords([issueId]);}).immediate();
 }
 
 export async function addComment(
@@ -3484,7 +3415,7 @@ export async function createApiKey(
   return { key, record };
 }
 
-export async function verifyApiKey(rawKey: string): Promise<ApiKeyRecord | null> {
+export async function verifyApiKey(rawKey: string, options: { recordUse?: boolean } = {}): Promise<ApiKeyRecord | null> {
   const db = getDb();
   const [row] = await db
     .select({ key: apiKeys, deletedAt: workspaces.deletedAt })
@@ -3503,7 +3434,7 @@ export async function verifyApiKey(rawKey: string): Promise<ApiKeyRecord | null>
     .where(and(eq(workspaceMembers.workspaceId, record.workspaceId), eq(workspaceMembers.userId, record.createdBy)))
     .limit(1);
   if (!creator) return null;
-  await db.update(apiKeys).set({ lastUsedAt: nowIso() }).where(eq(apiKeys.id, record.id));
+  if (options.recordUse !== false) {const at=nowIso();await recordApiKeyUsage(record.id,at);record.lastUsedAt=at;}
   return {
     id: record.id,
     workspaceId: record.workspaceId,
@@ -3516,7 +3447,8 @@ export async function verifyApiKey(rawKey: string): Promise<ApiKeyRecord | null>
 }
 
 export async function listApiKeys(workspaceId: string): Promise<ApiKeyRecord[]> {
-  return getDb()
+  const pending=await pendingApiKeyUsage();
+  const rows=await getDb()
     .select({
       createdBy: apiKeys.createdBy,
       id: apiKeys.id,
@@ -3529,6 +3461,7 @@ export async function listApiKeys(workspaceId: string): Promise<ApiKeyRecord[]> 
     .from(apiKeys)
     .where(eq(apiKeys.workspaceId, workspaceId))
     .orderBy(apiKeys.createdAt);
+  return rows.map(row=>({...row,lastUsedAt:row.lastUsedAt && row.lastUsedAt>(pending.get(row.id)??"")?row.lastUsedAt:pending.get(row.id)??row.lastUsedAt}));
 }
 
 export async function revokeApiKey(workspaceId: string, id: string, actorId: string) {
@@ -3558,53 +3491,24 @@ function reminderFireAt(dueDate: string, preset: ReminderPreset): Date {
 // Sends one "due_soon" notice per task when now reaches dueDate minus the preset.
 // The creator, the claimer and the assignees get it. Returns the number of tasks.
 export async function sendDueReminders(now: Date = new Date()): Promise<number> {
-  const db = getDb();
-  const rows = await db
-    .select({
-      id: issues.id,
-      workspaceId: issues.workspaceId,
-      dueDate: issues.dueDate,
-      reminder: issues.reminder,
-      sentFor: issues.reminderSentFor,
-      createdBy: issues.createdBy,
-      claimedBy: issues.claimedBy,
-    })
-    .from(issues)
-    .where(
-      and(
-        isNotNull(issues.dueDate),
-        isNotNull(issues.reminder),
-        isNull(issues.deletedAt),
-        notInArray(issues.status, ["done", "canceled"])
-      )
-    );
-  let sent = 0;
-  for (const row of rows) {
-    const preset = row.reminder as ReminderPreset;
-    if (!row.dueDate || !REMINDER_META[preset]) continue;
-    const key = `${row.dueDate}|${preset}`;
-    if (row.sentFor === key || reminderFireAt(row.dueDate, preset) > now) continue;
-    // Claim the key first so two overlapping runs cannot both send.
-    const claimed = await db
-      .update(issues)
-      .set({ reminderSentFor: key })
-      .where(and(eq(issues.id, row.id), or(isNull(issues.reminderSentFor), ne(issues.reminderSentFor, key))))
-      .returning({ id: issues.id });
-    if (claimed.length === 0) continue;
-    const people = new Set<string>();
-    if (row.createdBy) people.add(row.createdBy);
-    if (row.claimedBy) people.add(row.claimedBy);
-    const assigned = await db
-      .select({ userId: issueAssignees.userId })
-      .from(issueAssignees)
-      .where(eq(issueAssignees.issueId, row.id));
-    for (const a of assigned) people.add(a.userId);
-    for (const userId of people) {
-      await notify({ workspaceId: row.workspaceId, userId, issueId: row.id, type: "due_soon", body: row.dueDate });
+  const db=getDb();
+  // A single transaction owns the claim and every recipient insert. A crash rolls
+  // both back, and another process can safely retry the same schedule key.
+  return db.transaction(tx=>{
+    const rows=tx.select().from(issues).where(sql`reminder_next_fire IS NOT NULL AND reminder_next_fire <= ${Math.floor(now.getTime()/1000)}`).orderBy(sql`reminder_next_fire`).limit(100).all();
+    const assigned=rows.length?tx.select().from(issueAssignees).where(inArray(issueAssignees.issueId,rows.map(row=>row.id))).all():[];
+    const byTask=new Map<string,string[]>();for(const entry of assigned){const list=byTask.get(entry.issueId)??[];list.push(entry.userId);byTask.set(entry.issueId,list);}
+    let sent=0;
+    for(const row of rows){const preset=row.reminder as ReminderPreset;if(!row.dueDate||!REMINDER_META[preset])continue;
+      const key=`${row.dueDate}|${preset}`;
+      if(row.reminderSentFor===key||reminderFireAt(row.dueDate,preset)>now)continue;
+      tx.update(issues).set({reminderSentFor:key}).where(eq(issues.id,row.id)).run();
+      const people=new Set([row.createdBy,row.claimedBy,...(byTask.get(row.id)??[])].filter((id):id is string=>Boolean(id)));
+      for(const userId of people)tx.insert(notifications).values({id:crypto.randomUUID(),workspaceId:row.workspaceId,userId,issueId:row.id,type:"due_soon",body:row.dueDate,createdAt:nowIso()}).run();
+      sent++;
     }
-    sent++;
-  }
-  return sent;
+    return sent;
+  },{behavior:"immediate"});
 }
 
 let reminderTimer: ReturnType<typeof setInterval> | null = null;
@@ -3617,33 +3521,27 @@ export function startDueReminderScheduler(intervalMs = 60_000) {
   reminderTimer.unref?.();
 }
 
+export async function workspaceRevisions(workspaceId:string,userId:string):Promise<Record<string,number>>{
+ const rows=await getDb().all<{domain:string;revision:number}>(sql`SELECT domain,revision FROM workspace_revisions WHERE workspace_id IN (${workspaceId},${"@user:"+userId})`);
+ return Object.fromEntries(rows.map(row=>[row.domain,row.revision]));
+}
+
 // H-COLLAB-13: a short fingerprint of what other members can change in a workspace:
 // tasks (edits, claims, deletes), activity, comments, agent messages, and this user's
 // notices. A window polls it and refreshes when it changes.
 export async function workspacePulse(workspaceId: string, userId: string): Promise<string> {
-  const db = getDb();
-  const [row] = await db.all<Record<string, string | number | null>>(sql`
-    SELECT
-      (SELECT count(*) || ':' || coalesce(max(updated_at), '') || ':' || coalesce(max(claimed_at), '') || ':' || coalesce(max(deleted_at), '') || ':' || coalesce(sum(claimed_by IS NULL), 0)
-         FROM issues WHERE workspace_id = ${workspaceId}) AS t,
-      (SELECT count(*) || ':' || coalesce(max(e.created_at), '')
-         FROM events e JOIN issues i ON i.id = e.issue_id WHERE i.workspace_id = ${workspaceId}) AS e,
-      (SELECT count(*) || ':' || coalesce(max(c.created_at), '')
-         FROM comments c JOIN issues i ON i.id = c.issue_id WHERE i.workspace_id = ${workspaceId}) AS c,
-      (SELECT count(*) || ':' || coalesce(max(m.created_at), '')
-         FROM agent_messages m JOIN agent_threads th ON th.id = m.thread_id WHERE th.workspace_id = ${workspaceId}) AS m,
-      (SELECT count(*) || ':' || coalesce(max(updated_at), '') || ':' || coalesce(sum(turn_user_id IS NOT NULL), 0)
-         FROM agent_threads WHERE workspace_id = ${workspaceId}) AS a,
-      (SELECT count(*) || ':' || coalesce(sum(read_at IS NULL), 0)
-         FROM notifications WHERE workspace_id = ${workspaceId} AND user_id = ${userId}) AS n
+  const rows = await getDb().all<{ workspace_id: string; domain: string; revision: number }>(sql`
+    SELECT workspace_id, domain, revision FROM workspace_revisions
+    WHERE workspace_id IN (${workspaceId}, ${"@user:" + userId})
+    ORDER BY workspace_id, domain
   `);
-  return crypto.createHash("sha1").update(JSON.stringify(row ?? {})).digest("hex").slice(0, 16);
+  return crypto.createHash("sha1").update(JSON.stringify(rows)).digest("hex").slice(0, 16);
 }
 
 /** A single checkbox changes one relationship; another editor's choices survive. */
 export async function changeIssueCollection(workspaceId: string, id: string, change: {kind: "assignee" | "label"; value: string; selected: boolean}, actor: MutationActor): Promise<IssueDetail> {
   if (actor.kind !== "user") throw new TacosError("A member is required", 403);
-  if (!(await getIssueDetail(workspaceId, id, actor.userId))) throw new TacosError("Task not found",404);
+  if (!(await findVisibleIssueRow(workspaceId, id, actor.userId))) throw new TacosError("Task not found",404);
   const db = getDb();
   const memberMap = await membersById(workspaceId);
   let added: string | null = null;

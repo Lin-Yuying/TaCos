@@ -1,7 +1,7 @@
 import { eq } from "drizzle-orm";
 import { getDb } from "@/db/client";
 import { aiSettings } from "@/db/schema";
-import { clearHarnessDetectCache } from "./detect-bin";
+import { clearHarnessDetectCache,warmHarnessDetectCache } from "./detect-bin";
 import { FIRST_CLASS_HARNESS_IDS, listHarnessDetect } from "./registry";
 import type { DetectResult, HarnessGate, HarnessId, HarnessSettingsView, HarnessStatus } from "./types";
 export type { HarnessSettingsView } from "./types";
@@ -97,6 +97,7 @@ export async function refreshHarnessSettingsView(
   detects?: DetectResult[]
 ): Promise<HarnessSettingsView> {
   clearHarnessDetectCache();
+  await warmHarnessDetectCache();
   return getHarnessSettingsView(workspaceId, keyed, detects);
 }
 

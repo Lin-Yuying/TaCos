@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { Download, RotateCcw } from "lucide-react";
+import { Download, RotateCcw,X } from "lucide-react";
 
 /**
  * H-DESKTOP-UPDATE-03: sidebar control for the desktop app binary update.
@@ -16,9 +16,11 @@ type AppUpdateStatus = {
   availableVersion: string | null;
   progress: number | null;
   error: string | null;
+  stage?:string|null;
 };
 
 export type AppUpdateApi = {
+  cancel?:()=>Promise<{ok:boolean}>;
   getStatus: () => Promise<AppUpdateStatus>;
   check: () => Promise<{ ok: boolean; error?: string; status?: AppUpdateStatus }>;
   download: () => Promise<{ ok: boolean; error?: string; status?: AppUpdateStatus }>;
@@ -41,6 +43,8 @@ function labelFor(status: AppUpdateStatus | null, busy: boolean): string {
   if (!status) return COPY.check;
   if (busy || status.state === "checking") return COPY.checking;
   if (status.state === "downloading") {
+    if(status.stage==="unpacking")return "正在解压更新…";
+    if(status.stage==="verifying")return "正在检查签名…";
     const p = typeof status.progress === "number" ? Math.round(status.progress) : null;
     return p != null ? `${COPY.downloading} ${p}%` : COPY.downloading;
   }
@@ -98,7 +102,7 @@ export function DesktopAppUpdateButton({ compact }: { compact?: boolean }) {
   const Icon = status?.state === "downloaded" ? RotateCcw : Download;
 
   return (
-    <button
+    <><button
       type="button"
       onClick={() => void onClick()}
       title={text}
@@ -108,7 +112,7 @@ export function DesktopAppUpdateButton({ compact }: { compact?: boolean }) {
       className={`${compact ? "" : "ml-1 "}flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-emerald-600 transition-colors hover:bg-emerald-500/10 hover:text-emerald-700 disabled:opacity-60 dark:text-emerald-400 dark:hover:text-emerald-300`}
     >
       <Icon size={14} className={status?.state === "downloading" ? "animate-pulse" : undefined} />
-    </button>
+    </button>{status?.state==="downloading"&&api.cancel&&<button type="button" title="取消准备更新" aria-label="取消准备更新" onClick={()=>void api.cancel?.()} className="rounded p-1 text-faint hover:text-text"><X size={12}/></button>}</>
   );
 }
 

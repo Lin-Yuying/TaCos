@@ -1,5 +1,5 @@
 import crypto from "node:crypto";
-import { and, asc, eq } from "drizzle-orm";
+import { and, asc, eq, inArray, sql } from "drizzle-orm";
 import { getDb } from "../db/client";
 import { notifications, pageComments, users } from "../db/schema";
 import type { DocAnchor } from "./doc-anchor";
@@ -10,6 +10,7 @@ import { getPage, pageVisible, requirePageLevel, type DocPage, type PageAuthor }
 export type PageComment = {
   id: string;
   body: string;
+  bodyLoaded?:boolean;
   quote: string | null;
   prefix: string;
   suffix: string;
@@ -31,13 +32,14 @@ async function readablePage(workspaceId: string, pageId: string, viewerId: strin
 export async function listPageComments(
   workspaceId: string,
   pageId: string,
-  viewerId: string
+  viewerId: string,
+  read: {ids?:string[];summary?:boolean}={}
 ): Promise<PageComment[]> {
   await readablePage(workspaceId, pageId, viewerId);
   const rows = await getDb()
     .select({
       id: pageComments.id,
-      body: pageComments.body,
+      body: read.summary?sql<string>`''`:pageComments.body,
       quote: pageComments.quote,
       prefix: pageComments.prefix,
       suffix: pageComments.suffix,
@@ -53,11 +55,12 @@ export async function listPageComments(
     })
     .from(pageComments)
     .leftJoin(users, eq(users.id, pageComments.authorId))
-    .where(eq(pageComments.pageId, pageId))
+    .where(and(eq(pageComments.pageId, pageId),read.ids?inArray(pageComments.id,read.ids):undefined))
     .orderBy(asc(pageComments.createdAt));
   return rows.map(({ authorId, displayName, avatar, ...row }) => ({
     ...row,
     body: row.deletedAt ? "" : row.body,
+    bodyLoaded:!read.summary,
     author: authorId ? { id: authorId, displayName: displayName ?? "", avatar } : null,
   }));
 }
@@ -97,7 +100,7 @@ export async function addPageComment(
   pageId: string,
   viewerId: string,
   input: { body: string; anchor?: DocAnchor | null; parentId?: string | null },
-  options: { via?: string } = {}
+  options: { via?: string;incremental?:boolean } = {}
 ): Promise<PageComment[]> {
   const page = await readablePage(workspaceId, pageId, viewerId);
   await requirePageLevel(page, viewerId, "comment");
@@ -106,8 +109,9 @@ export async function addPageComment(
   if (body.length > 5_000) throw new TacosError("Comment is too long (5k characters max)");
   if(input.parentId){const parent=await commentOn(pageId,input.parentId);if(parent.deletedAt)throw new TacosError("This comment was deleted. Reply to another comment.",409);}
   const quote = input.anchor?.quote ?? "";
+  const id=crypto.randomUUID();
   await getDb().insert(pageComments).values({
-    id: crypto.randomUUID(),
+    id,
     pageId,
     workspaceId,
     authorId: viewerId,
@@ -120,7 +124,7 @@ export async function addPageComment(
     createdAt: nowIso(),
   });
   await notifyPageComment(page, body, viewerId);
-  return listPageComments(workspaceId, pageId, viewerId);
+  return listPageComments(workspaceId, pageId, viewerId,{ids:options.incremental?[id]:undefined});
 }
 
 async function commentOn(pageId: string, commentId: string) {
@@ -138,7 +142,8 @@ export async function setPageCommentResolved(
   pageId: string,
   viewerId: string,
   commentId: string,
-  resolved: boolean
+  resolved: boolean,
+  options:{incremental?:boolean}={}
 ): Promise<PageComment[]> {
   await requirePageLevel(await readablePage(workspaceId, pageId, viewerId), viewerId, "comment");
   await commentOn(pageId, commentId);
@@ -146,7 +151,7 @@ export async function setPageCommentResolved(
     .update(pageComments)
     .set({ resolvedAt: resolved ? nowIso() : null })
     .where(eq(pageComments.id, commentId));
-  return listPageComments(workspaceId, pageId, viewerId);
+  return listPageComments(workspaceId, pageId, viewerId,{ids:options.incremental?[commentId]:undefined});
 }
 
 /** The author takes back their own words; the page's owner can clear anyone's. */
@@ -154,7 +159,8 @@ export async function removePageComment(
   workspaceId: string,
   pageId: string,
   viewerId: string,
-  commentId: string
+  commentId: string,
+  options:{incremental?:boolean}={}
 ): Promise<PageComment[]> {
   const page = await readablePage(workspaceId, pageId, viewerId);
   const row = await commentOn(pageId, commentId);
@@ -162,18 +168,18 @@ export async function removePageComment(
     throw new TacosError("You cannot delete this comment", 403);
   }
   await getDb().update(pageComments).set({deletedAt:nowIso()}).where(eq(pageComments.id, commentId));
-  return listPageComments(workspaceId, pageId, viewerId);
+  return listPageComments(workspaceId, pageId, viewerId,{ids:options.incremental?[commentId]:undefined});
 }
 
-export async function editPageComment(workspaceId:string,pageId:string,viewerId:string,commentId:string,body:string):Promise<PageComment[]> {
+export async function editPageComment(workspaceId:string,pageId:string,viewerId:string,commentId:string,body:string,options:{incremental?:boolean}={}):Promise<PageComment[]> {
  const page=await readablePage(workspaceId,pageId,viewerId);await requirePageLevel(page,viewerId,"comment");
  const row=await commentOn(pageId,commentId);if(row.authorId!==viewerId)throw new TacosError("Only the author can edit this comment",403);
  if(row.deletedAt)throw new TacosError("Restore the comment before editing",409);
  const text=body.trim();if(!text||text.length>5000)throw new TacosError("Enter between 1 and 5000 characters",400);
- await getDb().update(pageComments).set({body:text,editedAt:nowIso()}).where(eq(pageComments.id,commentId));return listPageComments(workspaceId,pageId,viewerId);
+ await getDb().update(pageComments).set({body:text,editedAt:nowIso()}).where(eq(pageComments.id,commentId));return listPageComments(workspaceId,pageId,viewerId,{ids:options.incremental?[commentId]:undefined});
 }
-export async function restorePageComment(workspaceId:string,pageId:string,viewerId:string,commentId:string):Promise<PageComment[]> {
+export async function restorePageComment(workspaceId:string,pageId:string,viewerId:string,commentId:string,options:{incremental?:boolean}={}):Promise<PageComment[]> {
  const page=await readablePage(workspaceId,pageId,viewerId);await requirePageLevel(page,viewerId,"comment");
  const row=await commentOn(pageId,commentId);if(row.authorId!==viewerId&&page.createdBy!==viewerId)throw new TacosError("You cannot restore this comment",403);
- await getDb().update(pageComments).set({deletedAt:null}).where(eq(pageComments.id,commentId));return listPageComments(workspaceId,pageId,viewerId);
+ await getDb().update(pageComments).set({deletedAt:null}).where(eq(pageComments.id,commentId));return listPageComments(workspaceId,pageId,viewerId,{ids:options.incremental?[commentId]:undefined});
 }
