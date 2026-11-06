@@ -108,7 +108,7 @@ async function main() {
 
   const panel = fs.readFileSync(new URL("../src/components/issue-panel/index.tsx", import.meta.url), "utf8");
   const subtasks = fs.readFileSync(new URL("../src/components/issue-panel/subtasks.tsx", import.meta.url), "utf8");
-  const mcp = fs.readFileSync(new URL("../mcp/server.ts", import.meta.url), "utf8");
+  const mcp = fs.readFileSync(new URL("../mcp/create-server.ts", import.meta.url), "utf8");
   assert(panel.includes("parent: detail.id"), "the task panel sends the parent");
   assert(subtasks.includes('data-testid="subtasks"'), "the task panel lists subtasks");
   assert(mcp.includes("parent,"), "the MCP server passes the parent through");

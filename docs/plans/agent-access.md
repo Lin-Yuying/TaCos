@@ -1,6 +1,7 @@
 # Agent access upgrade: REST API keys and MCP server
 
-Status: planned as **one PR** (decided 2026-11-06). No implementation started.
+Status: implemented on `feat/agent-access` (2026-11-06), four commits. Not merged;
+the Lead runs the browser E2E and screenshots.
 Written after checking Settings → Advanced → Agent access and comparing the two
 features with the public products below.
 
@@ -238,6 +239,30 @@ Commit 4 — checks, docs, i18n.
    `npm run build` pass.
 10. No regression in the existing checks for tasks, Inbox, desktop updates or
     upgrade boot.
+
+## Status (2026-11-06)
+
+| Item | State | Evidence |
+| --- | --- | --- |
+| API keys: scopes, projects, expiry, rotation, rate limits, UI | done | `0fe9208` |
+| MCP: `createMcpServer`, stdio wrapper, `/api/mcp` Streamable HTTP | done | `4aa22dd` |
+| MCP tools: annotations, cursor pagination, output schemas, read-only/tool filters | done | `8714537` |
+| Checks, README, i18n | done | this commit |
+| Type check / build | pass | `npx tsc --noEmit`, `npm run build` |
+| Harness checks | pass | `npm run check:harness`: 110/110 |
+| MCP smoke + new checks | pass | `npm run mcp:test`, `check-api-key-scopes.ts`, `check-mcp-http.ts` |
+| Browser E2E + 1440/1100 screenshots | not run here | Lead runs them |
+
+Notes for the reviewer:
+
+- The new columns are nullable and land in both the `CREATE TABLE` and
+  `bootstrap()` via `addColumnIfMissing()`; a dev server started before the DDL
+  edit keeps the old handle, so it must be restarted (no manual migration).
+- In this worktree `node_modules` was a symlink to the Lead's checkout, which
+  Turbopack refuses to resolve for a production build. It was replaced with a
+  local copy (gitignored) only to produce the build evidence above.
+- `npm run lint` is red on `main` too (84 errors in untouched files); this
+  branch adds none.
 
 ## Not in this PR (follow-ups)
 

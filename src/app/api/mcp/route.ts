@@ -4,8 +4,6 @@ import { assertKeyScope, errorResponse, requireApiKey } from "@/lib/api-auth";
 import { ApiKeyRateLimitError, takeApiKeyToken } from "@/lib/api-key-rate-limit";
 import { apiKeyHasScope, type ApiKeyRecord } from "@/lib/issues";
 
-export const runtime = "nodejs";
-
 type JsonRpcMessage = {
   jsonrpc?: string;
   id?: unknown;
