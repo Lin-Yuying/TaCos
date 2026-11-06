@@ -48,3 +48,7 @@ next-env.d.ts
 /vendor/
 /release/
 /release-standalone/
+
+# Browser acceptance artifacts
+/.playwright-cli/
+/output/playwright/

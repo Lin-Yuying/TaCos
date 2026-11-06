@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { Search, X } from "lucide-react";
 import { StatusIcon } from "@/components/icons";
 import { IssueLayout, LayoutToggle } from "@/components/issue-layout";
@@ -75,9 +76,15 @@ export function ProjectWorkspace({
   trashedTitles: Record<string, string>;
 }) {
   const t = useT();
-  const [tab, setTab] = useState<ProjectTab>(initialTab);
-  const [status, setStatus] = useState<Status | null>(null);
-  const [q, setQ] = useState("");
+  const params = useSearchParams();
+  const selectedTab = params.get("tab");
+  const tab: ProjectTab = selectedTab === "documents" || selectedTab === "issues" || selectedTab === "overview" ? selectedTab : initialTab;
+  const selectedStatus=params.get("status");
+  const status:Status|null=selectedStatus&&selectedStatus in STATUS_META?selectedStatus as Status:null;
+  const q=params.get("q")??"";
+  function setQueryValue(key:string,value:string|null){const url=new URL(location.href);if(value)url.searchParams.set(key,value);else url.searchParams.delete(key);history.replaceState(null,"",url);}
+  function setStatus(status:Status|null){setQueryValue("status",status);}
+  function setQ(query:string){setQueryValue("q",query);}
   const [favorite, setFavorite] = useState(initialFavorite);
   const [icon, setIcon] = useState<string | null>(project.icon);
   const metaRows = useMetaRows();
@@ -126,8 +133,9 @@ export function ProjectWorkspace({
         canPickIcon={access.canEdit}
         onPickIcon={pickIcon}
         onTab={(next) => {
-          setTab(next);
-          if (next === "issues") setStatus(null);
+          const url = new URL(window.location.href); url.searchParams.set("tab", next);
+          window.history.pushState(null, "", url);
+
         }}
         onToggleFavorite={toggleFavorite}
         meta={

@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { SidePanel } from "@/components/ui/side-panel";
 import { History, X } from "lucide-react";
 import { AssigneeAvatar } from "@/components/issue-table";
 import { useLocale, useT } from "@/components/i18n-context";
@@ -85,8 +86,12 @@ export function DocUpdatesPanel({
   const t = useT();
   const locale = useLocale();
   const [versions, setVersions] = useState<PageVersion[] | null>(null);
+  const [query,setQuery]=useState(""),[limit,setLimit]=useState(30);
   const [selected, setSelected] = useState<string | null>(null);
   const [change, setChange] = useState<PageVersionChange | null>(null);
+  const selectedRef = useRef<string | null>(null);
+  const restoring = useRef(false);
+  const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const groups = useMemo(() => (versions ? groupDocUpdates(versions) : null), [versions]);
 
@@ -109,33 +114,34 @@ export function DocUpdatesPanel({
   }, [workspaceId, pageId]);
 
   async function open(newestId: string, oldestId: string) {
+    selectedRef.current = newestId;
     setSelected(newestId);
     setChange(null);
     const result = await getPageVersionChangeAction(workspaceId, pageId, newestId, oldestId);
+    if (selectedRef.current !== newestId) return;
     if (result.ok) setChange(result.data);
     else setError(result.error);
   }
 
   async function restore(id: string, action = restorePageVersionAction) {
-    await beforeRestore();
-    const result = await action(workspaceId, pageId, id);
-    if (!result.ok) {
-      setError(result.error);
-      return;
-    }
-    onRestored(result.data);
-    setSelected(null);
-    setChange(null);
-    await load();
+    if (restoring.current || selectedRef.current !== id) return;
+    restoring.current = true; setBusy(true); setError(null);
+    try {
+      await beforeRestore();
+      const result = await action(workspaceId,pageId,id);
+      if(!result.ok){setError(result.error);return;}
+      onRestored(result.data);setSelected(null);selectedRef.current=null;setChange(null);await load();
+    } catch(err) {setError(err instanceof Error ? err.message : "Something went wrong");}
+    finally {restoring.current=false;setBusy(false);}
   }
 
   const current = versions?.find((version) => version.reason !== "unsaved")?.id;
 
   return (
-    <aside
+    <SidePanel name="document-discussion" compact={compact}><aside
       data-doc-updates
       className={`flex min-h-0 flex-col border-l border-border bg-bg ${
-        compact ? "absolute inset-0 z-10 border-l-0" : "w-[340px] shrink-0"
+        compact ? "w-full border-l-0" : "w-full shrink-0"
       }`}
     >
       <div className="flex h-10 shrink-0 items-center gap-1.5 border-b border-border px-3 text-body font-medium text-text">
@@ -153,8 +159,11 @@ export function DocUpdatesPanel({
       </div>
       <div className="min-h-0 flex-1 overflow-y-auto p-2">
         {error && <div className="px-1 pb-2 text-small text-danger">{t(error)}</div>}
+        {versions === null && !error && <p className="p-2 text-small text-faint">{t("Loading…")}</p>}
+        <input aria-label={t("Search versions")} placeholder={t("Search versions")} value={query} onChange={e=>{setQuery(e.target.value);setLimit(30);}} className="mb-2 w-full rounded border border-border bg-bg p-1 text-small"/>
+        {error&&<button onClick={()=>void load()} className="text-small">{t("Retry")}</button>}
         {groups?.length === 0 && <p className="px-1 py-2 text-body text-faint">{t("No updates yet.")}</p>}
-        {groups?.map((group) => {
+        {groups?.filter(group=>group.versions.some(version=>`${versionLabel(version,t)} ${version.seq} ${version.updatedAt} ${version.title}`.toLowerCase().includes(query.toLowerCase()))).slice(0,limit).map((group) => {
           const newest = group.versions[0];
           if (!newest) return null;
           const oldest = group.versions[group.versions.length - 1] ?? newest;
@@ -164,7 +173,7 @@ export function DocUpdatesPanel({
             <div key={group.id} className="rounded-md">
               <button
                 type="button"
-                onClick={() => void (selected === group.id ? setSelected(null) : open(newest.id, oldest.id))}
+                onClick={() => void (selected === group.id ? (selectedRef.current=null,setSelected(null)) : open(newest.id, oldest.id))}
                 aria-expanded={selected === group.id}
                 className={`flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-small transition-colors hover:bg-elevated/60 ${
                   selected === group.id ? "bg-elevated/60" : ""
@@ -202,6 +211,7 @@ export function DocUpdatesPanel({
                       <button
                         type="button"
                         data-doc-undo-agent
+                        disabled={busy}
                         onClick={() => void restore(newest.id, undoAgentEditAction)}
                         className="ml-auto rounded-md border border-border px-2 py-1 text-small font-medium text-muted hover:border-border-strong hover:text-text"
                       >
@@ -211,6 +221,7 @@ export function DocUpdatesPanel({
                     {canEdit && !multiple && newest.id !== current && (
                       <button
                         type="button"
+                        disabled={busy}
                         onClick={() => void restore(newest.id)}
                         className="ml-auto rounded-md border border-border px-2 py-1 text-small font-medium text-muted hover:border-border-strong hover:text-text"
                       >
@@ -236,7 +247,8 @@ export function DocUpdatesPanel({
                           {canEdit && version.id !== current && (
                             <button
                               type="button"
-                              onClick={() => void restore(version.id)}
+                              disabled={busy}
+                        onClick={() => {selectedRef.current=version.id;void restore(version.id);}}
                               className="shrink-0 rounded-md border border-border px-2 py-1 text-small font-medium text-muted hover:border-border-strong hover:text-text"
                             >
                               {t("Restore this version")}
@@ -251,7 +263,8 @@ export function DocUpdatesPanel({
             </div>
           );
         })}
+        {groups&&groups.length>limit&&<button onClick={()=>setLimit(n=>n+30)} className="p-2 text-small">{t("Load more")}</button>}
       </div>
-    </aside>
+    </aside></SidePanel>
   );
 }

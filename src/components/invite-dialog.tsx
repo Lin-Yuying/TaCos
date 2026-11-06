@@ -1,8 +1,9 @@
 "use client";
 
-import { useEffect, useState, useSyncExternalStore } from "react";
+import { useState, useSyncExternalStore } from "react";
 import { Check, Copy, X } from "lucide-react";
 import { interpolate, useT } from "@/components/i18n-context";
+import { Modal } from "@/components/ui/modal";
 import { inviteMemberAction } from "@/app/auth-actions";
 
 // The register URL is only knowable in the browser; useSyncExternalStore lets the
@@ -50,17 +51,6 @@ export function InviteDialog({
     setInviteMsg({ ok: true, text: t("{name} joined the workspace", { name: result.data.displayName }) });
   }
 
-  useEffect(() => {
-    const onKey = (event: KeyboardEvent) => {
-      if (event.key === "Escape") {
-        event.preventDefault();
-        onClose();
-      }
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [onClose]);
-
   async function copy(kind: "code" | "link") {
     const text = kind === "code" ? joinCode : link;
     if (!text) return;
@@ -73,9 +63,7 @@ export function InviteDialog({
   }
 
   return (
-    <>
-      <div className="fixed inset-0 z-40 bg-black/40" onClick={onClose} />
-      <div className="fixed inset-x-0 top-[18vh] z-50 mx-auto w-[480px] max-w-[94vw]">
+    <Modal open onClose={onClose} title={t("Invite teammates")} className="max-w-[480px]">
         <div
           role="dialog"
           aria-modal="true"
@@ -155,6 +143,7 @@ export function InviteDialog({
                   }}
                 >
                   <input
+                    onKeyDown={(event)=>{if(event.key==="Enter"&&event.nativeEvent.isComposing)event.preventDefault();}}
                     value={who}
                     onChange={(e) => setWho(e.target.value)}
                     placeholder={t("User name")}
@@ -180,7 +169,6 @@ export function InviteDialog({
             </p>
           </div>
         </div>
-      </div>
-    </>
+    </Modal>
   );
 }

@@ -4,11 +4,13 @@ import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js"
 function textOf(result: unknown): any {
   const content = (result as { content: Array<{ type: string; text: string }> }).content;
   const first = content?.find((c) => c.type === "text");
-  return first ? JSON.parse(first.text) : null;
+  if (first) { try { return JSON.parse(first.text); } catch { throw new Error(first.text); } }
+  return null;
 }
 
 async function main() {
   const transport = new StdioClientTransport({
+    env: Object.fromEntries(Object.entries(process.env).filter((entry): entry is [string,string] => entry[1] !== undefined)),
     command: process.execPath,
     args: ["node_modules/tsx/dist/cli.mjs", "mcp/server.ts"],
   });

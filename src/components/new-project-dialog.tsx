@@ -1,4 +1,8 @@
 "use client";
+import { usePrimaryModifier } from "@/lib/ui/platform";
+
+import { Modal } from "@/components/ui/modal";
+import { useDraft } from "@/lib/ui/draft-store";
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
@@ -15,32 +19,20 @@ export function NewProjectDialog({
   workspaceName: string;
 }) {
   const t = useT();
+  const modifier=usePrimaryModifier();
   const { projectComposerOpen, setProjectComposerOpen, projectComposerOnCreated } = useUI();
   const router = useRouter();
-  const [name, setName] = useState("");
-  const [description, setDescription] = useState("");
+  const [name, setName] = useDraft("create-new-project-dialog.tsx", "name", "");
+  const [description, setDescription] = useDraft("create-new-project-dialog.tsx", "description", "");
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
   useEffect(() => {
     if (!projectComposerOpen) return;
-    setName("");
-    setDescription("");
     setError(null);
     setBusy(false);
   }, [projectComposerOpen]);
 
-  useEffect(() => {
-    if (!projectComposerOpen) return;
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") {
-        e.preventDefault();
-        setProjectComposerOpen(false);
-      }
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [projectComposerOpen, setProjectComposerOpen]);
 
   if (!projectComposerOpen) return null;
 
@@ -57,6 +49,7 @@ export function NewProjectDialog({
       setError(t(result.error));
       return;
     }
+    setName("");setDescription("");
     setProjectComposerOpen(false);
     // Opened from the Agent composer: hand the project back so the draft stays put
     // instead of jumping to the new project's overview.
@@ -69,13 +62,11 @@ export function NewProjectDialog({
   }
 
   return (
-    <>
-      <div className="fixed inset-0 z-40 bg-black/40" onClick={() => setProjectComposerOpen(false)} />
-      <div className="fixed inset-x-0 top-[14vh] z-50 mx-auto w-[560px] max-w-[94vw]">
+    <Modal open={projectComposerOpen} onClose={() => {if(!busy)setProjectComposerOpen(false);}} title={t("New project")}>
         <div
           className="rounded-xl border border-border bg-overlay shadow-2xl shadow-black/15"
           onKeyDown={(e) => {
-            if ((e.metaKey || e.ctrlKey) && e.key === "Enter") {
+            if ((e.metaKey || e.ctrlKey) && e.key === "Enter" && !e.nativeEvent.isComposing && e.nativeEvent.keyCode !== 229) {
               e.preventDefault();
               void submit();
             }
@@ -132,11 +123,10 @@ export function NewProjectDialog({
               className="rounded-md bg-accent px-3 py-1.5 text-body font-medium text-white transition-colors hover:bg-accent-hover disabled:opacity-40"
             >
               {t("Create project")}
-              <span className="ml-2 text-caption opacity-75">⌘↵</span>
+              <span className="ml-2 text-caption opacity-75">{modifier}↵</span>
             </button>
           </div>
         </div>
-      </div>
-    </>
+    </Modal>
   );
 }

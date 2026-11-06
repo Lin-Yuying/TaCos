@@ -1,8 +1,13 @@
 "use client";
 
+import { useScrollMemory } from "@/lib/ui/scroll-memory";
+import { useDetailSource } from "@/components/detail-navigation";
+import { BatchSelection } from "@/components/ui/batch-selection";
+import { EntityRow } from "@/components/ui/entity-row";
+
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { FileText, Lock, Plus, Users } from "lucide-react";
 import { createPageAction } from "@/app/pages-actions";
 import { timeAgo } from "@/lib/format";
@@ -25,19 +30,24 @@ export function ProjectDocuments({
   const [error, setError] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
 
+  const scroller=useRef<HTMLDivElement>(null);useScrollMemory(scroller,`project-documents.${projectId}`);
+  const creatingRef=useRef(false);
   async function createPage() {
+    if(creatingRef.current)return;creatingRef.current=true;
+    try {
     setCreating(true);
     const result = await createPageAction(workspaceId, { projectId });
-    setCreating(false);
     if (!result.ok) {
       setError(result.error);
       return;
     }
     router.push(`/${workspaceId}/docs/${result.data.id}`);
+    }catch{setError("Could not save. Retry.");}finally{creatingRef.current=false;setCreating(false);}
   }
 
+  useDetailSource("document",pages.map(page=>page.id));
   return (
-    <div className="flex-1 overflow-y-auto">
+    <div ref={scroller} className="flex-1 overflow-y-auto">
       <div className={`w-full pb-8 pt-6 ${PAGE_INSET}`}>
         <div className="flex items-center justify-between gap-3">
           <div>
@@ -56,6 +66,7 @@ export function ProjectDocuments({
           </button>
         </div>
 
+        <BatchSelection workspaceId={workspaceId} kind="document" items={pages}/>
         {error && <div className="mt-3 text-small text-danger">{t(error)}</div>}
 
         {pages.length === 0 ? (
@@ -65,7 +76,8 @@ export function ProjectDocuments({
         ) : (
           <div className="mt-5 space-y-0.5">
             {pages.map((page) => (
-              <Link
+              <EntityRow key={page.id} kind="document" id={page.id} title={page.title}>
+            <Link
                 key={page.id}
                 href={`/${workspaceId}/docs/${page.id}`}
                 style={{ paddingLeft: 8 + page.depth * 18 }}
@@ -83,6 +95,7 @@ export function ProjectDocuments({
                   </span>
                 </span>
               </Link>
+            </EntityRow>
             ))}
           </div>
         )}

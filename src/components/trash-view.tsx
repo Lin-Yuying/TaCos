@@ -1,5 +1,8 @@
 "use client";
 
+import { useRef, useState } from "react";
+import { useUI } from "@/components/ui-context";
+import { entityHref } from "@/lib/ui/entity-actions";
 import { useRouter } from "next/navigation";
 import { FileText, RotateCcw, Trash2 } from "lucide-react";
 import {
@@ -36,51 +39,36 @@ export function TrashView({
   const locale = useLocale();
   const router = useRouter();
 
-  async function restoreProject(project: TrashedProject) {
-    await restoreProjectAction(workspaceId, project.id);
-    router.refresh();
+  const {confirm,toast} = useUI();
+  const running = useRef(new Set<string>());
+  const [busy,setBusy] = useState<string[]>([]);
+  const [errors,setErrors] = useState<Record<string,string>>({});
+  async function perform(id:string, action:()=>Promise<{ok:boolean;error?:string}>, href?:string) {
+    if(running.current.has(id))return;
+    running.current.add(id);setBusy([...running.current]);
+    setErrors(previous=>({...previous,[id]:""}));
+    try {
+      const result=await action();
+      if(!result.ok){setErrors(previous=>({...previous,[id]:result.error??"Could not save. Retry."}));return;}
+      if(href)toast(t("Restored"),{label:t("Open"),run:()=>router.push(href)});
+      router.refresh();
+    }catch{setErrors(previous=>({...previous,[id]:"Could not save. Retry."}));}
+    finally{running.current.delete(id);setBusy([...running.current]);}
   }
-
-  async function purgeProject(project: TrashedProject) {
-    if (
-      !window.confirm(
-        t(
-          project.issueCount === 1
-            ? 'Delete "{name}" and its {count} task permanently? This cannot be undone.'
-            : 'Delete "{name}" and its {count} tasks permanently? This cannot be undone.',
-          { name: project.name, count: project.issueCount }
-        )
-      )
-    )
-      return;
-    await purgeProjectAction(workspaceId, project.id);
-    router.refresh();
+  async function restoreProject(project:TrashedProject) {await perform(project.id,()=>restoreProjectAction(workspaceId,project.id),`/${workspaceId}/projects/${project.id}`);}
+  async function purgeProject(project:TrashedProject) {
+    if(!await confirm(t('Delete "{name}" and its {count} tasks permanently? This cannot be undone.',{name:project.name,count:project.issueCount})))return;
+    await perform(project.id,()=>purgeProjectAction(workspaceId,project.id));
   }
-
-  async function restoreIssue(issue: TrashedIssue) {
-    await restoreIssueAction(workspaceId, issue.id);
-    router.refresh();
+  async function restoreIssue(issue:TrashedIssue) {await perform(issue.id,()=>restoreIssueAction(workspaceId,issue.id),entityHref(workspaceId,{kind:"task",id:issue.id}));}
+  async function purgeIssue(issue:TrashedIssue) {
+    if(!await confirm(t('Delete "{name}" permanently? This cannot be undone.',{name:issue.title})))return;
+    await perform(issue.id,()=>purgeIssueAction(workspaceId,issue.id));
   }
-
-  async function purgeIssue(issue: TrashedIssue) {
-    await purgeIssueAction(workspaceId, issue.id);
-    router.refresh();
-  }
-
-  async function restoreDoc(doc: TrashedPage) {
-    await restorePageAction(workspaceId, doc.id);
-    router.refresh();
-  }
-
-  async function purgeDoc(doc: TrashedPage) {
-    if (
-      !window.confirm(
-        t('Delete "{name}" and everything inside it permanently? This cannot be undone.', { name: doc.title })
-      )
-    )
-      return;
-    await purgePageAction(workspaceId, doc.id);
-    router.refresh();
+  async function restoreDoc(doc:TrashedPage) {await perform(doc.id,()=>restorePageAction(workspaceId,doc.id),entityHref(workspaceId,{kind:"document",id:doc.id}));}
+  async function purgeDoc(doc:TrashedPage) {
+    if(!await confirm(t('Delete "{name}" and everything inside it permanently? This cannot be undone.',{name:doc.title})))return;
+    await perform(doc.id,()=>purgePageAction(workspaceId,doc.id));
   }
 
   const empty = projects.length === 0 && issues.length === 0 && docs.length === 0;
@@ -88,6 +76,7 @@ export function TrashView({
   return (
     <div className={`flex-1 overflow-y-auto pb-10 pt-6 ${PAGE_INSET}`}>
       <div className="space-y-4">
+        {Object.entries(errors).filter(([,message])=>message).map(([id,message])=><p role="alert" key={id} className="text-small text-danger">{t(message)}</p>)}
         <p className="text-body leading-relaxed text-muted">
           {t(
             "Deleted issues, documents and projects wait here. Restore puts one back exactly as it was; deleting it for good cannot be undone."
@@ -121,7 +110,7 @@ export function TrashView({
                 <div className="flex shrink-0 items-center gap-1">
                   <button
                     type="button"
-                    onClick={() => void restoreIssue(issue)}
+                    disabled={busy.includes(issue.id)} onClick={() => void restoreIssue(issue)}
                     title={t("Restore")}
                     aria-label={t("Restore {name}", { name: issueRef(issue) })}
                     className="rounded-md border border-border p-1.5 text-faint transition-colors hover:border-border-strong hover:text-text"
@@ -130,7 +119,7 @@ export function TrashView({
                   </button>
                   <button
                     type="button"
-                    onClick={() => void purgeIssue(issue)}
+                    disabled={busy.includes(issue.id)} onClick={() => void purgeIssue(issue)}
                     title={t("Delete forever")}
                     aria-label={t("Delete {name} forever", { name: issueRef(issue) })}
                     className="rounded-md p-1.5 text-faint transition-colors hover:bg-elevated hover:text-danger"
@@ -157,7 +146,7 @@ export function TrashView({
                 <div className="flex shrink-0 items-center gap-1">
                   <button
                     type="button"
-                    onClick={() => void restoreDoc(doc)}
+                    disabled={busy.includes(doc.id)} onClick={() => void restoreDoc(doc)}
                     title={t("Restore")}
                     aria-label={t("Restore {name}", { name: doc.title })}
                     className="rounded-md border border-border p-1.5 text-faint transition-colors hover:border-border-strong hover:text-text"
@@ -167,7 +156,7 @@ export function TrashView({
                   {(doc.createdBy === userId || isOwner) && (
                     <button
                       type="button"
-                      onClick={() => void purgeDoc(doc)}
+                      disabled={busy.includes(doc.id)} onClick={() => void purgeDoc(doc)}
                       title={t("Delete forever")}
                       aria-label={t("Delete {name} forever", { name: doc.title })}
                       className="rounded-md p-1.5 text-faint transition-colors hover:bg-elevated hover:text-danger"
@@ -199,7 +188,7 @@ export function TrashView({
                 <div className="flex shrink-0 items-center gap-1">
                   <button
                     type="button"
-                    onClick={() => void restoreProject(project)}
+                    disabled={busy.includes(project.id)} onClick={() => void restoreProject(project)}
                     title={t("Restore")}
                     aria-label={t("Restore {name}", { name: project.name })}
                     className="rounded-md border border-border p-1.5 text-faint transition-colors hover:border-border-strong hover:text-text"
@@ -209,7 +198,7 @@ export function TrashView({
                   {(project.createdBy === userId || isOwner) && (
                     <button
                       type="button"
-                      onClick={() => void purgeProject(project)}
+                      disabled={busy.includes(project.id)} onClick={() => void purgeProject(project)}
                       title={t("Delete forever")}
                       aria-label={t("Delete {name} forever", { name: project.name })}
                       className="rounded-md p-1.5 text-faint transition-colors hover:bg-elevated hover:text-danger"

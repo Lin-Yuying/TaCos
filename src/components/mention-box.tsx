@@ -119,6 +119,7 @@ export function MentionBox({
         }}
         onBlur={() => setQuery(null)}
         onKeyDown={(e) => {
+          if(e.nativeEvent.isComposing||e.nativeEvent.keyCode===229)return;
           if (matches.length > 0) {
             if (e.key === "ArrowDown" || e.key === "ArrowUp") {
               e.preventDefault();

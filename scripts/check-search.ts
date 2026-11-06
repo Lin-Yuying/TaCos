@@ -89,6 +89,15 @@ async function main() {
   await pagesLib.setPageShared(ws, shared.id, "owner", false);
   assert(!(await searchWorkspace(ws, "member", "lighthouses")).length, "unshared document does not match");
 
+  const comment=(await pageComments.addPageComment(ws,secret.id,"owner",{body:"uniquecommentword"})).at(-1)!;
+  await pageComments.editPageComment(ws,secret.id,"owner",comment.id,"editedcommentword");
+  assert((await searchWorkspace(ws,"owner","uniquecommentword")).length===0,"comment edit removes old index text");
+  assert((await searchWorkspace(ws,"owner","editedcommentword")).some(hit=>hit.id===comment.id),"comment edit updates index");
+  await pageComments.removePageComment(ws,secret.id,"owner",comment.id);
+  assert((await searchWorkspace(ws,"owner","editedcommentword")).length===0,"deleted comment is hidden");
+  await pageComments.restorePageComment(ws,secret.id,"owner",comment.id);
+  assert((await searchWorkspace(ws,"owner","editedcommentword")).some(hit=>hit.id===comment.id),"restoring comment restores index");
+  await pageComments.removePageComment(ws,secret.id,"owner",comment.id);
   // A database from before this index gets filled on open.
   const sqlite = (db as unknown as { $client: { exec(sql: string): void; close(): void } }).$client;
   sqlite.exec("DROP TABLE search_fts");
@@ -97,6 +106,7 @@ async function main() {
   hits = await searchWorkspace(ws, "member", "ROADMAP");
   assert(kinds(hits) === "task,task_comment", `old rows are indexed on open: ${kinds(hits)}`);
 
+  assert((await searchWorkspace(ws,"owner","editedcommentword")).length===0,"index rebuild excludes deleted comments");
   console.log("check-search: ok");
 }
 

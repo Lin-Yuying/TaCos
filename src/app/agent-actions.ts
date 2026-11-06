@@ -314,3 +314,5 @@ export async function cancelHandoffAction(
     return handoffPanel(workspaceId, issueId, user.id);
   });
 }
+
+export async function searchAgentThreadsAction(ws:string,query:string,offset=0){return run(async()=>{const {user}=await requireWorkspace(ws);const {searchAgentThreads}=await import("@/lib/agent-threads");return searchAgentThreads(ws,user.id,query,offset);});}

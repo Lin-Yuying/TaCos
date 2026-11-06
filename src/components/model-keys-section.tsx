@@ -1,4 +1,6 @@
 "use client";
+import { safeAction } from "@/lib/ui/safe-action";
+import { useConfirmation } from "@/components/ui/confirmation";
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
@@ -44,6 +46,7 @@ export function ModelKeysSection({
   serverMode?: boolean;
 }) {
   const t = useT();
+  const {confirm,dialog}=useConfirmation();
   const router = useRouter();
   const [view, setView] = useState(initial);
   // null: form closed. "": adding a new API. Otherwise the API being changed.
@@ -106,7 +109,7 @@ export function ModelKeysSection({
   }
 
   async function remove(endpoint: ModelEndpointView) {
-    if (busy || !window.confirm(t("Delete {name} and its key?", { name: endpoint.label }))) return;
+    if (busy || !await confirm(t("Delete {name} and its key?", { name: endpoint.label }))) return;
     setBusy(true);
     setError(null);
     setNotice(null);
@@ -138,7 +141,7 @@ export function ModelKeysSection({
 
   if (onThisComputer !== true) {
     return (
-      <section className="space-y-3" data-testid="model-keys-settings">
+      <section className="space-y-3" data-testid="model-keys-settings">{dialog}
         <h2 className="text-body font-semibold">{t("Model API")}</h2>
         <p className="text-body leading-relaxed text-muted">
           {t("Your APIs stay on your own computer. Open the TaCos desktop app to add or change them.")}
@@ -148,7 +151,7 @@ export function ModelKeysSection({
   }
 
   return (
-    <section className="space-y-3" data-testid="model-keys-settings">
+    <section className="space-y-3" data-testid="model-keys-settings">{dialog}
       <h2 className="text-body font-semibold">{t("Model API")}</h2>
       {serverMode ? (
         <p className="text-body leading-relaxed text-muted">

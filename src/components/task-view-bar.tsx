@@ -1,8 +1,10 @@
 "use client";
 
+import { TaskFieldManager } from "@/components/task-field-manager";
 import { useState } from "react";
 import { ArrowDownUp, Filter, ListPlus, Plus, Trash2, X } from "lucide-react";
-import { createTaskFieldAction, deleteTaskFieldAction } from "@/app/actions";
+import { createTaskFieldAction, deleteTaskFieldAction, taskFieldImpactAction, restoreTaskFieldAction } from "@/app/actions";
+import { useUI } from "@/components/ui-context";
 import { Menu } from "@/components/menu";
 import { useT } from "@/components/i18n-context";
 import { STATUS_META } from "@/components/icons";
@@ -99,6 +101,7 @@ export function TaskViewBar({
   onFieldsChanged: () => void;
 }) {
   const t = useT();
+  const {confirm, toast} = useUI();
   const [name, setName] = useState("");
   const [type, setType] = useState<FieldType>("text");
   const [options, setOptions] = useState("");
@@ -141,8 +144,11 @@ export function TaskViewBar({
   }
 
   async function removeField(id: string) {
+    const impact = await taskFieldImpactAction(workspaceId,id);
+    if(!impact.ok){setError(impact.error);return;}
+    if(!await confirm(t("Disable this field on {count} tasks? Values are kept and can be restored.",{count:impact.data})))return;
     const result = await deleteTaskFieldAction(workspaceId, id);
-    if (result.ok) onFieldsChanged();
+    if (result.ok) {onFieldsChanged();toast(t("Field disabled"),{label:t("Undo"),run:async()=>{const restored=await restoreTaskFieldAction(workspaceId,id);if(!restored.ok)setError(restored.error);else onFieldsChanged();}});}
     else setError(result.error);
   }
 
@@ -277,6 +283,7 @@ export function TaskViewBar({
           </div>
         )}
       </Menu>
+      {manageFields&&<TaskFieldManager workspaceId={workspaceId}/>}
       {manageFields && (
         <Menu
           width={300}

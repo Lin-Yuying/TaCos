@@ -1,6 +1,8 @@
 "use server";
 
-import { createTaskField, deleteTaskField, setTaskFieldValue } from "@/lib/task-fields";
+import { changeIssueCollection } from "@/lib/issues";
+
+import { createTaskField, deleteTaskField, setTaskFieldValue, taskFieldImpact, restoreTaskField } from "@/lib/task-fields";
 import type { TaskField } from "@/lib/task-view";
 import { revalidatePath } from "next/cache";
 import { requireAdmin, requireWorkspace } from "@/lib/auth";
@@ -96,6 +98,13 @@ export async function updateIssueAction(workspaceId: string, idOrIdentifier: str
     const result = await updateIssue(workspaceId, idOrIdentifier, patch, userActor(user));
     refresh(workspaceId);
     return result.issue;
+  });
+}
+
+export async function getIssueDetailAction(workspaceId: string, id: string) {
+  return run<IssueDetail>(async () => {
+    const { user } = await requireWorkspace(workspaceId);
+    return claimedDetail(workspaceId, id, user.id);
   });
 }
 
@@ -557,3 +566,18 @@ export async function setTaskFieldValueAction(
     return saved;
   });
 }
+
+export async function changeIssueCollectionAction(workspaceId: string, id: string, change: {kind: "assignee" | "label"; value: string; selected: boolean}) {
+  return run(async () => { const {user} = await requireWorkspace(workspaceId); const result = await changeIssueCollection(workspaceId,id,change,userActor(user)); refresh(workspaceId); return result; });
+}
+
+export async function taskFieldImpactAction(workspaceId:string,fieldId:string) {
+  return run(async()=>{await requireWorkspace(workspaceId);return taskFieldImpact(workspaceId,fieldId);});
+}
+export async function restoreTaskFieldAction(workspaceId:string,fieldId:string) {
+  return run(async()=>{const {user}=await requireWorkspace(workspaceId);await restoreTaskField(workspaceId,user.id,fieldId);refresh(workspaceId);});
+}
+
+export async function listTaskFieldsAction(workspaceId:string,includeDisabled=false){return run(async()=>{await requireWorkspace(workspaceId);const {listTaskFields}=await import("@/lib/task-fields");return listTaskFields(workspaceId,includeDisabled);});}
+
+export async function updateTaskFieldAction(workspaceId:string,id:string,input:{name:string;options?:string[]}){return run(async()=>{const {user}=await requireWorkspace(workspaceId);const {updateTaskField}=await import("@/lib/task-fields");const result=await updateTaskField(workspaceId,user.id,id,input);refresh(workspaceId);return result;});}

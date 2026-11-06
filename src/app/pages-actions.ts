@@ -12,7 +12,10 @@ import {
   importMarkdownPage,
   keepUnsavedText,
   listPageAccess,
+  listPageTree,
   movePage,
+  previewPageMove,
+  type PageMoveTarget,
   setPageCover,
   togglePageFavorite,
   listPageVersions,
@@ -30,9 +33,11 @@ import {
   type PageVersion,
   type PageVersionChange,
 } from "@/lib/pages";
-import { TacosError, listMembers, type Member } from "@/lib/issues";
+import { TacosError, listMembers, listProjects, type Member } from "@/lib/issues";
 import {
   addPageComment,
+  editPageComment,
+  restorePageComment,
   listPageComments,
   removePageComment,
   setPageCommentResolved,
@@ -247,7 +252,7 @@ export async function listPageCommentsAction(
 export async function addPageCommentAction(
   workspaceId: string,
   pageId: string,
-  input: { body: string; anchor?: DocAnchor | null }
+  input: { body: string; anchor?: DocAnchor | null; parentId?: string | null }
 ): Promise<ActionResult<PageComment[]>> {
   return run(async () => {
     const { user } = await requireWorkspace(workspaceId);
@@ -316,7 +321,7 @@ export async function setPageMemberLevelAction(
 export async function movePageAction(
   workspaceId: string,
   pageId: string,
-  target: { parentId: string | null; beforeId?: string | null; shared?: boolean }
+  target: PageMoveTarget
 ): Promise<ActionResult<void>> {
   return run(async () => {
     const { user } = await requireWorkspace(workspaceId);
@@ -362,3 +367,14 @@ export async function getCollabSessionAction(
     };
   });
 }
+
+export async function previewPageMoveAction(workspaceId:string,pageId:string,target:PageMoveTarget) {
+  return run(async()=>{const {user}=await requireWorkspace(workspaceId);return previewPageMove(workspaceId,pageId,user.id,target);});
+}
+
+export async function listMoveTargetsAction(workspaceId:string) {
+ return run(async()=>{const {user}=await requireWorkspace(workspaceId);return {pages:await listPageTree(workspaceId,user.id),projects:await listProjects(workspaceId,user.id)};});
+}
+
+export async function editPageCommentAction(ws:string,pageId:string,id:string,body:string){return run(async()=>{const {user}=await requireWorkspace(ws);return editPageComment(ws,pageId,user.id,id,body);});}
+export async function restorePageCommentAction(ws:string,pageId:string,id:string){return run(async()=>{const {user}=await requireWorkspace(ws);return restorePageComment(ws,pageId,user.id,id);});}

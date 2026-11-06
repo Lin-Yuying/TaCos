@@ -1,6 +1,13 @@
 "use client";
+import { usePrimaryModifier } from "@/lib/ui/platform";
+import { OptionSearch,matchesOption } from "@/components/ui/option-search";
 
-import { useEffect, useState } from "react";
+import { DuePicker } from "@/components/ui/due-picker";
+import { readJson } from "@/lib/ui/request";
+import { Modal } from "@/components/ui/modal";
+import { useDraft } from "@/lib/ui/draft-store";
+
+import { useEffect, useRef, useState } from "react";
 import { usePathname, useSearchParams } from "next/navigation";
 import { LoaderCircle, Sparkles, Users, X } from "lucide-react";
 import { useUI } from "@/components/ui-context";
@@ -14,14 +21,17 @@ import {
   StatusIcon,
 } from "@/components/icons";
 import { AssigneeAvatar, AssigneeStack } from "@/components/issue-table";
-import { createIssueAction } from "@/app/actions";
+import { createIssueAction, listTaskFieldsAction } from "@/app/actions";
 import { draftIssueAction } from "@/app/ai-actions";
-import { STATUS_ORDER, type Priority, type Status } from "@/lib/constants";
+import { STATUS_ORDER, type Priority, type Status, type ReminderPreset } from "@/lib/constants";
+import type { TaskField } from "@/lib/task-view";
 import type { Label, Member, Project } from "@/lib/issues";
 import { useT } from "@/components/i18n-context";
 
 export function NewIssueDialog({ workspaceId }: { workspaceId: string }) {
   const t = useT();
+  const modifier=usePrimaryModifier();
+  const [memberQuery,setMemberQuery]=useState(""),[labelQuery,setLabelQuery]=useState("");
   const { composerOpen, composerStatus, composerSeed, setComposerOpen, openIssue, aiReady, projectComposerOpen, setProjectComposerOpen } =
     useUI();
   const searchParams = useSearchParams();
@@ -29,13 +39,18 @@ export function NewIssueDialog({ workspaceId }: { workspaceId: string }) {
   // Opened from a project's Overview page, the composer should stay in that project.
   const activeProjectId =
     searchParams.get("project") ?? pathname.match(/\/projects\/([^/]+)/)?.[1] ?? "";
-  const [title, setTitle] = useState("");
-  const [description, setDescription] = useState("");
-  const [status, setStatus] = useState<Status>("todo");
-  const [priority, setPriority] = useState<Priority>(0);
-  const [assigneeIds, setAssigneeIds] = useState<string[]>([]);
-  const [labelNames, setLabelNames] = useState<string[]>([]);
-  const [projectId, setProjectId] = useState<string>("");
+  const [title, setTitle] = useDraft("create-new-issue-dialog.tsx", "title", "");
+  const [description, setDescription] = useDraft("create-new-issue-dialog.tsx", "description", "");
+  const [status, setStatus] = useDraft<Status>("create-new-issue-dialog.tsx", "status", "todo");
+  const [priority, setPriority] = useDraft<Priority>("create-new-issue-dialog.tsx", "priority", 0);
+  const [assigneeIds, setAssigneeIds] = useDraft<string[]>("create-new-issue-dialog.tsx", "assigneeIds", []);
+  const [labelNames, setLabelNames] = useDraft<string[]>("create-new-issue-dialog.tsx", "labelNames", []);
+  const [projectId, setProjectId] = useDraft<string>("create-new-issue-dialog.tsx", "projectId", "");
+  const [dueDate,setDueDate]=useDraft<string|null>("create-task","dueDate",null);
+  const [reminder,setReminder]=useDraft<ReminderPreset|null>("create-task","reminder",null);
+  const [fields,setFields]=useState<TaskField[]>([]);
+  const [fieldValues,setFieldValues]=useDraft<Record<string,string>>("create-task","fields",{});
+  const [continueCreating,setContinueCreating]=useState(false);
   const [projects, setProjects] = useState<Project[]>([]);
   const [projectsLoaded, setProjectsLoaded] = useState(false);
   const [labels, setLabels] = useState<Label[]>([]);
@@ -49,12 +64,10 @@ export function NewIssueDialog({ workspaceId }: { workspaceId: string }) {
 
   useEffect(() => {
     if (!composerOpen) return;
-    setTitle(composerSeed?.title ?? "");
-    setDescription(composerSeed?.description ?? "");
-    setStatus(composerStatus ?? "todo");
-    setPriority(0);
-    setAssigneeIds([]);
-    setLabelNames([]);
+    if(composerSeed?.dueDate)setDueDate(composerSeed.dueDate);
+    if(composerSeed?.title !== undefined) setTitle(composerSeed.title);
+    if(composerSeed?.description !== undefined) setDescription(composerSeed.description);
+    if(composerStatus) setStatus(composerStatus);
     setError(null);
     setBusy(false);
     setAiOpen(false);
@@ -62,39 +75,26 @@ export function NewIssueDialog({ workspaceId }: { workspaceId: string }) {
     setAiBusy(false);
     setAiError(null);
     setProjectsLoaded(false);
-    fetch(`/api/internal/${workspaceId}/projects`)
-      .then((res) => res.json())
+    readJson<Project[]>(`/api/internal/${workspaceId}/projects`,(data):data is Project[]=>Array.isArray(data))
       .then((data: Project[]) => {
         setProjects(data);
         setProjectId(
-          data.find((p) => p.id === activeProjectId)?.id ?? data[0]?.id ?? ""
+          data.find((p) => p.id === (projectId || activeProjectId))?.id ?? data[0]?.id ?? ""
         );
       })
-      .catch(() => setProjects([]))
+      .catch((error) => {setProjects([]);setError(error.message);})
       .finally(() => setProjectsLoaded(true));
-    fetch(`/api/internal/${workspaceId}/labels`)
-      .then((res) => res.json())
+    void listTaskFieldsAction(workspaceId).then(result=>{if(result.ok)setFields(result.data);else setError(result.error);});
+    readJson<Label[]>(`/api/internal/${workspaceId}/labels`,(data):data is Label[]=>Array.isArray(data))
       .then((data) => setLabels(data as Label[]))
-      .catch(() => setLabels([]));
-    fetch(`/api/internal/${workspaceId}/members`)
-      .then((res) => res.json())
+      .catch((error) => {setLabels([]);setError(error.message);});
+    readJson<Member[]>(`/api/internal/${workspaceId}/members`,(data):data is Member[]=>Array.isArray(data))
       .then((data) => setMembers(data as Member[]))
-      .catch(() => setMembers([]));
+      .catch((error) => {setMembers([]);setError(error.message);});
   }, [composerOpen, composerStatus, composerSeed, workspaceId, activeProjectId]);
 
-  useEffect(() => {
-    if (!composerOpen) return;
-    const onKey = (e: KeyboardEvent) => {
-      // The new project dialog opens on top of this one and closes first.
-      if (e.key === "Escape" && !projectComposerOpen) {
-        e.preventDefault();
-        setComposerOpen(false);
-      }
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [composerOpen, projectComposerOpen, setComposerOpen]);
 
+  const submitRunning=useRef(false);
   if (!composerOpen) return null;
 
   function newProject() {
@@ -106,8 +106,10 @@ export function NewIssueDialog({ workspaceId }: { workspaceId: string }) {
 
   async function submit() {
     const project = projects.find((p) => p.id === projectId);
-    if (!title.trim() || !project || busy) return;
+    if (!title.trim() || !project || submitRunning.current) return;
+    submitRunning.current=true;
     setBusy(true);
+    try {
     const result = await createIssueAction(workspaceId, {
       title,
       description,
@@ -116,17 +118,20 @@ export function NewIssueDialog({ workspaceId }: { workspaceId: string }) {
       assigneeIds,
       labelNames,
       project: project.id,
+      dueDate,reminder,fieldValues,
     });
-    setBusy(false);
+
     if (result.ok) {
       // Pages that opened the composer from a passage use this to drop the task
       // reference exactly where the passage was.
+      setFieldValues({});setDueDate(null);setReminder(null);
+      setTitle("");setDescription("");setStatus("todo");setPriority(0);setAssigneeIds([]);setLabelNames([]);
       composerSeed?.onCreated?.(result.data);
-      setComposerOpen(false);
-      openIssue(result.data.id);
+      if(!continueCreating){setComposerOpen(false);openIssue(result.data.id);}
     } else {
       setError(t(result.error));
     }
+    }catch{setError(t("Could not save. Retry."));}finally{submitRunning.current=false;setBusy(false);}
   }
 
   const project = projects.find((p) => p.id === projectId);
@@ -156,13 +161,12 @@ export function NewIssueDialog({ workspaceId }: { workspaceId: string }) {
   }
 
   return (
-    <>
-      <div className="fixed inset-0 z-40 bg-black/40" onClick={() => setComposerOpen(false)} />
-      <div className="fixed inset-x-0 top-[12vh] z-50 mx-auto w-[640px] max-w-[94vw]">
+    <Modal open={composerOpen} onClose={() => {if(!busy)setComposerOpen(false);}} title={t("New task")}>
+      <fieldset disabled={busy}>
         <div
           className="rounded-xl border border-border bg-overlay shadow-2xl shadow-black/15"
           onKeyDown={(e) => {
-            if ((e.metaKey || e.ctrlKey) && e.key === "Enter") {
+            if (!e.defaultPrevented && (e.metaKey || e.ctrlKey) && e.key === "Enter" && !e.nativeEvent.isComposing && e.nativeEvent.keyCode !== 229) {
               e.preventDefault();
               void submit();
             }
@@ -180,7 +184,7 @@ export function NewIssueDialog({ workspaceId }: { workspaceId: string }) {
             </span>
             <button
               type="button"
-              onClick={() => setComposerOpen(false)}
+              onClick={() => {if(!submitRunning.current)setComposerOpen(false);}}
               aria-label={t("Close")}
               className="rounded p-1 transition-colors hover:bg-elevated hover:text-text"
             >
@@ -193,9 +197,8 @@ export function NewIssueDialog({ workspaceId }: { workspaceId: string }) {
               value={title}
               onChange={(e) => setTitle(e.target.value)}
               onKeyDown={(e) => {
-                // ⌘Enter is the dialog's own shortcut; handling it here too creates the task twice.
-                if (e.key === "Enter" && !e.metaKey && !e.ctrlKey) {
-                  e.preventDefault();
+                if (e.key === "Enter" && !e.metaKey && !e.ctrlKey && !e.nativeEvent.isComposing && e.nativeEvent.keyCode !== 229) {
+                  e.preventDefault();e.stopPropagation();
                   void submit();
                 }
               }}
@@ -218,11 +221,11 @@ export function NewIssueDialog({ workspaceId }: { workspaceId: string }) {
                       value={aiPrompt}
                       onChange={(event) => setAiPrompt(event.target.value)}
                       onKeyDown={(event) => {
-                        if (event.key === "Enter") {
-                          event.preventDefault();
+                        if (event.key === "Enter" && !event.nativeEvent.isComposing && event.nativeEvent.keyCode !== 229) {
+                          event.preventDefault();event.stopPropagation();
                           void aiDraft();
                         }
-                        if (event.key === "Escape") setAiOpen(false);
+                        if (event.key === "Escape") {event.stopPropagation();setAiOpen(false);}
                       }}
                       placeholder={t("Describe the task, e.g. 修复微信登录回调偶发失败")}
                       className="min-w-0 flex-1 rounded-md border border-border bg-elevated/40 px-2.5 py-1.5 text-small text-text placeholder:text-faint focus:border-border-strong"
@@ -402,7 +405,7 @@ export function NewIssueDialog({ workspaceId }: { workspaceId: string }) {
                       <Users size={14} className="text-muted" /> {t("Everyone")}
                     </MenuItem>
                     <div className="my-1 border-t border-border" />
-                    {members.map((member) => {
+                    <OptionSearch value={memberQuery} onChange={setMemberQuery} selected={assigneeIds.length}/>{members.filter(member=>matchesOption(memberQuery,member.displayName,member.username)).map((member) => {
                       const on = assigneeIds.includes(member.id);
                       return (
                         <MenuItem
@@ -440,7 +443,7 @@ export function NewIssueDialog({ workspaceId }: { workspaceId: string }) {
               >
                 {() => (
                   <>
-                    {labels.map((label) => {
+                    <OptionSearch value={labelQuery} onChange={setLabelQuery} selected={labelNames.length}/>{labels.filter(label=>matchesOption(labelQuery,label.name)).map((label) => {
                       const on = labelNames.includes(label.name);
                       return (
                         <MenuItem
@@ -467,8 +470,11 @@ export function NewIssueDialog({ workspaceId }: { workspaceId: string }) {
                 )}
               </Menu>
 
+              {Object.keys(fieldValues).some(id=>!fields.some(field=>field.id===id))&&<p role="alert" className="text-small text-danger">{t("Some saved properties are no longer available.")} <button type="button" onClick={()=>setFieldValues(old=>Object.fromEntries(Object.entries(old).filter(([id])=>fields.some(field=>field.id===id))))} className="underline">{t("Remove unavailable properties")}</button></p>}
+            {fields.length>0&&<details className="my-2 text-small"><summary className="cursor-pointer">{t("More properties")}</summary><div className="mt-2 grid grid-cols-2 gap-2">{fields.map(field=><label key={field.id} className="block">{field.name}{field.type==="select"?<select disabled={busy} value={fieldValues[field.id]??""} onChange={e=>setFieldValues(old=>({...old,[field.id]:e.target.value}))} className="block w-full rounded border border-border bg-bg p-1"><option value=""/>{field.options.map(option=><option key={option}>{option}</option>)}</select>:<input disabled={busy} type={field.type==="checkbox"?"checkbox":field.type==="number"?"number":field.type==="date"?"date":"text"} checked={fieldValues[field.id]==="1"} value={fieldValues[field.id]??""} onChange={e=>setFieldValues(old=>({...old,[field.id]:field.type==="checkbox"?(e.target.checked?"1":""):e.target.value}))} className="block w-full rounded border border-border bg-bg p-1"/>}</label>)}</div></details>}
               <div className="ml-auto flex items-center gap-2">
-                {error && <span className="text-small text-danger">{t(error)}</span>}
+                <div className="flex flex-wrap items-center gap-4 py-2"><DuePicker value={dueDate} reminder={reminder} onSave={async(date,next)=>{setDueDate(date);setReminder(next);return true;}}/><label className="flex items-center gap-2 text-small"><input type="checkbox" checked={continueCreating} onChange={event=>setContinueCreating(event.target.checked)}/>{t("Create and continue")}</label></div>
+      {error && <span className="text-small text-danger">{t(error)}</span>}
                 {projectsLoaded && projects.length === 0 && (
                   <button type="button" onClick={newProject} className="text-small text-accent hover:underline">
                     {t("A task needs a project. Create one")}
@@ -481,13 +487,13 @@ export function NewIssueDialog({ workspaceId }: { workspaceId: string }) {
                   className="rounded-md bg-accent px-3 py-1.5 text-body font-medium text-white transition-colors hover:bg-accent-hover disabled:opacity-40"
                 >
                   {t("Create task")}
-                  <span className="ml-2 text-caption opacity-75">⌘↵</span>
+                  <span className="ml-2 text-caption opacity-75">{modifier}↵</span>
                 </button>
               </div>
             </div>
           </div>
         </div>
-      </div>
-    </>
+      </fieldset>
+    </Modal>
   );
 }

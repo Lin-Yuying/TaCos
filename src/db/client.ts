@@ -11,6 +11,17 @@ import * as schema from "./schema";
 export { DATA_DIR };
 
 const DDL = `
+CREATE TABLE IF NOT EXISTS personal_task_views (
+ workspace_id TEXT NOT NULL,user_id TEXT NOT NULL,scope TEXT NOT NULL,name TEXT NOT NULL,value TEXT NOT NULL,
+ PRIMARY KEY(workspace_id,user_id,scope,name)
+);
+
+CREATE TABLE IF NOT EXISTS personal_entity_state (
+  user_id TEXT NOT NULL, workspace_id TEXT NOT NULL, entity_type TEXT NOT NULL, entity_id TEXT NOT NULL,
+  pinned_at TEXT, position INTEGER NOT NULL DEFAULT 0,
+  PRIMARY KEY(user_id, workspace_id, entity_type, entity_id)
+);
+
 CREATE TABLE IF NOT EXISTS users (
   id TEXT PRIMARY KEY,
   username TEXT NOT NULL UNIQUE,
@@ -228,6 +239,9 @@ CREATE TABLE IF NOT EXISTS page_comments (
   suffix TEXT NOT NULL DEFAULT '',
   via TEXT NOT NULL DEFAULT 'you',
   resolved_at TEXT,
+  parent_id TEXT,
+  edited_at TEXT,
+  deleted_at TEXT,
   created_at TEXT NOT NULL
 );
 CREATE INDEX IF NOT EXISTS page_comments_page_idx ON page_comments (page_id);
@@ -285,7 +299,6 @@ CREATE TABLE IF NOT EXISTS issues (
 CREATE INDEX IF NOT EXISTS issues_workspace_idx ON issues (workspace_id);
 CREATE INDEX IF NOT EXISTS issues_project_idx ON issues (project_id);
 CREATE INDEX IF NOT EXISTS issues_status_idx ON issues (status);
-CREATE INDEX IF NOT EXISTS issues_parent_idx ON issues (parent_id);
 
 CREATE TABLE IF NOT EXISTS issue_dependencies (
   issue_id TEXT NOT NULL,
@@ -842,9 +855,14 @@ function ensureSearchIndex(sqlite: Database.Database) {
     CREATE TRIGGER IF NOT EXISTS search_comments_ad AFTER DELETE ON comments BEGIN
       DELETE FROM search_fts WHERE kind = 'task_comment' AND ref_id = old.id;
     END;
+    CREATE TRIGGER IF NOT EXISTS search_page_comments_au AFTER UPDATE OF body, deleted_at ON page_comments BEGIN
+      DELETE FROM search_fts WHERE kind = 'doc_comment' AND ref_id = old.id;
+      INSERT INTO search_fts (kind, ref_id, workspace_id, title, body)
+      SELECT 'doc_comment',new.id,new.workspace_id,'',new.body WHERE new.deleted_at IS NULL;
+    END;
     CREATE TRIGGER IF NOT EXISTS search_page_comments_ai AFTER INSERT ON page_comments BEGIN
       INSERT INTO search_fts (kind, ref_id, workspace_id, title, body)
-      VALUES ('doc_comment', new.id, new.workspace_id, '', new.body);
+      SELECT 'doc_comment', new.id, new.workspace_id, '', new.body WHERE new.deleted_at IS NULL;
     END;
     CREATE TRIGGER IF NOT EXISTS search_page_comments_ad AFTER DELETE ON page_comments BEGIN
       DELETE FROM search_fts WHERE kind = 'doc_comment' AND ref_id = old.id;
@@ -859,13 +877,15 @@ function ensureSearchIndex(sqlite: Database.Database) {
     INSERT INTO search_fts (kind, ref_id, workspace_id, title, body)
     SELECT 'task_comment', c.id, i.workspace_id, '', c.body FROM comments c JOIN issues i ON i.id = c.issue_id;
     INSERT INTO search_fts (kind, ref_id, workspace_id, title, body)
-    SELECT 'doc_comment', id, workspace_id, '', body FROM page_comments;
+    SELECT 'doc_comment', id, workspace_id, '', body FROM page_comments WHERE deleted_at IS NULL;
   `);
 }
 
 function bootstrap(sqlite: Database.Database) {
   const hadIssueAssignees = tableExists(sqlite, "issue_assignees");
   sqlite.exec(DDL);
+  addColumnIfMissing(sqlite,"favorites","position","INTEGER NOT NULL DEFAULT 0");
+  addColumnIfMissing(sqlite,"page_favorites","position","INTEGER NOT NULL DEFAULT 0");
   addColumnIfMissing(sqlite, "users", "avatar", "TEXT");
   addColumnIfMissing(sqlite, "users", "role", "TEXT NOT NULL DEFAULT 'member'");
   addColumnIfMissing(sqlite, "users", "last_workspace_id", "TEXT");
@@ -886,7 +906,10 @@ function bootstrap(sqlite: Database.Database) {
   addColumnIfMissing(sqlite, "projects", "doc", "TEXT NOT NULL DEFAULT ''");
   addColumnIfMissing(sqlite, "projects", "icon", "TEXT");
   addColumnIfMissing(sqlite, "issues", "parent_id", "TEXT");
+  sqlite.exec("CREATE INDEX IF NOT EXISTS issues_parent_idx ON issues (parent_id)");
   addColumnIfMissing(sqlite, "issues", "deleted_at", "TEXT");
+  addColumnIfMissing(sqlite, "task_fields", "disabled_at", "TEXT");
+  for(const column of ["parent_id","edited_at","deleted_at"]) addColumnIfMissing(sqlite,"page_comments",column,"TEXT");
   addColumnIfMissing(sqlite, "issues", "position", "REAL NOT NULL DEFAULT 0");
   addColumnIfMissing(sqlite, "issues", "due_date", "TEXT");
   addColumnIfMissing(sqlite, "issues", "reminder", "TEXT");

@@ -15,6 +15,9 @@ export type PageComment = {
   suffix: string;
   via: string;
   resolvedAt: string | null;
+  parentId: string | null;
+  editedAt: string | null;
+  deletedAt: string | null;
   createdAt: string;
   author: PageAuthor | null;
 };
@@ -40,6 +43,9 @@ export async function listPageComments(
       suffix: pageComments.suffix,
       via: pageComments.via,
       resolvedAt: pageComments.resolvedAt,
+      parentId: pageComments.parentId,
+      editedAt: pageComments.editedAt,
+      deletedAt: pageComments.deletedAt,
       createdAt: pageComments.createdAt,
       authorId: users.id,
       displayName: users.displayName,
@@ -51,6 +57,7 @@ export async function listPageComments(
     .orderBy(asc(pageComments.createdAt));
   return rows.map(({ authorId, displayName, avatar, ...row }) => ({
     ...row,
+    body: row.deletedAt ? "" : row.body,
     author: authorId ? { id: authorId, displayName: displayName ?? "", avatar } : null,
   }));
 }
@@ -89,7 +96,7 @@ export async function addPageComment(
   workspaceId: string,
   pageId: string,
   viewerId: string,
-  input: { body: string; anchor?: DocAnchor | null },
+  input: { body: string; anchor?: DocAnchor | null; parentId?: string | null },
   options: { via?: string } = {}
 ): Promise<PageComment[]> {
   const page = await readablePage(workspaceId, pageId, viewerId);
@@ -97,6 +104,7 @@ export async function addPageComment(
   const body = input.body.trim();
   if (!body) throw new TacosError("Comment cannot be empty");
   if (body.length > 5_000) throw new TacosError("Comment is too long (5k characters max)");
+  if(input.parentId){const parent=await commentOn(pageId,input.parentId);if(parent.deletedAt)throw new TacosError("This comment was deleted. Reply to another comment.",409);}
   const quote = input.anchor?.quote ?? "";
   await getDb().insert(pageComments).values({
     id: crypto.randomUUID(),
@@ -104,6 +112,7 @@ export async function addPageComment(
     workspaceId,
     authorId: viewerId,
     body,
+    parentId:input.parentId??null,
     quote: quote ? quote.slice(0, 1_000) : null,
     prefix: quote ? (input.anchor?.prefix ?? "").slice(0, 64) : "",
     suffix: quote ? (input.anchor?.suffix ?? "").slice(0, 64) : "",
@@ -152,6 +161,19 @@ export async function removePageComment(
   if (row.authorId !== viewerId && page.createdBy !== viewerId) {
     throw new TacosError("You cannot delete this comment", 403);
   }
-  await getDb().delete(pageComments).where(eq(pageComments.id, commentId));
+  await getDb().update(pageComments).set({deletedAt:nowIso()}).where(eq(pageComments.id, commentId));
   return listPageComments(workspaceId, pageId, viewerId);
+}
+
+export async function editPageComment(workspaceId:string,pageId:string,viewerId:string,commentId:string,body:string):Promise<PageComment[]> {
+ const page=await readablePage(workspaceId,pageId,viewerId);await requirePageLevel(page,viewerId,"comment");
+ const row=await commentOn(pageId,commentId);if(row.authorId!==viewerId)throw new TacosError("Only the author can edit this comment",403);
+ if(row.deletedAt)throw new TacosError("Restore the comment before editing",409);
+ const text=body.trim();if(!text||text.length>5000)throw new TacosError("Enter between 1 and 5000 characters",400);
+ await getDb().update(pageComments).set({body:text,editedAt:nowIso()}).where(eq(pageComments.id,commentId));return listPageComments(workspaceId,pageId,viewerId);
+}
+export async function restorePageComment(workspaceId:string,pageId:string,viewerId:string,commentId:string):Promise<PageComment[]> {
+ const page=await readablePage(workspaceId,pageId,viewerId);await requirePageLevel(page,viewerId,"comment");
+ const row=await commentOn(pageId,commentId);if(row.authorId!==viewerId&&page.createdBy!==viewerId)throw new TacosError("You cannot restore this comment",403);
+ await getDb().update(pageComments).set({deletedAt:null}).where(eq(pageComments.id,commentId));return listPageComments(workspaceId,pageId,viewerId);
 }

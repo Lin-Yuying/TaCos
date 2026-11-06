@@ -96,7 +96,9 @@ async function behaviorChecks() {
   assert((await rawShared(sharedPage.id)) === 1, "movePage without `shared` keeps a shared page shared (1)");
 
   // Library semantics are intact: an explicit `shared` target still changes it.
-  await lib.movePage(ws, privatePage.id, viewerId, { parentId: null, beforeId: null, shared: true });
+  const target = { parentId: null, beforeId: null, shared: true };
+  const impact = await lib.previewPageMove(ws, privatePage.id, viewerId, target);
+  await lib.movePage(ws, privatePage.id, viewerId, { ...target, confirmedImpact: impact.token });
   assert((await rawShared(privatePage.id)) === 1, "movePage with shared:true still shares the page (1)");
 }
 

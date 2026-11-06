@@ -1,30 +1,33 @@
 "use client";
 
-import { useCallback, useMemo, useSyncExternalStore } from "react";
+import { useCallback, useMemo, useEffect, useRef, useSyncExternalStore, type SetStateAction } from "react";
 
 // Per-browser state that the server never renders. Falls back to memory when storage is blocked.
 const listeners = new Map<string, Set<() => void>>();
 const memory = new Map<string, string>();
+const volatile = new Set<string>();
 
 function read(key: string): string | null {
-  if (memory.has(key)) return memory.get(key) ?? null;
+  if (volatile.has(key)) return memory.get(key) ?? null;
   let raw: string | null = null;
   try {
     raw = window.localStorage.getItem(key);
   } catch {
-    /* storage unavailable: this page view starts empty */
+    return memory.get(key) ?? null;
   }
-  if (raw !== null) memory.set(key, raw);
   return raw;
 }
 
-export function useStoredJson<T>(key: string, fallback: T): [T, (next: T) => void] {
+export function useStoredJson<T>(key: string, fallback: T): [T, (next: SetStateAction<T>) => void] {
+  const fallbackRef = useRef(fallback); useEffect(()=>{fallbackRef.current=fallback;},[fallback]);
   const subscribe = useCallback(
     (listener: () => void) => {
       const set = listeners.get(key) ?? new Set();
       listeners.set(key, set);
       set.add(listener);
-      return () => set.delete(listener);
+      const changed = (event: StorageEvent) => { if(event.key === key) listener(); };
+      window.addEventListener("storage", changed);
+      return () => {set.delete(listener);window.removeEventListener("storage", changed);};
     },
     [key]
   );
@@ -38,13 +41,18 @@ export function useStoredJson<T>(key: string, fallback: T): [T, (next: T) => voi
     }
   }, [raw, fallback]);
   const set = useCallback(
-    (next: T) => {
-      const text = JSON.stringify(next);
+    (next: SetStateAction<T>) => {
+      let current = fallbackRef.current;
+      try {const raw = read(key); if(raw !== null) current = JSON.parse(raw) as T;} catch { /* use fallback */ }
+      const value = typeof next === "function" ? (next as (old:T)=>T)(current) : next;
+      const text = JSON.stringify(value);
       memory.set(key, text);
       try {
         window.localStorage.setItem(key, text);
+        volatile.delete(key);
       } catch {
-        /* storage unavailable: it still applies for this page view */
+        volatile.add(key);
+        window.dispatchEvent(new Event("tacos:storage-error"));
       }
       for (const listener of listeners.get(key) ?? []) listener();
     },

@@ -1,11 +1,14 @@
 "use client";
 
-import { Lock, Maximize2, Minimize2, Trash2 } from "lucide-react";
+import { Link2, Lock, Maximize2, Minimize2, Trash2 } from "lucide-react";
 import { Menu, MenuItem } from "@/components/menu";
 import { STATUS_META, StatusIcon } from "@/components/icons";
 import { STATUS_ORDER } from "@/lib/constants";
 import { issueRef } from "@/lib/format";
 import type { FlatDetail, IssueUpdate } from "./types";
+import { useUI } from "@/components/ui-context";
+import { useParams } from "next/navigation";
+import { entityHref } from "@/lib/ui/entity-actions";
 import { useT } from "@/components/i18n-context";
 
 export function PanelHeader({
@@ -26,6 +29,8 @@ export function PanelHeader({
   onToggleExpanded: () => void;
 }) {
   const t = useT();
+  const {workspaceId}=useParams<{workspaceId:string}>();
+  const {toast}=useUI();
   return (
     <div className="flex h-12 shrink-0 items-center gap-2 border-b border-border px-4">
       <span className="max-w-[240px] truncate font-mono text-small text-faint">
@@ -70,6 +75,7 @@ export function PanelHeader({
         </span>
       )}
       <div className="ml-auto flex items-center gap-1">
+        <button type="button" aria-label={t("Copy link")} title={t("Copy link")} className="rounded p-1.5 text-muted" onClick={()=>{void navigator.clipboard.writeText(new URL(entityHref(workspaceId,{kind:"task",id:detail.id}),location.origin).href).then(()=>toast(t("Copied"))).catch(()=>toast(t("Could not copy. Retry.")));}}><Link2 size={15}/></button>
         <button
           type="button"
           onClick={onRemove}

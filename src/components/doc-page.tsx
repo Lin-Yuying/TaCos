@@ -1,7 +1,15 @@
 "use client";
 
+import { DetailNavigation } from "@/components/detail-navigation";
+import { useScrollMemory } from "@/lib/ui/scroll-memory";
+import { DocumentTools } from "@/components/document-tools";
+import { Modal } from "@/components/ui/modal";
+import { useStoredJson } from "@/lib/use-stored-json";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import type { Editor } from "@tiptap/react";
+import { documentMarkdown, markdownToDocument } from "@/lib/editor/document-markdown";
+import { useDraft } from "@/lib/ui/draft-store";
+import { useRouter,useSearchParams } from "next/navigation";
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
   History,
@@ -111,7 +119,17 @@ export function DocPageView({
 }) {
   const t = useT();
   const router = useRouter();
-  const { aiReady } = useUI();
+  const params=useSearchParams(),requestedComment=params.get("comment");
+  const { aiReady, confirm,scope } = useUI();
+  const [recent,setRecent]=useStoredJson<string[]>(`tacos.recent-documents.${scope}`,[]);
+  useEffect(()=>{const frame=requestAnimationFrame(()=>setRecent(old=>[page.id,...old.filter(id=>id!==page.id)].slice(0,50)));return()=>cancelAnimationFrame(frame);},[page.id,setRecent]);
+  const [readingWidth,setReadingWidth]=useStoredJson(`tacos.document.reading-width.${scope}`,880);
+  const [proposal,setProposal]=useState<{before:string;after:string}|null>(null);
+  const editorRef = useRef<Editor | null>(null);
+  const [activeEditor,setActiveEditor]=useState<Editor|null>(null);
+  const markdown = useMemo(() => documentMarkdown(), []);
+  const [recovery, setRecovery] = useDraft<{body:string;revision:number;token:string}|null>("document",page.id,null);
+  const recoveryRef = useRef(recovery); recoveryRef.current = recovery;
   const [favorite, setFavorite] = useState(initialFavorite);
   const [cover, setCover] = useState(page.cover);
   const [uploading, setUploading] = useState(0);
@@ -122,19 +140,23 @@ export function DocPageView({
   const [icon, setIcon] = useState(page.icon);
   const [shared, setShared] = useState(page.shared);
   const [doc, setDoc] = useState(page.doc);
-  const [saved, setSaved] = useState(false);
+  const [saved, setSaved] = useState(true);
+  const contentRef = useRef(doc); contentRef.current = doc;
   const [aiPanel, setAiPanel] = useState<{ x: number; y: number } | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [side, setSide] = useState<"updates" | "comments" | null>(null);
   const [comments, setComments] = useState<PageComment[]>([]);
   const [members, setMembers] = useState<Member[]>([]);
   const [located, setLocated] = useState<Set<string>>(new Set());
-  const [draftAnchor, setDraftAnchor] = useState<DocAnchor | null>(null);
+  const [draftAnchor, setDraftAnchor] = useDraft<DocAnchor | null>("document-comment-anchor",page.id,null);
   const [activeComment, setActiveComment] = useState<string | null>(null);
+  const [commentsLoading,setCommentsLoading]=useState(true),[commentsError,setCommentsError]=useState<string|null>(null);
+  const commentRunning=useRef(false);
   const [commentBusy, setCommentBusy] = useState(false);
   const [conflict, setConflict] = useState<{ doc: string; revision: number; by: string | null } | null>(null);
   const collab = useDocCollab(workspaceId, page.id);
   const sharing = collab.status === "live" || collab.status === "reconnecting";
+  const canEditBody = canEdit && collab.status !== "connecting";
   const pending = useRef<string | null>(null);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
   // Saves run one at a time: each one names the revision the one before it produced.
@@ -147,16 +169,19 @@ export function DocPageView({
     timer.current = null;
     if (conflicted.current) return;
     const next = pending.current;
+    const token = recoveryRef.current?.token;
     pending.current = null;
     if (next === null) return;
     setSaved(false);
     saves.current = saves.current.then(async () => {
+      if (conflicted.current) return;
       const result = await savePageDocAction(workspaceId, page.id, next, revision.current).catch(() => null);
-      if (!result) setError("Something went wrong");
-      else if (!result.ok) setError(result.error);
+      if (!result || !result.ok) { if (contentRef.current === next) pending.current ??= next; setError(result && !result.ok ? result.error : "Could not save. Retry."); }
       else if (result.data.kind === "saved") {
         revision.current = result.data.revision;
-        setSaved(true);
+        const confirmed = contentRef.current === next && pending.current === null;
+        setSaved(confirmed);
+        if (confirmed) {setRecovery((current)=>current?.token === token ? null : current);setError(null);}
       } else {
         // Hold the text: newer typing wins over it, and leaving the page still keeps it.
         pending.current ??= next;
@@ -175,12 +200,13 @@ export function DocPageView({
     flushDoc();
   }
 
-  function useTheirs() {
+  async function useTheirs() {
     if (!conflict) return;
-    if (!window.confirm(t("Discard your unsaved text?"))) return;
+    if (!(await confirm(t("Discard your unsaved text?")))) return;
     revision.current = conflict.revision;
     conflicted.current = false;
     pending.current = null;
+    setRecovery(null);
     setDoc(conflict.doc);
     setConflict(null);
   }
@@ -192,9 +218,13 @@ export function DocPageView({
 
   function editDoc(next: string) {
     setDoc(next);
+    contentRef.current = next;
+    setSaved(false);
     // The socket stores a shared document.
     if (sharing) return;
     pending.current = next;
+    const snapshot = {body:next,revision:revision.current,token:crypto.randomUUID()};
+    recoveryRef.current = snapshot; setRecovery(snapshot);
     if (timer.current) clearTimeout(timer.current);
     timer.current = setTimeout(flushDoc, 700);
   }
@@ -204,10 +234,12 @@ export function DocPageView({
       if (timer.current) clearTimeout(timer.current);
       timer.current = null;
       const next = pending.current;
+      const token = recoveryRef.current?.token;
       pending.current = null;
       if (next === null) return;
       saves.current = saves.current.then(async () => {
-        await savePageDocAction(workspaceId, page.id, next, revision.current, { keepOnConflict: true });
+        const result = await savePageDocAction(workspaceId, page.id, next, revision.current, { keepOnConflict: true }).catch(() => null);
+        if (result?.ok && result.data.kind === "saved") setRecovery((current)=>current?.token === token ? null : current);
       });
     },
     [workspaceId, page.id]
@@ -215,8 +247,10 @@ export function DocPageView({
 
   // Text not saved yet belongs in the history before a restore replaces it.
   async function beforeRestore() {
+    if (!canEditBody) throw new Error("Save or synchronize your current text before restoring a version");
     flushDoc();
     await saves.current;
+    if (pending.current !== null || conflicted.current || sharing && collab.provider.hasUnsyncedChanges) throw new Error("Save or synchronize your current text before restoring a version");
   }
 
   function restored(next: DocPage) {
@@ -233,50 +267,33 @@ export function DocPageView({
   useEffect(() => {
     let live = true;
     void listPageCommentsAction(workspaceId, page.id).then((result) => {
-      if (!live || !result.ok) return;
-      setComments(result.data.comments);
+      if (!live) return;
+      setCommentsLoading(false);
+      if (!result.ok) {setCommentsError(result.error);return;}
+      setCommentsError(null);setComments(result.data.comments);
       setMembers(result.data.members);
+      if(requestedComment&&result.data.comments.some(comment=>comment.id===requestedComment)){setActiveComment(requestedComment);setSide("comments");}
     });
     return () => {
       live = false;
     };
-  }, [workspaceId, page.id]);
+  }, [workspaceId, page.id,requestedComment]);
 
   const anchors = useMemo<EditorAnchor[]>(
     () =>
       comments.flatMap((comment) =>
-        comment.quote && !comment.resolvedAt
+        comment.quote && !comment.resolvedAt && !comment.deletedAt
           ? [{ id: comment.id, quote: comment.quote, prefix: comment.prefix, suffix: comment.suffix }]
           : []
       ),
     [comments]
   );
 
-  async function addComment(body: string): Promise<boolean> {
-    if (!body.trim() || commentBusy) return false;
-    setCommentBusy(true);
-    const result = await addPageCommentAction(workspaceId, page.id, { body, anchor: draftAnchor });
-    setCommentBusy(false);
-    if (!result.ok) {
-      setError(result.error);
-      return false;
-    }
-    setComments(result.data);
-    setDraftAnchor(null);
-    return true;
-  }
-
-  async function resolveComment(id: string, resolved: boolean) {
-    const result = await setPageCommentResolvedAction(workspaceId, page.id, id, resolved);
-    if (result.ok) setComments(result.data);
-    else setError(result.error);
-  }
-
-  async function removeComment(id: string) {
-    const result = await removePageCommentAction(workspaceId, page.id, id);
-    if (result.ok) setComments(result.data);
-    else setError(result.error);
-  }
+  async function reloadComments(){setCommentsLoading(true);try{const result=await listPageCommentsAction(workspaceId,page.id);if(result.ok){setComments(result.data.comments);setCommentsError(null);}else setCommentsError(result.error);}catch{setCommentsError("Could not load comments. Retry.");}finally{setCommentsLoading(false);}}
+  async function commentAction(work:()=>Promise<{ok:boolean;data?:PageComment[];error?:string}>):Promise<boolean>{if(commentRunning.current)return false;commentRunning.current=true;setCommentBusy(true);try{const result=await work();if(!result.ok){setCommentsError(result.error??"Could not save. Retry.");return false;}if(result.data)setComments(result.data);setCommentsError(null);return true;}catch{setCommentsError("Could not save. Retry.");return false;}finally{commentRunning.current=false;setCommentBusy(false);}}
+  async function addComment(body:string,parentId?:string){if(!body.trim())return false;const ok=await commentAction(()=>addPageCommentAction(workspaceId,page.id,{body,anchor:parentId?null:draftAnchor,parentId}));if(ok)setDraftAnchor(null);return ok;}
+  async function resolveComment(id:string,resolved:boolean){await commentAction(()=>setPageCommentResolvedAction(workspaceId,page.id,id,resolved));}
+  async function removeComment(id:string){if(!await confirm(t("Delete this comment? You can restore it here.")))return;await commentAction(()=>removePageCommentAction(workspaceId,page.id,id));}
 
   async function saveTitle() {
     const next = title.trim();
@@ -287,24 +304,26 @@ export function DocPageView({
     const result = await updatePageAction(workspaceId, page.id, { title: next });
     if (!result.ok) {
       setError(result.error);
-      setTitle(page.title);
       return;
     }
+    setTitle(result.data.title);
     router.refresh();
   }
 
   async function pickIcon(next: string) {
+    if (!canEdit) return;
+    const previous = icon;
     setIcon(next);
     const result = await updatePageAction(workspaceId, page.id, { icon: next });
-    if (!result.ok) setError(result.error);
+    if (!result.ok) {setIcon(previous);setError(result.error);}
     else router.refresh();
   }
 
-  async function uploadFile(file: File): Promise<string | null> {
+  async function uploadFile(file: File,controls?:{signal?:AbortSignal;onProgress?:(progress:number)=>void}): Promise<string | null> {
     setUploading((count) => count + 1);
     try {
       const { uploadPageFile } = await import("@/lib/upload-client");
-      return (await uploadPageFile(workspaceId, page.id, file)).url;
+      return (await uploadPageFile(workspaceId, page.id, file,controls)).url;
     } catch (err) {
       setError(err instanceof Error ? err.message : "Upload failed");
       return null;
@@ -335,17 +354,18 @@ export function DocPageView({
   }
 
   async function toggleShared() {
+    if(!await confirm(t("Change sharing for this document and all its children?")))return;
     const result = await setPageSharedAction(workspaceId, page.id, !shared);
     if (!result.ok) {
       setError(result.error);
-      return;
+      throw new Error(result.error);
     }
     setShared(result.data.shared);
     router.refresh();
   }
 
   async function removePage() {
-    if (!window.confirm(t("Move “{title}” and everything inside it to the Trash?", { title: page.title }))) return;
+    if (!(await confirm(t("Move “{title}” and everything inside it to the Trash?", { title: page.title })))) return;
     const result = await deletePageAction(workspaceId, page.id);
     if (!result.ok) {
       setError(result.error);
@@ -372,6 +392,7 @@ export function DocPageView({
   // Inserting at the end is predictable; the editor owns the caret and has no public
   // "insert at cursor" API, and a page reference is usually added as its own block.
   function insertRef(reference: PageRefEntry, embed: boolean) {
+    if (!canEditBody || !editorRef.current?.isEditable) return;
     // The server read embedded pages when this page opened; a new embed needs its text now.
     if (embed) {
       void pageEmbedBodyAction(workspaceId, reference.id).then((result) => {
@@ -382,23 +403,15 @@ export function DocPageView({
       });
     }
     const syntax = embed ? `![[${reference.title}|${reference.id}]]` : `[[${reference.title}|${reference.id}]]`;
-    if (sharing) {
-      outsideEdit.current?.({ at: "end", text: syntax });
-      return;
-    }
-    const next = doc.trim() ? `${doc.replace(/\s+$/, "")}\n\n${syntax}` : syntax;
-    editDoc(next);
+    editorRef.current?.chain().focus().insertContent(markdownToDocument(markdown, syntax).content ?? []).run();
   }
 
   // Putting the reference at the top of the text keeps the row where the list showed
   // it; from there it is an ordinary line the editor can move anywhere.
   function placeSubpage(child: PageSummary) {
+    if (!canEditBody || !editorRef.current?.isEditable) return;
     const syntax = `[[${child.title}|${child.id}]]`;
-    if (sharing) {
-      outsideEdit.current?.({ at: "start", text: syntax });
-      return;
-    }
-    editDoc(doc.trim() ? `${syntax}\n\n${doc}` : syntax);
+    editorRef.current?.chain().focus().insertContent(markdownToDocument(markdown, syntax).content ?? []).run();
   }
 
   function openAi(origin: HTMLElement) {
@@ -409,20 +422,21 @@ export function DocPageView({
     });
   }
 
-  function acceptAi(text: string, action: string) {
-    if (sharing) {
-      outsideEdit.current?.({ at: action === "continue" ? "end" : "all", text });
-      return;
-    }
+  function acceptAi(text: string, action: string, source:string) {
+    if (!canEditBody || !editorRef.current?.isEditable) return;
+    if(contentRef.current!==source){setError("The document changed. Generate the edit again before replacing it.");return;}
     const next = action === "continue" && doc.trim() ? `${doc.replace(/\s+$/, "")}\n\n${text}` : text;
-    editDoc(next);
+    setProposal({before:doc,after:next});
     setAiPanel(null);
   }
 
   const base = `/${workspaceId}/docs/`;
   // A pane is a narrow column: the header drops its labels and keeps the glyphs, or the
   // row wraps and the buttons lose their words.
-  const compact = Boolean(onClose);
+  const root=useRef<HTMLDivElement>(null);
+  useScrollMemory(root,`document.${page.id}`,"[data-document-scroll]",!requestedComment);
+  const [compact,setCompact]=useState(Boolean(onClose));
+  useEffect(()=>{const observer=new ResizeObserver(([entry])=>setCompact(entry.contentRect.width<850));if(root.current)observer.observe(root.current);return()=>observer.disconnect();},[]);
   // References inside the pane open in the pane, so following one never loses the page
   // you were reading.
   const pageCtx = useMemo<PageContext>(
@@ -440,8 +454,9 @@ export function DocPageView({
   );
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col">
+    <div ref={root} data-document-root className="flex min-h-0 flex-1 flex-col">
       <header className="flex h-11 shrink-0 items-center gap-2 border-b border-border px-4 text-small text-muted">
+        <DetailNavigation kind="document" id={page.id} workspaceId={workspaceId} panel={!!onClose} fallback={refs.map(ref=>ref.id)}/>
         <span
           className="flex shrink-0 items-center gap-1"
           title={shared ? t("Shared with the workspace") : t("Private")}
@@ -483,6 +498,7 @@ export function DocPageView({
           )}
         </span>
         <div className="ml-auto flex shrink-0 items-center gap-2">
+          {sharing && collab.storageError && <p role="alert" className="text-small text-danger">{t(collab.storageError)}</p>}
           {collab.status === "reconnecting" && (
             <span data-doc-reconnecting className="text-small text-faint">
               {t("Reconnecting…")}
@@ -504,10 +520,10 @@ export function DocPageView({
           )}
           <span
             className={`text-small text-faint transition-opacity duration-300 ${
-              saved ? "opacity-100" : "opacity-0"
+              saved || sharing ? "opacity-100" : "opacity-70"
             }`}
           >
-            {t("Saved")}
+            {t(sharing ? collab.pending || collab.status === "reconnecting" ? "Offline changes are kept on this device" : "Synchronized" : saved ? "Saved" : "Unsaved changes")}
           </span>
           <button
             type="button"
@@ -564,7 +580,7 @@ export function DocPageView({
               shared={shared}
               compact={compact}
               members={members}
-              onToggleShared={() => void toggleShared()}
+              onToggleShared={toggleShared}
             />
           ) : (
             !canEdit && (
@@ -577,8 +593,8 @@ export function DocPageView({
             <button
               type="button"
               onClick={() => void removePage()}
-              aria-label={t("Delete page")}
-              title={t("Delete page")}
+              aria-label={t("Delete document")}
+              title={t("Delete document")}
               className="rounded-md p-1.5 text-muted transition-colors hover:bg-elevated hover:text-danger"
             >
               <Trash2 size={15} />
@@ -609,6 +625,8 @@ export function DocPageView({
         </div>
       </header>
 
+      <div className="border-b border-border px-3 py-1"><DocumentTools title={title} doc={doc} editor={activeEditor} width={readingWidth} onWidth={setReadingWidth}/></div>
+      <Modal open={!!proposal} title={t("Review changes")} onClose={()=>setProposal(null)}><h2 className="text-title">{t("Review changes")}</h2>{error&&<p role="alert" className="text-small text-danger">{t(error)}</p>}{proposal&&<div className="my-3 max-h-[60dvh] overflow-auto"><DiffLines before={proposal.before} after={proposal.after}/></div>}<button disabled={!canEditBody} onClick={()=>{if(!proposal||!editorRef.current?.isEditable)return;if(contentRef.current!==proposal.before){setError("The document changed. Generate the edit again before replacing it.");return;}editorRef.current.commands.setContent(markdownToDocument(markdown,proposal.after));setProposal(null);}} className="rounded border border-border px-3 py-1 text-body">{t("Apply changes")}</button></Modal>
       {aiPanel && (
         <AiEditPanel
           workspaceId={workspaceId}
@@ -626,10 +644,11 @@ export function DocPageView({
       )}
 
       <div className="relative flex min-h-0 flex-1">
-      <div className="min-w-0 flex-1 overflow-y-auto">
+      <div data-document-scroll className="min-w-0 flex-1 overflow-y-auto">
         {/* A pane is measured by its own width, not the window's, so the reading
             margins it would use on a full tab would leave no text at all. */}
         <div
+          style={{maxWidth:readingWidth,marginInline:"auto"}}
           className={`w-full pb-8 pt-6 ${
             onClose ? "px-5" : "px-10 lg:px-20 xl:px-32"
           }`}
@@ -686,6 +705,7 @@ export function DocPageView({
             </div>
           )}
           <div className="flex items-start gap-3">
+            {canEdit ? (
             <Menu
               width={196}
               triggerClassName="shrink-0 rounded-md p-1 text-display leading-none transition-colors hover:bg-elevated"
@@ -713,17 +733,19 @@ export function DocPageView({
                 </div>
               )}
             </Menu>
+            ) : <span className="text-display">{icon ?? "📄"}</span>}
             <div className="min-w-0 flex-1">
               <input
                 value={title}
                 onChange={(event) => setTitle(event.target.value)}
                 onBlur={() => void saveTitle()}
                 onKeyDown={(event) => {
+                  if (event.nativeEvent.isComposing || event.nativeEvent.keyCode === 229) return;
                   if (event.key === "Enter") event.currentTarget.blur();
                   if (event.key === "Escape") setTitle(page.title);
                 }}
                 readOnly={!canEdit}
-                aria-label={t("Page title")}
+                aria-label={t("Document title")}
                 className={`w-full rounded-md bg-transparent font-semibold leading-tight tracking-tight text-text placeholder:text-faint hover:bg-elevated/40 focus:bg-bg focus:outline-none ${
                   compact ? "text-heading" : "text-display"
                 }`}
@@ -732,7 +754,9 @@ export function DocPageView({
             </div>
           </div>
 
-          {error && <div className="mt-3 text-small text-danger">{t(error)}</div>}
+          {error && <div role="alert" className="mt-3 text-small text-danger">{t(error)} <button onClick={flushDoc}>{t("Retry")}</button> <button onClick={()=>void navigator.clipboard.writeText(doc)}>{t("Copy draft")}</button></div>}
+          {collab.status === "connecting" && collab.error && <p role="alert" className="my-2 text-small text-danger">{t(collab.error)} <button onClick={()=>location.reload()}>{t("Retry")}</button></p>}
+          {recovery && !sharing && <div role="status" className="my-2 flex flex-wrap gap-3 text-small text-muted">{t("A local draft is kept until saving succeeds.")}<button disabled={!canEditBody} onClick={()=>{if(!canEditBody)return;revision.current=recovery.revision;setDoc(recovery.body);contentRef.current=recovery.body;pending.current=recovery.body;flushDoc();}}>{t("Restore draft")}</button><button onClick={()=>void navigator.clipboard.writeText(recovery.body)}>{t("Copy draft")}</button></div>}
 
           {conflict && (
             <div data-doc-conflict className="mt-3 rounded-lg border border-border-strong bg-surface p-3 text-body">
@@ -822,13 +846,15 @@ export function DocPageView({
             {!canEdit && !doc.trim() && <p className="text-body text-faint">{t("This page is empty.")}</p>}
             {(canEdit || doc.trim()) && (
               <DocumentEditor
+                editorRef={editorRef}
+                onEditorReady={setActiveEditor}
                 key={sharing ? "shared" : "alone"}
                 collab={sharing ? collab : undefined}
                 value={doc}
                 onChange={editDoc}
                 outsideEditRef={outsideEdit}
                 pages={pageCtx}
-                editable={canEdit && collab.status !== "connecting"}
+                editable={canEditBody}
                 placeholder={t("Write something, or type / for commands…")}
                 anchors={anchors}
                 members={members}
@@ -850,7 +876,7 @@ export function DocPageView({
                 onUpload={uploadFile}
               />
             )}
-            {canEdit && (
+            {canEditBody && (
               <div className="mt-4 flex items-center gap-2">
                 <Menu
                   width={240}
@@ -895,7 +921,7 @@ export function DocPageView({
         <DocUpdatesPanel
           workspaceId={workspaceId}
           pageId={page.id}
-          canEdit={canEdit}
+          canEdit={canEditBody}
           compact={compact}
           beforeRestore={beforeRestore}
           onRestored={restored}
@@ -904,6 +930,8 @@ export function DocPageView({
       )}
       {side === "comments" && (
         <DocCommentsPanel
+          workspaceId={workspaceId} onChanged={setComments} onReload={()=>void reloadComments()} loading={commentsLoading} loadError={commentsError}
+          pageId={page.id}
           comments={comments}
           members={members}
           userId={viewerId}
@@ -939,12 +967,16 @@ function PagePicker({
   onPick: (ref: PageRefEntry) => void;
 }) {
   const t = useT();
+  const [query,setQuery]=useState("");
+  const [limit,setLimit]=useState(40);
+  const matches=refs.filter(ref=>(ref.path??ref.title).toLowerCase().includes(query.toLowerCase())||ref.id.includes(query));
   if (refs.length === 0) {
-    return <div className="px-2 py-1.5 text-small text-faint">{t("No pages yet.")}</div>;
+    return <div className="px-2 py-1.5 text-small text-faint">{t("No documents yet.")}</div>;
   }
   return (
     <>
-      {refs.slice(0, 40).map((ref) => (
+      <input aria-label={t("Search documents")} placeholder={t("Search documents")} value={query} onChange={event=>{setQuery(event.target.value);setLimit(40);}} className="sticky top-0 w-full rounded border border-border bg-bg px-2 py-1 text-small"/>
+      {matches.slice(0, limit).map((ref) => (
         <MenuItem
           key={ref.id}
           onSelect={() => {
@@ -954,10 +986,11 @@ function PagePicker({
         >
           <span className="flex items-center gap-2">
             <span className="shrink-0">{ref.icon ?? <FileText size={14} className="text-muted" />}</span>
-            <span className="truncate">{ref.title}</span>
+            <span className="min-w-0"><span className="block truncate">{ref.title}</span><span className="block truncate text-caption text-faint">{ref.path??ref.id}</span></span>
           </span>
         </MenuItem>
       ))}
+      {matches.length>limit&&<button onClick={()=>setLimit(n=>n+40)} className="p-2 text-small">{t("Load more")}</button>}
     </>
   );
 }

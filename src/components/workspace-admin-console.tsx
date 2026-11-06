@@ -1,4 +1,6 @@
 "use client";
+import { safeAction } from "@/lib/ui/safe-action";
+import { useConfirmation } from "@/components/ui/confirmation";
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -49,6 +51,7 @@ export function WorkspaceAdminConsole({
   homeUrl: string;
 }) {
   const t = useT();
+  const {confirm,dialog}=useConfirmation();
   const router = useRouter();
   const origin = useSyncExternalStore(NO_SUBSCRIBE, () => window.location.origin, () => "");
   const [code, setCode] = useState(joinCode);
@@ -59,7 +62,7 @@ export function WorkspaceAdminConsole({
     if (busy) return;
     setBusy(true);
     setError(null);
-    const result = await setMemberRoleAction(workspace.id, member.id, role);
+    const result = await safeAction(async()=>setMemberRoleAction(workspace.id, member.id, role));
     setBusy(false);
     if (!result.ok) {
       setError(result.error);
@@ -70,13 +73,13 @@ export function WorkspaceAdminConsole({
 
   async function remove(member: Member) {
     if (busy) return;
-    const ok = window.confirm(
+    const ok = await confirm(
       t("Remove {name} from {workspace}?", { name: member.displayName, workspace: workspace.name })
     );
     if (!ok) return;
     setBusy(true);
     setError(null);
-    const result = await removeMemberAction(workspace.id, member.id);
+    const result = await safeAction(async()=>removeMemberAction(workspace.id, member.id));
     setBusy(false);
     if (!result.ok) {
       setError(result.error);
@@ -89,7 +92,7 @@ export function WorkspaceAdminConsole({
     if (busy) return;
     setBusy(true);
     setError(null);
-    const result = await rotateJoinCodeAction(workspace.id);
+    const result = await safeAction(async()=>rotateJoinCodeAction(workspace.id));
     setBusy(false);
     if (!result.ok) {
       setError(result.error);
@@ -100,7 +103,7 @@ export function WorkspaceAdminConsole({
   }
 
   return (
-    <div className="flex h-full flex-col bg-bg">
+    <div className="flex h-full flex-col bg-bg">{dialog}
       <header className="app-titlebar flex h-12 shrink-0 items-center gap-2 border-b border-border px-4">
         <OtterMark className="h-6 w-6" />
         <h1 className="text-body font-semibold">{t("Admin console")}</h1>

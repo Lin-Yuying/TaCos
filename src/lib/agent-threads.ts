@@ -1,6 +1,6 @@
 import { removePageAttachments } from "./attachments";
 import crypto from "node:crypto";
-import { and, asc, desc, eq, inArray, isNotNull, isNull, lt, or } from "drizzle-orm";
+import { sql, and, asc, desc, eq, inArray, isNotNull, isNull, lt, or } from "drizzle-orm";
 import { getDb } from "@/db/client";
 import { issueRef } from "@/lib/format";
 import { agentMessages, agentSteps, agentThreadFlags, agentThreads, issues, projects, users } from "@/db/schema";
@@ -155,11 +155,14 @@ export async function hasAgentThreads(workspaceId: string, userId: string): Prom
 export async function listAgentThreads(
   workspaceId: string,
   userId: string,
-  projectId?: string
+  projectId?: string,
+  page?:{query:string;offset:number}
 ): Promise<AgentThread[]> {
   const db = getDb();
   const conditions = [eq(agentThreads.workspaceId, workspaceId), visibleTo(userId)];
   if (projectId) conditions.push(eq(agentThreads.projectId, projectId));
+  if(page?.query.trim())conditions.push(sql`(instr(lower(${agentThreads.title}),lower(${page.query.trim()})) > 0 OR EXISTS (SELECT 1 FROM agent_messages m WHERE m.thread_id=${agentThreads.id} AND instr(lower(m.content),lower(${page.query.trim()}))>0))`);
+  const recent = db.select({id:agentThreads.id}).from(agentThreads).where(and(...conditions)).orderBy(desc(agentThreads.updatedAt)).limit(100);
   const rows = await db
     .select({
       thread: agentThreads,
@@ -177,9 +180,8 @@ export async function listAgentThreads(
       agentThreadFlags,
       and(eq(agentThreadFlags.threadId, agentThreads.id), eq(agentThreadFlags.userId, userId))
     )
-    .where(and(...conditions))
-    .orderBy(desc(agentThreads.updatedAt))
-    .limit(100);
+    .where(and(...conditions, page?undefined:or(inArray(agentThreads.id, recent), isNotNull(agentThreadFlags.pinnedAt))))
+    .orderBy(desc(agentThreads.updatedAt),desc(agentThreads.id)).limit(page?41:-1).offset(page?.offset??0);
   if (rows.length === 0) return [];
   const turnIds = [
     ...new Set(rows.map((row) => row.thread.turnUserId).filter((id): id is string => Boolean(id))),
@@ -965,4 +967,9 @@ export async function startTaskChat(
   const opened = await getAgentThread(workspaceId, userId, thread.id);
   if (!opened) throw new TacosError("Could not open the conversation", 500);
   return { thread: opened, openingMessage: taskChatOpeningMessage(task.identifier) };
+}
+
+export async function searchAgentThreads(workspaceId:string,userId:string,query:string,offset=0){
+ if(query.length>500||!Number.isSafeInteger(offset)||offset<0)throw new TacosError("Invalid search",400);
+ const rows=await listAgentThreads(workspaceId,userId,undefined,{query,offset});return {threads:rows.slice(0,40),nextOffset:rows.length>40?offset+40:null};
 }

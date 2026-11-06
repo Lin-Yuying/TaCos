@@ -34,7 +34,7 @@ import {
 } from "@/lib/markdown";
 import { useT } from "@/components/i18n-context";
 
-export type PageRefEntry = { id: string; title: string; icon: string | null };
+export type PageRefEntry = { id: string; title: string; icon: string | null;path?:string };
 
 /** Everything needed to draw an inline task reference with its live priority. */
 export type IssueRefEntry = {

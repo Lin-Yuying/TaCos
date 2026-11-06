@@ -1,6 +1,14 @@
 "use client";
+import { usePrimaryModifier } from "@/lib/ui/platform";
 
+import * as ContextMenu from "@radix-ui/react-context-menu";
+import { useStoredJson } from "@/lib/use-stored-json";
+import { EntityRow,usePinned } from "@/components/ui/entity-row";
+
+import { PersonalOrder } from "@/components/personal-order";
+import { RecentDocuments } from "@/components/recent-documents";
 import Link from "next/link";
+import { tabIdentity } from "@/lib/ui/tabs";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import {
   Suspense,
@@ -51,6 +59,7 @@ import { DocTree } from "@/components/doc-tree";
 import { ProjectIcon, StatusIcon, WorkspaceMark } from "@/components/icons";
 import { AssigneeAvatar } from "@/components/issue-table";
 import { IssuePanelHost } from "@/components/issue-panel";
+import { DetailLayout } from "@/components/ui/detail-layout";
 import { DocPanelHost } from "@/components/doc-panel";
 import { UserMenu, type UserInfo } from "@/components/user-menu";
 import { useUI, NOTIFICATIONS_READ } from "@/components/ui-context";
@@ -192,10 +201,11 @@ function SidebarNav({
   onToggleSection: (key: string) => void;
   onInvite: () => void;
 }) {
+  const shownProjects=usePinned(projects,"project");
   const t = useT();
   const pathname = usePathname();
   const searchParams = useSearchParams();
-  const { setProjectComposerOpen } = useUI();
+  const { setProjectComposerOpen, pins } = useUI();
   const view = searchParams.get("view") ?? "all";
   const projectId = searchParams.get("project") ?? "";
   const assignee = searchParams.get("assignee") ?? "";
@@ -339,9 +349,10 @@ function SidebarNav({
             onToggle={() => toggleSection("favorites")}
           />
           {open("favorites") && (
-            <div className="space-y-0.5">
+            <div className="space-y-0.5"><PersonalOrder workspaceId={workspaceId} group="favorite" items={favorites.map(p=>({kind:"project" as const,id:p.id,title:p.name}))}/>
               {favorites.map((project) => (
-                <NavItem
+                <EntityRow key={project.id} kind="project" id={project.id} title={project.name}>
+<NavItem
                   key={project.id}
                   href={`/${workspaceId}/projects/${project.id}`}
                   active={pathname.startsWith(`/${workspaceId}/projects/${project.id}`)}
@@ -349,9 +360,12 @@ function SidebarNav({
                 >
                   {project.name}
                 </NavItem>
+</EntityRow>
               ))}
+              {favoritePages.length>1&&<PersonalOrder workspaceId={workspaceId} group="favorite" items={favoritePages.map(p=>({kind:"document" as const,id:p.id,title:p.title}))}/>}
               {favoritePages.map((page) => (
-                <NavItem
+                <EntityRow key={page.id} kind="document" id={page.id} title={page.title}>
+<NavItem
                   key={page.id}
                   href={`/${workspaceId}/docs/${page.id}`}
                   active={pathname === `/${workspaceId}/docs/${page.id}`}
@@ -359,11 +373,13 @@ function SidebarNav({
                 >
                   {page.title}
                 </NavItem>
+</EntityRow>
               ))}
             </div>
           )}
         </div>
       )}
+      <RecentDocuments workspaceId={workspaceId} pages={pages}/>{pins.length>0&&<section><div className="px-2 py-2 text-small text-faint">{t("Pinned")}<PersonalOrder workspaceId={workspaceId} group="pin" items={pins}/></div>{pins.map(pin=><EntityRow key={`${pin.kind}:${pin.id}`} kind={pin.kind} id={pin.id} title={pin.title}><NavItem href={pin.href} active={false} icon={<Star size={13}/>}>{pin.title}</NavItem></EntityRow>)}</section>}
       <div className="mt-2">
         <SectionHeader
           label={t("Projects")}
@@ -396,8 +412,9 @@ function SidebarNav({
                 {t("No projects yet — create one")}
               </button>
             )}
-            {projects.map((project) => (
-              <NavItem
+            {shownProjects.map((project) => (
+              <EntityRow key={project.id} kind="project" id={project.id} title={project.name}>
+<NavItem
                 key={project.id}
                 href={`/${workspaceId}/projects/${project.id}`}
                 active={pathname.startsWith(`/${workspaceId}/projects/${project.id}`)}
@@ -405,6 +422,7 @@ function SidebarNav({
               >
                 {project.name}
               </NavItem>
+</EntityRow>
             ))}
           </div>
         )}
@@ -565,12 +583,13 @@ function WorkspaceSwitcher({
   compact?: boolean;
 }) {
   const t = useT();
+  const {confirm}=useUI();
   const [leaving, setLeaving] = useState(false);
   const [leaveError, setLeaveError] = useState<string | null>(null);
 
   async function leaveWorkspace() {
     if (
-      !window.confirm(
+      !await confirm(
         t('Leave "{name}"? A workspace admin has to invite you back with a join code.', {
           name: workspace.name,
         })
@@ -578,6 +597,7 @@ function WorkspaceSwitcher({
     )
       return;
     setLeaving(true);
+    try {
     const result = await leaveWorkspaceAction(workspace.id);
     if (!result.ok) {
       setLeaving(false);
@@ -586,6 +606,7 @@ function WorkspaceSwitcher({
     }
     const next = workspaces.find((ws) => ws.id !== workspace.id);
     window.location.href = next ? `/${next.id}` : "/onboarding";
+    }catch{setLeaving(false);setLeaveError("Could not save. Retry.");}
   }
 
   return (
@@ -774,12 +795,13 @@ function RailFlyout({
     document.addEventListener("mousedown", onDown);
     document.addEventListener("keydown", onKey);
     window.addEventListener("resize", close);
-    window.addEventListener("scroll", close, true);
+    const onScroll = (e: Event) => { if (e.target instanceof Node && panelRef.current?.contains(e.target)) return; close(); };
+    window.addEventListener("scroll", onScroll, true);
     return () => {
       document.removeEventListener("mousedown", onDown);
       document.removeEventListener("keydown", onKey);
       window.removeEventListener("resize", close);
-      window.removeEventListener("scroll", close, true);
+      window.removeEventListener("scroll", onScroll, true);
     };
   }, [open]);
 
@@ -904,6 +926,7 @@ function SidebarRail({
   width: number;
   agentAllowed: boolean;
 }) {
+  const shownProjects=usePinned(projects,"project");
   const t = useT();
   const pathname = usePathname();
   const searchParams = useSearchParams();
@@ -920,6 +943,7 @@ function SidebarRail({
   const privateDocs = docRoots.filter((page) => !page.shared);
   // Dragging the rail wider turns it into a compact sidebar: labels appear, the
   // workspace chip regains its name, and everything lines up from the left edge.
+  const {pins} = useUI();
   const labeled = width >= SIDEBAR_RAIL_LABEL_MIN;
   const named = width >= SIDEBAR_RAIL_NAME_MIN;
   const teamShown = !hidden.includes("team") && members.length > 0;
@@ -1030,6 +1054,7 @@ function SidebarRail({
             </RailFlyoutLink>,
           ]}
         </RailFlyout>
+        {pins.length>0&&<RailFlyout label={t("Pinned")} icon={<Star size={15}/>} labeled={labeled}>{close=>pins.map(pin=><RailFlyoutLink key={`${pin.kind}:${pin.id}`} href={pin.href} active={false} icon={<Star size={13}/>} onSelect={close}>{pin.title}</RailFlyoutLink>)}</RailFlyout>}
         {/* Only the groups survive the fold, not their rows: each glyph raises a
             flyout with the group's names, leaving the column's width alone. */}
         {(favorites.length > 0 || favoritePages.length > 0 || projects.length > 0 || teamShown) && divider}
@@ -1061,12 +1086,10 @@ function SidebarRail({
             ]}
           </RailFlyout>
         )}
-        <RailFlyout label={t("Projects")} icon={<Boxes size={15} />} labeled={labeled}>
-          {(close) =>
-            projects.length === 0 ? (
-              <div className="px-2 py-1.5 text-small text-faint">{t("No projects yet.")}</div>
-            ) : (
-              projects.map((project) => (
+        {projects.length > 0 && (
+          <RailFlyout label={t("Projects")} icon={<Boxes size={15} />} labeled={labeled}>
+            {(close) =>
+              shownProjects.map((project) => (
                 <RailFlyoutLink
                   key={project.id}
                   href={`/${workspaceId}/projects/${project.id}`}
@@ -1077,9 +1100,9 @@ function SidebarRail({
                   {project.name}
                 </RailFlyoutLink>
               ))
-            )
-          }
-        </RailFlyout>
+            }
+          </RailFlyout>
+        )}
         <RailFlyout label={t("Documents")} icon={<FileText size={15} />} labeled={labeled}>
           {(close) => [
             <RailFlyoutLink
@@ -1218,7 +1241,6 @@ const SIDEBAR_RAIL_MAX = SIDEBAR_MIN - 1;
 // so a label never arrives already cut off with an ellipsis.
 const SIDEBAR_RAIL_LABEL_MIN = 128;
 const SIDEBAR_RAIL_NAME_MIN = 176;
-const MAX_TABS = 8;
 
 // The sidebar width is a per-device preference, not workspace data: the same account
 // on a laptop and a wide display wants different numbers. Restored after mount so the
@@ -1484,7 +1506,10 @@ function TabBar({
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
-  const { setPaletteOpen } = useUI();
+  const { setPaletteOpen, scope } = useUI();
+  const modifier=usePrimaryModifier();
+  const [recentTabs,setRecentTabs]=useStoredJson<string[]>(`tacos.tabs.closed.${scope}`,[]);
+  const [fixedTabs,setFixedTabs]=useStoredJson<string[]>(`tacos.tabs.fixed.${scope}`,[]);
   const [tabs, setTabs] = useState<string[] | null>(null);
   const justClosed = useRef<string | null>(null);
   // Closing a tab returns to the page it was opened from, not to whichever tab happens to
@@ -1495,25 +1520,15 @@ function TabBar({
   // is empty, and this page offers the ways back in.
   const startKey = `/${workspace.id}/start`;
 
-  // Search text and label filters change too often to deserve their own tab.
-  const keyParams = new URLSearchParams();
-  for (const name of ["view", "project", "assignee"]) {
-    const value = searchParams.get(name);
-    if (value) keyParams.set(name, value);
-  }
-  if (keyParams.get("view") === "all") keyParams.delete("view");
+  const keyParams = new URLSearchParams(searchParams.toString());
+  keyParams.sort();
   const qs = keyParams.toString();
   const current = `${pathname}${qs ? `?${qs}` : ""}`;
-
-  // Different URLs can show the same page (a project's Overview and Issues, or
-  // `?view=all` vs none); tabs are unique by what they display, not by URL.
-  const sameTab = (a: string, b: string) =>
-    tabMeta(a, workspace, projects, members, pages, t).label ===
-    tabMeta(b, workspace, projects, members, pages, t).label;
+  const sameTab = (a: string, b: string) => tabIdentity(a) === tabIdentity(b);
 
   useEffect(() => {
     try {
-      const saved = JSON.parse(window.localStorage.getItem(`${TABS_KEY}.${workspace.id}`) ?? "[]");
+      const saved = JSON.parse(window.localStorage.getItem(`${TABS_KEY}.${scope}`) ?? "[]");
       const keys: string[] = Array.isArray(saved) ? saved.filter((t) => typeof t === "string") : [];
       setTabs(keys.filter((key, i) => keys.findIndex((other) => sameTab(other, key)) === i));
     } catch {
@@ -1543,14 +1558,14 @@ function TabBar({
       setTabs(tabs.map((key, i) => (i === existing ? current : key)));
       return;
     }
-    setTabs([...tabs, current].slice(-MAX_TABS));
+    setTabs([...tabs, current]);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [current, tabs]);
 
   useEffect(() => {
     if (tabs === null) return;
     try {
-      window.localStorage.setItem(`${TABS_KEY}.${workspace.id}`, JSON.stringify(tabs));
+      window.localStorage.setItem(`${TABS_KEY}.${scope}`, JSON.stringify(tabs));
     } catch {
       /* storage unavailable — tabs still work for this window */
     }
@@ -1576,6 +1591,8 @@ function TabBar({
   const visible = tabs ?? [];
 
   function closeTab(key: string) {
+    if(fixedTabs.includes(key))return;
+    setRecentTabs(previous=>[key,...previous.filter(item=>item!==key)].slice(0,20));
     const index = visible.indexOf(key);
     const rest = visible.filter((t) => t !== key);
     setTabs(rest);
@@ -1591,6 +1608,12 @@ function TabBar({
     router.push(back ?? startKey);
   }
 
+  function closeMany(key:string,right:boolean) {
+    const keep=visible.filter((item,index)=>fixedTabs.includes(item)||(right?index<=visible.indexOf(key):item===key));
+    setTabs(keep);setRecentTabs(previous=>[...visible.filter(item=>!keep.includes(item)),...previous].slice(0,20));
+    if(!keep.includes(current))router.push(key);
+  }
+
   // A deleted doc must not leave a dead route in the strip: drop its tab (and any
   // subpage tabs that went with it) and activate the neighbour, like closing a tab.
   useEffect(() => {
@@ -1604,18 +1627,15 @@ function TabBar({
         return Boolean(match && dead.has(match[1]));
       };
       const index = tabs.findIndex(isDead);
-      if (index < 0) {
-        router.push(`/${workspace.id}/docs`);
-        return;
-      }
+      if (index < 0) return;
       const rest = tabs.filter((key) => !isDead(key));
       justClosed.current = tabs[index];
       setTabs(rest);
-      router.push(rest[Math.max(0, Math.min(index, rest.length - 1))] ?? startKey);
+      if (isDead(current)) router.push(rest[Math.max(0, Math.min(index, rest.length - 1))] ?? startKey);
     };
     window.addEventListener(DOCS_DELETED_EVENT, onDocsDeleted);
     return () => window.removeEventListener(DOCS_DELETED_EVENT, onDocsDeleted);
-  }, [tabs, workspace.id, startKey, router]);
+  }, [tabs, workspace.id, startKey, router, current]);
 
   return (
     <header className="app-windowbar flex h-12 shrink-0 items-center bg-surface pr-3">
@@ -1636,14 +1656,13 @@ function TabBar({
         </button>
       </div>
 
-      <div className="app-tabstrip flex min-w-0 flex-1 items-center gap-1.5 overflow-hidden pl-1.5">
+      <div className="app-tabstrip flex min-w-0 flex-1 items-center gap-1.5 overflow-x-auto pl-1.5">
         {visible.map((key) => {
           const { label, icon } = tabMeta(key, workspace, projects, members, pages, t);
           const isActive = key === current;
           return (
-            <div
-              key={key}
-              className={`app-tab group flex h-8 w-[128px] min-w-0 items-center gap-1.5 rounded-lg border px-2 text-small transition-colors ${
+            <ContextMenu.Root key={key}><ContextMenu.Trigger asChild><div
+              className={`app-tab group flex h-8 w-[128px] shrink-0 min-w-0 items-center gap-1.5 rounded-lg border px-2 text-small transition-colors ${
                 isActive
                   ? "border-border bg-bg font-medium text-text shadow-[0_1px_2px_rgba(0,0,0,0.05)]"
                   : "border-transparent text-muted hover:bg-elevated/70 hover:text-text"
@@ -1656,9 +1675,9 @@ function TabBar({
                 title={label}
               >
                 <span className="flex shrink-0 items-center text-faint">{icon}</span>
-                <span className="truncate">{label}</span>
+                <span className="truncate">{fixedTabs.includes(key)?"• ":""}{label}</span>
               </button>
-              <button
+              <button disabled={fixedTabs.includes(key)}
                 type="button"
                 onClick={() => closeTab(key)}
                 aria-label={t("Close {label}", { label })}
@@ -1668,15 +1687,22 @@ function TabBar({
               >
                 <X size={12} />
               </button>
-            </div>
+            </div></ContextMenu.Trigger><ContextMenu.Portal><ContextMenu.Content className="z-[90] rounded-lg border border-border bg-overlay p-1 text-body shadow-lg">
+              <ContextMenu.Item onSelect={()=>setFixedTabs(previous=>previous.includes(key)?previous.filter(item=>item!==key):[...previous,key])} className="rounded px-3 py-1.5 data-[highlighted]:bg-elevated">{t(fixedTabs.includes(key)?"Unpin tab":"Pin tab")}</ContextMenu.Item>
+              <ContextMenu.Item disabled={fixedTabs.includes(key)} onSelect={()=>closeTab(key)} className="rounded px-3 py-1.5 data-[highlighted]:bg-elevated">{t("Close tab")}</ContextMenu.Item>
+              <ContextMenu.Item onSelect={()=>closeMany(key,false)} className="rounded px-3 py-1.5 data-[highlighted]:bg-elevated">{t("Close other tabs")}</ContextMenu.Item>
+              <ContextMenu.Item onSelect={()=>closeMany(key,true)} className="rounded px-3 py-1.5 data-[highlighted]:bg-elevated">{t("Close tabs to the right")}</ContextMenu.Item>
+            </ContextMenu.Content></ContextMenu.Portal></ContextMenu.Root>
           );
         })}
       </div>
 
+      <Menu align="right" width={300} trigger={<span aria-label={t("Open tabs")}>▾</span>} triggerClassName="rounded px-2 py-1 text-muted">{close=><>{visible.map(key=><MenuItem key={key} onSelect={()=>{close();router.push(key);}}>{tabMeta(key,workspace,projects,members,pages,t).label}</MenuItem>)}{recentTabs.length>0&&<div className="border-t border-border px-2 py-1 text-small text-faint">{t("Recently closed")}</div>}{recentTabs.map(key=><MenuItem key={key} onSelect={()=>{close();setRecentTabs(previous=>previous.filter(item=>item!==key));router.push(key);}}>{tabMeta(key,workspace,projects,members,pages,t).label}</MenuItem>)}</>}</Menu>
+
       <button
         type="button"
         onClick={() => setPaletteOpen(true)}
-        title={t("Open something (⌘K)")}
+        title={t("Open something ({key}K)",{key:modifier})}
         aria-label={t("Open something")}
         className="ml-1.5 shrink-0 rounded-md p-1.5 text-muted transition-colors hover:bg-elevated hover:text-text"
       >
@@ -1726,7 +1752,6 @@ export function WorkspaceShell({
 }) {
   const t = useT();
   const pathname = usePathname();
-  const { panelExpanded } = useUI();
   // One width, two looks, like ChatGPT: under SIDEBAR_MIN the column is the icon rail.
   const {
     width: sidebarWidth,
@@ -1894,15 +1919,9 @@ export function WorkspaceShell({
         <main className="flex min-w-0 flex-1 flex-col p-2 pt-1">
           {/* The list and the issue are separate cards with a gutter, the way Linear
               splits a view from its detail pane — not one card cut by a divider. */}
-          <div className="@container relative flex min-h-0 flex-1 gap-2">
-            {!panelExpanded && (
-              <div className="@container flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-xl border border-border bg-bg shadow-[0_1px_2px_rgba(0,0,0,0.05)]">
-                {children}
-              </div>
-            )}
-            <IssuePanelHost workspaceId={workspace.id} currentUserId={user.id} />
-            <DocPanelHost workspaceId={workspace.id} />
-          </div>
+          <DetailLayout detail={<><IssuePanelHost workspaceId={workspace.id} currentUserId={user.id} /><DocPanelHost workspaceId={workspace.id} /></>}>
+            {children}
+          </DetailLayout>
         </main>
       </div>
 

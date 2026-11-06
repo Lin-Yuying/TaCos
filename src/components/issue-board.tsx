@@ -1,5 +1,7 @@
 "use client";
 
+import { EntityRow } from "@/components/ui/entity-row";
+
 import { Fragment, useMemo, useState, useTransition, type DragEvent } from "react";
 import { useRouter } from "next/navigation";
 import { moveIssueAction } from "@/app/actions";
@@ -29,10 +31,12 @@ function BoardCard({
   const opened = openIssueId === issue.id;
 
   return (
+    <EntityRow kind="task" id={issue.id} title={issue.title}>
     <article
       data-issue-id={issue.id}
       role="button"
-      tabIndex={-1}
+      tabIndex={0}
+      onKeyDown={(event)=>{if(event.key==="Enter"&&!event.nativeEvent.isComposing)openIssue(issue.id);}}
       draggable
       onDragStart={(event) => {
         event.dataTransfer.effectAllowed = "move";
@@ -74,6 +78,7 @@ function BoardCard({
         </span>
       </div>
     </article>
+    </EntityRow>
   );
 }
 
@@ -92,13 +97,17 @@ export function IssueBoard({
   issues,
   workspaceId,
   currentUserId,
+  manualOrder = true,
 }: {
   issues: IssueWithLabels[];
   workspaceId: string;
   currentUserId: string;
+  manualOrder?: boolean;
 }) {
   const t = useT();
   const router = useRouter();
+  const {toast} = useUI();
+  const [moving,setMoving]=useState(false);
   const [, startTransition] = useTransition();
   const [drag, setDrag] = useState<IssueWithLabels | null>(null);
   const [over, setOver] = useState<{ status: Status; index: number } | null>(null);
@@ -119,7 +128,8 @@ export function IssueBoard({
   }
 
   function handleDragOver(event: DragEvent<HTMLDivElement>, status: Status) {
-    if (!drag) return;
+    if (!drag || moving) return;
+    if (drag.status === status && !manualOrder) return;
     if (drag.status !== status && !canChangeStatus(drag)) return;
     event.preventDefault();
     event.dataTransfer.dropEffect = "move";
@@ -147,7 +157,8 @@ export function IssueBoard({
     const target = over;
     setDrag(null);
     setOver(null);
-    if (!issue || !target || target.status !== status) return;
+    if (!issue || !target || target.status !== status || moving) return;
+    if(issue.status === status && !manualOrder)return;
     if (issue.status !== status && !canChangeStatus(issue)) return;
 
     const items = columns.find((column) => column.status === status)?.items ?? [];
@@ -165,8 +176,11 @@ export function IssueBoard({
       }
     }
 
-    const result = await moveIssueAction(workspaceId, issue.id, { status, beforeId, afterId });
-    if (result.ok) startTransition(() => router.refresh());
+    setMoving(true);
+    try {
+      const result = await moveIssueAction(workspaceId, issue.id, { status, beforeId:manualOrder?beforeId:null, afterId:manualOrder?afterId:null });
+      if (result.ok) startTransition(() => router.refresh()); else toast(t(result.error));
+    }catch{toast(t("Could not move task. Retry."));}finally{setMoving(false);}
   }
 
   return (
@@ -176,7 +190,7 @@ export function IssueBoard({
       {columns.map(({ status, items }) => {
         let slot = 0;
         return (
-          <section key={status} className="flex min-h-0 min-w-[180px] flex-1 flex-col">
+          <section key={status} className="flex min-h-0 min-w-[260px] flex-1 flex-col">
             <header className="flex shrink-0 items-center gap-2 px-1 pb-2">
               <StatusIcon status={status} size={13} />
               <span className="truncate text-small font-medium text-muted">
@@ -201,7 +215,7 @@ export function IssueBoard({
                     <BoardCard
                       issue={issue}
                       dragging={isDragging}
-                      onDragStart={setDrag}
+                      onDragStart={(issue)=>{setDrag(issue);if(!canChangeStatus(issue))toast(t("Only assignees can change status"));else if(!manualOrder)toast(t("Field sorting is active. Clear sorting to reorder cards."));}}
                       onDragEnd={() => {
                         setDrag(null);
                         setOver(null);

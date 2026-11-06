@@ -1,6 +1,10 @@
 // The small part of the collaboration socket that the rest of the app talks to, so that the page
 // code does not load the socket server. Set when the socket starts; absent in the desktop app.
-type CollabLive = { replace: (pageId: string, markdown: string, revision: number) => void };
+type CollabLive = {
+  replace: (pageId: string, markdown: string, revision: number) => void;
+  accessChanged: (pageIds: string[], keepUserId?: string) => void;
+  withStored: <T>(pageId: string, work: () => Promise<T>) => Promise<T>;
+};
 
 const shared = globalThis as unknown as { __tacosCollab?: CollabLive };
 
@@ -16,3 +20,9 @@ export function collabRunning(): boolean {
 export function collabDocWritten(pageId: string, markdown: string, revision: number): void {
   shared.__tacosCollab?.replace(pageId, markdown, revision);
 }
+
+export function withStoredCollabPage<T>(pageId: string, work: () => Promise<T>): Promise<T> {
+  return shared.__tacosCollab?.withStored(pageId, work) ?? work();
+}
+
+export function collabAccessChanged(pageIds: string[], keepUserId?: string): void { shared.__tacosCollab?.accessChanged(pageIds,keepUserId); }

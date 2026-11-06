@@ -1,5 +1,7 @@
 "use client";
+import { safeAction } from "@/lib/ui/safe-action";
 
+import { useUI } from "@/components/ui-context";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Trash2 } from "lucide-react";
@@ -21,6 +23,7 @@ export function LabelsManager({
   embedded?: boolean;
 }) {
   const t = useT();
+  const {confirm}=useUI();
   const router = useRouter();
   const [name, setName] = useState("");
   const [color, setColor] = useState(LABEL_COLORS[3]);
@@ -30,7 +33,7 @@ export function LabelsManager({
   async function submit() {
     if (!name.trim() || busy) return;
     setBusy(true);
-    const result = await createLabelAction(workspaceId, { name, color });
+    const result = await safeAction(async()=>createLabelAction(workspaceId, { name, color }));
     setBusy(false);
     if (result.ok) {
       setName("");
@@ -42,9 +45,8 @@ export function LabelsManager({
   }
 
   async function remove(label: LabelWithCount) {
-    if (!window.confirm(t('Delete label "{name}"? It will be removed from all issues.', { name: label.name }))) return;
-    await deleteLabelAction(workspaceId, label.id);
-    router.refresh();
+    if (!await confirm(t('Delete label "{name}"? It will be removed from all issues.', { name: label.name }))) return;
+    if(busy)return;setBusy(true);try{const result=await safeAction(async()=>deleteLabelAction(workspaceId,label.id));if(!result.ok)setError(result.error);else router.refresh();}catch{setError("Could not save. Retry.");}finally{setBusy(false);}
   }
 
   const body = (
@@ -56,7 +58,7 @@ export function LabelsManager({
               value={name}
               onChange={(e) => setName(e.target.value)}
               onKeyDown={(e) => {
-                if (e.key === "Enter") void submit();
+                if (e.key === "Enter"&&!e.nativeEvent.isComposing) void submit();
               }}
               placeholder={t("Label name")}
               className="w-full rounded-md border border-border bg-elevated/50 px-2.5 py-1.5 text-body placeholder:text-faint focus:border-border-strong"
