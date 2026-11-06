@@ -1,4 +1,6 @@
 "use client";
+import { usePrimaryModifier } from "@/lib/ui/platform";
+import { OptionSearch,matchesOption } from "@/components/ui/option-search";
 
 import { DuePicker } from "@/components/ui/due-picker";
 import { readJson } from "@/lib/ui/request";
@@ -28,6 +30,8 @@ import { useT } from "@/components/i18n-context";
 
 export function NewIssueDialog({ workspaceId }: { workspaceId: string }) {
   const t = useT();
+  const modifier=usePrimaryModifier();
+  const [memberQuery,setMemberQuery]=useState(""),[labelQuery,setLabelQuery]=useState("");
   const { composerOpen, composerStatus, composerSeed, setComposerOpen, openIssue, aiReady, projectComposerOpen, setProjectComposerOpen } =
     useUI();
   const searchParams = useSearchParams();
@@ -198,7 +202,7 @@ export function NewIssueDialog({ workspaceId }: { workspaceId: string }) {
                   void submit();
                 }
               }}
-              placeholder={t("Issue title")}
+              placeholder={t("Task title")}
               className="w-full bg-transparent text-title font-semibold text-text placeholder:text-faint"
             />
             <textarea
@@ -401,7 +405,7 @@ export function NewIssueDialog({ workspaceId }: { workspaceId: string }) {
                       <Users size={14} className="text-muted" /> {t("Everyone")}
                     </MenuItem>
                     <div className="my-1 border-t border-border" />
-                    {members.map((member) => {
+                    <OptionSearch value={memberQuery} onChange={setMemberQuery} selected={assigneeIds.length}/>{members.filter(member=>matchesOption(memberQuery,member.displayName,member.username)).map((member) => {
                       const on = assigneeIds.includes(member.id);
                       return (
                         <MenuItem
@@ -439,7 +443,7 @@ export function NewIssueDialog({ workspaceId }: { workspaceId: string }) {
               >
                 {() => (
                   <>
-                    {labels.map((label) => {
+                    <OptionSearch value={labelQuery} onChange={setLabelQuery} selected={labelNames.length}/>{labels.filter(label=>matchesOption(labelQuery,label.name)).map((label) => {
                       const on = labelNames.includes(label.name);
                       return (
                         <MenuItem
@@ -483,7 +487,7 @@ export function NewIssueDialog({ workspaceId }: { workspaceId: string }) {
                   className="rounded-md bg-accent px-3 py-1.5 text-body font-medium text-white transition-colors hover:bg-accent-hover disabled:opacity-40"
                 >
                   {t("Create task")}
-                  <span className="ml-2 text-caption opacity-75">⌘↵</span>
+                  <span className="ml-2 text-caption opacity-75">{modifier}↵</span>
                 </button>
               </div>
             </div>

@@ -1,4 +1,5 @@
 "use client";
+import { safeAction } from "@/lib/ui/safe-action";
 
 import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { useRouter } from "next/navigation";
@@ -27,6 +28,8 @@ import {
   checkHarnessUpdatesAction,
 } from "@/app/ai-actions";
 import type { AiSettingsView, ModelKeysView } from "@/lib/ai-constants";
+import { SettingsNavigation } from "@/components/settings-navigation";
+import { useUI } from "@/components/ui-context";
 import { ModelKeysSection } from "@/components/model-keys-section";
 import { AssigneeAvatar } from "@/components/issue-table";
 import { ProjectIcon, WorkspaceMark } from "@/components/icons";
@@ -151,6 +154,11 @@ export function SettingsView({
   const router = useRouter();
   const t = useT();
   const locale = useLocale();
+  const {confirm,density,setDensity}=useUI();
+  const root=useRef<HTMLDivElement>(null);
+  const memberLocks=useRef(new Set<string>());
+  const [memberBusy,setMemberBusy]=useState<string[]>([]),[memberErrors,setMemberErrors]=useState<Record<string,string>>({}),[visibilityError,setVisibilityError]=useState<string|null>(null),[visibilityBusy,setVisibilityBusy]=useState(false);
+  async function memberChange(id:string,work:()=>Promise<{ok:boolean;error?:string}>){if(memberLocks.current.has(id))return;memberLocks.current.add(id);setMemberBusy([...memberLocks.current]);try{const result=await work();if(!result.ok)throw new Error(result.error);setMemberErrors(old=>{const next={...old};delete next[id];return next;});router.refresh();}catch(error){setMemberErrors(old=>({...old,[id]:error instanceof Error?error.message:"Could not save. Retry."}));}finally{memberLocks.current.delete(id);setMemberBusy([...memberLocks.current]);}}
   const isAdmin = role === "admin";
   const [code, setCode] = useState(joinCode);
   const [newKeyName, setNewKeyName] = useState("");
@@ -187,7 +195,7 @@ export function SettingsView({
     setHarnessError(null);
     const before = harnessRows;
     setHarnessRows((rows) => rows.map((row) => (row.id === id ? { ...row, enabled } : row)));
-    const result = await setHarnessEnabledAction(workspace.id, id, enabled);
+    const result = await safeAction(async()=>setHarnessEnabledAction(workspace.id, id, enabled));
     setHarnessBusy(null);
     if (!result.ok) {
       setHarnessRows(before);
@@ -211,7 +219,7 @@ export function SettingsView({
     setHarnessBusy(`${id}:${mode}`);
     setHarnessError(null);
     setHarnessNotice(null);
-    const result = await runHarnessInstallAction(workspace.id, id, mode);
+    const result = await safeAction(async()=>runHarnessInstallAction(workspace.id, id, mode));
     setHarnessBusy(null);
     if (!result.ok) {
       setHarnessError(result.error);
@@ -234,7 +242,7 @@ export function SettingsView({
   // and only the newest check counts, so one begun before an upgrade can't bring back its button.
   async function readHarnessUpdates(force: boolean) {
     const seq = ++harnessUpdateSeq.current;
-    const result = await checkHarnessUpdatesAction(workspace.id, force);
+    const result = await safeAction(async()=>checkHarnessUpdatesAction(workspace.id, force));
     if (seq !== harnessUpdateSeq.current) return null;
     if (result.ok) {
       setHarnessRows((rows) =>
@@ -294,7 +302,7 @@ export function SettingsView({
   async function chooseLocale(next: Locale) {
     if (next === locale) return;
     setLocaleError(null);
-    const result = await saveLocaleAction(next);
+    const result = await safeAction(async()=>saveLocaleAction(next));
     if (!result.ok) {
       setLocaleError(result.error);
       return;
@@ -303,14 +311,14 @@ export function SettingsView({
   }
 
   async function rotateCode() {
-    const result = await rotateJoinCodeAction(workspace.id);
+    const result = await safeAction(async()=>rotateJoinCodeAction(workspace.id));
     if (result.ok) setCode(result.data.code);
   }
 
   async function createKey() {
     if (!newKeyName.trim()) return;
     setBusy(true);
-    const result = await createApiKeyAction(workspace.id, newKeyName);
+    const result = await safeAction(async()=>createApiKeyAction(workspace.id, newKeyName));
     setBusy(false);
     if (result.ok) {
       setNewKey(result.data.key);
@@ -323,9 +331,8 @@ export function SettingsView({
   }
 
   async function revokeKey(key: ApiKeyRecord) {
-    if (!window.confirm(t("Revoke key \"{name}\"? Agents using it will lose access.", { name: key.name }))) return;
-    await revokeApiKeyAction(workspace.id, key.id);
-    router.refresh();
+    if (!await confirm(t("Revoke key \"{name}\"? Agents using it will lose access.", { name: key.name }))) return;
+    try{const result=await safeAction(async()=>revokeApiKeyAction(workspace.id,key.id));if(!result.ok)setKeyError(result.error);else router.refresh();}catch{setKeyError("Could not save. Retry.");}
   }
 
   async function saveRuntime() {
@@ -333,7 +340,7 @@ export function SettingsView({
     setAiBusy(true);
     setAiError(null);
     setAiNotice(null);
-    const result = await saveAgentRuntimeAction(workspace.id, { proxy: aiProxy });
+    const result = await safeAction(async()=>saveAgentRuntimeAction(workspace.id, { proxy: aiProxy }));
     setAiBusy(false);
     if (!result.ok) {
       setAiError(result.error);
@@ -346,7 +353,7 @@ export function SettingsView({
   async function addProject() {
     if (!projName.trim()) return;
     setBusy(true);
-    const result = await createProjectAction(workspace.id, { name: projName });
+    const result = await safeAction(async()=>createProjectAction(workspace.id, { name: projName }));
     setBusy(false);
     if (result.ok) {
       setProjName("");
@@ -359,32 +366,31 @@ export function SettingsView({
 
   async function removeProject(project: Project) {
     if (
-      !window.confirm(
+      !await confirm(
         t("Move project \"{name}\" and its issues to the Trash? You can restore it from there.", {
           name: project.name,
         })
       )
     )
       return;
-    const result = await trashProjectAction(workspace.id, project.id);
+    const result = await safeAction(async()=>trashProjectAction(workspace.id, project.id));
     if (!result.ok) setProjError(result.error);
     router.refresh();
   }
 
   async function saveRename(project: Project, name: string) {
-    setRenaming(null);
     const trimmed = name.trim();
     if (!trimmed || trimmed === project.name) return;
-    const result = await updateProjectAction(workspace.id, project.id, { name: trimmed });
+    const result = await safeAction(async()=>updateProjectAction(workspace.id, project.id, { name: trimmed }));
     if (!result.ok) setProjError(result.error);
-    router.refresh();
+    else {setRenaming(null);setProjError(null);router.refresh();}
   }
 
   async function deleteWorkspaceNow() {
     if (deleteWord.trim() !== "confirmed") return;
     setBusy(true);
     setDeleteError(null);
-    const result = await deleteWorkspaceAction(workspace.id, deleteWord);
+    const result = await safeAction(async()=>deleteWorkspaceAction(workspace.id, deleteWord));
     setBusy(false);
     if (!result.ok) {
       setDeleteError(result.error);
@@ -406,7 +412,7 @@ export function SettingsView({
     setBusy(true);
     setAvatarError(null);
     try {
-      const result = await saveAvatarAction(await toSquareDataUrl(file));
+      const result = await safeAction(async()=>saveAvatarAction(await toSquareDataUrl(file)));
       if (result.ok) {
         setAvatar(result.data.avatar);
         router.refresh();
@@ -423,7 +429,7 @@ export function SettingsView({
   async function clearAvatar() {
     setBusy(true);
     setAvatarError(null);
-    const result = await saveAvatarAction(null);
+    const result = await safeAction(async()=>saveAvatarAction(null));
     setBusy(false);
     if (result.ok) {
       setAvatar(result.data.avatar);
@@ -436,7 +442,7 @@ export function SettingsView({
   async function chooseAvatar(value: string) {
     setBusy(true);
     setAvatarError(null);
-    const result = await saveAvatarAction(value);
+    const result = await safeAction(async()=>saveAvatarAction(value));
     setBusy(false);
     if (result.ok) {
       setAvatar(result.data.avatar);
@@ -451,7 +457,7 @@ export function SettingsView({
     setBusy(true);
     setIconError(null);
     try {
-      const result = await saveWorkspaceIconAction(workspace.id, await toSquareDataUrl(file));
+      const result = await safeAction(async()=>saveWorkspaceIconAction(workspace.id, await toSquareDataUrl(file)));
       if (result.ok) {
         setIcon(result.data);
         router.refresh();
@@ -468,7 +474,7 @@ export function SettingsView({
   async function clearIcon() {
     setBusy(true);
     setIconError(null);
-    const result = await saveWorkspaceIconAction(workspace.id, null);
+    const result = await safeAction(async()=>saveWorkspaceIconAction(workspace.id, null));
     setBusy(false);
     if (result.ok) {
       setIcon(null);
@@ -478,16 +484,7 @@ export function SettingsView({
     }
   }
 
-  async function toggleSeeAll(next: boolean) {
-    setSeeAll(next);
-    const result = await setMembersSeeAllTasksAction(workspace.id, next);
-    if (!result.ok) {
-      setSeeAll(!next);
-      setProjError(result.error);
-      return;
-    }
-    router.refresh();
-  }
+  async function toggleSeeAll(next:boolean){if(visibilityBusy)return;setVisibilityBusy(true);setSeeAll(next);try{const result=await safeAction(async()=>setMembersSeeAllTasksAction(workspace.id,next));if(!result.ok)throw new Error(result.error);setVisibilityError(null);router.refresh();}catch(error){setSeeAll(!next);setVisibilityError(error instanceof Error?error.message:"Could not save. Retry.");}finally{setVisibilityBusy(false);}}
 
   const curlExample = `curl -H "Authorization: Bearer tac_YOUR_KEY" \\
   -H "Content-Type: application/json" \\
@@ -499,8 +496,8 @@ export function SettingsView({
     : null;
 
   return (
-    <div className="flex-1 overflow-y-auto px-10 pb-10 pt-6 lg:px-20 xl:px-32">
-      <div className="space-y-10">
+    <div ref={root} className="flex-1 overflow-y-auto px-10 pb-10 pt-6 lg:px-20 xl:px-32">
+      <SettingsNavigation root={root}/><div className="space-y-10">
         <header className="flex items-center gap-3">
           <h1 className="text-lead font-semibold">{t("Workspace settings")}</h1>
           <span className="rounded-full bg-elevated px-2 py-0.5 text-caption text-muted">
@@ -626,6 +623,7 @@ export function SettingsView({
           </p>
         </section>
 
+        <section className="space-y-3"><h2 className="text-body font-semibold">{t("Display density")}</h2><div className="flex gap-2 text-body">{(["comfortable","compact"] as const).map(value=><button key={value} aria-pressed={density===value} onClick={()=>setDensity(value)} className={`rounded border border-border px-3 py-1 ${density===value?"bg-elevated":""}`}>{t(value==="compact"?"Compact":"Comfortable")}</button>)}</div></section>
         <section className="space-y-3">
           <h2 className="text-body font-semibold">{t("Language")}</h2>
           <div className="flex items-center gap-4 rounded-lg border border-border p-4">
@@ -666,7 +664,7 @@ export function SettingsView({
           </h2>
           <div className="divide-y divide-border rounded-lg border border-border">
             {members.map((member) => (
-              <div key={member.id} className="flex items-center gap-3 px-4 py-2.5">
+              <div key={member.id} className="flex flex-wrap items-center gap-3 px-4 py-2.5">
                 <AssigneeAvatar displayName={member.displayName} avatar={member.avatar} size={24} />
                 <div className="min-w-0">
                   <div className="text-body">
@@ -681,13 +679,8 @@ export function SettingsView({
                   <>
                     <select
                       value={member.role}
-                      onChange={(e) => {
-                        void setMemberRoleAction(
-                          workspace.id,
-                          member.id,
-                          e.target.value as "admin" | "member"
-                        ).then(() => router.refresh());
-                      }}
+                      disabled={memberBusy.includes(member.id)}
+                      onChange={(e) => {const role=e.target.value as "admin"|"member";void memberChange(member.id,()=>setMemberRoleAction(workspace.id,member.id,role));}}
                       className="ml-auto rounded-md border border-border bg-elevated px-1.5 py-1 text-small text-muted"
                     >
                       <option value="admin">{t("Admin")}</option>
@@ -695,9 +688,10 @@ export function SettingsView({
                     </select>
                     <button
                       type="button"
-                      onClick={() => {
-                        if (window.confirm(t("Remove {name} from this workspace?", { name: member.displayName }))) {
-                          void removeMemberAction(workspace.id, member.id).then(() => router.refresh());
+                      disabled={memberBusy.includes(member.id)}
+                      onClick={async () => {
+                        if (await confirm(t("Remove {name} from this workspace?", { name: member.displayName }))) {
+                          void memberChange(member.id,()=>removeMemberAction(workspace.id,member.id));
                         }
                       }}
                       className="rounded-md p-1 text-faint transition-colors hover:bg-elevated hover:text-danger"
@@ -711,6 +705,7 @@ export function SettingsView({
                     {member.role === "admin" ? t("Admin") : t("Member")}
                   </span>
                 )}
+                {memberErrors[member.id]&&<p role="alert" className="w-full text-small text-danger">{t(memberErrors[member.id])}</p>}
               </div>
             ))}
           </div>
@@ -741,7 +736,7 @@ export function SettingsView({
         </section>
 
         <section className="space-y-3">
-          <h2 className="text-body font-semibold">{t("Task visibility")}</h2>
+          <h2 className="text-body font-semibold">{t("Task visibility")}</h2>{visibilityError&&<p role="alert" className="text-small text-danger">{t(visibilityError)}</p>}
           <div className="flex items-center gap-4 rounded-lg border border-border p-4">
             <div className="min-w-0 flex-1">
               <div className="text-body font-medium">
@@ -758,7 +753,7 @@ export function SettingsView({
               role="switch"
               aria-checked={seeAll}
               aria-label={t("Let every member see all tasks")}
-              disabled={!isAdmin}
+              disabled={!isAdmin||visibilityBusy}
               onClick={() => void toggleSeeAll(!seeAll)}
               className={`relative h-5 w-9 shrink-0 rounded-full transition-colors disabled:opacity-40 ${
                 seeAll ? "bg-accent" : "bg-border-strong"
