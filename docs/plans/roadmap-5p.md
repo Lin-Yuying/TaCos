@@ -1,112 +1,84 @@
-# TaCos roadmap for a 5-person internal team
+# TaCos roadmap: five-person scope guardrails
 
-Status: **recommended reset, 2026-11-06.** Supersedes the sequencing in
-`product-roadmap.md` while keeping the deeper plan documents. No production code
-has been written for the items below.
+Status: **active sequencing after the 2026-11-06 reset.** Five internal people,
+desktop-only, no external sharing/agents/channels/integrations. The point of
+this reset is **not to cut the PR sequence** — it is to keep the agreed features
+while removing over-design. The detailed plans remain the reference.
 
-## Context and principles
+## What stays out of scope (explicit owner decisions)
 
-TaCos is used by **five internal people**, on their computers. There is no
-external sharing, no external agents, no email/push/mobile and no third-party
-integrations. That removes a large part of the previous roadmap.
+- U-01 Sharing and permissions.
+- U-06 Enterprise / governance.
+- U-07 External agents / A2A (internal agents only).
+- U-08 Notification channels / mobile.
+- All third-party integrations (Slack, GitHub, webhooks, email, push).
 
-Principles:
+Everything else in the plan set stays scheduled.
 
-1. Build only what removes a recurring daily friction for these five people.
-2. Prefer small PRs; defer features until someone asks twice.
-3. Keep the existing workspace model (projects, tasks, docs, in-app Inbox,
-   CLI/API agents); no new permissions/enterprise layer.
-4. Each implementation PR gets a real end-to-end test, not just checks.
-5. Deferred plans stay in `docs/plans/` as design records.
+## Active PR sequence
 
-## What is worth building now
+| # | PR | Plan | Core outcome |
+| --- | --- | --- | --- |
+| 1 | #82 (Inbox, #78) | implemented | Triage, structured notifications, Done/snooze/mutes, 90-day retention |
+| 2 | #77 | `agent-access.md` | Scoped/expiring API keys + remote MCP server |
+| 3 | U-13a | `api-surface.md` | Projects CRUD + task extension API/MCP |
+| 4 | #79 | `agent-runtime.md` | Agent identity/delegation/review, built-in API agent, usage, harness v2 |
+| 5 | #80 | `automations-integrations.md` | Internal automation rules only (integrations removed) |
+| 6 | U-09 | `views-task-ux.md` | Shared views, display options, subscriptions, bulk edit, templates, estimate |
+| 7 | U-04 | `docs-knowledge.md` | Page links/backlinks, templates, outline |
+| 8 | U-13b | `api-surface.md` | Pages/documents API and MCP tools |
+| 9 | U-10 | `search.md` | Unified search + command palette, with UI design gate |
+| 10 | U-11 | `collaboration.md` | Comment threads, follow, activity feed, review threads |
+| 11 | U-03 | `planning.md` | Cycles, milestones, initiatives, roadmap |
+| 12 | U-02 | `insights.md` | Task-flow, agent and automation insights |
+| 13 | U-05 | `import-export.md` | Canonical export + Markdown/CSV import |
+| 14 | U-12 | `self-host-ops.md` | Health, verified backup/restore, update/rollback UX |
 
-### 0. Merge the Inbox (#82)
+Order may move if a dependency demands it; the sequence above is the default.
 
-Already implemented and E2E-tested: triage, structured notifications, Done,
-snooze, mutes, 90-day retention. Merge it first; it is the daily notification
-surface.
+## Over-design guardrails
 
-### 1. Agent essentials (trimmed #79)
+These apply to every PR. They are the actual lesson from the five-person reset.
 
-The current Agent tab works with local CLI harnesses, but server mode needs the
-desktop runner and task delegation/review is missing. Keep only:
+1. **Keep the agreed feature scope; simplify the implementation.** Do not remove
+   a feature just because the team is small. Do not add a feature nobody asked
+   for.
+2. **No speculative abstractions.** No plugin interfaces, generic workflow DSLs,
+   multi-provider normalisation, or extension points until a second real caller
+   exists.
+3. **Use the existing stack.** SQLite, Drizzle, server actions, existing
+   components/tokens, existing queue/scheduler patterns. No new service, no new
+   daemon, no new chart library if SVG suffices.
+4. **One obvious UI path.** No settings matrices with unused dimensions, no
+   duplicate entry points, no configuration for hypothetical teams.
+5. **Internal assumptions are fine.** No guest roles, no multi-tenancy, no
+   enterprise auth, no public links, no external channel fan-out.
+6. **Defer the stretch items already marked in each plan** (for example ACP,
+   native session adapters, custom chart types, cross-version restore,
+   third-party importer fidelity, custom fields typing).
+7. **Finish one PR before starting the next.** Each PR ships with its plan's
+   checks + a real end-to-end test of the changed flow; screenshots where the UI
+   changed.
+8. **If a plan starts growing a second system inside itself, stop and split or
+   cut it.** The existing plan documents already list their follow-ups; use them.
 
-- **Built-in API Agent**: server-side loop using the existing Model API
-  settings; used when the desktop runner is offline.
-- **Delegation and review**: delegate a task to a workspace/personal agent,
-  human keeps ownership, approve / request changes / retry, Inbox
-  notifications.
-- **Token usage**: record and show tokens per run/thread; observe-only.
+## Why this is not the same as "only do three things"
 
-Defer from the original #79 plan: subscription-remaining UI, ACP adapter,
-native harness resume/session contract, governance/audit, automation triggers,
-A2A.
+The earlier lean proposal cut features to match the team size. That was the
+wrong reading: the 14 PRs are the agreed product scope; the five-person
+constraint only changes **how much machinery each PR may add**. For example:
 
-Why now: it makes the Agent usable on the shared server without every person's
-desktop runner, and puts agent work on tasks where the team already looks.
+- #79 keeps delegation, review, built-in API agent and usage, but does not grow
+  a general agent-orchestration platform.
+- #80 keeps internal rules, but never grows a webhook/Slack integration layer.
+- U-10 keeps entity coverage and filters, but not a search query language or
+  analytics.
+- U-12 keeps health/backup/rollback, but not clustering/observability stack.
 
-### 2. Task UX essentials (trimmed U-09)
+## Not planned (do not add back without a new owner decision)
 
-Keep the two things five people will use daily:
-
-- Multi-select bulk edit: status, assignee, priority, labels, due date, project.
-- Display options: layout, grouping, ordering, property visibility per view
-  (personal, not shared).
-
-Defer: shared workspace/project views, view subscriptions, task templates,
-estimate field, cross-group drag complexity.
-
-Why: the team already lives in task lists/boards; bulk edit and a couple of
-display controls remove repetitive work without building a view platform.
-
-### 3. Operations essentials (trimmed U-12)
-
-Keep the safety net for the self-hosted/server setup:
-
-- System health page: version, DB size/integrity, disk, uptime, backup age.
-- Verified backup + restore from the UI, with typed confirmation and a safety
-  backup before restore.
-
-Defer: update channels/rollback UX, diagnostics bundle, runner admin page,
-signing/notarization, deploy preflight.
-
-Why: five people depend on the server; verified backups and a visible health
-page are cheap insurance. The rest of U-12 is platform polish.
-
-## Backlog (defer until asked)
-
-- **#77 Agent access + U-13 external API/MCP surface**: no external consumers
-  yet; built-in Agent does not need them.
-- **#80 internal automations**: integrations removed; rules can wait until
-  manual coordination is a real bottleneck.
-- **U-10 search**: current command palette/list search covers docs, tasks and
-  comments; corpus is small.
-- **U-11 collaboration**: comments/activity already work for five people;
-  threads/follow/workspace activity can wait.
-- **U-03 planning**: projects + due dates are enough for now; cycles,
-  milestones and initiatives are heavy.
-- **U-02 insights**: five people can see the work directly; no analytics.
-- **U-05 import/export**: no migration need; backups cover the safety case.
-- **U-04 documents depth**: current docs/editor/version/comments are strong;
-  backlinks/templates wait until the knowledge base is actually used.
-- **U-13b page API**: with #77/U-13.
-
-## Not planned
-
-- U-01 Sharing and permissions (internal only).
-- U-06 Enterprise/governance (5-person team).
-- U-07 External agents/A2A (internal agents only).
-- U-08 Channels/mobile (desktop only).
-- Slack, GitHub, webhook and all other integrations.
-
-## Recommended order
-
-1. Merge **#82 Inbox**.
-2. **Agent essentials** (one PR, three commits).
-3. **Task UX essentials** (one PR, two commits).
-4. **Operations essentials** (one PR, two commits).
-5. Revisit the backlog only when there is a concrete request.
-
-Each PR: tsc, i18n, `check:harness`, build, plus a real browser E2E of the
-changed flow; screenshots at 1440/1100 where UI changed.
+- Public/external sharing, guests, private projects (U-01).
+- SSO/SCIM/audit/retention (U-06).
+- External A2A agents (U-07).
+- Email/push/PWA/mobile/digests (U-08).
+- Slack/GitHub/webhook integrations.
