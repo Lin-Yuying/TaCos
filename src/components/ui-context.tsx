@@ -12,7 +12,7 @@ import {
 } from "react";
 import { listPinsAction } from "@/app/entity-actions";
 import { PERSONAL_STATE_CHANGED, type PersonalPin } from "@/lib/ui/entity-actions";
-import { usePathname, useSearchParams } from "next/navigation";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { exportLocalDrafts, useStoredJson } from "@/lib/use-stored-json";
 import { Modal } from "@/components/ui/modal";
 import { useT } from "@/components/i18n-context";
@@ -149,6 +149,7 @@ export function UIProvider({
 }) {
   const t = useT();
   const pathname = usePathname();
+  const router = useRouter();
   const params = useSearchParams();
   const scope = `${userId}.${workspaceId}`;
   const [density,setDensity]=useStoredJson<"compact"|"comfortable">(`tacos.density.${scope}`,"comfortable");
@@ -238,6 +239,19 @@ export function UIProvider({
         return;
       }
       if (e.defaultPrevented || document.querySelector('[role="dialog"], [role="menu"][data-state="open"]') || isTyping(e) || e.metaKey || e.ctrlKey || e.altKey) return;
+      // One search entry per surface: / is the search page, Cmd/Ctrl K is the palette.
+      if (e.key === "/") {
+        e.preventDefault();
+        if (paletteOpen) return;
+        const searchInput = document.querySelector<HTMLInputElement>('[data-testid="search-input"]');
+        if (searchInput && pathname.endsWith("/search")) {
+          searchInput.focus();
+          searchInput.select();
+          return;
+        }
+        router.push(`/${workspaceId}/search`);
+        return;
+      }
       if (e.key === "c") {
         e.preventDefault();
         setComposerOpen(true);
@@ -245,7 +259,7 @@ export function UIProvider({
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, []);
+  }, [paletteOpen, pathname, router, workspaceId, setComposerOpen]);
 
   const actions=useMemo(()=>({scope,confirm,toast,openIssue,closeIssue,openPage,closePage,setFocused,setComposerOpen}),[scope,confirm,toast,openIssue,closeIssue,openPage,closePage,setComposerOpen]);
   const pinState=useMemo(()=>({pins,keys:new Set(pins.map(pin=>`${pin.kind}:${pin.id}`))}),[pins]);
