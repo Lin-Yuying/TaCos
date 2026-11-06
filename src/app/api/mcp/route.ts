@@ -2,7 +2,7 @@ import { WebStandardStreamableHTTPServerTransport } from "@modelcontextprotocol/
 import { createMcpServer, MCP_READ_TOOL_NAMES, MCP_WRITE_TOOL_NAMES } from "../../../../mcp/create-server";
 import { assertKeyScope, errorResponse, requireApiKey } from "@/lib/api-auth";
 import { ApiKeyRateLimitError, takeApiKeyToken } from "@/lib/api-key-rate-limit";
-import { apiKeyHasScope, type ApiKeyRecord } from "@/lib/issues";
+import { apiKeyHasScope, TacosError, type ApiKeyRecord } from "@/lib/issues";
 
 type JsonRpcMessage = {
   jsonrpc?: string;
@@ -30,15 +30,15 @@ function toolCalls(messages: JsonRpcMessage[] | null): Array<JsonRpcMessage & { 
   );
 }
 
-// A tool call draws from the same read/write bucket as the REST surface. initialize,
-// tools/list and ping are cheap and do not consume a token.
-function toolCallMode(messages: JsonRpcMessage[] | null): "read" | "write" | null {
-  let mode: "read" | "write" | null = null;
+// Every tool call draws from the same read/write bucket as the REST surface, including
+// each call in a JSON-RPC batch. initialize, tools/list and ping consume no token.
+function toolCallModes(messages: JsonRpcMessage[] | null): Array<"read" | "write"> {
+  const modes: Array<"read" | "write"> = [];
   for (const call of toolCalls(messages)) {
-    if ((MCP_WRITE_TOOL_NAMES as readonly string[]).includes(call.params.name)) return "write";
-    if ((MCP_READ_TOOL_NAMES as readonly string[]).includes(call.params.name)) mode = "read";
+    if ((MCP_WRITE_TOOL_NAMES as readonly string[]).includes(call.params.name)) modes.push("write");
+    else if ((MCP_READ_TOOL_NAMES as readonly string[]).includes(call.params.name)) modes.push("read");
   }
-  return mode;
+  return modes;
 }
 
 // A read-only key does not register write tools, so a write call would only say
@@ -90,9 +90,14 @@ export async function POST(req: Request) {
     if (readOnly) {
       const denied = readOnlyToolCallError(messages);
       if (denied) return Response.json(denied);
+      if (toolCallModes(messages).includes("write")) {
+        throw new TacosError(
+          'This API key is read-only. Create a key with the "write" scope in Settings → Advanced → Agent access to change data.',
+          403
+        );
+      }
     }
-    const mode = toolCallMode(messages);
-    if (mode) {
+    for (const mode of toolCallModes(messages)) {
       assertKeyScope(key, mode);
       const limited = takeApiKeyToken(key.id, mode);
       if (!limited.ok) throw new ApiKeyRateLimitError(limited.retryAfterSeconds);
@@ -107,6 +112,7 @@ export async function POST(req: Request) {
     readOnly,
     allowedProjectIds: key.projectIds,
     toolFilter: null,
+    viewerId: key.createdBy,
   });
   // Stateless: one server and transport per POST, no session id, no server-initiated
   // notifications. Stateful sessions are explicitly a follow-up.

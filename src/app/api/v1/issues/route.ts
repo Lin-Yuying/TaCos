@@ -70,7 +70,7 @@ export async function POST(req: Request) {
         { status: 400 }
       );
     }
-    const projects = await listProjects(key.workspaceId);
+    const projects = await listProjects(key.workspaceId, key.createdBy);
     const allowlist = key.projectIds;
     const allowedProjects =
       allowlist === null ? projects : projects.filter((project) => allowlist.includes(project.id));

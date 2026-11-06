@@ -6,6 +6,7 @@
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { eq } from "drizzle-orm";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 
@@ -50,9 +51,23 @@ async function main() {
     role: "admin",
     createdAt: at,
   });
+  await db.insert(users).values({
+    id: "http-outsider",
+    username: "httpoutsider",
+    displayName: "HTTP Outsider",
+    passwordHash: "x",
+    createdAt: at,
+  });
+  await db.insert(workspaceMembers).values({
+    workspaceId: "http-ws",
+    userId: "http-outsider",
+    role: "member",
+    createdAt: at,
+  });
   const projectA = { id: "http-a", workspaceId: "http-ws", key: "HA", name: "Alpha", createdBy: "http-user", createdAt: at };
   const projectB = { id: "http-b", workspaceId: "http-ws", key: "HB", name: "Beta", createdBy: "http-user", createdAt: at };
-  await db.insert(projects).values([projectA, projectB] as never);
+  const projectC = { id: "http-c", workspaceId: "http-ws", key: "HC", name: "Hidden", createdBy: "http-outsider", createdAt: at };
+  await db.insert(projects).values([projectA, projectB, projectC] as never);
   for (let index = 0; index < 3; index++) {
     await db.insert(labels).values({
       id: `http-label-${index}`,
@@ -62,11 +77,23 @@ async function main() {
       createdAt: at,
     });
   }
+  for (const name of ["a", "B", "中"]) {
+    await db.insert(labels).values({
+      id: `http-label-${name}`,
+      workspaceId: "http-ws",
+      name,
+      color: "#5e6ad2",
+      createdAt: at,
+    });
+  }
   const actor = { kind: "user" as const, userId: "http-user", displayName: "HTTP User" };
   for (let index = 1; index <= 3; index++) {
     await createIssue("http-ws", { title: `Alpha ${index}`, project: "HA" }, actor);
   }
   await createIssue("http-ws", { title: "Beta 1", project: "HB" }, actor);
+  const outsiderActor = { kind: "user" as const, userId: "http-outsider", displayName: "HTTP Outsider" };
+  await createIssue("http-ws", { title: "Outsider only", project: "HC" }, outsiderActor);
+  await db.update(workspaces).set({ membersSeeAllTasks: 0 }).where(eq(workspaces.id, "http-ws"));
 
   const writer = await createApiKey("http-ws", "http-writer", ["read", "write"], null, 90, "http-user");
   const reader = await createApiKey("http-ws", "http-reader", ["read"], null, 90, "http-user");
@@ -120,15 +147,21 @@ async function main() {
   const firstIds = new Set(first.issues.map((issue) => issue.id));
   assert(second.issues.every((issue) => !firstIds.has(issue.id)), "the cursor returns the next page");
 
-  const labelsPage = await writeClient.callTool({ name: "list_labels", arguments: { limit: 1 } });
-  const labelsFirst = labelsPage.structuredContent as { labels: Array<{ id: string }>; nextCursor: string | null };
-  assert(labelsFirst.labels.length === 1 && labelsFirst.nextCursor, "list_labels paginates");
-  const labelsNext = await writeClient.callTool({
-    name: "list_labels",
-    arguments: { limit: 1, cursor: labelsFirst.nextCursor },
-  });
-  const labelsSecond = labelsNext.structuredContent as { labels: Array<{ id: string }> };
-  assert(labelsSecond.labels[0]?.id !== labelsFirst.labels[0]?.id, "the label cursor advances");
+  const seenLabels: string[] = [];
+  let labelCursor: string | null = null;
+  for (let page = 0; page < 10; page++) {
+    const labelsPage = await writeClient.callTool({
+      name: "list_labels",
+      arguments: { limit: 1, ...(labelCursor ? { cursor: labelCursor } : {}) },
+    });
+    const body = labelsPage.structuredContent as { labels: Array<{ id: string }>; nextCursor: string | null };
+    assert(body.labels.length === 1, `label page ${page} has one row`);
+    seenLabels.push(body.labels[0].id);
+    labelCursor = body.nextCursor;
+    if (!labelCursor) break;
+  }
+  assert(!labelCursor, "label pagination terminates");
+  assert(new Set(seenLabels).size === 6, `label pages cover mixed-case/Unicode labels: ${seenLabels.join(",")}`);
 
   const readClient = await connect(reader.key);
   const readNames = (await readClient.listTools()).tools.map((tool) => tool.name).sort();
@@ -158,10 +191,60 @@ async function main() {
     arguments: { title: "Elsewhere", project: "HB" },
   });
   assert(outsideWrite.isError === true, "a project-scoped key cannot create in another project");
+  for (const [tool, args] of [
+    ["update_issue", { id: "HB-1", title: "nope" }],
+    ["delete_issue", { id: "HB-1" }],
+    ["add_comment", { id: "HB-1", body: "nope" }],
+  ] as const) {
+    const result = await scopedClient.callTool({ name: tool, arguments: args });
+    assert(result.isError === true, `a project-scoped key cannot ${tool} another project`);
+  }
 
   const projectsPage = await writeClient.callTool({ name: "list_projects", arguments: { limit: 50 } });
   const projectResult = projectsPage.structuredContent as { projects: Array<{ key: string }> };
-  assert(projectResult.projects.length === 2, "list_projects returns both projects");
+  assert(projectResult.projects.length === 3, "list_projects returns every visible project");
+
+  // Task visibility off: a member's key must not see projects they cannot see in the UI.
+  const outsiderKey = await createApiKey("http-ws", "http-outsider", ["read", "write"], null, 90, "http-outsider");
+  const outsiderClient = await connect(outsiderKey.key);
+  const outsiderProjects = await outsiderClient.callTool({ name: "list_projects", arguments: { limit: 50 } });
+  const outsiderProjectRows = (outsiderProjects.structuredContent as { projects: Array<{ key: string }> }).projects;
+  assert(outsiderProjectRows.length === 1 && outsiderProjectRows[0].key === "HC", `visibility filters projects: ${outsiderProjectRows.map((project) => project.key).join(",")}`);
+  const outsiderIssues = await outsiderClient.callTool({ name: "list_issues", arguments: { limit: 50 } });
+  const outsiderIssueRows = (outsiderIssues.structuredContent as { issues: Array<{ title: string }> }).issues;
+  assert(outsiderIssueRows.length === 1 && outsiderIssueRows[0].title === "Outsider only", `visibility filters tasks: ${outsiderIssueRows.map((issue) => issue.title).join(",")}`);
+  for (const [tool, args] of [
+    ["get_issue", { id: "HA-1" }],
+    ["update_issue", { id: "HA-1", title: "hidden" }],
+    ["delete_issue", { id: "HA-1" }],
+    ["add_comment", { id: "HA-1", body: "hidden" }],
+    ["create_issue", { title: "hidden write", project: "HA" }],
+  ] as const) {
+    const result = await outsiderClient.callTool({ name: tool, arguments: args });
+    assert(result.isError === true, `visibility blocks MCP ${tool}`);
+  }
+  await outsiderClient.close();
+
+  // A JSON-RPC batch consumes one rate-limit token per tool call, not one per request.
+  const batchKey = await createApiKey("http-ws", "http-batch", ["read", "write"], null, 90, "http-user");
+  const batch = Array.from({ length: 61 }, (_, index) => ({
+    jsonrpc: "2.0",
+    id: index + 1,
+    method: "tools/call",
+    params: { name: "create_issue", arguments: { title: `batch ${index}`, project: "HA" } },
+  }));
+  const batchResponse = await POST(
+    new Request("http://tacos.test/api/mcp", {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        accept: "application/json, text/event-stream",
+        authorization: `Bearer ${batchKey.key}`,
+      },
+      body: JSON.stringify(batch),
+    })
+  );
+  assert(batchResponse.status === 429, `batch rate limit is per tool call, got ${batchResponse.status}`);
 
   const unauthorized = await POST(
     new Request("http://tacos.test/api/mcp", {
@@ -176,7 +259,7 @@ async function main() {
   await readClient.close();
   await scopedClient.close();
   console.log(
-    "check-mcp-http: pass (10 tools, annotations, output schema, cursor pagination, read-only rejection, project allowlist, 401)"
+    "check-mcp-http: pass (10 tools, annotations, output schema, cursor pagination, mixed-case labels, read-only rejection, project allowlist, task visibility, batch rate limit, 401)"
   );
 }
 

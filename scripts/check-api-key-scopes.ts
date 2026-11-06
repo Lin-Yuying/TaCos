@@ -102,6 +102,19 @@ async function main() {
     await createIssue("scope-ws", { title: `Alpha ${index}`, project: "SA" }, actor);
   }
   await createIssue("scope-ws", { title: "Beta 1", project: "SB" }, actor);
+  await db.insert(projects).values({
+    id: "scope-c",
+    workspaceId: "scope-ws",
+    key: "SC",
+    name: "Member only",
+    createdBy: "plain-member",
+    createdAt: at,
+  } as never);
+  await createIssue(
+    "scope-ws",
+    { title: "Member only task", project: "SC" },
+    { kind: "user" as const, userId: "plain-member", displayName: "plain-member" }
+  );
 
   const readKey = await createApiKey("scope-ws", "reader", ["read"], null, 90, "owner");
   const projectKey = await createApiKey("scope-ws", "alpha-only", ["read", "write"], ["scope-a"], 90, "owner");
@@ -195,7 +208,7 @@ async function main() {
   assert(meResult.status === 200, `/me: ${meResult.status}`);
   const meBody = objectBody(meResult);
   assert((meBody.scopes as string[]).join(",") === "read", `/me scopes: ${String(meBody.scopes)}`);
-  assert(meBody.projectIds === null && meBody.projectCount === 2, `/me projects: ${String(meBody.projectCount)}`);
+  assert(meBody.projectIds === null && meBody.projectCount === 3, `/me projects: ${String(meBody.projectCount)}`);
   assert(typeof meBody.expiresAt === "string", "/me expiry");
   assert(String(meBody.keyPrefix).startsWith("tac_"), `/me prefix: ${String(meBody.keyPrefix)}`);
   assert(String(meBody.last4).length === 4, `/me last4: ${String(meBody.last4)}`);
@@ -231,7 +244,46 @@ async function main() {
   const otherResult = await call(listIssues, otherKey.key, "/api/v1/issues");
   assert(otherResult.status === 200, "another key has its own bucket");
 
-  // 8. No key is 401.
+  // 8. Task visibility off: a member key only sees its own project, and the
+  // no-project create default must pick a visible project, not an admin's.
+  await db.update(workspaces).set({ membersSeeAllTasks: 0 }).where(eq(workspaces.id, "scope-ws"));
+  const memberListKey = await createApiKey("scope-ws", "member-visible", ["read", "write"], null, 90, "plain-member");
+  const memberList = await call(listIssues, memberListKey.key, "/api/v1/issues");
+  assert(memberList.status === 200, `member list: ${memberList.status}`);
+  const memberIssues = arrayBody<{ projectId: string; title: string }>(memberList.body);
+  assert(
+    memberIssues.length === 1 && memberIssues[0].projectId === "scope-c",
+    `member list is visibility-filtered: ${memberIssues.map((issue) => issue.title).join(",")}`
+  );
+  const memberMe = objectBody(await call(me, memberListKey.key, "/api/v1/me"));
+  assert(memberMe.projectCount === 1, `member /me projectCount: ${String(memberMe.projectCount)}`);
+  const hiddenCreate = await call(createIssueRoute, memberListKey.key, "/api/v1/issues", {
+    method: "POST",
+    body: { title: "hidden default", project: "SB" },
+  });
+  assert(hiddenCreate.status === 403 || hiddenCreate.status === 404, `member cannot create in hidden project: ${hiddenCreate.status}`);
+  const defaultCreate = await call(createIssueRoute, memberListKey.key, "/api/v1/issues", {
+    method: "POST",
+    body: { title: "member default" },
+  });
+  assert(
+    defaultCreate.status === 201 && objectBody(defaultCreate).projectId === "scope-c",
+    `no-project create picks a visible project: ${defaultCreate.status} ${JSON.stringify(objectBody(defaultCreate).projectId)}`
+  );
+  const hiddenAllowlist = await createApiKey(
+    "scope-ws",
+    "member-hidden-allowlist",
+    ["read"],
+    ["scope-a"],
+    90,
+    "plain-member"
+  ).catch((error) => error as Error);
+  assert(
+    hiddenAllowlist instanceof Error,
+    `member cannot mint a key scoped to a hidden project: ${hiddenAllowlist}`
+  );
+
+  // 9. No key is 401.
   const missing = await call(listIssues, null, "/api/v1/issues");
   assert(missing.status === 401, `missing key is 401, got ${missing.status}`);
 

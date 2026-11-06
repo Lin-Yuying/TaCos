@@ -2,6 +2,8 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import {
   addComment,
+  assertSeesIssue,
+  assertSeesProject,
   createIssue,
   createLabel,
   deleteIssue,
@@ -32,6 +34,8 @@ export type CreateMcpServerOptions = {
   readOnly: boolean;
   // null means every project in the workspace.
   allowedProjectIds: string[] | null;
+  // The key creator; applies the workspace task-visibility rule. Null = trusted stdio.
+  viewerId: string | null;
   // TACOS_MCP_TOOLS: when set, only these tool names register.
   toolFilter: string[] | null;
 };
@@ -89,6 +93,10 @@ function parsePriority(value?: string | number): Priority | undefined {
   const priority = normalizePriority(value);
   if (priority === null) throw new Error(`Invalid priority "${value}". Valid priorities: ${PRIORITY_HELP}`);
   return priority;
+}
+
+function compareText(a: string, b: string): number {
+  return a < b ? -1 : a > b ? 1 : 0;
 }
 
 function pageLimit(value: number | undefined, fallback = PAGE_DEFAULT): number {
@@ -157,7 +165,7 @@ const deleteAnnotations = { ...createAnnotations, destructiveHint: true };
 const itemSchema = z.record(z.string(), z.unknown());
 
 export function createMcpServer(options: CreateMcpServerOptions): McpServer {
-  const { workspaceId, actor, readOnly, allowedProjectIds, toolFilter } = options;
+  const { workspaceId, actor, readOnly, allowedProjectIds, toolFilter, viewerId } = options;
   const server = new McpServer({ name: "tacos", version: "0.3.0" });
 
   function enabled(name: string): boolean {
@@ -173,7 +181,7 @@ export function createMcpServer(options: CreateMcpServerOptions): McpServer {
   }
 
   async function resolveProject(project?: string) {
-    const projects = await listProjects(workspaceId);
+    const projects = await listProjects(workspaceId, viewerId ?? undefined);
     const allowed =
       allowedProjectIds === null
         ? projects
@@ -184,7 +192,7 @@ export function createMcpServer(options: CreateMcpServerOptions): McpServer {
       }
       return allowed[0];
     }
-    const found = await getProject(workspaceId, project);
+    const found = await getProject(workspaceId, project, viewerId ?? undefined);
     if (!found) throw new Error(`Project "${project}" not found`);
     if (allowedProjectIds !== null && !allowedProjectIds.includes(found.id)) {
       throw projectAllowedError(found.key);
@@ -195,11 +203,12 @@ export function createMcpServer(options: CreateMcpServerOptions): McpServer {
   // A task route names the task, so the allowlist is checked before any write. A missing
   // task is left to the business call, which owns that error message.
   async function assertIssueAllowed(idOrIdentifier: string): Promise<void> {
+    if (viewerId) await assertSeesIssue(workspaceId, idOrIdentifier, viewerId);
     if (allowedProjectIds === null) return;
     const row = await findIssueRow(workspaceId, idOrIdentifier);
     if (!row) return;
     if (!allowedProjectIds.includes(row.projectId)) {
-      const project = await getProject(workspaceId, row.projectId);
+      const project = await getProject(workspaceId, row.projectId, viewerId ?? undefined);
       throw projectAllowedError(project?.key ?? row.projectId);
     }
   }
@@ -245,8 +254,9 @@ export function createMcpServer(options: CreateMcpServerOptions): McpServer {
             label,
             projectId: resolved?.id,
             projectIds: allowedProjectIds ?? undefined,
+            viewerId: viewerId ?? undefined,
             assigneeId,
-            limit: limit ? pageLimit(limit, 100) : undefined,
+            limit: limit !== undefined ? pageLimit(limit, 100) : undefined,
             cursor,
           });
           return ok({
@@ -286,7 +296,7 @@ export function createMcpServer(options: CreateMcpServerOptions): McpServer {
       async ({ id }) =>
         guard(async () => {
           await assertIssueAllowed(id);
-          const detail = await getIssueDetail(workspaceId, id);
+          const detail = await getIssueDetail(workspaceId, id, viewerId ?? undefined);
           if (!detail) throw new Error(`Issue "${id}" not found`);
           return ok({
             ...detail.issue,
@@ -493,7 +503,7 @@ export function createMcpServer(options: CreateMcpServerOptions): McpServer {
             pageLimit(limit),
             cursor,
             (label) => ({ k: label.name, id: label.id }),
-            (a, b) => a.name.localeCompare(b.name) || a.id.localeCompare(b.id)
+            (a, b) => compareText(a.name, b.name) || compareText(a.id, b.id)
           );
           return ok({ labels: page, nextCursor });
         })
@@ -535,7 +545,7 @@ export function createMcpServer(options: CreateMcpServerOptions): McpServer {
       },
       async ({ limit, cursor }) =>
         guard(async () => {
-          const projects = await listProjects(workspaceId);
+          const projects = await listProjects(workspaceId, viewerId ?? undefined);
           const allowed =
             allowedProjectIds === null
               ? projects
@@ -545,7 +555,7 @@ export function createMcpServer(options: CreateMcpServerOptions): McpServer {
             pageLimit(limit),
             cursor,
             (project) => ({ k: project.key, id: project.id }),
-            (a, b) => a.key.localeCompare(b.key) || a.id.localeCompare(b.id)
+            (a, b) => compareText(a.key, b.key) || compareText(a.id, b.id)
           );
           return ok({ projects: page, nextCursor });
         })
@@ -576,7 +586,7 @@ export function createMcpServer(options: CreateMcpServerOptions): McpServer {
             pageLimit(limit),
             cursor,
             (member) => ({ k: member.username, id: member.id }),
-            (a, b) => a.username.localeCompare(b.username) || a.id.localeCompare(b.id)
+            (a, b) => compareText(a.username, b.username) || compareText(a.id, b.id)
           );
           return ok({ members: page, nextCursor });
         })

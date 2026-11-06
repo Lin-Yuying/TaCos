@@ -14,7 +14,7 @@ import { pendingApiKeyUsage } from "./api-key-usage";
 const DOCS_HINT = "Create a key in Settings → Agent access, then send header Authorization: Bearer <key>";
 const SCOPE_HINT = 'Create a key with the "write" scope in Settings → Agent access, or use its read-only key for reads.';
 const PROJECT_HINT =
-  'Create a key that includes this project in Settings → Agent access, or edit the existing key\'s project allowlist.';
+  'Create a key that includes this project in Settings → Advanced → Agent access.';
 
 function extractRawKey(req: Request): string {
   const header = req.headers.get("authorization") ?? "";
@@ -29,7 +29,7 @@ export function requestIp(req: Request): string | null {
   return req.headers.get("x-real-ip")?.trim() || null;
 }
 
-export type ApiKeyRequestMode = "auto" | "read" | "write" | "none";
+export type ApiKeyRequestMode = "read" | "write" | "none";
 
 // Verifies the key, updates lastUsedAt/IP, enforces its scope and per-key rate limit.
 // `mode: "none"` leaves the scope and rate-limit check to the caller (the MCP endpoint
@@ -47,7 +47,7 @@ export async function requireApiKey(
   const mode =
     options.mode ??
     (req.method === "GET" || req.method === "HEAD" ? "read" : "write");
-  if (mode !== "auto" && mode !== "none") {
+  if (mode !== "none") {
     assertKeyScope(record, mode);
     const limited = takeApiKeyToken(record.id, mode);
     if (!limited.ok) throw new ApiKeyRateLimitError(limited.retryAfterSeconds);

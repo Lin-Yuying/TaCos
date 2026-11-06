@@ -36,6 +36,7 @@ async function main() {
     readOnly: READ_ONLY,
     allowedProjectIds: null,
     toolFilter: TOOL_FILTER,
+    viewerId: null,
   });
   const transport = new StdioServerTransport();
   await server.connect(transport);
