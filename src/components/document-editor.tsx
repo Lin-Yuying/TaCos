@@ -10,6 +10,7 @@ import type { EditorState } from "@tiptap/pm/state";
 import { BubbleMenu } from "@tiptap/react/menus";
 import { Extension } from "@tiptap/core";
 import { Plugin, PluginKey } from "@tiptap/pm/state";
+import type { Node as PMNode } from "@tiptap/pm/model";
 import { Decoration, DecorationSet } from "@tiptap/pm/view";
 import Collaboration from "@tiptap/extension-collaboration";
 import CollaborationCaret from "@tiptap/extension-collaboration-caret";
@@ -48,6 +49,7 @@ import type { Member } from "@/lib/issues";
 import { BLOCK_TURNS, canTurnBlock, turnBlock } from "@/lib/editor/block-turn";
 import { incrementalMarkdown } from "@/lib/editor/incremental-markdown";
 import { documentMarkdown, markdownToDocument } from "@/lib/editor/document-markdown";
+import { outlineHeadings } from "@/lib/doc-outline";
 import { anchorFromSelection, anchorRanges } from "@/lib/editor/anchors";
 import type { DocAnchor } from "@/lib/doc-anchor";
 import type { DocCollab } from "@/components/use-doc-collab";
@@ -346,6 +348,79 @@ function PageRefNode({ node, extension }: NodeViewProps) {
 
 export type EditorAnchor = DocAnchor & { id: string };
 
+const headingsKey = new PluginKey<DecorationSet>("documentHeadings");
+
+// The `#` in a heading's left margin. It is a widget, not document content: copying the
+// link never changes the Markdown and collaboration never sees it.
+function headingAnchor(id: string, copyLabel: string, base: string): HTMLElement {
+  const button = document.createElement("button");
+  button.type = "button";
+  button.contentEditable = "false";
+  button.dataset.headingAnchor = id;
+  button.className = "doc-heading-anchor";
+  button.textContent = "#";
+  button.title = copyLabel;
+  button.setAttribute("aria-label", copyLabel);
+  button.addEventListener("mousedown", (event) => event.preventDefault());
+  button.addEventListener("click", (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+    const href = `${window.location.origin}${base || window.location.pathname}?heading=${encodeURIComponent(id)}`;
+    void navigator.clipboard?.writeText(href).then(() => {
+      button.dataset.copied = "true";
+      button.textContent = "✓";
+      window.setTimeout(() => {
+        delete button.dataset.copied;
+        button.textContent = "#";
+      }, 1200);
+    }).catch(() => {});
+  });
+  return button;
+}
+
+// The same text the Markdown outline reads. Atom nodes (a page reference, a task or a
+// mention) have no text content of their own, so their visible label fills in.
+function headingText(node: PMNode): string {
+  let out = "";
+  node.forEach((child) => {
+    if (child.isText) out += child.text ?? "";
+    else if (child.type.name === "pageRef") out += String(child.attrs.title ?? "");
+    else if (child.type.name === "issueRef") out += String(child.attrs.label ?? "");
+    else if (child.type.name === "mention" || child.type.name === "docMention")
+      out += `@${String(child.attrs.id ?? "")}`;
+    else out += child.textContent;
+  });
+  return out;
+}
+
+function headingDecorations(doc: PMNode, copyLabel: string, base: string): DecorationSet {
+  const headings: { level: number; text: string }[] = [];
+  doc.descendants((node) => {
+    if (node.type.name === "heading") {
+      headings.push({ level: Number(node.attrs.level) || 1, text: headingText(node) });
+    }
+  });
+  const outline = outlineHeadings(headings);
+  const decorations: Decoration[] = [];
+  let index = 0;
+  doc.descendants((node, pos) => {
+    if (node.type.name !== "heading") return;
+    const heading = outline[index++];
+    if (!heading) return;
+    decorations.push(
+      Decoration.node(pos, pos + node.nodeSize, {
+        class: "doc-heading",
+        id: heading.id,
+        "data-doc-heading": heading.id,
+      })
+    );
+    decorations.push(
+      Decoration.widget(pos + 1, () => headingAnchor(heading.id, copyLabel, base), { side: -10 })
+    );
+  });
+  return DecorationSet.create(doc, decorations);
+}
+
 /** Text from outside the editor, for a shared document where the page state cannot carry it. */
 export type OutsideEdit = { at: "start" | "end" | "all"; text: string };
 
@@ -434,6 +509,7 @@ export function DocumentEditor({
   editorRef,
   onEditorReady,
   outsideEditRef,
+  headingBase = "",
 }: {
   editorRef?: { current: Editor | null };
   onEditorReady?:(editor:Editor|null)=>void;
@@ -457,6 +533,8 @@ export function DocumentEditor({
   collab?: Extract<DocCollab, { doc: unknown }>;
   // Filled with the call that puts outside text into the editor and so into a shared document.
   outsideEditRef?: RefObject<((edit: OutsideEdit) => void) | null>;
+  // Canonical path of this document ("/<workspace>/docs/<page>"); heading links point here.
+  headingBase?: string;
 }) {
   const t = useT();
   const router = useRouter();
@@ -689,6 +767,28 @@ export function DocumentEditor({
     [embedPages],
   );
 
+  const headings = useMemo(() => {
+    const copyLabel = t("Copy link to heading");
+    return Extension.create({
+      name: "documentHeadings",
+      addProseMirrorPlugins() {
+        return [
+          new Plugin<DecorationSet>({
+            key: headingsKey,
+            state: {
+              init: (_, state) => headingDecorations(state.doc, copyLabel, headingBase),
+              apply: (tr, set) =>
+                tr.docChanged ? headingDecorations(tr.doc, copyLabel, headingBase) : set,
+            },
+            props: {
+              decorations: (state) => headingsKey.getState(state),
+            },
+          }),
+        ];
+      },
+    });
+  }, [headingBase, t]);
+
   const insertRef = useRef<(files: File[], at?: number) => void>(() => {});
   const dropFiles = (files: FileList | undefined | null, at?: number) => {
     if (!files?.length || !uploadRef.current) return false;
@@ -700,7 +800,7 @@ export function DocumentEditor({
     immediatelyRender: false,
     extensions: [
       ...documentExtensions({ sharedHistory: Boolean(collab), mention, embed, pageRef }),
-      Placeholder.configure({ placeholder: placeholder ?? "" }), UploadMarkers, slash, pageLink, CommentAnchors.configure({ store: anchorStore }),
+      Placeholder.configure({ placeholder: placeholder ?? "" }), UploadMarkers, slash, pageLink, headings, CommentAnchors.configure({ store: anchorStore }),
       ...(collab
         ? [
             Collaboration.configure({ document: collab.doc }),

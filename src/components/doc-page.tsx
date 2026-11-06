@@ -11,11 +11,12 @@ import type { Editor } from "@tiptap/react";
 import { documentMarkdown, markdownToDocument } from "@/lib/editor/document-markdown";
 import { useDraft } from "@/lib/ui/draft-store";
 import { useRouter,useSearchParams } from "next/navigation";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   History,
   FileText,
   Link2,
+  ListTree,
   Lock,
   Maximize2,
   MessageSquare,
@@ -34,6 +35,7 @@ import { DocumentEditor, type EditorAnchor, type OutsideEdit } from "@/component
 import { useDocCollab } from "@/components/use-doc-collab";
 import { DocCommentsPanel } from "@/components/doc-comments";
 import { DocLinksPanel } from "@/components/doc-links";
+import { DocOutlinePanel } from "@/components/doc-outline";
 import { DocShareMenu } from "@/components/doc-share";
 import { AssigneeAvatar } from "@/components/issue-table";
 import { AiEditPanel } from "@/components/ai-assist";
@@ -55,6 +57,7 @@ import {
 } from "@/app/pages-actions";
 import { announceDocsDeleted } from "@/components/tab-events";
 import type { DocAnchor } from "@/lib/doc-anchor";
+import { docOutline } from "@/lib/doc-outline";
 import { levelAllows, type PageLevel } from "@/lib/page-level";
 import type { Member } from "@/lib/issues";
 import type { PageComment } from "@/lib/page-comments";
@@ -121,7 +124,7 @@ export function DocPageView({
 }) {
   const t = useT();
   const router = useRouter();
-  const params=useSearchParams(),requestedComment=params.get("comment");
+  const params=useSearchParams(),requestedComment=params.get("comment"),requestedHeading=params.get("heading");
   const { aiReady, confirm,scope } = useUI();
   const [recent,setRecent]=useStoredJson<string[]>(`tacos.recent-documents.${scope}`,[]);
   useEffect(()=>{const frame=requestAnimationFrame(()=>setRecent(old=>[page.id,...old.filter(id=>id!==page.id)].slice(0,50)));return()=>cancelAnimationFrame(frame);},[page.id,setRecent]);
@@ -146,7 +149,7 @@ export function DocPageView({
   const contentRef = useRef(doc); contentRef.current = doc;
   const [aiPanel, setAiPanel] = useState<{ x: number; y: number } | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [side, setSide] = useState<"updates" | "comments" | "links" | null>(null);
+  const [side, setSide] = useState<"updates" | "comments" | "links" | "outline" | null>(null);
   const [comments, setComments] = useState<PageComment[]>([]);
   const mergeComments=(patch:PageComment[],bodyOnly=false)=>setComments(previous=>{const byId=new Map(previous.map(row=>[row.id,row]));for(const row of patch){const current=byId.get(row.id);if(bodyOnly){if(current&&current.editedAt===row.editedAt&&current.deletedAt===row.deletedAt)byId.set(row.id,{...current,body:row.body,bodyLoaded:true});}else byId.set(row.id,row);}return [...byId.values()].sort((a,b)=>a.createdAt.localeCompare(b.createdAt)||a.id.localeCompare(b.id));});
   const refreshCommentIndex=(index:PageComment[])=>setComments(previous=>{const old=new Map(previous.map(row=>[row.id,row]));return index.map(row=>{const cached=old.get(row.id);return cached&&cached.editedAt===row.editedAt&&cached.deletedAt===row.deletedAt?{...row,body:cached.body,bodyLoaded:cached.bodyLoaded}:row;});});
@@ -448,6 +451,23 @@ export function DocPageView({
     [ctx, onOpenPage, addedEmbeds]
   );
   const placed = useMemo(() => placedPageKeys(doc), [doc]);
+  const outline = useMemo(() => docOutline(doc), [doc]);
+  const scrollToHeading = useCallback((id: string) => {
+    const heading = root.current?.querySelector<HTMLElement>(
+      `[data-doc-heading="${CSS.escape(id)}"]`
+    );
+    if (!heading) return;
+    heading.scrollIntoView({ block: "start" });
+    heading.classList.add("doc-heading-flash");
+    window.setTimeout(() => heading.classList.remove("doc-heading-flash"), 1600);
+  }, []);
+  // A copied "link to heading" opens this page with ?heading=<id>. Scroll once the editor
+  // has drawn the headings; a heading that no longer exists is a harmless no-op.
+  useEffect(() => {
+    if (!requestedHeading) return;
+    const frame = requestAnimationFrame(() => scrollToHeading(requestedHeading));
+    return () => cancelAnimationFrame(frame);
+  }, [requestedHeading, activeEditor, page.id, scrollToHeading]);
   const blockedDocMentions = useMemo(
     () => mentionedMembersWithoutAccess({ shared, createdBy: page.createdBy }, members, doc, { doc: true }),
     [shared, page.createdBy, members, doc]
@@ -555,6 +575,20 @@ export function DocPageView({
           >
             <Link2 size={12} />
             {!compact && t("Linked from")}
+          </button>
+          <button
+            type="button"
+            data-doc-outline-toggle
+            onClick={() => setSide((open) => (open === "outline" ? null : "outline"))}
+            title={t("Outline")}
+            aria-label={t("Outline")}
+            aria-pressed={side === "outline"}
+            className={`flex items-center gap-1 rounded-md border px-2 py-1 text-small font-medium transition-colors hover:border-border-strong hover:text-text ${
+              side === "outline" ? "border-border-strong text-text" : "border-border text-muted"
+            }`}
+          >
+            <ListTree size={12} />
+            {!compact && t("Outline")}
           </button>
           <button
             type="button"
@@ -891,6 +925,7 @@ export function DocPageView({
                   setSide("comments");
                 }}
                 onAnchorsLocated={setLocated}
+                headingBase={`/${workspaceId}/docs/${page.id}`}
                 onUpload={uploadFile}
               />
             )}
@@ -976,6 +1011,15 @@ export function DocPageView({
           pageId={page.id}
           compact={compact}
           onOpen={onOpenPage}
+          onClose={() => setSide(null)}
+        />
+      )}
+      {side === "outline" && (
+        <DocOutlinePanel
+          headings={outline}
+          compact={compact}
+          linkBase={`/${workspaceId}/docs/${page.id}`}
+          onSelect={scrollToHeading}
           onClose={() => setSide(null)}
         />
       )}

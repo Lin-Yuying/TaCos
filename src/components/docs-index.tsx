@@ -17,6 +17,7 @@ import { documentIndex } from "@/lib/ui/document-index";
 import { useStoredJson } from "@/lib/use-stored-json";
 import { useUI } from "@/components/ui-context";
 import type { PageMetadata } from "@/lib/pages";
+import type { UnresolvedPageLink } from "@/lib/page-links";
 import { useT } from "@/components/i18n-context";
 import { PAGE_INSET } from "@/lib/page-chrome";
 
@@ -34,9 +35,13 @@ function junkPath(path: string): boolean {
 export function DocsIndex({
   workspaceId,
   pages,
+  unresolvedLinks,
+  backlinkCounts,
 }: {
   workspaceId: string;
   pages: PageMetadata[];
+  unresolvedLinks: UnresolvedPageLink[];
+  backlinkCounts: Record<string, number>;
 }) {
   const t = useT();
   const router = useRouter();
@@ -102,6 +107,17 @@ export function DocsIndex({
             >
               <span className="shrink-0">{page.icon ?? <FileText size={14} className="text-muted" />}</span>
               <span className="min-w-0 flex-1"><span className="block truncate">{page.title}</span><span className="block truncate text-caption text-faint">{index.paths.get(page.id)}</span></span>
+              {backlinkCounts[page.id] > 0 && (
+                <span
+                  data-doc-backlink-count={backlinkCounts[page.id]}
+                  title={t("Linked from")}
+                  className="shrink-0 text-caption text-faint"
+                >
+                  {t(backlinkCounts[page.id] === 1 ? "{count} link" : "{count} links", {
+                    count: backlinkCounts[page.id],
+                  })}
+                </span>
+              )}
               <span className="ml-auto flex shrink-0 items-center gap-1 text-caption text-faint">
                 {page.shared ? <Users size={11} /> : <Lock size={11} />}
                 {page.shared ? t("Shared") : t("Private")}
@@ -193,6 +209,39 @@ export function DocsIndex({
         {!error && note && <div className="mt-3 text-small text-muted">{note}</div>}
         {section("shared", t("Shared"), sharedPages, t("No documents yet"))}
         {section("private", t("Private"), privatePages, t("No documents yet"))}
+        {unresolvedLinks.length > 0 && (
+          <section data-doc-unresolved className="mt-8">
+            <h2 className="text-small font-medium uppercase tracking-wider text-faint">
+              {t("Unresolved links")}
+            </h2>
+            <p className="mt-1 text-small text-muted">
+              {t("These references point at a document in the Trash or one that is no longer available.")}
+            </p>
+            <div className="mt-2 space-y-0.5">
+              {unresolvedLinks.map((link) => (
+                <div
+                  key={`${link.sourceId}:${link.targetPageId}`}
+                  data-doc-unresolved-link={`${link.sourceId}:${link.targetPageId}`}
+                  className="flex flex-wrap items-center gap-2 rounded-md px-2 py-1.5 text-body"
+                >
+                  <Link
+                    href={`/${workspaceId}/docs/${link.sourceId}`}
+                    className="min-w-0 truncate text-text underline decoration-border-strong underline-offset-2"
+                  >
+                    {link.sourceTitle}
+                  </Link>
+                  <span className="text-faint">→</span>
+                  <span
+                    title={t("Unresolved")}
+                    className="min-w-0 truncate text-muted underline decoration-dashed decoration-border-strong underline-offset-2"
+                  >
+                    {link.targetTitle || t("Untitled")}
+                  </span>
+                </div>
+              ))}
+            </div>
+          </section>
+        )}
       </div>
     </div>
   );

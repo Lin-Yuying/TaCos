@@ -1,0 +1,89 @@
+"use client";
+
+import { useState } from "react";
+import { Check, Copy, ListTree, X } from "lucide-react";
+import { SidePanel } from "@/components/ui/side-panel";
+import type { DocHeading } from "@/lib/doc-outline";
+import { useT } from "@/components/i18n-context";
+
+/** The reader's outline: jump within the document, and copy a link to one heading. */
+export function DocOutlinePanel({
+  headings,
+  compact,
+  linkBase,
+  onSelect,
+  onClose,
+}: {
+  headings: DocHeading[];
+  compact: boolean;
+  // Canonical path of the document, without a query string.
+  linkBase: string;
+  onSelect: (id: string) => void;
+  onClose: () => void;
+}) {
+  const t = useT();
+  const [copied, setCopied] = useState<string | null>(null);
+
+  function copy(id: string) {
+    const href = `${window.location.origin}${linkBase}?heading=${encodeURIComponent(id)}`;
+    void navigator.clipboard?.writeText(href).then(() => {
+      setCopied(id);
+      window.setTimeout(() => setCopied((current) => (current === id ? null : current)), 1200);
+    }).catch(() => {});
+  }
+
+  return (
+    <SidePanel name="document-outline" compact={compact}>
+      <aside
+        data-doc-outline
+        className={`flex min-h-0 flex-col border-l border-border bg-bg ${
+          compact ? "w-full border-l-0" : "w-full shrink-0"
+        }`}
+      >
+        <div className="flex h-10 shrink-0 items-center gap-1.5 border-b border-border px-3 text-body font-medium text-text">
+          <ListTree size={13} />
+          {t("Outline")}
+          <button
+            type="button"
+            onClick={onClose}
+            aria-label={t("Close outline")}
+            title={t("Close outline")}
+            className="ml-auto rounded p-1 text-muted hover:bg-elevated hover:text-text"
+          >
+            <X size={14} />
+          </button>
+        </div>
+        <div className="min-h-0 flex-1 overflow-y-auto p-2">
+          {headings.length === 0 ? (
+            <p className="p-2 text-small text-faint">{t("Add a heading with # to build an outline.")}</p>
+          ) : (
+            headings.map((heading) => (
+              <div key={heading.id} className="group flex items-center gap-1">
+                <button
+                  type="button"
+                  data-outline-item={heading.id}
+                  onClick={() => onSelect(heading.id)}
+                  style={{ paddingLeft: 8 + Math.max(0, heading.level - 1) * 10 }}
+                  title={heading.text}
+                  className="min-w-0 flex-1 truncate rounded px-1 py-1 text-left text-small text-muted transition-colors hover:bg-elevated/60 hover:text-text"
+                >
+                  {heading.text || t("Untitled")}
+                </button>
+                <button
+                  type="button"
+                  data-outline-copy={heading.id}
+                  onClick={() => copy(heading.id)}
+                  aria-label={t("Copy link to {title}", { title: heading.text })}
+                  title={t("Copy link to heading")}
+                  className="shrink-0 rounded p-1 text-faint opacity-0 transition-opacity hover:bg-elevated hover:text-text focus-visible:opacity-100 group-hover:opacity-100"
+                >
+                  {copied === heading.id ? <Check size={12} /> : <Copy size={12} />}
+                </button>
+              </div>
+            ))
+          )}
+        </div>
+      </aside>
+    </SidePanel>
+  );
+}

@@ -292,6 +292,29 @@ html[data-desktop] .app-auth-menu {
 .document-editor .ProseMirror th { background: var(--color-elevated); font-weight: 600; }
 .document-editor .ProseMirror p.is-editor-empty:first-child::before { content: attr(data-placeholder); float: left; height: 0; pointer-events: none; color: var(--color-faint); }
 
+/* Reader outline anchors. The # sits in the left margin so it never moves the text. */
+.document-editor .ProseMirror .doc-heading { position: relative; scroll-margin-top: 16px; }
+.document-editor .ProseMirror .doc-heading .doc-heading-anchor {
+  position: absolute;
+  left: -1.35rem;
+  top: 0.1em;
+  padding: 0 2px;
+  border-radius: 4px;
+  color: var(--color-faint);
+  font-weight: 500;
+  opacity: 0;
+  transition: opacity 120ms ease, color 120ms ease;
+}
+.document-editor .ProseMirror .doc-heading:hover .doc-heading-anchor,
+.document-editor .ProseMirror .doc-heading-anchor:focus-visible { opacity: 1; }
+.document-editor .ProseMirror .doc-heading-anchor:hover { color: var(--color-text); background: var(--color-elevated); }
+.document-editor .ProseMirror .doc-heading-anchor[data-copied="true"] { color: var(--color-accent); opacity: 1; }
+.document-editor .ProseMirror .doc-heading-flash { animation: doc-heading-flash 1.6s ease; }
+@keyframes doc-heading-flash {
+  0%, 40% { background: color-mix(in srgb, var(--color-accent) 14%, transparent); }
+  100% { background: transparent; }
+}
+
 /* FullCalendar reads its colours from these; the rest of its stylesheet comes with the package. */
 .task-calendar {
   --fc-classic-button: var(--color-elevated);
