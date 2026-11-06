@@ -257,6 +257,13 @@ function SidebarNav({
     (params.view ?? "all") === view &&
     (params.assignee ?? "") === assignee &&
     (params.project ?? "") === projectId;
+  // Active, Unassigned and Agent tasks became list-header quick filters, so the All
+  // Tasks row stays highlighted while one of them is on.
+  const allTasksActive =
+    active({ view: "all" }) ||
+    active({ view: "active" }) ||
+    active({ view: "agent" }) ||
+    active({ view: "all", assignee: "none" });
 
   return (
     <nav data-sidebar-nav className="flex-1 overflow-y-auto px-2 py-2 text-body">
@@ -306,29 +313,8 @@ function SidebarNav({
             >
               {t("Open Tasks")}
             </NavItem>
-            <NavItem href={link({ view: "all" })} active={active({ view: "all" })} icon={<List size={14} />}>
+            <NavItem href={link({ view: "all" })} active={allTasksActive} icon={<List size={14} />}>
               {t("All Tasks")}
-            </NavItem>
-            <NavItem
-              href={link({ view: "active" })}
-              active={active({ view: "active" })}
-              icon={<Activity size={14} />}
-            >
-              {t("Active")}
-            </NavItem>
-            <NavItem
-              href={link({ view: "all", assignee: "none" })}
-              active={active({ view: "all", assignee: "none" })}
-              icon={<UserRoundX size={14} />}
-            >
-              {t("Unassigned")}
-            </NavItem>
-            <NavItem
-              href={link({ view: "agent" })}
-              active={active({ view: "agent" })}
-              icon={<Bot size={14} />}
-            >
-              {t("Agent tasks")}
             </NavItem>
             <NavItem
               href={`/${workspaceId}/review`}
@@ -945,6 +931,11 @@ function SidebarRail({
     !searchParams.get("project") &&
     (params.view ?? "all") === view &&
     (params.assignee ?? "") === assignee;
+  const allTasksActive =
+    taskActive({ view: "all" }) ||
+    taskActive({ view: "active" }) ||
+    taskActive({ view: "agent" }) ||
+    taskActive({ view: "all", assignee: "none" });
   const docRoots = pages.filter((page) => !page.parentId);
   const sharedDocs = docRoots.filter((page) => page.shared);
   const privateDocs = docRoots.filter((page) => !page.shared);
@@ -1017,38 +1008,11 @@ function SidebarRail({
             <RailFlyoutLink
               key="all"
               href={`/${workspaceId}/?view=all`}
-              active={taskActive({ view: "all" })}
+              active={allTasksActive}
               icon={<List size={14} />}
               onSelect={close}
             >
               {t("All Tasks")}
-            </RailFlyoutLink>,
-            <RailFlyoutLink
-              key="active"
-              href={`/${workspaceId}/?view=active`}
-              active={taskActive({ view: "active" })}
-              icon={<Activity size={14} />}
-              onSelect={close}
-            >
-              {t("Active")}
-            </RailFlyoutLink>,
-            <RailFlyoutLink
-              key="unassigned"
-              href={`/${workspaceId}/?view=all&assignee=none`}
-              active={taskActive({ view: "all", assignee: "none" })}
-              icon={<UserRoundX size={14} />}
-              onSelect={close}
-            >
-              {t("Unassigned")}
-            </RailFlyoutLink>,
-            <RailFlyoutLink
-              key="agent"
-              href={`/${workspaceId}/?view=agent`}
-              active={taskActive({ view: "agent" })}
-              icon={<Bot size={14} />}
-              onSelect={close}
-            >
-              {t("Agent tasks")}
             </RailFlyoutLink>,
             <RailFlyoutLink
               key="review"

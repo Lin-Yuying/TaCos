@@ -15,7 +15,8 @@ Item-level checks stay cheap (types, check scripts). End-to-end tests and screen
 - Public components come first. npm lists these as MIT on 2026-11-05: `@tiptap/extension-drag-handle-react`, `@tiptap/extension-details`, `@tiptap/extension-color`, `@tiptap/extension-text-style`, `@tiptap/extension-highlight`, `@tiptap/extension-link`, `@tiptap/extension-code-block-lowlight`, `lowlight`.
 - A shared chat takes one turn at a time. A member can fork it from any message into their own private chat.
 - "Move forward with Agent" becomes "Work on it in chat" and sends the first message itself, only on a new empty chat. "Hand to my Agent" becomes "Hand to Agent in background" and keeps its behaviour. Writes still follow the approval level.
-- Sidebar order: Inbox, Agent; Tasks (My Tasks, Open Tasks, All Tasks, Active, Unassigned, Review); Projects; Documents (Shared, Private); Your team. Bottom: Help, Trash, Settings. Labels moves into Settings.
+- Sidebar order: Inbox, Agent; Tasks (My Tasks, Open Tasks, All Tasks, Review); Projects; Documents (Shared, Private); Your team. Bottom: Help, Trash, Settings. Labels moves into Settings.
+- Active, Unassigned and Agent tasks are quick filters in the task list header, not sidebar rows (2026-11-06).
 - Board columns run todo, in progress, done, canceled. List grouping keeps in progress first.
 - CodeBuddy tool loading (2026-11-05, CodeBuddy 2.171.0, one tool on a local stub): `alwaysLoad` with `--tools DeferExecuteTool` calls the tool directly in 3 of 3 runs, 4.3 to 12.1 s; the old setting went through ToolSearch in 3 of 3, 6.2 to 10.8 s. Two runs asked to write a file made none.
 - Local direct output, a document cache and a local replica are not in this plan. They wait for the timing data from item 2.
