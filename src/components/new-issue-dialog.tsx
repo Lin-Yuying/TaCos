@@ -1,5 +1,8 @@
 "use client";
 
+import { Modal } from "@/components/ui/modal";
+import { useDraft } from "@/lib/ui/draft-store";
+
 import { useEffect, useState } from "react";
 import { usePathname, useSearchParams } from "next/navigation";
 import { LoaderCircle, Sparkles, Users, X } from "lucide-react";
@@ -29,13 +32,13 @@ export function NewIssueDialog({ workspaceId }: { workspaceId: string }) {
   // Opened from a project's Overview page, the composer should stay in that project.
   const activeProjectId =
     searchParams.get("project") ?? pathname.match(/\/projects\/([^/]+)/)?.[1] ?? "";
-  const [title, setTitle] = useState("");
-  const [description, setDescription] = useState("");
-  const [status, setStatus] = useState<Status>("todo");
-  const [priority, setPriority] = useState<Priority>(0);
-  const [assigneeIds, setAssigneeIds] = useState<string[]>([]);
-  const [labelNames, setLabelNames] = useState<string[]>([]);
-  const [projectId, setProjectId] = useState<string>("");
+  const [title, setTitle] = useDraft("create-new-issue-dialog.tsx", "title", "");
+  const [description, setDescription] = useDraft("create-new-issue-dialog.tsx", "description", "");
+  const [status, setStatus] = useDraft<Status>("create-new-issue-dialog.tsx", "status", "todo");
+  const [priority, setPriority] = useDraft<Priority>("create-new-issue-dialog.tsx", "priority", 0);
+  const [assigneeIds, setAssigneeIds] = useDraft<string[]>("create-new-issue-dialog.tsx", "assigneeIds", []);
+  const [labelNames, setLabelNames] = useDraft<string[]>("create-new-issue-dialog.tsx", "labelNames", []);
+  const [projectId, setProjectId] = useDraft<string>("create-new-issue-dialog.tsx", "projectId", "");
   const [projects, setProjects] = useState<Project[]>([]);
   const [projectsLoaded, setProjectsLoaded] = useState(false);
   const [labels, setLabels] = useState<Label[]>([]);
@@ -49,12 +52,9 @@ export function NewIssueDialog({ workspaceId }: { workspaceId: string }) {
 
   useEffect(() => {
     if (!composerOpen) return;
-    setTitle(composerSeed?.title ?? "");
-    setDescription(composerSeed?.description ?? "");
-    setStatus(composerStatus ?? "todo");
-    setPriority(0);
-    setAssigneeIds([]);
-    setLabelNames([]);
+    if(composerSeed?.title !== undefined) setTitle(composerSeed.title);
+    if(composerSeed?.description !== undefined) setDescription(composerSeed.description);
+    if(composerStatus) setStatus(composerStatus);
     setError(null);
     setBusy(false);
     setAiOpen(false);
@@ -67,7 +67,7 @@ export function NewIssueDialog({ workspaceId }: { workspaceId: string }) {
       .then((data: Project[]) => {
         setProjects(data);
         setProjectId(
-          data.find((p) => p.id === activeProjectId)?.id ?? data[0]?.id ?? ""
+          data.find((p) => p.id === (projectId || activeProjectId))?.id ?? data[0]?.id ?? ""
         );
       })
       .catch(() => setProjects([]))
@@ -82,18 +82,6 @@ export function NewIssueDialog({ workspaceId }: { workspaceId: string }) {
       .catch(() => setMembers([]));
   }, [composerOpen, composerStatus, composerSeed, workspaceId, activeProjectId]);
 
-  useEffect(() => {
-    if (!composerOpen) return;
-    const onKey = (e: KeyboardEvent) => {
-      // The new project dialog opens on top of this one and closes first.
-      if (e.key === "Escape" && !projectComposerOpen) {
-        e.preventDefault();
-        setComposerOpen(false);
-      }
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [composerOpen, projectComposerOpen, setComposerOpen]);
 
   if (!composerOpen) return null;
 
@@ -121,6 +109,7 @@ export function NewIssueDialog({ workspaceId }: { workspaceId: string }) {
     if (result.ok) {
       // Pages that opened the composer from a passage use this to drop the task
       // reference exactly where the passage was.
+      setTitle("");setDescription("");setStatus("todo");setPriority(0);setAssigneeIds([]);setLabelNames([]);
       composerSeed?.onCreated?.(result.data);
       setComposerOpen(false);
       openIssue(result.data.id);
@@ -156,13 +145,11 @@ export function NewIssueDialog({ workspaceId }: { workspaceId: string }) {
   }
 
   return (
-    <>
-      <div className="fixed inset-0 z-40 bg-black/40" onClick={() => setComposerOpen(false)} />
-      <div className="fixed inset-x-0 top-[12vh] z-50 mx-auto w-[640px] max-w-[94vw]">
+    <Modal open={composerOpen} onClose={() => {if(!busy)setComposerOpen(false);}} title={t("New task")}>
         <div
           className="rounded-xl border border-border bg-overlay shadow-2xl shadow-black/15"
           onKeyDown={(e) => {
-            if ((e.metaKey || e.ctrlKey) && e.key === "Enter") {
+            if ((e.metaKey || e.ctrlKey) && e.key === "Enter" && !e.nativeEvent.isComposing && e.nativeEvent.keyCode !== 229) {
               e.preventDefault();
               void submit();
             }
@@ -193,7 +180,7 @@ export function NewIssueDialog({ workspaceId }: { workspaceId: string }) {
               value={title}
               onChange={(e) => setTitle(e.target.value)}
               onKeyDown={(e) => {
-                if (e.key === "Enter") {
+                if (e.key === "Enter" && !e.nativeEvent.isComposing && e.nativeEvent.keyCode !== 229) {
                   e.preventDefault();
                   void submit();
                 }
@@ -217,11 +204,11 @@ export function NewIssueDialog({ workspaceId }: { workspaceId: string }) {
                       value={aiPrompt}
                       onChange={(event) => setAiPrompt(event.target.value)}
                       onKeyDown={(event) => {
-                        if (event.key === "Enter") {
+                        if (event.key === "Enter" && !event.nativeEvent.isComposing && event.nativeEvent.keyCode !== 229) {
                           event.preventDefault();
                           void aiDraft();
                         }
-                        if (event.key === "Escape") setAiOpen(false);
+                        if (event.key === "Escape") {event.stopPropagation();setAiOpen(false);}
                       }}
                       placeholder={t("Describe the task, e.g. 修复微信登录回调偶发失败")}
                       className="min-w-0 flex-1 rounded-md border border-border bg-elevated/40 px-2.5 py-1.5 text-small text-text placeholder:text-faint focus:border-border-strong"
@@ -486,7 +473,6 @@ export function NewIssueDialog({ workspaceId }: { workspaceId: string }) {
             </div>
           </div>
         </div>
-      </div>
-    </>
+    </Modal>
   );
 }

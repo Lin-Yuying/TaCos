@@ -1,5 +1,7 @@
 "use client";
 
+import { useDraft } from "@/lib/ui/draft-store";
+
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import Link from "next/link";
@@ -1762,7 +1764,7 @@ function StartComposer({
   onStart: (text: string) => void;
 }) {
   const t = useT();
-  const [text, setText] = useState("");
+  const [text, setText] = useDraft("agent-new", "new", "");
   const submit = () => {
     const message = text.trim();
     if (!message || busy) return;
@@ -2187,7 +2189,7 @@ function Conversation({
   const t = useT();
   const router = useRouter();
   const [messages, setMessages] = useState<UiMessage[]>(() => toUi(active));
-  const [input, setInput] = useState("");
+  const [input, setInput] = useDraft("agent", active.id, "");
   const [busy, setBusy] = useState(false);
   // H-COLLAB-13: a live refresh brings new server messages (another member's turn).
   // Take them when no turn of ours is running; a running turn owns the list, and a
@@ -2297,7 +2299,6 @@ function Conversation({
   async function send(text: string) {
     const message = text.trim();
     if (!message || busy) return;
-    setInput("");
     setError(null);
     setApproval(null);
     setBusy(true);
@@ -2309,12 +2310,14 @@ function Conversation({
     ]);
     const controller = new AbortController();
     abort.current = controller;
+    let accepted = false;
     try {
       await streamAiEdit(
         { workspaceId, action: "agent", threadId: active.id, engine, text: message },
-        (delta) => patchLastAssistant((last) => ({ ...last, content: last.content + delta })),
+        (delta) => { if (!accepted) {accepted=true;setInput("");} patchLastAssistant((last) => ({ ...last, content: last.content + delta })); },
         controller.signal,
         (frame) => {
+          if (!accepted) {accepted=true;setInput("");}
           if (frame.type === "step") {
             patchLastAssistant((last) => {
               const key = frame.step.key || `${frame.step.kind}|${frame.step.title}`;
@@ -2361,9 +2364,10 @@ function Conversation({
       if (!response.ok) {
         const payload = (await response.json().catch(() => null)) as { error?: string } | null;
         setError(payload?.error ?? "Could not send the answer");
+        return;
       }
-      setApproval(null);
-    } finally {
+      if (response.ok) setApproval((current)=>current?.requestId===requestId?null:current);
+    } catch { setError("Could not send the answer"); } finally {
       setApprovalBusy(false);
     }
   }

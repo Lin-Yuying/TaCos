@@ -24,6 +24,9 @@ export function CommandPalette({ workspaceId }: { workspaceId: string }) {
   const { paletteOpen, setPaletteOpen, openIssue, openPage, focused, setComposerOpen } = useUI();
   const router = useRouter();
   const [query, setQuery] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [attempt, setAttempt] = useState(0);
   const [results, setResults] = useState<SearchHit[]>([]);
 
   useEffect(() => {
@@ -47,16 +50,21 @@ export function CommandPalette({ workspaceId }: { workspaceId: string }) {
       setResults([]);
       return;
     }
-    const timer = setTimeout(() => {
-      fetch(
-        `/api/internal/${workspaceId}/search?q=${encodeURIComponent(trimmed)}`
-      )
-        .then((res) => res.json())
-        .then((data) => setResults(data as SearchHit[]))
-        .catch(() => setResults([]));
+    const controller = new AbortController();
+    let current = true;
+    setLoading(true); setError(null);
+    const timer = setTimeout(async () => {
+      try {
+        const res = await fetch(`/api/internal/${workspaceId}/search?q=${encodeURIComponent(trimmed)}`, { signal: controller.signal });
+        if (!res.ok) throw new Error(res.status === 401 ? "Not signed in" : "Could not load. Retry.");
+        const data: unknown = await res.json();
+        if (!Array.isArray(data)) throw new Error("Unexpected response. Retry.");
+        if (current) setResults(data as SearchHit[]);
+      } catch (err) { if (current) { setResults([]); setError(err instanceof Error ? err.message : "Something went wrong"); } }
+      finally { if (current) setLoading(false); }
     }, 150);
-    return () => clearTimeout(timer);
-  }, [query, paletteOpen, workspaceId]);
+    return () => { current = false; controller.abort(); clearTimeout(timer); };
+  }, [query, paletteOpen, workspaceId, attempt]);
 
   if (!paletteOpen) return null;
 
@@ -81,7 +89,7 @@ export function CommandPalette({ workspaceId }: { workspaceId: string }) {
           <Command.List className="max-h-[380px] overflow-y-auto p-1 pb-2">
             <Command.Empty>
               <div className="px-3 py-6 text-center text-body text-faint">
-                {t("No results for “{query}”")}
+                {loading ? t("Loading…") : error ? <button onClick={() => setAttempt((n) => n + 1)}>{t(error)} · {t("Retry")}</button> : t("No results for “{query}”", {query})}
               </div>
             </Command.Empty>
 
@@ -143,8 +151,9 @@ export function CommandPalette({ workspaceId }: { workspaceId: string }) {
                     key={status}
                     value={`move ${focused.ref} ${t(STATUS_META[status].label)}`}
                     onSelect={() => {
-                      void updateIssueAction(workspaceId, focused.identifier, { status });
-                      close();
+                      void updateIssueAction(workspaceId, focused.id, { status }).then((result) => {
+                        if (result.ok) { close(); router.refresh(); } else setError(result.error);
+                      });
                     }}
                   >
                     <StatusIcon status={status} size={13} />

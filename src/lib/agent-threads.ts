@@ -1,5 +1,5 @@
 import crypto from "node:crypto";
-import { and, asc, desc, eq, inArray, isNull, or } from "drizzle-orm";
+import { isNotNull, and, asc, desc, eq, inArray, isNull, or } from "drizzle-orm";
 import { getDb } from "@/db/client";
 import { agentMessages, agentSteps, agentThreadFlags, agentThreads, issues, projects, users } from "@/db/schema";
 import { claimIssue, listIssues, TacosError, type Status } from "./issues";
@@ -144,6 +144,7 @@ export async function listAgentThreads(
   const db = getDb();
   const conditions = [eq(agentThreads.workspaceId, workspaceId), visibleTo(userId)];
   if (projectId) conditions.push(eq(agentThreads.projectId, projectId));
+  const recent = db.select({id:agentThreads.id}).from(agentThreads).where(and(...conditions)).orderBy(desc(agentThreads.updatedAt)).limit(100);
   const rows = await db
     .select({
       thread: agentThreads,
@@ -161,9 +162,8 @@ export async function listAgentThreads(
       agentThreadFlags,
       and(eq(agentThreadFlags.threadId, agentThreads.id), eq(agentThreadFlags.userId, userId))
     )
-    .where(and(...conditions))
-    .orderBy(desc(agentThreads.updatedAt))
-    .limit(100);
+    .where(and(...conditions, or(inArray(agentThreads.id, recent), isNotNull(agentThreadFlags.pinnedAt))))
+    .orderBy(desc(agentThreads.updatedAt));
   if (rows.length === 0) return [];
   const counts = await db
     .select({ threadId: agentMessages.threadId, id: agentMessages.id })
