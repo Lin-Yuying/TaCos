@@ -22,9 +22,89 @@ export type FilterOp = (typeof FILTER_OPS)[number];
 
 export type ViewFilter = { key: string; op: FilterOp; value?: string };
 export type ViewSort = { key: string; dir: "asc" | "desc" };
-export type TaskView = { filters: ViewFilter[]; sort: ViewSort[] };
+
+// The per-view display options. They live in the saved definition, so opening a view
+// restores its layout and grouping; a personal override keeps one member's changes
+// out of everyone else's copy.
+export const VIEW_LAYOUTS = ["list", "board", "table", "calendar"] as const;
+export type ViewLayout = (typeof VIEW_LAYOUTS)[number];
+
+export const VIEW_GROUPINGS = ["status", "assignee", "project", "priority", "label", "dueDate"] as const;
+export type ViewGrouping = (typeof VIEW_GROUPINGS)[number];
+
+export const VIEW_ORDERINGS = ["manual", "status", "priority", "created", "updated", "dueDate"] as const;
+export type ViewOrdering = (typeof VIEW_ORDERINGS)[number];
+
+export const VIEW_PROPERTIES = [
+  "id",
+  "status",
+  "assignee",
+  "priority",
+  "project",
+  "dueDate",
+  "labels",
+  "dates",
+] as const;
+export type ViewProperty = (typeof VIEW_PROPERTIES)[number];
+
+export type TaskViewDisplay = {
+  grouping: ViewGrouping;
+  ordering: ViewOrdering;
+  // Show tasks that are subtasks of another task.
+  subIssues: boolean;
+  // Draw group headers with zero tasks.
+  showEmptyGroups: boolean;
+  // Which columns the list and board cards draw.
+  properties: ViewProperty[];
+};
+
+export const DEFAULT_DISPLAY: TaskViewDisplay = {
+  grouping: "status",
+  ordering: "manual",
+  subIssues: true,
+  showEmptyGroups: false,
+  properties: ["id", "status", "assignee", "priority", "labels", "dates"],
+};
+
+/** Stored/URL values are untrusted: keep the known members and fall back per field. */
+export function normalizeDisplay(raw: unknown): TaskViewDisplay {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return DEFAULT_DISPLAY;
+  const input = raw as Record<string, unknown>;
+  const properties = Array.isArray(input.properties)
+    ? [...new Set(input.properties.filter((value): value is ViewProperty =>
+        typeof value === "string" && (VIEW_PROPERTIES as readonly string[]).includes(value)
+      ))]
+    : DEFAULT_DISPLAY.properties;
+  return {
+    grouping: (VIEW_GROUPINGS as readonly string[]).includes(String(input.grouping))
+      ? (input.grouping as ViewGrouping)
+      : DEFAULT_DISPLAY.grouping,
+    ordering: (VIEW_ORDERINGS as readonly string[]).includes(String(input.ordering))
+      ? (input.ordering as ViewOrdering)
+      : DEFAULT_DISPLAY.ordering,
+    subIssues: typeof input.subIssues === "boolean" ? input.subIssues : DEFAULT_DISPLAY.subIssues,
+    showEmptyGroups:
+      typeof input.showEmptyGroups === "boolean"
+        ? input.showEmptyGroups
+        : DEFAULT_DISPLAY.showEmptyGroups,
+    properties,
+  };
+}
+
+export type TaskView = {
+  filters: ViewFilter[];
+  sort: ViewSort[];
+  // Optional so every pre-display-options saved view keeps working.
+  display?: TaskViewDisplay;
+};
 
 export const EMPTY_VIEW: TaskView = { filters: [], sort: [] };
+export const EMPTY_DEFINITION: TaskView & { layout: ViewLayout } = {
+  filters: [],
+  sort: [],
+  layout: "list",
+  display: DEFAULT_DISPLAY,
+};
 export const BUILTIN_KEYS = ["title", "status", "priority", "assignee", "project", "dueDate", "source"] as const;
 
 // The part of a task a view reads, so this file needs nothing from the server's types.
@@ -38,6 +118,10 @@ export type ViewTask = {
   assignees: { id: string }[];
   // Tasks an agent created through the API or MCP, not ones a person opened.
   createdVia?: string;
+  createdAt?: string;
+  updatedAt?: string;
+  // Set on a subtask; the sub-issue display option hides these.
+  parentId?: string | null;
 };
 
 const FIELD_PREFIX = "field:";
@@ -64,6 +148,10 @@ function rawValues(task: ViewTask, key: string, values: FieldValues): string[] {
       return [task.createdVia === "api" || task.createdVia === "mcp" ? "agent" : "person"];
     case "dueDate":
       return task.dueDate ? [task.dueDate] : [];
+    case "createdAt":
+      return task.createdAt ? [task.createdAt] : [];
+    case "updatedAt":
+      return task.updatedAt ? [task.updatedAt] : [];
     default:
       return [];
   }
@@ -119,6 +207,30 @@ function compare(a: ViewTask, b: ViewTask, sort: ViewSort, numericKeys: Set<stri
   return sort.dir === "desc" ? -order : order;
 }
 
+/** The ordering menu's fallback: explicit sorts always win over it. */
+export function orderingSort(ordering: ViewOrdering): ViewSort[] {
+  switch (ordering) {
+    case "status":
+      return [{ key: "status", dir: "asc" }];
+    case "priority":
+      return [{ key: "priority", dir: "desc" }];
+    case "created":
+      return [{ key: "createdAt", dir: "desc" }];
+    case "updated":
+      return [{ key: "updatedAt", dir: "desc" }];
+    case "dueDate":
+      return [{ key: "dueDate", dir: "asc" }];
+    default:
+      return [];
+  }
+}
+
+/** True when the stored order is the server's own: no explicit sort and no display reordering. */
+export function isManualOrder(view: TaskView): boolean {
+  const display = normalizeDisplay(view.display);
+  return view.sort.length === 0 && display.ordering === "manual" && display.subIssues;
+}
+
 export function applyView<T extends ViewTask>(
   tasks: T[],
   view: TaskView,
@@ -132,10 +244,13 @@ export function applyView<T extends ViewTask>(
     !key.startsWith(FIELD_PREFIX) || keys.has(key);
   const filters = view.filters.filter((filter) => live(filter.key));
   const sorts = view.sort.filter((sort) => live(sort.key));
-  const shown = tasks.filter((task) => filters.every((filter) => matches(task, filter, numericKeys, values)));
-  if (!sorts.length) return shown;
+  const display = normalizeDisplay(view.display);
+  const source = display.subIssues ? tasks : tasks.filter((task) => !task.parentId);
+  const shown = source.filter((task) => filters.every((filter) => matches(task, filter, numericKeys, values)));
+  const effectiveSorts = sorts.length > 0 ? sorts : orderingSort(display.ordering);
+  if (!effectiveSorts.length) return shown;
   return [...shown].sort((a, b) => {
-    for (const sort of sorts) {
+    for (const sort of effectiveSorts) {
       const order = compare(a, b, sort, numericKeys, values);
       if (order) return order;
     }

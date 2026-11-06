@@ -7,6 +7,7 @@ import { existsSync, mkdirSync } from "node:fs";
 import path from "node:path";
 import crypto from "node:crypto";
 import { DEFAULT_PROJECT_COLOR, PROJECT_COLORS } from "../lib/constants";
+import { DEFAULT_DISPLAY, FILTER_OPS, VIEW_LAYOUTS } from "../lib/task-view";
 import { BUILTIN_AVATAR_PREFIX, builtinAvatarId, nextFreeAvatar } from "../lib/avatars";
 import * as schema from "./schema";
 
@@ -22,6 +23,60 @@ CREATE TABLE IF NOT EXISTS file_cleanup(id TEXT PRIMARY KEY,created_at TEXT NOT 
 CREATE TABLE IF NOT EXISTS personal_task_views (
  workspace_id TEXT NOT NULL,user_id TEXT NOT NULL,scope TEXT NOT NULL,name TEXT NOT NULL,value TEXT NOT NULL,
  PRIMARY KEY(workspace_id,user_id,scope,name)
+);
+
+CREATE TABLE IF NOT EXISTS schema_migrations (
+  name TEXT PRIMARY KEY,
+  applied_at TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS task_views (
+  id TEXT PRIMARY KEY,
+  workspace_id TEXT NOT NULL,
+  project_id TEXT,
+  scope TEXT NOT NULL,
+  name TEXT NOT NULL,
+  definition TEXT NOT NULL,
+  shared INTEGER NOT NULL DEFAULT 0,
+  owner_id TEXT NOT NULL,
+  position INTEGER NOT NULL DEFAULT 0,
+  is_default INTEGER NOT NULL DEFAULT 0,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS task_views_workspace_idx ON task_views (workspace_id);
+CREATE INDEX IF NOT EXISTS task_views_owner_idx ON task_views (owner_id);
+CREATE TABLE IF NOT EXISTS task_view_prefs (
+  workspace_id TEXT NOT NULL,
+  user_id TEXT NOT NULL,
+  view_id TEXT NOT NULL,
+  favorite INTEGER NOT NULL DEFAULT 0,
+  display_override TEXT,
+  updated_at TEXT NOT NULL,
+  PRIMARY KEY (workspace_id, user_id, view_id)
+);
+CREATE TABLE IF NOT EXISTS task_templates (
+  id TEXT PRIMARY KEY,
+  workspace_id TEXT NOT NULL,
+  name TEXT NOT NULL,
+  title TEXT NOT NULL,
+  description TEXT NOT NULL DEFAULT '',
+  priority INTEGER NOT NULL DEFAULT 0,
+  label_names TEXT NOT NULL DEFAULT '[]',
+  field_values TEXT NOT NULL DEFAULT '{}',
+  created_by TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS task_templates_workspace_idx ON task_templates (workspace_id);
+CREATE TABLE IF NOT EXISTS task_view_subscriptions (
+  workspace_id TEXT NOT NULL,
+  user_id TEXT NOT NULL,
+  view_id TEXT NOT NULL,
+  events TEXT NOT NULL DEFAULT '["added","completed"]',
+  muted INTEGER NOT NULL DEFAULT 0,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL,
+  PRIMARY KEY (workspace_id, user_id, view_id)
 );
 
 CREATE TABLE IF NOT EXISTS personal_entity_state (
@@ -870,6 +925,100 @@ function ensureSearchIndex(sqlite: Database.Database) {
   })();
 }
 
+// Personal saved views used to live in personal_task_views. They move into the
+// task_views model once, keep their exact context (the URL they were saved under) and
+// stay private, so nothing a member sees changes on the day of the upgrade.
+function migratePersonalTaskViews(sqlite: Database.Database) {
+  const marker = "task_views_personal_v1";
+  const applied = sqlite
+    .prepare("SELECT 1 FROM schema_migrations WHERE name = ?")
+    .get(marker);
+  if (applied) return;
+  sqlite.transaction(() => {
+    const rows = sqlite
+      .prepare(
+        "SELECT workspace_id, user_id, scope, name, value FROM personal_task_views ORDER BY rowid"
+      )
+      .all() as Array<{
+      workspace_id: string;
+      user_id: string;
+      scope: string;
+      name: string;
+      value: string;
+    }>;
+    const insert = sqlite.prepare(`INSERT OR IGNORE INTO task_views
+      (id, workspace_id, project_id, scope, name, definition, shared, owner_id, position, is_default, created_at, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?, 0, ?, ?, 0, ?, ?)`);
+    const now = new Date().toISOString();
+    rows.forEach((row, position) => {
+      let stored: Record<string, unknown> = {};
+      try {
+        const parsed = JSON.parse(row.value);
+        if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+          stored = parsed as Record<string, unknown>;
+        }
+      } catch {
+        // An unreadable legacy value becomes an empty personal view, not a failed boot.
+      }
+      const filters = Array.isArray(stored.filters)
+        ? stored.filters.filter(
+            (filter): filter is { key: string; op: string; value?: string } =>
+              !!filter &&
+              typeof filter === "object" &&
+              typeof (filter as { key?: unknown }).key === "string" &&
+              typeof (filter as { op?: unknown }).op === "string" &&
+              (FILTER_OPS as readonly string[]).includes((filter as { op: string }).op) &&
+              ((filter as { value?: unknown }).value === undefined ||
+                typeof (filter as { value?: unknown }).value === "string")
+          )
+        : [];
+      const sort = Array.isArray(stored.sort)
+        ? stored.sort.filter(
+            (item): item is { key: string; dir: "asc" | "desc" } =>
+              !!item &&
+              typeof item === "object" &&
+              typeof (item as { key?: unknown }).key === "string" &&
+              ((item as { dir?: unknown }).dir === "asc" || (item as { dir?: unknown }).dir === "desc")
+          )
+        : [];
+      const layout = (VIEW_LAYOUTS as readonly string[]).includes(String(stored.layout))
+        ? (stored.layout as (typeof VIEW_LAYOUTS)[number])
+        : "list";
+      const projectMatch = row.scope.match(/\/projects\/([^/?#]+)/);
+      const projectId = projectMatch ? decodeURIComponent(projectMatch[1]) : null;
+      const definition = JSON.stringify({
+        filters,
+        sort,
+        layout,
+        display: DEFAULT_DISPLAY,
+        context: row.scope,
+      });
+      const id =
+        "view-" +
+        crypto
+          .createHash("sha1")
+          .update(`${row.workspace_id}|${row.user_id}|${row.scope}|${row.name}`)
+          .digest("hex")
+          .slice(0, 24);
+      insert.run(
+        id,
+        row.workspace_id,
+        projectId,
+        projectId ? "project" : "workspace",
+        row.name,
+        definition,
+        row.user_id,
+        position,
+        now,
+        now
+      );
+    });
+    sqlite
+      .prepare("INSERT INTO schema_migrations (name, applied_at) VALUES (?, ?)")
+      .run(marker, now);
+  })();
+}
+
 function bootstrap(sqlite: Database.Database) {
   const hadIssueAssignees = tableExists(sqlite, "issue_assignees");
   sqlite.exec(DDL);
@@ -921,6 +1070,8 @@ function bootstrap(sqlite: Database.Database) {
   for(const column of ["parent_id","edited_at","deleted_at"]) addColumnIfMissing(sqlite,"page_comments",column,"TEXT");
   addColumnIfMissing(sqlite, "issues", "position", "REAL NOT NULL DEFAULT 0");
   addColumnIfMissing(sqlite, "issues", "due_date", "TEXT");
+  // U-09: numeric estimate read by U-03 planning; null means unsized.
+  addColumnIfMissing(sqlite, "issues", "estimate", "REAL");
   addColumnIfMissing(sqlite, "issues", "reminder", "TEXT");
   addColumnIfMissing(sqlite, "issues", "recurrence", "TEXT");
   addColumnIfMissing(sqlite, "issues", "recurred_into", "TEXT");
@@ -1069,6 +1220,7 @@ function bootstrap(sqlite: Database.Database) {
   ensureInitialAvatars(sqlite);
   ensureSearchIndex(sqlite);
   ensureRevisions(sqlite);
+  migratePersonalTaskViews(sqlite);
   sqlite.exec("CREATE INDEX IF NOT EXISTS pages_sibling_title_idx ON pages(workspace_id,parent_id,lower(title))");
   sqlite.exec(`CREATE INDEX IF NOT EXISTS issues_identifier_idx ON issues(workspace_id,identifier COLLATE NOCASE);
     CREATE INDEX IF NOT EXISTS issues_project_number_idx ON issues(project_id,number);

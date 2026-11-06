@@ -39,6 +39,13 @@ export type FocusRef = {
 
 export type IssueLayout = "list" | "board" | "table" | "calendar";
 
+// Multi-select state shared by the list, board and table so one bulk bar drives all three.
+export type TaskSelection = {
+  mode: boolean;
+  selected: Set<string>;
+  toggle: (id: string) => void;
+};
+
 export type CreatedProject = {
   id: string;
   name: string;

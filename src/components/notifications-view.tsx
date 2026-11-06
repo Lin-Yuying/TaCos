@@ -90,6 +90,19 @@ function sentence(item: NotificationRow, t: ReturnType<typeof useT>): string {
       return t("{name} handed a task to you", { name });
     case "blocker":
       return t("{name} reported a blocker", { name });
+    case "view_added":
+      return t("{name} added “{title}” to {view}", {
+        name,
+        title,
+        view: data.viewName ?? t("a view you follow"),
+      });
+    case "view_completed":
+      return t("{name} moved “{title}” to {status} in {view}", {
+        name,
+        title,
+        status: data.statusLabel ?? "",
+        view: data.viewName ?? t("a view you follow"),
+      });
     case "due_soon":
       return t("Due {date}: reminder", { date: data.date ?? item.body });
     case "handoff_done":

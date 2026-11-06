@@ -9,7 +9,7 @@ import { useDraft } from "@/lib/ui/draft-store";
 
 import { useEffect, useRef, useState } from "react";
 import { usePathname, useSearchParams } from "next/navigation";
-import { LoaderCircle, Sparkles, Users, X } from "lucide-react";
+import { FileText, LoaderCircle, Sparkles, Trash2, Users, X } from "lucide-react";
 import { useUI } from "@/components/ui-context";
 import { Menu, MenuItem } from "@/components/menu";
 import {
@@ -22,6 +22,12 @@ import {
 } from "@/components/icons";
 import { AssigneeAvatar, AssigneeStack } from "@/components/issue-table";
 import { createIssueAction, listTaskFieldsAction } from "@/app/actions";
+import {
+  createTaskTemplateAction,
+  deleteTaskTemplateAction,
+  listTaskTemplatesAction,
+} from "@/app/task-template-actions";
+import type { TaskTemplate } from "@/lib/task-templates";
 import { draftIssueAction } from "@/app/ai-actions";
 import { STATUS_ORDER, type Priority, type Status, type ReminderPreset } from "@/lib/constants";
 import type { TaskField } from "@/lib/task-view";
@@ -32,7 +38,7 @@ export function NewIssueDialog({ workspaceId }: { workspaceId: string }) {
   const t = useT();
   const modifier=usePrimaryModifier();
   const [memberQuery,setMemberQuery]=useState(""),[labelQuery,setLabelQuery]=useState("");
-  const { composerOpen, composerStatus, composerSeed, setComposerOpen, openIssue, aiReady, projectComposerOpen, setProjectComposerOpen } =
+  const { composerOpen, composerStatus, composerSeed, setComposerOpen, openIssue, aiReady, projectComposerOpen, setProjectComposerOpen, confirm } =
     useUI();
   const searchParams = useSearchParams();
   const pathname = usePathname();
@@ -48,6 +54,11 @@ export function NewIssueDialog({ workspaceId }: { workspaceId: string }) {
   const [projectId, setProjectId] = useDraft<string>("create-new-issue-dialog.tsx", "projectId", "");
   const [dueDate,setDueDate]=useDraft<string|null>("create-task","dueDate",null);
   const [reminder,setReminder]=useDraft<ReminderPreset|null>("create-task","reminder",null);
+  const [estimate,setEstimate]=useDraft<string>("create-task","estimate","");
+  const [templates,setTemplates]=useState<TaskTemplate[]>([]);
+  const [canManageTemplates,setCanManageTemplates]=useState(false);
+  const [templateName,setTemplateName]=useState("");
+  const [templateBusy,setTemplateBusy]=useState(false);
   const [fields,setFields]=useState<TaskField[]>([]);
   const [fieldValues,setFieldValues]=useDraft<Record<string,string>>("create-task","fields",{});
   const [continueCreating,setContinueCreating]=useState(false);
@@ -85,6 +96,15 @@ export function NewIssueDialog({ workspaceId }: { workspaceId: string }) {
       .catch((error) => {setProjects([]);setError(error.message);})
       .finally(() => setProjectsLoaded(true));
     void listTaskFieldsAction(workspaceId).then(result=>{if(result.ok)setFields(result.data);else setError(result.error);});
+    void listTaskTemplatesAction(workspaceId)
+      .then((result) => {
+        if (result.ok) {
+          setTemplates(result.data.templates);
+          setCanManageTemplates(result.data.canManage);
+        }
+      })
+      .catch(() => {});
+    setTemplateName("");
     readJson<Label[]>(`/api/internal/${workspaceId}/labels`,(data):data is Label[]=>Array.isArray(data))
       .then((data) => setLabels(data as Label[]))
       .catch((error) => {setLabels([]);setError(error.message);});
@@ -119,12 +139,13 @@ export function NewIssueDialog({ workspaceId }: { workspaceId: string }) {
       labelNames,
       project: project.id,
       dueDate,reminder,fieldValues,
+      estimate: estimate.trim() === "" ? null : Number(estimate),
     });
 
     if (result.ok) {
       // Pages that opened the composer from a passage use this to drop the task
       // reference exactly where the passage was.
-      setFieldValues({});setDueDate(null);setReminder(null);
+      setFieldValues({});setDueDate(null);setReminder(null);setEstimate("");
       setTitle("");setDescription("");setStatus("todo");setPriority(0);setAssigneeIds([]);setLabelNames([]);
       composerSeed?.onCreated?.(result.data);
       if(!continueCreating){setComposerOpen(false);openIssue(result.data.id);}
@@ -158,6 +179,49 @@ export function NewIssueDialog({ workspaceId }: { workspaceId: string }) {
     }
     setAiOpen(false);
     setAiPrompt("");
+  }
+
+  function applyTemplate(template: TaskTemplate) {
+    setTitle(template.title);
+    setDescription(template.description);
+    setPriority(template.priority);
+    setLabelNames(template.labelNames);
+    setFieldValues(
+      Object.fromEntries(
+        Object.entries(template.fieldValues).filter(([id]) => fields.some((field) => field.id === id))
+      )
+    );
+  }
+
+  async function saveTemplate() {
+    if (!templateName.trim() || !title.trim() || templateBusy) return;
+    setTemplateBusy(true);
+    try {
+      const result = await createTaskTemplateAction(workspaceId, {
+        name: templateName,
+        title,
+        description,
+        priority,
+        labelNames,
+        fieldValues,
+      });
+      if (result.ok) {
+        setTemplates((current) => [...current, result.data]);
+        setTemplateName("");
+        setError(null);
+      } else setError(result.error);
+    } catch {
+      setError(t("Could not save. Retry."));
+    } finally {
+      setTemplateBusy(false);
+    }
+  }
+
+  async function removeTemplate(template: TaskTemplate) {
+    if (!(await confirm(t("Delete the template “{name}”?", { name: template.name })))) return;
+    const result = await deleteTaskTemplateAction(workspaceId, template.id);
+    if (result.ok) setTemplates((current) => current.filter((item) => item.id !== template.id));
+    else setError(result.error);
   }
 
   return (
@@ -261,6 +325,69 @@ export function NewIssueDialog({ workspaceId }: { workspaceId: string }) {
               </div>
             )}
             <div className="mt-3 flex flex-wrap items-center gap-2">
+              <Menu
+                width={280}
+                trigger={
+                  <>
+                    <FileText size={12} />
+                    {t("Template")}
+                  </>
+                }
+              >
+                {(close) => (
+                  <div data-task-templates className="space-y-1 p-1">
+                    {templates.length === 0 ? (
+                      <div className="px-2 py-1 text-small text-faint">{t("No templates yet.")}</div>
+                    ) : (
+                      templates.map((template) => (
+                        <div key={template.id} className="flex items-center gap-1">
+                          <MenuItem
+                            onSelect={() => {
+                              applyTemplate(template);
+                              close();
+                            }}
+                          >
+                            <span className="min-w-0 flex-1 truncate">{template.name}</span>
+                            <span className="shrink-0 text-caption text-faint">{t(template.priority ? PRIORITY_META[template.priority].label : "No priority")}</span>
+                          </MenuItem>
+                          {canManageTemplates ? (
+                            <button
+                              type="button"
+                              aria-label={t("Delete template {name}", { name: template.name })}
+                              onClick={() => void removeTemplate(template)}
+                              className="shrink-0 rounded p-1 text-faint hover:text-danger"
+                            >
+                              <Trash2 size={12} />
+                            </button>
+                          ) : null}
+                        </div>
+                      ))
+                    )}
+                    {canManageTemplates ? (
+                      <div className="flex gap-1 border-t border-border pt-1">
+                        <input
+                          data-template-name
+                          aria-label={t("Template name")}
+                          placeholder={t("Template name")}
+                          value={templateName}
+                          onChange={(event) => setTemplateName(event.target.value)}
+                          className="min-w-0 flex-1 rounded border border-border bg-bg p-1 text-small"
+                        />
+                        <button
+                          type="button"
+                          data-template-save
+                          disabled={templateBusy || !templateName.trim() || !title.trim()}
+                          onClick={() => void saveTemplate()}
+                          className="rounded border border-border px-2 text-small text-muted disabled:opacity-40"
+                        >
+                          {t("Save draft as template")}
+                        </button>
+                      </div>
+                    ) : null}
+                  </div>
+                )}
+              </Menu>
+
               <Menu
                 width={200}
                 trigger={
@@ -473,7 +600,7 @@ export function NewIssueDialog({ workspaceId }: { workspaceId: string }) {
               {Object.keys(fieldValues).some(id=>!fields.some(field=>field.id===id))&&<p role="alert" className="text-small text-danger">{t("Some saved properties are no longer available.")} <button type="button" onClick={()=>setFieldValues(old=>Object.fromEntries(Object.entries(old).filter(([id])=>fields.some(field=>field.id===id))))} className="underline">{t("Remove unavailable properties")}</button></p>}
             {fields.length>0&&<details className="my-2 text-small"><summary className="cursor-pointer">{t("More properties")}</summary><div className="mt-2 grid grid-cols-2 gap-2">{fields.map(field=><label key={field.id} className="block">{field.name}{field.type==="select"?<select disabled={busy} value={fieldValues[field.id]??""} onChange={e=>setFieldValues(old=>({...old,[field.id]:e.target.value}))} className="block w-full rounded border border-border bg-bg p-1"><option value=""/>{field.options.map(option=><option key={option}>{option}</option>)}</select>:<input disabled={busy} type={field.type==="checkbox"?"checkbox":field.type==="number"?"number":field.type==="date"?"date":"text"} checked={fieldValues[field.id]==="1"} value={fieldValues[field.id]??""} onChange={e=>setFieldValues(old=>({...old,[field.id]:field.type==="checkbox"?(e.target.checked?"1":""):e.target.value}))} className="block w-full rounded border border-border bg-bg p-1"/>}</label>)}</div></details>}
               <div className="ml-auto flex items-center gap-2">
-                <div className="flex flex-wrap items-center gap-4 py-2"><DuePicker value={dueDate} reminder={reminder} onSave={async(date,next)=>{setDueDate(date);setReminder(next);return true;}}/><label className="flex items-center gap-2 text-small"><input type="checkbox" checked={continueCreating} onChange={event=>setContinueCreating(event.target.checked)}/>{t("Create and continue")}</label></div>
+                <div className="flex flex-wrap items-center gap-4 py-2"><DuePicker value={dueDate} reminder={reminder} onSave={async(date,next)=>{setDueDate(date);setReminder(next);return true;}}/><label className="flex items-center gap-1 text-small text-muted">{t("Estimate")}<input aria-label={t("Estimate")} data-task-estimate type="number" min="0" step="1" value={estimate} onChange={event=>setEstimate(event.target.value)} className="w-14 rounded border border-border bg-bg px-1 py-0.5 text-small text-text"/></label><label className="flex items-center gap-2 text-small"><input type="checkbox" checked={continueCreating} onChange={event=>setContinueCreating(event.target.checked)}/>{t("Create and continue")}</label></div>
       {error && <span className="text-small text-danger">{t(error)}</span>}
                 {projectsLoaded && projects.length === 0 && (
                   <button type="button" onClick={newProject} className="text-small text-accent hover:underline">

@@ -3,14 +3,18 @@
 import { useState, type ReactNode } from "react";
 import * as Dropdown from "@radix-ui/react-dropdown-menu";
 
-export function Menu({ trigger, children, align = "left", width = 200, offset = 0, triggerClassName, className, onOpenChange }: {
+export function Menu({ trigger, children, align = "left", width = 200, offset = 0, triggerClassName, className, onOpenChange, open: controlledOpen }: {
   trigger: ReactNode | ((open: boolean) => ReactNode);
   children: (close: () => void) => ReactNode;
   align?: "left" | "right"; width?: number; offset?: number;
   triggerClassName?: string | ((open: boolean) => string); className?: string; onOpenChange?: (open: boolean) => void;
+  // Controlled by a caller that also opens the menu from a keyboard shortcut.
+  open?: boolean;
 }) {
-  const [open, setOpen] = useState(false);
-  return <Dropdown.Root open={open} onOpenChange={(next) => {setOpen(next);onOpenChange?.(next);}} modal={false}>
+  const [uncontrolled, setUncontrolled] = useState(false);
+  const open = controlledOpen ?? uncontrolled;
+  const setOpen = (next: boolean) => { setUncontrolled(next); onOpenChange?.(next); };
+  return <Dropdown.Root open={open} onOpenChange={setOpen} modal={false}>
     <span className={className}>
       <Dropdown.Trigger asChild><button type="button" className={(typeof triggerClassName === "function" ? triggerClassName(open) : triggerClassName) ?? "flex items-center gap-1.5 rounded-md border border-border px-2 py-1 text-body text-muted hover:border-border-strong hover:text-text"}>
         {typeof trigger === "function" ? trigger(open) : trigger}

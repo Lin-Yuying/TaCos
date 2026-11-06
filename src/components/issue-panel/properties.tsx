@@ -26,6 +26,7 @@ export function PropertiesRow({
 }) {
   const t = useT();
   const [memberQuery,setMemberQuery]=useState(""),[labelQuery,setLabelQuery]=useState("");
+
   const currentLabelNames = detail.labels.map((l) => l.name);
   const allAssigned = members.every((member) =>
     detail.assignees.some((assignee) => assignee.id === member.id)
@@ -33,6 +34,27 @@ export function PropertiesRow({
 
   return (
     <div className="-mx-2 -mt-1.5 flex flex-wrap items-center gap-2">
+      <label
+        title={t("Estimate")}
+        className="flex items-center gap-1.5 rounded-md px-2 py-1 text-body text-muted transition-colors hover:bg-elevated hover:text-text"
+      >
+        <span className="text-faint">{t("Estimate")}</span>
+        <input
+          data-issue-estimate
+          key={`estimate:${detail.id}:${detail.estimate ?? "none"}`}
+          aria-label={t("Estimate")}
+          type="number"
+          min="0"
+          step="1"
+          defaultValue={detail.estimate ?? ""}
+          onBlur={(event) => {
+            const raw = event.target.value.trim();
+            const next = raw === "" ? null : Number(raw);
+            if (next !== (detail.estimate ?? null)) void onUpdate({ estimate: next });
+          }}
+          className="w-12 bg-transparent text-small text-text"
+        />
+      </label>
       <Menu
         width={180}
         triggerClassName="flex items-center gap-1.5 rounded-md px-2 py-1 text-body text-muted transition-colors hover:bg-elevated hover:text-text"

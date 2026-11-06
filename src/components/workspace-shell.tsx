@@ -56,6 +56,7 @@ import { leaveWorkspaceAction } from "@/app/auth-actions";
 import { DOCS_DELETED_EVENT } from "@/components/tab-events";
 import type { PageRef, PageSummary } from "@/lib/pages";
 import { DocTree } from "@/components/doc-tree";
+import { WorkspaceViews } from "@/components/workspace-views";
 import { ProjectIcon, StatusIcon, WorkspaceMark } from "@/components/icons";
 import { AssigneeAvatar } from "@/components/issue-table";
 import { IssuePanelHost } from "@/components/issue-panel";
@@ -321,6 +322,7 @@ function SidebarNav({
             <NavItem href={link({ view: "all" })} active={allTasksActive} icon={<List size={14} />}>
               {t("All Tasks")}
             </NavItem>
+            <WorkspaceViews workspaceId={workspaceId} />
             <NavItem
               href={`/${workspaceId}/review`}
               active={pathname.endsWith("/review")}

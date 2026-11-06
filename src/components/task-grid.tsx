@@ -12,7 +12,7 @@ import { setTaskFieldValueAction, updateIssueAction, changeIssueCollectionAction
 import { AssigneeAvatar } from "@/components/issue-table";
 import { PriorityIcon, StatusIcon, STATUS_META } from "@/components/icons";
 import { useT } from "@/components/i18n-context";
-import { useUI } from "@/components/ui-context";
+import { useUI, type TaskSelection } from "@/components/ui-context";
 import { issueRef } from "@/lib/format";
 import type { IssueWithLabels } from "@/lib/issues";
 import { Menu } from "@/components/menu";
@@ -22,7 +22,7 @@ import { useStoredJson } from "@/lib/use-stored-json";
 import { readJson } from "@/lib/ui/request";
 import { STATUS_ORDER, PRIORITY_NAMES, type Status, type Priority } from "@/lib/constants";
 import type { Member, UpdateIssueInput } from "@/lib/issues";
-import { fieldKey, type FieldValues, type TaskField, type TaskView } from "@/lib/task-view";
+import { fieldKey, VIEW_PROPERTIES, type FieldValues, type TaskField, type TaskView, type ViewProperty } from "@/lib/task-view";
 
 const FEATURES = tableFeatures({ columnSizingFeature, columnResizingFeature });
 
@@ -44,6 +44,17 @@ const SORT_KEYS: Record<string, string> = {
   dueDate: "dueDate",
 };
 
+// Display properties map onto the table's built-in columns. Title always shows.
+const COLUMN_PROPERTY: Record<string, ViewProperty> = {
+  ref: "id",
+  status: "status",
+  priority: "priority",
+  assignee: "assignee",
+  dueDate: "dueDate",
+};
+
+const ALL_PROPERTIES: ViewProperty[] = [...VIEW_PROPERTIES];
+
 /** The table view: built-in columns plus the workspace's fields, which edit in place. */
 export function TaskGrid({
   workspaceId,
@@ -53,6 +64,8 @@ export function TaskGrid({
   values,
   view,
   onViewChange,
+  properties = ALL_PROPERTIES,
+  selection,
 }: {
   workspaceId: string;
   currentUserId:string;
@@ -61,6 +74,8 @@ export function TaskGrid({
   values: FieldValues;
   view: TaskView;
   onViewChange: (next: TaskView) => void;
+  properties?: ViewProperty[];
+  selection?: TaskSelection;
 }) {
   const t = useT();
   const [memberQuery,setMemberQuery]=useState("");
@@ -155,7 +170,13 @@ export function TaskGrid({
 
   const orderRanks=new Map(settings.order.map((id,index)=>[id,index]));
   const hiddenIds=new Set(settings.hidden),frozenIds=new Set(settings.frozen);
-  const ordered=[...columns].sort((a,b)=>(orderRanks.get(String(a.id))??999)-(orderRanks.get(String(b.id))??999)).filter(column=>!hiddenIds.has(String(column.id)));
+  const ordered=[...columns]
+    .filter(column=>{
+      const property=COLUMN_PROPERTY[String(column.id)];
+      return !property||properties.includes(property);
+    })
+    .sort((a,b)=>(orderRanks.get(String(a.id))??999)-(orderRanks.get(String(b.id))??999))
+    .filter(column=>!hiddenIds.has(String(column.id)));
   const table = useTable({ features: FEATURES, data: issues, columns:ordered, columnResizeMode:"onEnd",state:{columnSizing:settings.sizes},onColumnSizingChange:updater=>setSettings(old=>({...old,sizes:typeof updater==="function"?updater(old.sizes):updater})) });
   const frozenLeft=new Map<string,number>();let left=0;
   for(const column of table.getAllLeafColumns())if(frozenIds.has(column.id)){frozenLeft.set(column.id,left);left+=column.getSize();}
@@ -216,8 +237,24 @@ export function TaskGrid({
                 data-task-row={row.original.id}
                 onClick={() => openIssue(row.original.id)}
                 style={{ position: "absolute", top: 0, transform: `translateY(${item.start}px)`, height: ROW_HEIGHT }}
+                data-selected={selection?.selected.has(row.original.id) || undefined}
                 className="flex w-full cursor-pointer items-center border-b border-border/60 hover:bg-elevated/60"
               >
+                {selection?.mode ? (
+                  <div className="flex w-8 shrink-0 items-center justify-center">
+                    <input
+                      type="checkbox"
+                      aria-label={t("Select task {title}", { title: row.original.title })}
+                      checked={selection.selected.has(row.original.id)}
+                      onClick={(event) => event.stopPropagation()}
+                      onChange={(event) => {
+                        event.stopPropagation();
+                        selection.toggle(row.original.id);
+                      }}
+                      className="h-3.5 w-3.5 accent-accent"
+                    />
+                  </div>
+                ) : null}
                 {row.getAllCells().map((cell) => (
                   <div
                     key={cell.id}

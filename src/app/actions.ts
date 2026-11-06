@@ -44,8 +44,10 @@ import {
   TacosError,
   toggleFavoriteProject,
   trashProject,
+  bulkUpdateIssues,
   updateIssue,
   updateProject,
+  type BulkTaskPatch,
   type CreateIssueInput,
   type ReviewDecision,
   type ApiKeyScope,
@@ -105,6 +107,19 @@ export async function updateIssueAction(workspaceId: string, idOrIdentifier: str
     const result = await updateIssue(workspaceId, idOrIdentifier, patch, userActor(user));
     refresh(workspaceId);
     return result.issue;
+  });
+}
+
+export async function bulkUpdateIssuesAction(
+  workspaceId: string,
+  ids: string[],
+  patch: BulkTaskPatch
+) {
+  return run(async () => {
+    const { user } = await requireWorkspace(workspaceId);
+    const result = await bulkUpdateIssues(workspaceId, ids, patch, userActor(user));
+    refresh(workspaceId);
+    return result;
   });
 }
 

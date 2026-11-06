@@ -98,6 +98,14 @@ export function eventText(event: ActivityEvent, t: Translate, locale: Locale): s
       const to = event.data.to as Priority;
       return t("set priority to {priority}", { priority: label(PRIORITY_META[to], to) });
     }
+    case "estimate_changed": {
+      const to = event.data.to as number | null;
+      return to === null
+        ? t("cleared the estimate")
+        : t("set the estimate to {points}", { points: String(to) });
+    }
+    case "project_changed":
+      return t("moved the task to {project}", { project: String(event.data.to ?? "") });
     case "field_changed": {
       const field = String(event.data.field);
       const to = event.data.to as string | null;

@@ -1,7 +1,7 @@
 import { getDb } from "@/db/client";
 import { listIssues, listIssuesPage, listProjects, listMembers, workspaceRevisions, TacosError, type ListFilters } from "./issues";
 import { listTaskFields, listFieldValues } from "./task-fields";
-import { applyView, EMPTY_VIEW, type TaskView } from "./task-view";
+import { applyView, EMPTY_VIEW, isManualOrder, type TaskView } from "./task-view";
 export type TaskQuery = Pick<ListFilters,"status"|"q"|"label"|"projectId"|"assigneeId"|"agent">;
 async function revision(ws:string,user:string){const values=await workspaceRevisions(ws,user);return JSON.stringify(Object.entries(values).filter(([domain])=>["tasks","projects","permissions","personal"].includes(domain)).sort());}
 const viewSnapshots=new Map<string,string[]>();
