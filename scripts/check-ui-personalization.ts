@@ -18,7 +18,7 @@ async function main() {
     .from(schema.users)
     .all()
     .find((row) => row.id !== user.id)!;
-  const views = await import("../src/lib/personal-views");
+  const views = await import("../src/lib/task-views");
   const value = {
     filters: [{ key: "status", op: "is", value: "todo" }],
     sort: [{ key: "priority", dir: "desc" }],

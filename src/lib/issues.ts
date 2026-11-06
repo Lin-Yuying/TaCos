@@ -1,5 +1,6 @@
 import { recordApiKeyUsage, pendingApiKeyUsage } from "./api-key-usage";
-import { normalizeFieldValue, type TaskField } from "./task-view";
+import { applyView, normalizeFieldValue, type FieldValues, type TaskField } from "./task-view";
+import { parseStoredDefinition } from "./task-views";
 import { TacosError } from "./tacos-error";
 import { removeWorkspaceAttachments } from "./attachments";
 import crypto from "node:crypto";
@@ -34,6 +35,8 @@ import {
   issueLabels,
   taskFieldValues,
   taskFields,
+  taskViewSubscriptions,
+  taskViews,
   issues,
   joinCodes,
   labels,
@@ -112,6 +115,8 @@ export type Issue = {
   assignees: Assignee[];
   // YYYY-MM-DD, chosen from the calendar in the task panel
   dueDate: string | null;
+  // Numeric planning estimate, or null when unsized (U-03 planning reads it).
+  estimate: number | null;
   reminder: ReminderPreset | null;
   recurrence: Recurrence | null;
   // the person who opened it, or who ran the agent that published it
@@ -1857,6 +1862,7 @@ async function toIssueRows(workspaceId: string, rows: IssueRow[]): Promise<Issue
       projectName: project?.name ?? "Unknown",
       assignees: assigneesByIssue.get(row.id) ?? [],
       dueDate: row.dueDate ?? null,
+      estimate: row.estimate ?? null,
       reminder: (row.reminder as ReminderPreset | null) ?? null,
       recurrence: (row.recurrence as Recurrence | null) ?? null,
       createdBy: row.createdBy,
@@ -2205,6 +2211,8 @@ export type NotificationInput = {
     | "handoff_failed"
     | "handoff_waiting"
     | "blocker"
+    | "view_added"
+    | "view_completed"
     | ClaimNotice;
   body: string;
   data?: NotificationData;
@@ -2274,6 +2282,127 @@ export async function notify(input: NotificationInput) {
   });
 }
 
+/** The view definition matches this one task; used when a subscription fires. */
+async function taskMatchesView(
+  issue: IssueWithLabels,
+  definition: ReturnType<typeof parseStoredDefinition>,
+  fields: TaskField[],
+  values: FieldValues
+): Promise<boolean> {
+  return (
+    applyView(
+      [issue],
+      { filters: definition.filters, sort: [], display: definition.display },
+      fields,
+      values
+    ).length > 0
+  );
+}
+
+/**
+ * A task entering a saved view (added) or becoming done/canceled inside it
+ * (completed) notifies the members watching that view through the Inbox. The
+ * person who caused the change is never notified about their own action.
+ */
+async function notifyViewSubscribers(
+  workspaceId: string,
+  detail: IssueDetail,
+  kind: "added" | "completed",
+  actor: MutationActor
+) {
+  const db = getDb();
+  const subscriptions = db
+    .select({
+      userId: taskViewSubscriptions.userId,
+      events: taskViewSubscriptions.events,
+      muted: taskViewSubscriptions.muted,
+      viewId: taskViews.id,
+      viewName: taskViews.name,
+      definition: taskViews.definition,
+      scope: taskViews.scope,
+      projectId: taskViews.projectId,
+      shared: taskViews.shared,
+      ownerId: taskViews.ownerId,
+    })
+    .from(taskViewSubscriptions)
+    .innerJoin(taskViews, eq(taskViews.id, taskViewSubscriptions.viewId))
+    .where(eq(taskViewSubscriptions.workspaceId, workspaceId))
+    .all();
+  const issue = detail.issue;
+  const watchers = subscriptions.filter((row) => {
+    if (row.muted) return false;
+    if (!row.shared && row.ownerId !== row.userId) return false;
+    if (row.scope === "project" && row.projectId !== issue.projectId) return false;
+    return row.events.includes(kind);
+  });
+  if (watchers.length === 0) return;
+
+  const fieldRows = db
+    .select()
+    .from(taskFields)
+    .where(and(eq(taskFields.workspaceId, workspaceId), isNull(taskFields.disabledAt)))
+    .all();
+  const fields: TaskField[] = fieldRows.map((row) => ({
+    id: row.id,
+    name: row.name,
+    type: row.type as TaskField["type"],
+    options: JSON.parse(row.options) as string[],
+    createdBy: row.createdBy,
+    disabledAt: row.disabledAt,
+  }));
+  const valueRows = db
+    .select()
+    .from(taskFieldValues)
+    .where(eq(taskFieldValues.issueId, issue.id))
+    .all();
+  const values: FieldValues = {
+    [issue.id]: Object.fromEntries(valueRows.map((row) => [row.fieldId, row.value])),
+  };
+  // An agent-published task was still triggered by the person who ran the agent.
+  const actorUserId =
+    actor.kind === "user" ? actor.userId : (actor.publishedBy ?? null);
+  const who = actor.kind === "user" ? actor.displayName : `Agent (${actor.label})`;
+  // A project view must not notify someone who cannot open that project.
+  const projectAccess = new Map<string, boolean>();
+  const statusLabel =
+    issue.status === "done"
+      ? "Done"
+      : issue.status === "canceled"
+        ? "Canceled"
+        : issue.status === "in_progress"
+          ? "In Progress"
+          : "Todo";
+  for (const row of watchers) {
+    // Exclude self-triggered actions: the person who moved the task already knows.
+    if (row.userId === actorUserId) continue;
+    if (row.scope === "project" && row.projectId) {
+      let allowed = projectAccess.get(row.userId);
+      if (allowed === undefined) {
+        allowed = (await seesAllTasks(workspaceId, row.userId))
+          ? true
+          : Boolean(await getProject(workspaceId, row.projectId, row.userId));
+        projectAccess.set(row.userId, allowed);
+      }
+      if (!allowed) continue;
+    }
+    const definition = parseStoredDefinition(row.definition);
+    if (!(await taskMatchesView(issue, definition, fields, values))) continue;
+    await notify({
+      workspaceId,
+      userId: row.userId,
+      issueId: issue.id,
+      type: kind === "added" ? "view_added" : "view_completed",
+      body: "",
+      data: {
+        actorName: who,
+        title: issue.title,
+        viewName: row.viewName,
+        ...(kind === "completed" ? { statusLabel } : {}),
+      },
+    });
+  }
+}
+
 export type MutationActor =
   | { kind: "user"; userId: string; displayName: string }
   // publishedBy is the person who ran the agent. An agent task waits for human review.
@@ -2316,6 +2445,7 @@ export type CreateIssueInput = {
   assigneeIds?: string[];
   labelNames?: string[];
   dueDate?: string | null;
+  estimate?: number | null;
   reminder?: ReminderPreset | null;
   recurrence?: Recurrence | null;
   project: string;
@@ -2330,6 +2460,7 @@ export type UpdateIssueInput = {
   assigneeIds?: string[];
   labelNames?: string[];
   dueDate?: string | null;
+  estimate?: number | null;
   reminder?: ReminderPreset | null;
   recurrence?: Recurrence | null;
   // Identifier or id of the parent task. Null or "" detaches this task.
@@ -2343,6 +2474,15 @@ function normalizeDueDate(value: unknown): string | null {
     throw new TacosError("Due date must be a calendar date (YYYY-MM-DD)");
   }
   return text;
+}
+
+function normalizeEstimate(value: unknown): number | null {
+  if (value === null || value === undefined || value === "") return null;
+  const number = Number(value);
+  if (!Number.isFinite(number) || number < 0 || number > 10_000) {
+    throw new TacosError("Estimate must be a number between 0 and 10000");
+  }
+  return Math.round(number * 100) / 100;
 }
 
 function normalizeRecurrence(value: unknown): Recurrence | null {
@@ -2436,6 +2576,7 @@ export async function createIssue(
   const priority = input.priority ?? 0;
   const description = input.description ?? "";
   const dueDate = normalizeDueDate(input.dueDate);
+  const estimate = normalizeEstimate(input.estimate);
   const reminder = dueDate ? normalizeReminder(input.reminder) : null;
   const recurrence = normalizeRecurrence(input.recurrence);
   const id = crypto.randomUUID();
@@ -2470,10 +2611,10 @@ export async function createIssue(
     if(value!==null)customValues.push({issueId:id,fieldId,value});
   }
   await db.run(sql`INSERT INTO issues
-    (id, workspace_id, project_id, parent_id, number, identifier, title, description, status, priority, due_date, reminder, created_by, published_by, review_status, source_thread_id, created_via, created_at, updated_at, position)
+    (id, workspace_id, project_id, parent_id, number, identifier, title, description, status, priority, due_date, estimate, reminder, created_by, published_by, review_status, source_thread_id, created_via, created_at, updated_at, position)
     VALUES (${id}, ${workspaceId}, ${project.id}, ${parentId},
       (SELECT COALESCE(MAX(number), 0) + 1 FROM issues WHERE project_id = ${project.id}),
-      'pending', ${title}, ${description}, ${status}, ${priority}, ${dueDate}, ${reminder},
+      'pending', ${title}, ${description}, ${status}, ${priority}, ${dueDate}, ${estimate}, ${reminder},
       ${publisherId}, ${publisherId}, ${reviewStatus}, ${sourceThreadId},
       ${actor.kind === "agent" ? actor.via : "web"}, ${now}, ${now},
       (SELECT COALESCE(MAX(position), 0) + 1 FROM issues WHERE workspace_id = ${workspaceId}))`);
@@ -2503,6 +2644,7 @@ export async function createIssue(
 
   const detail = await getIssueDetail(workspaceId, id);
   if (!detail) throw new TacosError("Failed to create issue", 500);
+  await notifyViewSubscribers(workspaceId, detail, "added", actor);
   return detail;
 }
 
@@ -2594,6 +2736,13 @@ export async function updateIssue(
         sets.reminder = null;
         changes.push({ type: "reminder_changed", data: { from: row.reminder, to: null } });
       }
+    }
+  }
+  if (patch.estimate !== undefined) {
+    const estimate = normalizeEstimate(patch.estimate);
+    if (estimate !== (row.estimate ?? null)) {
+      sets.estimate = estimate;
+      changes.push({ type: "estimate_changed", data: { from: row.estimate ?? null, to: estimate } });
     }
   }
   if (patch.recurrence !== undefined) {
@@ -2713,6 +2862,12 @@ export async function updateIssue(
 
   const detail = await getIssueDetail(workspaceId, row.id);
   if (!detail) throw new TacosError("Issue disappeared while updating", 500);
+  const completed = changes.some(
+    (change) =>
+      change.type === "status_changed" &&
+      (sets.status === "done" || sets.status === "canceled")
+  );
+  if (completed) await notifyViewSubscribers(workspaceId, detail, "completed", actor);
   return detail;
 }
 
@@ -2848,7 +3003,191 @@ export async function moveIssue(
 
   const detail = await getIssueDetail(workspaceId, row.id);
   if (!detail) throw new TacosError("Issue disappeared while moving", 500);
+  if (
+    input.status &&
+    input.status !== row.status &&
+    (input.status === "done" || input.status === "canceled")
+  ) {
+    await notifyViewSubscribers(workspaceId, detail, "completed", actor);
+  }
   return detail;
+}
+
+/**
+ * Moves a top-level task to another project. The identifier is reallocated inside the
+ * target project; a task with subtasks is refused so a tree never straddles projects.
+ */
+export async function moveIssueToProject(
+  workspaceId: string,
+  idOrIdentifier: string,
+  projectIdOrKey: string,
+  actor: MutationActor
+): Promise<IssueDetail> {
+  const row = await findIssueRow(workspaceId, idOrIdentifier);
+  if (!row) throw new TacosError(`Issue "${idOrIdentifier}" not found`, 404);
+  if (actor.kind === "user" && !(await findVisibleIssueRow(workspaceId, row.id, actor.userId))) {
+    throw new TacosError("Task not found", 404);
+  }
+  const target = await findProjectRow(workspaceId, projectIdOrKey);
+  if (!target) throw new TacosError(`Project "${projectIdOrKey}" not found`, 404);
+  if (target.id === row.projectId) {
+    const unchanged = await getIssueDetail(workspaceId, row.id);
+    if (!unchanged) throw new TacosError("Task not found", 404);
+    return unchanged;
+  }
+  if (row.parentId) {
+    const parent = await findIssueRow(workspaceId, row.parentId);
+    if (!parent || parent.projectId !== target.id) {
+      throw new TacosError("A subtask stays in its parent's project", 400);
+    }
+  }
+  const db = getDb();
+  const child = db
+    .select({ id: issues.id })
+    .from(issues)
+    .where(and(eq(issues.parentId, row.id), isNull(issues.deletedAt)))
+    .limit(1)
+    .get();
+  if (child) {
+    throw new TacosError(
+      "Move or detach its subtasks before moving this task",
+      409,
+      "Subtasks stay in their parent's project"
+    );
+  }
+  const source = await findProjectRow(workspaceId, row.projectId);
+  const now = nowIso();
+  db.transaction((tx) => {
+    // Allocate the number against the target project in the same statement that moves it.
+    tx.run(sql`UPDATE issues SET
+      number = (SELECT COALESCE(MAX(number), 0) + 1 FROM issues WHERE project_id = ${target.id}),
+      project_id = ${target.id}, updated_at = ${now}
+      WHERE id = ${row.id}`);
+    tx.run(sql`UPDATE issues SET identifier = (SELECT key FROM projects WHERE id = ${target.id}) || '-' || number WHERE id = ${row.id}`);
+  });
+  await recordEvent(
+    row.id,
+    "project_changed",
+    {
+      from: source?.name ?? row.projectId,
+      to: target.name,
+      fromProjectId: row.projectId,
+      toProjectId: target.id,
+    },
+    actor
+  );
+  const detail = await getIssueDetail(workspaceId, row.id);
+  if (!detail) throw new TacosError("Issue disappeared while moving", 500);
+  return detail;
+}
+
+export type BulkTaskPatch = {
+  status?: Status;
+  assigneeIds?: string[];
+  priority?: Priority;
+  dueDate?: string | null;
+  labelAdd?: string[];
+  labelRemove?: string[];
+  projectId?: string;
+};
+
+export type BulkTaskResult = { id: string; ok: boolean; error?: string };
+
+/**
+ * Applies one patch to up to 100 tasks. Each task is its own mutation (status
+ * ownership, activity events, recurrence and notifications all run), so one
+ * refusal does not stop the rest; the caller gets a per-task result.
+ */
+export async function bulkUpdateIssues(
+  workspaceId: string,
+  ids: string[],
+  patch: BulkTaskPatch,
+  actor: MutationActor
+): Promise<{ results: BulkTaskResult[]; updated: number }> {
+  if (!Array.isArray(ids) || ids.length === 0) throw new TacosError("Select at least one task", 400);
+  if (ids.length > 100) throw new TacosError("Select at most 100 tasks per batch", 400);
+  const unique = [...new Set(ids)];
+  if (unique.length !== ids.length) throw new TacosError("The batch repeats a task", 400);
+  const hasPatch =
+    patch.status !== undefined ||
+    patch.assigneeIds !== undefined ||
+    patch.priority !== undefined ||
+    patch.dueDate !== undefined ||
+    patch.labelAdd?.length ||
+    patch.labelRemove?.length ||
+    patch.projectId !== undefined;
+  if (!hasPatch) throw new TacosError("Choose a change to apply", 400);
+  if (patch.assigneeIds !== undefined) {
+    const members = await membersById(workspaceId);
+    for (const assigneeId of patch.assigneeIds) {
+      if (!members.has(assigneeId)) throw new TacosError("Assignee is not a member of this workspace", 400);
+    }
+  }
+  if (patch.projectId !== undefined) {
+    const target = await findProjectRow(workspaceId, patch.projectId);
+    if (!target) throw new TacosError("Project not found", 404);
+  }
+  const db = getDb();
+  const add = [...new Set((patch.labelAdd ?? []).map((name) => name.trim()).filter(Boolean))];
+  const remove = new Set((patch.labelRemove ?? []).map((name) => name.trim()).filter(Boolean));
+  const labelsByTask = new Map<string, string[]>();
+  if (add.length > 0 || remove.size > 0) {
+    const rows = db
+      .select({ issueId: issueLabels.issueId, name: labels.name })
+      .from(issueLabels)
+      .innerJoin(labels, eq(labels.id, issueLabels.labelId))
+      .where(inArray(issueLabels.issueId, unique))
+      .all();
+    for (const row of rows) {
+      const list = labelsByTask.get(row.issueId) ?? [];
+      list.push(row.name);
+      labelsByTask.set(row.issueId, list);
+    }
+  }
+  const results: BulkTaskResult[] = [];
+  let updated = 0;
+  for (const id of unique) {
+    const row = await findIssueRow(workspaceId, id);
+    if (!row) {
+      results.push({ id, ok: false, error: "Task not found" });
+      continue;
+    }
+    if (actor.kind === "user" && !(await findVisibleIssueRow(workspaceId, row.id, actor.userId))) {
+      results.push({ id, ok: false, error: "Task not found" });
+      continue;
+    }
+    const errors: string[] = [];
+    if (patch.projectId !== undefined && patch.projectId !== row.projectId) {
+      try {
+        await moveIssueToProject(workspaceId, row.id, patch.projectId, actor);
+      } catch (error) {
+        errors.push(error instanceof Error ? error.message : "Could not move the task");
+      }
+    }
+    const changes: UpdateIssueInput = {};
+    if (patch.status !== undefined) changes.status = patch.status;
+    if (patch.assigneeIds !== undefined) changes.assigneeIds = [...new Set(patch.assigneeIds)];
+    if (patch.priority !== undefined) changes.priority = patch.priority;
+    if (patch.dueDate !== undefined) changes.dueDate = patch.dueDate;
+    if (add.length > 0 || remove.size > 0) {
+      const current = labelsByTask.get(row.id) ?? [];
+      changes.labelNames = [...new Set([...current.filter((name) => !remove.has(name)), ...add])];
+    }
+    try {
+      if (Object.keys(changes).length > 0) {
+        await updateIssue(workspaceId, row.id, changes, actor);
+      }
+      if (errors.length > 0) results.push({ id, ok: false, error: errors.join("; ") });
+      else {
+        updated += 1;
+        results.push({ id, ok: true });
+      }
+    } catch (error) {
+      errors.push(error instanceof Error ? error.message : "Could not update the task");
+      results.push({ id, ok: false, error: errors.join("; ") });
+    }
+  }
+  return { results, updated };
 }
 
 // Deleting an issue sends it to the Trash rather than erasing it: comments and history
@@ -2963,8 +3302,12 @@ async function notifyMentions(
   const names = parseMentions(text);
   const sent = new Set<string>();
   if (names.length === 0) return sent;
-  const actorUserId = actor.kind === "user" ? actor.userId : null;
+  // An agent-published task was still triggered by the person who ran the agent.
+  const actorUserId =
+    actor.kind === "user" ? actor.userId : (actor.publishedBy ?? null);
   const who = actor.kind === "user" ? actor.displayName : `Agent (${actor.label})`;
+  // A project view must not notify someone who cannot open that project.
+  const projectAccess = new Map<string, boolean>();
   for (const member of await listMembers(workspaceId)) {
     if (!names.includes(member.username.toLowerCase())) continue;
     if (member.id === actorUserId || skip.has(member.id)) continue;
@@ -3234,6 +3577,7 @@ export async function deleteIssue(workspaceId: string, idOrIdentifier: string): 
     projectName: "",
     assignees: [],
     dueDate: row.dueDate ?? null,
+    estimate: row.estimate ?? null,
     reminder: (row.reminder as ReminderPreset | null) ?? null,
     recurrence: (row.recurrence as Recurrence | null) ?? null,
     createdBy: row.createdBy,

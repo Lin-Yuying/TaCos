@@ -29,6 +29,7 @@ import type {
 } from "@/lib/issues";
 import { useT } from "@/components/i18n-context";
 import type { FieldValues, TaskField } from "@/lib/task-view";
+import type { TaskViewSummary } from "@/lib/task-views";
 import { PAGE_INSET } from "@/lib/page-chrome";
 
 type Counts = Record<Status, number> & { total: number };
@@ -54,10 +55,11 @@ export function ProjectWorkspace({
   resources,
   trashedTitles,
   fields,
-  fieldValues,taskQuery,taskPage,
+  fieldValues,taskQuery,taskPage,initialView,
 }: {
   fields: TaskField[];
   taskQuery?:TaskQuery;taskPage?:Awaited<ReturnType<typeof queryTaskView>>;
+  initialView?: TaskViewSummary | null;
   fieldValues: FieldValues;
   workspaceId: string;
   project: ProjectDetail;
@@ -230,6 +232,7 @@ export function ProjectWorkspace({
             </div>
           </header>
           <IssueLayout
+            key={`${project.id}:${initialView?.id ?? "no-view"}`}
             serverQuery={taskQuery}
             initialPage={taskPage}
             issues={shown}
@@ -238,6 +241,9 @@ export function ProjectWorkspace({
             fields={fields}
             values={fieldValues}
             manageFields
+            scope="project"
+            projectId={project.id}
+            initialView={initialView ?? null}
           />
         </>
       )}

@@ -70,7 +70,7 @@ async function main() {
   const ownerList = await listIssues(ws, { viewerId: ownerId });
   assert(ownerList.some((row) => row.id === task.issue.id), "the owner still sees the task");
   const board = fs.readFileSync(new URL("../src/app/[workspaceId]/page.tsx", import.meta.url), "utf8");
-  assert(board.includes("queryTaskView(workspaceId,user.id,query)"), "the task board passes the signed-in viewer to the authorized query");
+  assert(board.includes("queryTaskView(workspaceId,user.id,query,"), "the task board passes the signed-in viewer to the authorized query");
   const queryModule=fs.readFileSync(new URL("../src/lib/task-query.ts",import.meta.url),"utf8");
   assert(queryModule.includes("viewerId:user"), "paged task queries enforce the viewer projects");
 

@@ -6,6 +6,8 @@ import { listMembers, listProjects, type Status } from "@/lib/issues";
 import { ListHeader } from "@/components/list-header";
 import { IssueLayout } from "@/components/issue-layout";
 import { queryTaskView,type TaskQuery } from "@/lib/task-query";
+import { defaultTaskView, getTaskView, type TaskViewSummary } from "@/lib/task-views";
+import { EMPTY_VIEW } from "@/lib/task-view";
 
 type View = "all" | "active" | "open" | "my" | "unassigned" | "agent" | Status;
 
@@ -74,7 +76,26 @@ async function IssuesView({
           : (assigneeMember?.id ?? undefined),
     agent: view === "agent",
   };
-  const result=await queryTaskView(workspaceId,user.id,query);
+  // ?viewId= opens a saved view; without one the scope default (if a manager chose
+  // one) applies. Personal views keep their own saved definition from the menu.
+  const requestedViewId = typeof sp.viewId === "string" ? sp.viewId : "";
+  let activeView: TaskViewSummary | null = null;
+  if (requestedViewId) {
+    try {
+      activeView = getTaskView(workspaceId, user.id, requestedViewId);
+    } catch {
+      activeView = null;
+    }
+  }
+  if (!activeView) activeView = defaultTaskView(workspaceId, user.id, "workspace");
+  const viewDefinition = activeView
+    ? {
+        filters: activeView.definition.filters,
+        sort: activeView.definition.sort,
+        display: activeView.definition.display,
+      }
+    : EMPTY_VIEW;
+  const result=await queryTaskView(workspaceId,user.id,query,viewDefinition);
   const issues=result.items;
 
   const {fields,values}=result;
@@ -92,6 +113,7 @@ async function IssuesView({
         assigneeName={assigneeParam === "me" ? user.displayName : assigneeMember?.displayName}
       />
       <IssueLayout
+        key={activeView?.id ?? "no-view"}
         serverQuery={query}
         initialPage={result}
         issues={issues}
@@ -100,6 +122,8 @@ async function IssuesView({
         fields={fields}
         values={values}
         manageFields
+        scope="workspace"
+        initialView={activeView}
       />
     </div>
   );

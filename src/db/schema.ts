@@ -371,6 +371,8 @@ export const issues = sqliteTable(
     createdBy: text("created_by"),
     // YYYY-MM-DD, picked in the task panel. Null when the task has no deadline.
     dueDate: text("due_date"),
+    // planning estimate in points/hours; null when nobody sized the task yet (U-03 reads it)
+    estimate: real("estimate"),
     // how long before dueDate to remind: 12h | 1d | 3d | 5d | 7d
     reminder: text("reminder"),
     // daily | weekly | monthly. Null when the task does not repeat.
@@ -777,4 +779,97 @@ export const personalEntityState = sqliteTable("personal_entity_state", {
   pinnedAt: text("pinned_at"), position: integer("position").notNull().default(0),
 }, (t) => [primaryKey({ columns: [t.userId, t.workspaceId, t.entityType, t.entityId] })]);
 
+// One-time schema work (data migrations) recorded by name, so it never runs twice.
+export const schemaMigrations = sqliteTable("schema_migrations", {
+  name: text("name").primaryKey(),
+  appliedAt: text("applied_at").notNull(),
+});
+
+// Saved task list definitions. Personal views (shared=0) belong to one member;
+// shared views (shared=1) are visible to everyone in the workspace, or to one
+// project when scope='project'. `definition` is JSON TaskViewDefinition.
+export const taskViews = sqliteTable(
+  "task_views",
+  {
+    id: text("id").primaryKey(),
+    workspaceId: text("workspace_id").notNull(),
+    // set only for a project-scoped view
+    projectId: text("project_id"),
+    // workspace | project
+    scope: text("scope").notNull(),
+    name: text("name").notNull(),
+    definition: text("definition").notNull(),
+    // 0 personal, 1 shared with the workspace/project
+    shared: integer("shared").notNull().default(0),
+    ownerId: text("owner_id").notNull(),
+    position: integer("position").notNull().default(0),
+    // at most one default per workspace scope and per project scope
+    isDefault: integer("is_default").notNull().default(0),
+    createdAt: text("created_at").notNull(),
+    updatedAt: text("updated_at").notNull(),
+  },
+  (t) => [
+    index("task_views_workspace_idx").on(t.workspaceId),
+    index("task_views_owner_idx").on(t.ownerId),
+  ]
+);
+
+// Per-member state on a view: favorite and a personal display override. A personal
+// override never changes the shared definition.
+export const taskViewPrefs = sqliteTable(
+  "task_view_prefs",
+  {
+    workspaceId: text("workspace_id").notNull(),
+    userId: text("user_id").notNull(),
+    viewId: text("view_id").notNull(),
+    favorite: integer("favorite").notNull().default(0),
+    // JSON TaskViewDisplay; only this member sees it
+    displayOverride: text("display_override"),
+    updatedAt: text("updated_at").notNull(),
+  },
+  (t) => [primaryKey({ columns: [t.workspaceId, t.userId, t.viewId] })]
+);
+
+// Workspace-level task templates: a reusable draft body for the composer. Per-project
+// templates are a follow-up.
+export const taskTemplates = sqliteTable(
+  "task_templates",
+  {
+    id: text("id").primaryKey(),
+    workspaceId: text("workspace_id").notNull(),
+    name: text("name").notNull(),
+    title: text("title").notNull(),
+    description: text("description").notNull().default(""),
+    priority: integer("priority").notNull().default(0),
+    // JSON array of label names
+    labelNames: text("label_names").notNull().default("[]"),
+    // JSON object: custom field id -> stored value
+    fieldValues: text("field_values").notNull().default("{}"),
+    createdBy: text("created_by").notNull(),
+    createdAt: text("created_at").notNull(),
+    updatedAt: text("updated_at").notNull(),
+  },
+  (t) => [index("task_templates_workspace_idx").on(t.workspaceId)]
+);
+
+// A member watching a shared view. Delivery is the Inbox only; there is no
+// Slack/email channel. Row absence means "not subscribed", so the feature is off
+// until someone opts in.
+export const taskViewSubscriptions = sqliteTable(
+  "task_view_subscriptions",
+  {
+    workspaceId: text("workspace_id").notNull(),
+    userId: text("user_id").notNull(),
+    viewId: text("view_id").notNull(),
+    // JSON array of "added" | "completed"; both are on unless the member changes it.
+    events: text("events").notNull().default('["added","completed"]'),
+    muted: integer("muted").notNull().default(0),
+    createdAt: text("created_at").notNull(),
+    updatedAt: text("updated_at").notNull(),
+  },
+  (t) => [primaryKey({ columns: [t.workspaceId, t.userId, t.viewId] })]
+);
+
+// Kept for the legacy personal views that were migrated into task_views. Reads and
+// writes go through task_views now; the rows stay so the migration can be audited.
 export const personalTaskViews=sqliteTable("personal_task_views",{workspaceId:text("workspace_id").notNull(),userId:text("user_id").notNull(),scope:text("scope").notNull(),name:text("name").notNull(),value:text("value").notNull()},t=>[primaryKey({columns:[t.workspaceId,t.userId,t.scope,t.name]})]);

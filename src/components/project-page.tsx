@@ -33,6 +33,7 @@ import type { PageContext } from "@/components/markdown";
 import { listProjectResources, type ProjectResource } from "@/lib/resources";
 import { listFieldValues, listTaskFields } from "@/lib/task-fields";
 import type { ProjectTab } from "@/components/project-header";
+import { defaultTaskView, getTaskView, type TaskViewSummary } from "@/lib/task-views";
 
 // Both the project route and its legacy /issues sub-route render this, so the
 // Overview/Tasks pills can switch in place instead of navigating.
@@ -61,7 +62,28 @@ export async function ProjectPage({
   if(!access.canView)initialTab="issues";
 
   const taskQuery={projectId:project.id,status:typeof sp?.status==="string"&&["todo","in_progress","done","canceled"].includes(sp.status)?sp.status as "todo":undefined,q:typeof sp?.q==="string"?sp.q:undefined};
-  const taskPage=initialTab==="issues"?await queryTaskView(workspaceId,user.id,taskQuery,EMPTY_VIEW):undefined;
+  // ?viewId= or the project's default view decides the filters the list opens with.
+  const requestedViewId = typeof sp?.viewId === "string" ? sp.viewId : "";
+  let activeView: TaskViewSummary | null = null;
+  if (requestedViewId) {
+    try {
+      activeView = getTaskView(workspaceId, user.id, requestedViewId);
+      if (activeView.scope === "project" && activeView.projectId !== project.id) {
+        activeView = null;
+      }
+    } catch {
+      activeView = null;
+    }
+  }
+  if (!activeView) activeView = defaultTaskView(workspaceId, user.id, "project", project.id);
+  const viewDefinition = activeView
+    ? {
+        filters: activeView.definition.filters,
+        sort: activeView.definition.sort,
+        display: activeView.definition.display,
+      }
+    : EMPTY_VIEW;
+  const taskPage=initialTab==="issues"?await queryTaskView(workspaceId,user.id,taskQuery,viewDefinition):undefined;
   // When the owner turns off workspace-wide task visibility, a member outside this
   // project cannot open it — the same check the sidebar and lists use.
   const [visible, counts, members, projectMembers, issues, favorite, documents] =
@@ -118,6 +140,7 @@ export async function ProjectPage({
     <ProjectWorkspace
       taskQuery={taskQuery}
       taskPage={taskPage}
+      initialView={activeView}
       fields={fields}
       fieldValues={fieldValues}
       key={project.id}

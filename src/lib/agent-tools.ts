@@ -137,6 +137,7 @@ const TOOLS: AgentToolSpec[] = [
         status: { type: "string", description: STATUS_HELP },
         priority: { type: "string", description: PRIORITY_LIST },
         dueDate: { type: "string", description: "YYYY-MM-DD" },
+        estimate: { type: "number", description: "Numeric planning estimate; omit for unsized" },
         assignees: {
           type: "array",
           items: { type: "string" },
@@ -170,6 +171,7 @@ const TOOLS: AgentToolSpec[] = [
               status: { type: "string", description: STATUS_HELP },
               priority: { type: "string", description: PRIORITY_LIST },
               dueDate: { type: "string", description: "YYYY-MM-DD" },
+              estimate: { type: "number", description: "Numeric planning estimate; omit for unsized" },
               assignees: {
                 type: "array",
                 items: { type: "string" },
@@ -205,6 +207,7 @@ const TOOLS: AgentToolSpec[] = [
         status: { type: "string", description: STATUS_HELP },
         priority: { type: "string", description: PRIORITY_LIST },
         dueDate: { type: "string", description: "YYYY-MM-DD, empty string clears it" },
+        estimate: { type: "number", description: "Numeric planning estimate; null clears it" },
         parent: {
           type: "string",
           description: "Identifier of the parent task. Empty string detaches this task.",
@@ -233,6 +236,7 @@ const TOOLS: AgentToolSpec[] = [
               status: { type: "string", description: STATUS_HELP },
               priority: { type: "string", description: PRIORITY_LIST },
               dueDate: { type: "string", description: "YYYY-MM-DD, empty string clears it" },
+              estimate: { type: "number", description: "Numeric planning estimate; null clears it" },
               parent: {
                 type: "string",
                 description: "Identifier of the parent task. Empty string detaches this task.",
@@ -520,6 +524,7 @@ async function createOne(ctx: AgentToolContext, args: ToolArgs): Promise<string>
       status: asStatus(args.status) ?? "todo",
       priority: asPriority(args.priority) ?? 0,
       dueDate: str(args.dueDate) || null,
+      estimate: typeof args.estimate === "number" ? args.estimate : undefined,
       assigneeIds,
       labelNames: Array.isArray(args.labels)
         ? args.labels.map((value) => String(value).trim()).filter(Boolean)
@@ -541,6 +546,10 @@ async function updateOne(ctx: AgentToolContext, args: ToolArgs): Promise<string>
   const priority = asPriority(args.priority);
   if (priority !== undefined) patch.priority = priority;
   if (args.dueDate !== undefined) patch.dueDate = str(args.dueDate) || null;
+  if (args.estimate !== undefined) {
+    patch.estimate =
+      args.estimate === null || args.estimate === "" ? null : Number(args.estimate);
+  }
   if (args.parent !== undefined) patch.parent = str(args.parent) || null;
   if (Object.keys(patch).length === 0) throw new TacosError("Nothing to change");
   const { issue } = await requireProjectTask(ctx, str(args.id));

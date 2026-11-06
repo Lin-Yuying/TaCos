@@ -67,6 +67,10 @@ export async function POST(req: Request) {
         assigneeIds: await resolveAssigneeIds(key.workspaceId, assigneeValues),
         labelNames: parseLabelNames(body.labels),
         dueDate: typeof body.dueDate === "string" ? body.dueDate : null,
+        estimate:
+          body.estimate === undefined || body.estimate === null || body.estimate === ""
+            ? null
+            : Number(body.estimate),
         reminder:
           typeof body.reminder === "string" ? (body.reminder as ReminderPreset) : null,
         recurrence:

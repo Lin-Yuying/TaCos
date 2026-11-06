@@ -8,7 +8,7 @@ import { useParams } from "next/navigation";
 import { useScrollMemory } from "@/lib/ui/scroll-memory";
 import { usePathname } from "next/navigation";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { useUI, isTyping } from "@/components/ui-context";
+import { useUI, isTyping, type TaskSelection } from "@/components/ui-context";
 import { AddIssueButton } from "@/components/add-issue-button";
 import { LabelPill, PriorityIcon, StatusIcon, ViaBadge, STATUS_META } from "@/components/icons";
 import { STATUS_ORDER, PRIORITY_NAMES } from "@/lib/constants";
@@ -17,6 +17,10 @@ import type { Assignee, IssueWithLabels } from "@/lib/issues";
 import { issueRef, timeAgo } from "@/lib/format";
 import { useLocale, useT } from "@/components/i18n-context";
 import { PAGE_INSET } from "@/lib/page-chrome";
+import type { TaskGroup } from "@/lib/view-grouping";
+import { VIEW_PROPERTIES, type ViewProperty } from "@/lib/task-view";
+
+const ALL_PROPERTIES: ViewProperty[] = [...VIEW_PROPERTIES];
 
 function initials(displayName: string) {
   const words = displayName
@@ -141,26 +145,87 @@ export function AssigneeStack({
   );
 }
 
-export function IssueTable({ issues }: { issues: IssueWithLabels[] }) {
+function SelectionBox({
+  title,
+  checked,
+  onToggle,
+}: {
+  title: string;
+  checked: boolean;
+  onToggle: () => void;
+}) {
+  const t = useT();
+  return (
+    <input
+      type="checkbox"
+      aria-label={t("Select task {title}", { title })}
+      checked={checked}
+      onClick={(event) => event.stopPropagation()}
+      onChange={(event) => {
+        event.stopPropagation();
+        onToggle();
+      }}
+      className="h-3.5 w-3.5 shrink-0 accent-accent"
+    />
+  );
+}
+
+export function IssueTable({
+  issues,
+  groups: grouped,
+  properties = ALL_PROPERTIES,
+  selection,
+}: {
+  issues: IssueWithLabels[];
+  // A pre-computed grouping from the display menu. Falls back to status for the
+  // pages that do not offer display options.
+  groups?: TaskGroup<IssueWithLabels>[];
+  properties?: ViewProperty[];
+  selection?: TaskSelection;
+}) {
   const t = useT();
   const locale = useLocale();
   const { openIssue, openIssueId, setFocused, pins } = useUI();
   const assigneeHref = useAssigneeHref();
   const pinnedIds=useMemo(()=>new Set(pins.filter(pin=>pin.kind==="task").map(pin=>pin.id)),[pins]);
-  const groups = useMemo(
-    () =>
-      [{status:"pinned" as const,items:issues.filter(issue=>pinnedIds.has(issue.id))},...STATUS_ORDER.map((status) => ({
-        status,
-        items: issues.filter((issue) => issue.status === status&&!pinnedIds.has(issue.id)),
-      }))].filter((group) => group.items.length > 0),
-    [issues,pinnedIds]
-  );
+  const show = (property: ViewProperty) => properties.includes(property);
+  const groups = useMemo(() => {
+    const source =
+      grouped ??
+      STATUS_ORDER.map((status) => ({
+        key: `status:${status}`,
+        label: STATUS_META[status].label,
+        property: "status" as const,
+        value: status,
+        tasks: [] as IssueWithLabels[],
+      }));
+    const explicit = grouped !== undefined;
+    return [
+      ...(pinnedIds.size > 0
+        ? [
+            {
+              key: "pinned",
+              label: "Pinned",
+              property: "status" as const,
+              value: null,
+              tasks: issues.filter((issue) => pinnedIds.has(issue.id)),
+            },
+          ]
+        : []),
+      ...source
+        .map((group) => ({
+          ...group,
+          tasks: group.tasks.filter((issue) => !pinnedIds.has(issue.id)),
+        }))
+        .filter((group) => explicit || group.tasks.length > 0 || group.key === "pinned"),
+    ];
+  }, [grouped, issues, pinnedIds]);
 
-  const entries=useMemo(()=>groups.flatMap(group=>[{header:group},...group.items.map(issue=>({issue}))] as ({header:typeof group}|{issue:IssueWithLabels})[]),[groups]);
+  const entries=useMemo(()=>groups.flatMap(group=>[{header:group},...group.tasks.map(issue=>({issue}))] as ({header:TaskGroup<IssueWithLabels>}|{issue:IssueWithLabels})[]),[groups]);
   const stickyIndexes=useMemo(()=>entries.flatMap((entry,index)=>"header" in entry?[index]:[]),[entries]);
   const entryIndex=useMemo(()=>new Map(entries.flatMap((entry,index)=>"issue" in entry?[[entry.issue.id,index] as const]:[])),[entries]);
   const windowHandle=useRef<VirtualStackHandle>(null),keyboardFocus=useRef(false);
-  const visibleIssues = useMemo(() => groups.flatMap((group) => group.items), [groups]);
+  const visibleIssues = useMemo(() => groups.flatMap((group) => group.tasks), [groups]);
   const indexes=useMemo(()=>new Map(visibleIssues.map((issue,index)=>[issue.id,index])),[visibleIssues]);
   const [focusId, setFocusId] = useState<string | null>(null);
   const foundIndex = indexes.get(focusId??"")??-1;
@@ -224,19 +289,20 @@ export function IssueTable({ issues }: { issues: IssueWithLabels[] }) {
 
 
   return (
-    <VirtualStack scrollRef={scroller} handle={windowHandle} className="@container min-h-0 flex-1 overflow-y-auto" items={entries} keepIndex={focusId?entryIndex.get(focusId):undefined} estimate={38} stickyIndexes={stickyIndexes} keyFor={entry=>"header" in entry?`group:${entry.header.status}`:entry.issue.id} render={entry=>{
-      if("header" in entry){const group=entry.header;return (<div className={`sticky top-0 z-10 flex items-center gap-2 border-b border-border bg-bg/95 py-1.5 backdrop-blur ${PAGE_INSET}`}>
-            {group.status!=="pinned"&&<StatusIcon status={group.status} size={13} />}
+    <VirtualStack scrollRef={scroller} handle={windowHandle} className="@container min-h-0 flex-1 overflow-y-auto" items={entries} keepIndex={focusId?entryIndex.get(focusId):undefined} estimate={38} stickyIndexes={stickyIndexes} keyFor={entry=>"header" in entry?`group:${entry.header.key}`:entry.issue.id} render={entry=>{
+      if("header" in entry){const group=entry.header;const status=group.property==="status"&&group.value&&group.key!=="pinned"?group.value as keyof typeof STATUS_META:null;return (<div className={`sticky top-0 z-10 flex items-center gap-2 border-b border-border bg-bg/95 py-1.5 backdrop-blur ${PAGE_INSET}`}>
+            {status?<StatusIcon status={status} size={13}/>:null}
             <span className="text-small font-medium text-muted">
-              {group.status==="pinned"?t("Pinned"):t(STATUS_META[group.status].label)}
+              {t(group.label)}
             </span>
-            <span className="text-small text-faint">{group.items.length}</span>
-            {group.status!=="pinned"&&<AddIssueButton status={group.status} />}
+            <span className="text-small text-faint">{group.tasks.length}</span>
+            {status?<AddIssueButton status={status}/>:null}
           </div>);}
       const issue=entry.issue;
             const index = indexes.get(issue.id) ?? -1;
             const focused = focusIndex === index;
             const opened = openIssueId === issue.id;
+            const checked = selection?.selected.has(issue.id) ?? false;
             return (
               <EntityRow key={issue.id} kind="task" id={issue.id} title={issue.title}>
               <div
@@ -245,6 +311,7 @@ export function IssueTable({ issues }: { issues: IssueWithLabels[] }) {
                   rowRefs.current[index] = el;
                 }}
                 data-task-row
+                data-selected={checked || undefined}
                 role="button"
                 tabIndex={focused || focusIndex === null && index === 0 ? 0 : -1}
                 onFocus={() => setFocusIndex(index)}
@@ -257,75 +324,100 @@ export function IssueTable({ issues }: { issues: IssueWithLabels[] }) {
                   focused ? "bg-row-active" : opened ? "bg-surface" : "hover:bg-elevated/40"
                 } ${opened ? "border-l-2 border-l-accent" : "border-l-2 border-l-transparent"}`}
               >
-                <StatusIcon status={issue.status} size={14} />
-                <span
-                  title={issueRef(issue)}
-                  className="w-[124px] shrink-0 truncate font-mono text-small text-faint"
-                >
-                  {issueRef(issue)}
-                </span>
-                <span className="min-w-0 flex-1 truncate">{issue.title}</span>
-                <span className="hidden w-[96px] shrink-0 items-center gap-1.5 text-small @xl:flex">
-                  <PriorityIcon priority={issue.priority} size={14} />
-                  <span className={issue.priority === 0 ? "truncate text-faint" : "truncate text-muted"}>
-                    {t(PRIORITY_NAMES[issue.priority])}
+                {selection?.mode ? (
+                  <SelectionBox
+                    title={issue.title}
+                    checked={checked}
+                    onToggle={() => selection.toggle(issue.id)}
+                  />
+                ) : null}
+                {show("status") ? <StatusIcon status={issue.status} size={14} /> : null}
+                {show("id") ? (
+                  <span
+                    title={issueRef(issue)}
+                    className="w-[124px] shrink-0 truncate font-mono text-small text-faint"
+                  >
+                    {issueRef(issue)}
                   </span>
-                </span>
-                <span className="hidden w-[146px] shrink-0 items-center gap-1.5 @4xl:flex">
-                  {issue.assignees.length === 1 ? (
-                    (() => {
-                      const assignee = issue.assignees[0];
-                      const href = assigneeHref(assignee.id);
-                      const face = (
-                        <>
-                          <AssigneeAvatar
-                            displayName={assignee.displayName}
-                            avatar={assignee.avatar}
-                          />
-                          <span className="min-w-0 truncate text-small text-muted">
-                            {assignee.displayName}
-                          </span>
-                        </>
-                      );
-                      return href ? (
-                        <Link
-                          href={href}
-                          onClick={(event) => event.stopPropagation()}
-                          className="flex min-w-0 items-center gap-1.5 rounded transition-colors hover:text-text"
-                        >
-                          {face}
-                        </Link>
-                      ) : (
-                        <span className="flex min-w-0 items-center gap-1.5">{face}</span>
-                      );
-                    })()
-                  ) : issue.assignees.length > 1 ? (
-                    // Names, not a count: the row already shows who is on the task at
-                    // a glance, without opening the panel to find out.
-                    <span
-                      title={issue.assignees.map((assignee) => assignee.displayName).join(", ")}
-                      className="flex min-w-0 items-center gap-1.5"
-                    >
-                      <AssigneeStack assignees={issue.assignees} max={2} hrefFor={assigneeHref} />
-                      <span className="min-w-0 truncate text-small text-muted">
-                        {issue.assignees.map((assignee) => assignee.displayName).join(", ")}
-                      </span>
+                ) : null}
+                <span className="min-w-0 flex-1 truncate">{issue.title}</span>
+                {show("project") ? (
+                  <span className="hidden w-[110px] shrink-0 truncate text-small text-muted @xl:block">
+                    {issue.projectName}
+                  </span>
+                ) : null}
+                {show("priority") ? (
+                  <span className="hidden w-[96px] shrink-0 items-center gap-1.5 text-small @xl:flex">
+                    <PriorityIcon priority={issue.priority} size={14} />
+                    <span className={issue.priority === 0 ? "truncate text-faint" : "truncate text-muted"}>
+                      {t(PRIORITY_NAMES[issue.priority])}
                     </span>
-                  ) : null}
-                </span>
-                <span className="hidden w-[112px] shrink-0 items-center justify-end gap-1 @4xl:flex">
-                  {issue.labels.slice(0, 2).map((label) => (
-                    <LabelPill key={label.id} name={label.name} color={label.color} small />
-                  ))}
-                  {issue.labels.length > 2 && (
-                    <span className="text-caption text-faint">+{issue.labels.length - 2}</span>
-                  )}
-                </span>
+                  </span>
+                ) : null}
+                {show("assignee") ? (
+                  <span className="hidden w-[146px] shrink-0 items-center gap-1.5 @4xl:flex">
+                    {issue.assignees.length === 1 ? (
+                      (() => {
+                        const assignee = issue.assignees[0];
+                        const href = assigneeHref(assignee.id);
+                        const face = (
+                          <>
+                            <AssigneeAvatar
+                              displayName={assignee.displayName}
+                              avatar={assignee.avatar}
+                            />
+                            <span className="min-w-0 truncate text-small text-muted">
+                              {assignee.displayName}
+                            </span>
+                          </>
+                        );
+                        return href ? (
+                          <Link
+                            href={href}
+                            onClick={(event) => event.stopPropagation()}
+                            className="flex min-w-0 items-center gap-1.5 rounded transition-colors hover:text-text"
+                          >
+                            {face}
+                          </Link>
+                        ) : (
+                          <span className="flex min-w-0 items-center gap-1.5">{face}</span>
+                        );
+                      })()
+                    ) : issue.assignees.length > 1 ? (
+                      <span
+                        title={issue.assignees.map((assignee) => assignee.displayName).join(", ")}
+                        className="flex min-w-0 items-center gap-1.5"
+                      >
+                        <AssigneeStack assignees={issue.assignees} max={2} hrefFor={assigneeHref} />
+                        <span className="min-w-0 truncate text-small text-muted">
+                          {issue.assignees.map((assignee) => assignee.displayName).join(", ")}
+                        </span>
+                      </span>
+                    ) : null}
+                  </span>
+                ) : null}
+                {show("dueDate") ? (
+                  <span className="hidden w-[86px] shrink-0 truncate text-small text-muted @2xl:block">
+                    {issue.dueDate ?? ""}
+                  </span>
+                ) : null}
+                {show("labels") ? (
+                  <span className="hidden w-[112px] shrink-0 items-center justify-end gap-1 @4xl:flex">
+                    {issue.labels.slice(0, 2).map((label) => (
+                      <LabelPill key={label.id} name={label.name} color={label.color} small />
+                    ))}
+                    {issue.labels.length > 2 && (
+                      <span className="text-caption text-faint">+{issue.labels.length - 2}</span>
+                    )}
+                  </span>
+                ) : null}
                 <span className="flex w-[72px] shrink-0 items-center justify-end gap-1">
                   <ViaBadge via={issue.createdVia} />
-                  <span suppressHydrationWarning className="whitespace-nowrap text-right text-small text-faint">
-                    {timeAgo(issue.updatedAt, locale)}
-                  </span>
+                  {show("dates") ? (
+                    <span suppressHydrationWarning className="whitespace-nowrap text-right text-small text-faint">
+                      {timeAgo(issue.updatedAt, locale)}
+                    </span>
+                  ) : null}
                 </span>
               </div>
               </EntityRow>

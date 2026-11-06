@@ -70,6 +70,12 @@ export async function PATCH(req: Request, ctx: Ctx) {
             : typeof body.dueDate === "string" && body.dueDate.trim() !== ""
               ? body.dueDate
               : null,
+        estimate:
+          body.estimate === undefined
+            ? undefined
+            : body.estimate === null || body.estimate === ""
+              ? null
+              : Number(body.estimate),
         reminder:
           body.reminder === undefined
             ? undefined
