@@ -1,11 +1,11 @@
 "use client";
 import { MoveDocument } from "./move-document";
-import { useState, type ReactNode } from "react";
+import { useMemo, useRef, useState, type ReactNode } from "react";
 import { useRouter, useParams } from "next/navigation";
 import * as Context from "@radix-ui/react-context-menu";
 import { MoreHorizontal, Pin } from "lucide-react";
 import { Menu, MenuItem } from "@/components/menu";
-import { useUI } from "@/components/ui-context";
+import { usePins, useUIActions } from "@/components/ui-context";
 import { useT } from "@/components/i18n-context";
 import { inspectEntityAction, renameEntityAction, setPinAction } from "@/app/entity-actions";
 import { deleteIssueAction, restoreIssueAction, toggleProjectFavoriteAction, trashProjectAction, restoreProjectAction } from "@/app/actions";
@@ -15,17 +15,22 @@ import { ENTITY_RENAMED, PERSONAL_STATE_CHANGED, entityHref, type EntityKind, ty
 
 export function EntityRow({ kind, id, title, children }: { kind: EntityKind; id: string; title: string; children: ReactNode }) {
   const { workspaceId } = useParams<{workspaceId: string}>();
-  const { pins, confirm, toast } = useUI();
+  const { confirm, toast } = useUIActions();
+  const { keys } = usePins();
   const router = useRouter(); const t = useT();
   const [moveOpen,setMoveOpen]=useState(false);
   const [cap, setCap] = useState<EntityCapabilities | null>(null);
   const [editing, setEditing] = useState(false), [draft, setDraft] = useState(title), [expected, setExpected] = useState(title);
   const [busy, setBusy] = useState(false), [error, setError] = useState<string | null>(null);
-  const pinned = pins.some((p) => p.kind === kind && p.id === id);
+  const pinned = keys.has(`${kind}:${id}`);
+  const inspecting = useRef<ReturnType<typeof inspectEntityAction> | null>(null);
   async function inspect() {
-    const result = await inspectEntityAction(workspaceId, kind, id);
+    const request = inspecting.current ??= inspectEntityAction(workspaceId, kind, id);
+    try {
+    const result = await request;
     if (result.ok) { setCap(result.data.capabilities); if (!editing) { setDraft(result.data.title); setExpected(result.data.title); } return result.data; }
     setError(result.error); return null;
+    } catch { setError(t("Could not save. Retry.")); return null; } finally { if (inspecting.current === request) inspecting.current = null; }
   }
   async function rename() { const next = await inspect(); if (next?.capabilities.rename) { setDraft(next.title); setExpected(next.title); setEditing(true); setError(null); } }
   async function save() {
@@ -75,7 +80,7 @@ export function EntityRow({ kind, id, title, children }: { kind: EntityKind; id:
         if (e.key === "Escape") { setEditing(false); setError(null); }
       }} className="min-w-0 flex-1 rounded border border-border bg-bg px-2 py-1 text-body"/><button disabled={busy} onClick={() => void save()} className="text-small">{t(busy ? "Saving…" : "Save")}</button><button disabled={busy} onClick={() => {setEditing(false);setError(null);}} className="text-small">{t("Cancel")}</button></div> : <div className="pr-8">{children}</div>}
       {!editing && <div className="absolute right-0 top-1/2 -translate-y-1/2" onClick={(e) => e.stopPropagation()}>
-        <Menu onOpenChange={(open) => {if(open) void inspect();}} width={240} triggerClassName="flex h-7 w-7 items-center justify-center rounded text-faint hover:bg-elevated focus-visible:text-text" trigger={<span aria-label={t("More actions")} onPointerDown={() => void inspect()}><MoreHorizontal size={14}/></span>}>
+        <Menu onOpenChange={(open) => {if(open) void inspect();}} width={240} triggerClassName="flex h-7 w-7 items-center justify-center rounded text-faint hover:bg-elevated focus-visible:text-text" trigger={<span aria-label={t("More actions")}><MoreHorizontal size={14}/></span>}>
           {(close) => <>{!cap && <p className="p-2 text-small text-faint">{t("Loading…")}</p>}{actions.map((action) => <MenuItem key={action.label} disabled={action.disabled} danger={action.danger} onSelect={() => {close();void action.run();}}>{action.label}</MenuItem>)}</>}
         </Menu>
       </div>}
@@ -90,6 +95,6 @@ export function EntityRow({ kind, id, title, children }: { kind: EntityKind; id:
 }
 
 export function usePinned<T extends {id: string}>(items: T[], kind: EntityKind): T[] {
-  const { pins } = useUI(); const order = new Map(pins.filter((pin) => pin.kind === kind).map((pin,index) => [pin.id,index]));
-  return [...items].sort((a,b) => (order.get(a.id) ?? Number.MAX_SAFE_INTEGER) - (order.get(b.id) ?? Number.MAX_SAFE_INTEGER));
+  const { pins } = usePins(); const order = useMemo(()=>new Map(pins.filter((pin) => pin.kind === kind).map((pin,index) => [pin.id,index])),[pins,kind]);
+  return useMemo(() => [...items].sort((a,b) => (order.get(a.id) ?? Number.MAX_SAFE_INTEGER) - (order.get(b.id) ?? Number.MAX_SAFE_INTEGER)), [items, order]);
 }

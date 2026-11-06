@@ -6,13 +6,14 @@ import {
   useContext,
   useEffect,
   useRef,
+  useMemo,
   useState,
   type ReactNode,
 } from "react";
 import { listPinsAction } from "@/app/entity-actions";
 import { PERSONAL_STATE_CHANGED, type PersonalPin } from "@/lib/ui/entity-actions";
 import { usePathname, useSearchParams } from "next/navigation";
-import { useStoredJson } from "@/lib/use-stored-json";
+import { exportLocalDrafts, useStoredJson } from "@/lib/use-stored-json";
 import { Modal } from "@/components/ui/modal";
 import { useT } from "@/components/i18n-context";
 import type { Priority, Status } from "@/lib/constants";
@@ -106,6 +107,11 @@ type UIState = {
   toast: (message: string, action?: ToastAction) => void;
 };
 
+type UIActions = Pick<UIState,"scope"|"confirm"|"toast"|"openIssue"|"closeIssue"|"openPage"|"closePage"|"setFocused"|"setComposerOpen">;
+const ActionsContext=createContext<UIActions|null>(null);
+const PinsContext=createContext<{pins:PersonalPin[];keys:Set<string>} | null>(null);
+export function useUIActions(){const value=useContext(ActionsContext);if(!value)throw new Error("UIProvider missing");return value;}
+export function usePins(){const value=useContext(PinsContext);if(!value)throw new Error("UIProvider missing");return value;}
 const UIContext = createContext<UIState | null>(null);
 
 export function useUI(): UIState {
@@ -212,7 +218,7 @@ export function UIProvider({
   // Native history participates in Next navigation without reloading the list.
   useEffect(() => { setOpenIssueId(params.get("issue"));setOpenPageId(params.get("issue")?null:params.get("doc")); }, [params]);
   useEffect(() => {
-    const failed = () => toast(t("Local storage is full. Keep this page open and copy your draft."));
+    const failed = () => toast(t("Local storage is full. Keep this page open and copy your draft."),{label:t("Export"),run:exportLocalDrafts});
     window.addEventListener("tacos:storage-error", failed);
     return () => window.removeEventListener("tacos:storage-error", failed);
   }, [t, toast]);
@@ -234,7 +240,10 @@ export function UIProvider({
     return () => window.removeEventListener("keydown", onKey);
   }, []);
 
+  const actions=useMemo(()=>({scope,confirm,toast,openIssue,closeIssue,openPage,closePage,setFocused,setComposerOpen}),[scope,confirm,toast,openIssue,closeIssue,openPage,closePage,setComposerOpen]);
+  const pinState=useMemo(()=>({pins,keys:new Set(pins.map(pin=>`${pin.kind}:${pin.id}`))}),[pins]);
   return (
+    <ActionsContext.Provider value={actions}><PinsContext.Provider value={pinState}>
     <UIContext.Provider
       value={{
         scope, confirm, pins, refreshPins, density,setDensity,
@@ -283,6 +292,6 @@ export function UIProvider({
           </div>
         ))}
       </div>
-    </UIContext.Provider>
+    </UIContext.Provider></PinsContext.Provider></ActionsContext.Provider>
   );
 }

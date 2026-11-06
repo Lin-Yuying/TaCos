@@ -966,7 +966,7 @@ export function Markdown({
    */
   onSourceChange?: (next: string) => void;
 }) {
-  const blocks = parseBlocks(source);
+  const blocks = useMemo(() => parseBlocks(source), [source]);
   if (blocks.length === 0) return null;
   let tables = 0;
   // The language picker rewrites the source, which only makes sense when the caller
@@ -974,10 +974,8 @@ export function Markdown({
   let codes = 0;
   // Checkbox positions are counted across the whole source: setTodoChecked walks every
   // checkbox line, while a block only knows the items inside itself.
-  const todoCounts = blocks.map((block) => (block.kind === "todo" ? block.items.length : 0));
-  const todoBases = todoCounts.map((_, i) =>
-    todoCounts.slice(0, i).reduce((sum, count) => sum + count, 0)
-  );
+  let todoCount=0;
+  const todoBases=onSourceChange?blocks.map(block=>{const base=todoCount;if(block.kind==="todo")todoCount+=block.items.length;return base;}):[];
   return (
     <div>
       {blocks.map((block, i) => {

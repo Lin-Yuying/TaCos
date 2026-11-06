@@ -22,23 +22,31 @@ export async function openCollabCache(key: string, doc: Y.Doc, onError: () => vo
     });
   } catch (error) { db.close(); throw error; }
   let closed = false;
-  const store = (_update?: Uint8Array, origin?: unknown) => {
+  let count = 0, bytes = 0;
+  const store = (update: Uint8Array, origin?: unknown) => {
     if (closed || origin === "local-cache") return;
     try {
       const transaction = db.transaction("updates", "readwrite");
       const updates = transaction.objectStore("updates");
-      const read = updates.getAll();
-      read.onsuccess = () => {
-        for (const update of read.result) Y.applyUpdate(doc, update, "local-cache");
-        updates.clear();
-        updates.add(Y.encodeStateAsUpdate(doc));
-      };
+      updates.add(update);
+      count++; bytes += update.byteLength;
+      if (count >= 128 || bytes >= 1024 * 1024) {
+        // Read and compact inside the same transaction: another tab's committed
+        // updates cannot be overwritten by this tab's older live document.
+        const read = updates.getAll();
+        read.onsuccess = () => {
+          const checkpoint = Y.mergeUpdates(read.result);
+          updates.clear(); updates.add(checkpoint);
+          Y.applyUpdate(doc, checkpoint, "local-cache");
+        };
+        count = 0; bytes = 0;
+      }
       transaction.onerror = onError;
       transaction.onabort = onError;
     } catch { onError(); }
   };
   doc.on("update", store);
-  store();
+  store(Y.encodeStateAsUpdate(doc));
   db.onversionchange = () => { closed = true; db.close(); onError(); };
   return () => { closed = true; doc.off("update", store); db.close(); };
 }

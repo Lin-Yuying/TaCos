@@ -145,21 +145,23 @@ export function IssueTable({ issues }: { issues: IssueWithLabels[] }) {
   const locale = useLocale();
   const { openIssue, openIssueId, setFocused, pins } = useUI();
   const assigneeHref = useAssigneeHref();
+  const pinnedIds=useMemo(()=>new Set(pins.filter(pin=>pin.kind==="task").map(pin=>pin.id)),[pins]);
   const groups = useMemo(
     () =>
-      [{status:"pinned" as const,items:issues.filter(issue=>pins.some(pin=>pin.kind==="task"&&pin.id===issue.id))},...STATUS_ORDER.map((status) => ({
+      [{status:"pinned" as const,items:issues.filter(issue=>pinnedIds.has(issue.id))},...STATUS_ORDER.map((status) => ({
         status,
-        items: issues.filter((issue) => issue.status === status&&!pins.some(pin=>pin.kind==="task"&&pin.id===issue.id)),
+        items: issues.filter((issue) => issue.status === status&&!pinnedIds.has(issue.id)),
       }))].filter((group) => group.items.length > 0),
-    [issues,pins]
+    [issues,pinnedIds]
   );
 
   const visibleIssues = useMemo(() => groups.flatMap((group) => group.items), [groups]);
+  const indexes=useMemo(()=>new Map(visibleIssues.map((issue,index)=>[issue.id,index])),[visibleIssues]);
   const [focusId, setFocusId] = useState<string | null>(null);
-  const foundIndex = visibleIssues.findIndex((issue) => issue.id === focusId);
+  const foundIndex = indexes.get(focusId??"")??-1;
   const focusIndex = foundIndex < 0 ? null : foundIndex;
   const setFocusIndex = (next: number | null | ((previous:number|null)=>number)) => setFocusId((current)=>{
-    const found = visibleIssues.findIndex((issue)=>issue.id === current);
+    const found = indexes.get(current??"")??-1;
     const index = typeof next === "function" ? next(found < 0 ? null : found) : next;
     return index === null ? null : visibleIssues[index]?.id ?? null;
   });
@@ -226,7 +228,7 @@ export function IssueTable({ issues }: { issues: IssueWithLabels[] }) {
             {group.status!=="pinned"&&<AddIssueButton status={group.status} />}
           </div>
           {group.items.map((issue) => {
-            const index = visibleIssues.findIndex(item=>item.id===issue.id);
+            const index = indexes.get(issue.id) ?? -1;
             const focused = focusIndex === index;
             const opened = openIssueId === issue.id;
             return (

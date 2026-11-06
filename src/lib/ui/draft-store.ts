@@ -1,9 +1,9 @@
 "use client";
-import { useUI } from "@/components/ui-context";
+import { useUIActions } from "@/components/ui-context";
 import { useStoredJson } from "@/lib/use-stored-json";
 
 export function useDraft<T>(kind: string, id: string, fallback: T) {
-  const { scope } = useUI();
+  const { scope } = useUIActions();
   return useStoredJson<T>(`tacos.draft.v1.${scope}.${kind}.${id}`, fallback);
 }
 export function persistDraft<T>(scope: string, kind: string, id: string, value: T) {

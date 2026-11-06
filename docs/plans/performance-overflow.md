@@ -21,21 +21,21 @@ Baseline: production build and TypeScript pass; harness 88/88 plus upgrade check
 | B09 | 通知红点每 10 秒获取用不到的 50 条正文 | pass | Count-only endpoint; hidden pause, single flight, deadline and unmount abort |
 | B10 | 创建任务的 MAX 聚合缺乏匹配排序键的复合索引 | pass | Real SQLite EXPLAIN uses covering indexes for both maxima |
 | B11 | 每次 API key 验证都产生元数据写入 | doing | Introspection no longer writes; exact usage timestamps on data requests retained |
-| F01 | 任务列表逐行查找下标，单次渲染形成平方级计算 | todo | — |
+| F01 | 任务列表逐行查找下标，单次渲染形成平方级计算 | pass | ID → visual index Map replaces every row scan; TypeScript pass | 
 | F02 | 列表、看板和批量候选全量挂载，表格虚拟化尚未覆盖这些入口 | todo | — |
 | F03 | 看板拖动反复扫描整列并读取卡片位置 | todo | — |
-| F04 | 共享 UI 状态扩大重绘范围，置顶检查随列表规模重复 | todo | — |
-| F05 | 连续调宽和草稿输入把同步持久化放在交互路径上 | todo | — |
-| F06 | 草稿和偏好缺少缓存回收，配额失败会重复提示 | todo | — |
-| F07 | 表格冻结偏移在每个单元格内重复求值 | todo | — |
+| F04 | 共享 UI 状态扩大重绘范围，置顶检查随列表规模重复 | doing | Stable actions and pins contexts for entity controls; memoized pin Set/rank | 
+| F05 | 连续调宽和草稿输入把同步持久化放在交互路径上 | doing | Grid onEnd and local side-panel drag; durable draft writes retained | 
+| F06 | 草稿和偏好缺少缓存回收，配额失败会重复提示 | doing | Shared storage listener, bounded persisted cache, unsubscription cleanup, empty scalar drafts removed, errors throttled and export offered | 
+| F07 | 表格冻结偏移在每个单元格内重复求值 | pass | Column rank/visibility/frozen sets and shared left offsets | 
 | F08 | 筛选输入同步计算全量结果，并在比较内部反复查字段类型 | todo | — |
-| F09 | 对象菜单的鼠标打开路径重复发起能力检查 | todo | — |
+| F09 | 对象菜单的鼠标打开路径重复发起能力检查 | pass | One open trigger, shared in-flight request, retryable error | 
 | F10 | 宽度恢复、工具栏和菜单没有统一依据实际可用空间 | todo | — |
 | F11 | 项目概览的历史侧栏和评论浮层仍采用固定空间假设 | todo | — |
 | F12 | 日历未控制单日事件密度，未排期托盘仍全量绘制 | todo | — |
 | F13 | 项目评论定位在纯尺寸变化时也重建全文字符映射 | todo | — |
-| D01 | 协作缓存每次更新都重写完整 Yjs 状态 | todo | — |
-| D02 | 每次编辑重复序列化全文和定位全部评论 | todo | — |
+| D01 | 协作缓存每次更新都重写完整 Yjs 状态 | doing | Append incremental Yjs updates, transactional cross-tab merge at 128 updates/1MiB; browser replay validation pending | 
+| D02 | 每次编辑重复序列化全文和定位全部评论 | doing | WeakMap immutable document text index and no-anchor short circuit | 
 | D03 | 文内搜索与目录工具重复扫描，并在滚动中测量全部标题 | todo | — |
 | D04 | 只显示摘要的目录读取并传输所有文档正文 | pass | Summary projection, joined effective permissions, parent/project SQL filters |
 | D05 | 路径筛选与排序为每个文档重建完整索引 | pass | Memoized path/search/descendant/pin indexes across index and move selectors |
@@ -56,8 +56,8 @@ Baseline: production build and TypeScript pass; harness 88/88 plus upgrade check
 | A02 | 修改会话设置、发送下一轮之前都加载完整历史与步骤 | todo | — |
 | A03 | 会话列表计数先把所有消息 ID 读取到 JavaScript | todo | — |
 | A04 | 一次会话菜单操作会重新请求已加载的所有历史页 | todo | — |
-| A05 | Markdown 为每个块重复计算待办位置，产生平方级遍历 | todo | — |
-| A06 | 长串未闭合方括号使 Markdown 行内解析重复扫描后缀 | todo | — |
+| A05 | Markdown 为每个块重复计算待办位置，产生平方级遍历 | pass | Memoized blocks and one optional linear todo prefix | 
+| A06 | 长串未闭合方括号使 Markdown 行内解析重复扫描后缀 | pass | Delimiter index and URL suffix cache; 12000-case differential and roundtrip pass | 
 | A07 | SSE、内部事件队列和网关未把消费速度反馈给生产端 | todo | — |
 | A08 | Runner 发送批次持续排队，取消后旧批次仍可能完整重试 | todo | — |
 | A09 | Runner 没有限制同时启动的 Agent 工作数量 | todo | — |
