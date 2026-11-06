@@ -1316,15 +1316,17 @@ export function SettingsView({
                         <span>
                           {key.projectIds === null
                             ? t("All projects")
-                            : t("{count} projects", { count: key.projectIds.length })}
+                            : key.projectIds.length === 1
+                              ? t("1 project")
+                              : t("{count} projects", { count: key.projectIds.length })}
                         </span>
                         <span>{t("created {date}", { date: formatDate(key.createdAt, locale) })}</span>
                         <span suppressHydrationWarning>
                           {key.lastUsedAt
-                            ? t("last used {time} ago", { time: timeAgo(key.lastUsedAt, locale) })
+                            ? t("last used {time}", { time: timeAgo(key.lastUsedAt, locale) })
                             : t("never used")}
                           {key.lastUsedIp && (
-                            <span className="ml-1 font-mono">{key.lastUsedIp}</span>
+                            <span className="ml-1.5 font-mono text-faint">· {key.lastUsedIp}</span>
                           )}
                         </span>
                       </div>

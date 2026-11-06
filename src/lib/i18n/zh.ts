@@ -825,6 +825,7 @@ const zh: Record<string, string> = {
     "把项目「{name}」和其中的任务移到回收站？之后可以在回收站里恢复。",
   "{label} CLI": "{label} CLI",
   "last used {time} ago": "上次使用：{time}",
+  "last used {time}": "上次使用：{time}",
   "created {date}": "创建于 {date}",
   "AI agents and scripts read and write issues at {path} with a Bearer token scoped to this workspace ({key}). Agent activity is attributed in every issue timeline.":
     "AI Agent 和脚本通过 {path} 读写任务，使用只对这个工作区（{key}）有效的 Bearer token。Agent 的每次操作都会记录在任务时间线里。",
@@ -1371,6 +1372,7 @@ const zh: Record<string, string> = {
   "Expired {date}": "已于 {date} 过期",
   "Expires {date}": "{date} 过期",
   "{count} projects": "{count} 个项目",
+  "1 project": "1 个项目",
   "API key name is required": "请填写 API key 名称",
   "Pick at least the read scope": "请至少选择只读权限",
   "Expiry must be 30, 90 or 365 days": "有效期只能是 30、90 或 365 天",
