@@ -14,7 +14,12 @@ Recorded decisions:
 - Keys get read/write scopes, an optional project allowlist, expiry, rotation,
   per-key rate limits and owner/admin revocation. Any member may create a key;
   it stays bound to its creator.
-- Notification preferences are unrelated (Inbox PR); nothing here touches them.
+- Decisions confirmed with the owner (2026-11-06): expiry choices are
+  30/90/365 days with 90 as default; "never expires" is admin-only; the
+  project allowlist ships in this PR; any member may create a key; rate limits
+  are 120 reads/min and 60 writes/min with burst 20; the remote MCP endpoint is
+  stateless first; the current 10 tool names stay unchanged.
+- Implement exactly this in the API-keys/MCP PR; do not mix in Inbox work.
 
 ## Current implementation
 
@@ -241,19 +246,20 @@ Commit 4 — checks, docs, i18n.
 - Expiry warning emails / notifications.
 - Stateful HTTP sessions and server-initiated notifications/resumability.
 
-## Open decisions (confirm before starting)
+## Decisions (confirmed 2026-11-06, no open questions)
 
-- Default expiry: 30 / 90 / 365 days, default 90. Is "never expires" allowed,
-  and only for admins? Recommendation: yes, admin-only.
-- Project allowlist in this PR or a follow-up? Recommendation: in this PR — it
-  is the main "least privilege" feature for team workspaces.
-- Who creates keys: any member (recommended, creator-bound) or only
-  owners/admins? Existing keys already allow any member.
-- Rate limits: 120 reads/min + 60 writes/min with burst 20 — acceptable, or
-  different numbers?
-- Stateless HTTP MCP first (recommended) or stateful sessions now?
-- Tool grouping: keep the current 10 names (recommended) or rename into
-  task/label/workspace toolsets in this PR.
+- Expiry: 30 / 90 / 365 days, default 90; "never expires" is admin-only and
+  legacy keys keep no expiry.
+- Project allowlist ships in this PR.
+- Any workspace member may create a key (creator-bound). The creator, owner or
+  an admin may revoke it.
+- Rate limits: 120 reads/min and 60 writes/min per key, burst 20, 429 with
+  `Retry-After`.
+- The HTTP MCP endpoint is stateless in this PR; stateful sessions are a
+  follow-up.
+- Keep the current 10 MCP tool names and input schemas; only add annotations,
+  cursor pagination, output schemas and read-only filtering.
+- No OAuth in this PR; bearer API keys only.
 
 ## Files the PR touches
 
