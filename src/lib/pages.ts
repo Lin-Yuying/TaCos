@@ -2,11 +2,11 @@ import { packText,unpackText } from "./compressed-text";
 import crypto from "node:crypto";
 import { and, sql, getTableColumns, desc, eq, inArray, isNotNull, isNull, lt, or } from "drizzle-orm";
 import { getDb } from "../db/client";
-import { notifications, pageAccess, pageCollab, pageComments, pageFavorites, pageVersions, pages, users } from "../db/schema";
+import { pageAccess, pageCollab, pageComments, pageFavorites, pageVersions, pages, users } from "../db/schema";
 import { attachmentImageType, getAttachment, removePageAttachments } from "./attachments";
 import { collabDocWritten, withStoredCollabPage, collabAccessChanged } from "./collab/live";
 import { isPageLevel, levelAllows, type PageLevel } from "./page-level";
-import { TacosError, getProject, listMembers, nowIso } from "./issues";
+import { TacosError, getProject, listMembers, notify, nowIso } from "./issues";
 import { DOC_UPDATE_MERGE_MS } from "./doc-update-groups";
 import { parseDocMentions } from "./mentions";
 
@@ -596,15 +596,14 @@ async function notifyDocMentions(page: DocPage, doc: string, authorId: string): 
   for (const member of members) {
     if (!added.includes(member.username.toLowerCase())) continue;
     if (!pageVisible(page, member.id)) continue;
-    await getDb().insert(notifications).values({
-      id: crypto.randomUUID(),
+    await notify({
       workspaceId: page.workspaceId,
       userId: member.id,
       issueId: "",
       pageId: page.id,
       type: "doc_mentioned",
       body: who,
-      createdAt: nowIso(),
+      data: { actorName: who },
     });
   }
 }

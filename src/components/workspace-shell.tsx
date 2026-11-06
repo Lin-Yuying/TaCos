@@ -1742,7 +1742,38 @@ export function WorkspaceShell({
   children: ReactNode;
 }) {
   const t = useT();
+  const router = useRouter();
   const pathname = usePathname();
+  // G then I opens the Inbox from anywhere, like Linear.
+  useEffect(() => {
+    let waiting = false;
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    const onKey = (event: KeyboardEvent) => {
+      const target = event.target as HTMLElement | null;
+      if (
+        target &&
+        (target.tagName === "INPUT" || target.tagName === "TEXTAREA" || target.tagName === "SELECT" || target.isContentEditable)
+      ) {
+        waiting = false;
+        return;
+      }
+      if (waiting && (event.key === "i" || event.key === "I")) {
+        waiting = false;
+        if (timer) clearTimeout(timer);
+        event.preventDefault();
+        router.push(`/${workspace.id}/notifications`);
+        return;
+      }
+      waiting = event.key === "g" || event.key === "G";
+      if (timer) clearTimeout(timer);
+      if (waiting) timer = setTimeout(() => { waiting = false; }, 1200);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => {
+      window.removeEventListener("keydown", onKey);
+      if (timer) clearTimeout(timer);
+    };
+  }, [router, workspace.id]);
   // One width, two looks, like ChatGPT: under SIDEBAR_MIN the column is the icon rail.
   const {
     width: sidebarWidth,

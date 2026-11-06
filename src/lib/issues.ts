@@ -4,6 +4,8 @@ import { TacosError } from "./tacos-error";
 import { removeWorkspaceAttachments } from "./attachments";
 import crypto from "node:crypto";
 import { mentionText, parseMentions } from "./mentions";
+import { parseNotificationData, type NotificationData } from "./notification-data";
+import { NOTIFICATION_EVENT_GROUPS, prefGroupForType } from "./notification-constants";
 import {
   and,
   asc,
@@ -36,6 +38,8 @@ import {
   joinCodes,
   labels,
   notifications,
+  notificationMutes,
+  notificationPrefs,
   overviewComments,
   overviewDocEditViews,
   overviewDocEdits,
@@ -495,11 +499,15 @@ export async function deleteWorkspace(workspaceId: string, userId: string, confi
       id: crypto.randomUUID(),
       workspaceId,
       userId: member.userId,
-      // Workspace notices have no issue; the empty id keeps the column shape and the
-      // inbox renders them from the body alone.
+      // Workspace notices have no issue; the empty id keeps the column shape.
       issueId: "",
       type: "workspace_deleted",
-      body: `${owner?.displayName ?? "The owner"} deleted the workspace "${workspace.name}".`,
+      body: "",
+      data: JSON.stringify({
+        ownerName: owner?.displayName ?? "The owner",
+        workspaceName: workspace.name,
+      }),
+      state: "unread",
       createdAt: notifiedAt,
     });
   }
@@ -2156,20 +2164,87 @@ export async function getIssueDetail(
   };
 }
 
-export async function notify(input: {
+export type NotificationInput = {
   workspaceId: string;
   userId: string;
   issueId: string;
-  type: "assigned" | "commented" | "mentioned" | "due_soon" | "handoff_done" | "handoff_failed" | "handoff_waiting" | "blocker" | ClaimNotice;
+  pageId?: string;
+  type:
+    | "assigned"
+    | "commented"
+    | "mentioned"
+    | "doc_mentioned"
+    | "doc_commented"
+    | "due_soon"
+    | "handoff_done"
+    | "handoff_failed"
+    | "handoff_waiting"
+    | "blocker"
+    | ClaimNotice;
   body: string;
-}) {
+  data?: NotificationData;
+};
+
+/** Whether this person wants this notice at all (preferences + mutes). */
+async function notificationAllowed(input: NotificationInput): Promise<boolean> {
+  const group = prefGroupForType(input.type);
+  if (group) {
+    const types = await getNotificationPrefs(input.workspaceId, input.userId);
+    if (types[group] === false) return false;
+  }
+  const scopes: { type: string; id: string }[] = [];
+  if (input.pageId) {
+    scopes.push({ type: "page", id: input.pageId });
+    const [page] = await getDb()
+      .select({ projectId: pages.projectId })
+      .from(pages)
+      .where(eq(pages.id, input.pageId))
+      .limit(1);
+    if (page?.projectId) scopes.push({ type: "project", id: page.projectId });
+  }
+  if (input.issueId) {
+    scopes.push({ type: "issue", id: input.issueId });
+    const [issue] = await getDb()
+      .select({ projectId: issues.projectId })
+      .from(issues)
+      .where(eq(issues.id, input.issueId))
+      .limit(1);
+    if (issue?.projectId) scopes.push({ type: "project", id: issue.projectId });
+  }
+  if (scopes.length === 0) return true;
+  const [mute] = await getDb()
+    .select({ scopeId: notificationMutes.scopeId })
+    .from(notificationMutes)
+    .where(
+      and(
+        eq(notificationMutes.workspaceId, input.workspaceId),
+        eq(notificationMutes.userId, input.userId),
+        or(
+          ...scopes.map((scope) =>
+            and(
+              eq(notificationMutes.scopeType, scope.type),
+              eq(notificationMutes.scopeId, scope.id)
+            )
+          )
+        )
+      )
+    )
+    .limit(1);
+  return !mute;
+}
+
+export async function notify(input: NotificationInput) {
+  if (!(await notificationAllowed(input))) return;
   await getDb().insert(notifications).values({
     id: crypto.randomUUID(),
     workspaceId: input.workspaceId,
     userId: input.userId,
     issueId: input.issueId,
+    pageId: input.pageId ?? null,
     type: input.type,
     body: input.body,
+    data: input.data ? JSON.stringify(input.data) : null,
+    state: "unread",
     createdAt: nowIso(),
   });
 }
@@ -2436,7 +2511,8 @@ async function notifyAssigned(
     userId: assigneeId,
     issueId,
     type: "assigned",
-    body: `${who} assigned you to “${issueTitle}”`,
+    body: "",
+    data: { actorName: who, title: issueTitle },
   });
 }
 
@@ -2824,7 +2900,7 @@ export async function transferClaim(
   const actor = await userActor(fromUserId);
   await recordEvent(row.id, "claim_transferred", { to: toUserId }, actor);
   if (toUserId !== fromUserId) {
-    await notify({ workspaceId, userId: toUserId, issueId: row.id, type: "claim_transferred", body: actor.displayName });
+    await notify({ workspaceId, userId: toUserId, issueId: row.id, type: "claim_transferred", body: actor.displayName, data: { actorName: actor.displayName } });
   }
   return { id: row.id, identifier: row.identifier, claimedBy: toUserId, claimedAt: now };
 }
@@ -2855,7 +2931,7 @@ async function notifyMentions(
   for (const member of await listMembers(workspaceId)) {
     if (!names.includes(member.username.toLowerCase())) continue;
     if (member.id === actorUserId || skip.has(member.id)) continue;
-    await notify({ workspaceId, userId: member.id, issueId, type: "mentioned", body: who });
+    await notify({ workspaceId, userId: member.id, issueId, type: "mentioned", body: who, data: { actorName: who } });
     sent.add(member.id);
   }
   return sent;
@@ -2907,7 +2983,7 @@ export async function reportBlocker(
   });
   await recordEvent(row.id, "blocker_reported", { body: text }, actor);
   for (const userId of await blockerRecipient(workspaceId, row, actor.userId)) {
-    await notify({ workspaceId, userId, issueId: row.id, type: "blocker", body: actor.displayName });
+    await notify({ workspaceId, userId, issueId: row.id, type: "blocker", body: actor.displayName, data: { actorName: actor.displayName } });
   }
   return { id };
 }
@@ -3000,7 +3076,7 @@ async function notifyClaimWatchers(workspaceId: string, issueId: string, type: C
   watchers.delete(actorId);
   const actor = await userActor(actorId);
   for (const userId of watchers) {
-    await notify({ workspaceId, userId, issueId, type, body: actor.displayName });
+    await notify({ workspaceId, userId, issueId, type, body: actor.displayName, data: { actorName: actor.displayName } });
   }
 }
 
@@ -3246,7 +3322,8 @@ export async function addComment(
       userId,
       issueId: row.id,
       type: "commented",
-      body: `${who} commented on “${row.title}”`,
+      body: "",
+      data: { actorName: who, title: row.title },
     });
   }
 
@@ -3257,34 +3334,163 @@ export async function addComment(
 
 // --- notifications ---
 
+export type NotificationTab = "unread" | "mentions" | "assigned" | "all";
+
 export type NotificationRow = {
   id: string;
   issueId: string;
   issueIdentifier: string;
   issueNumber: number | null;
+  issueProjectId: string | null;
   issueProjectName: string | null;
   issueTitle: string;
   pageId: string | null;
+  pageProjectId: string | null;
   pageTitle: string | null;
   type: string;
   body: string;
+  data: NotificationData | null;
+  state: string;
+  snoozedUntil: string | null;
+  deletedAt: string | null;
   readAt: string | null;
   createdAt: string;
 };
 
-export async function listNotifications(workspaceId: string, userId: string): Promise<NotificationRow[]> {
+export type NotificationCounts = {
+  unread: number;
+  mentions: number;
+  assigned: number;
+  all: number;
+};
+
+export type NotificationPage = {
+  rows: NotificationRow[];
+  nextCursor: string | null;
+};
+
+export type NotificationOptions = {
+  tab?: NotificationTab;
+  q?: string;
+  cursor?: string | null;
+  limit?: number;
+};
+
+const NOTIFICATION_RETENTION_DAYS = 90;
+let notificationSweepAt = 0;
+
+/** 90-day retention: lazy sweep on inbox/badge reads, no background job. */
+export async function purgeOldNotifications(force = false): Promise<void> {
+  const now = Date.now();
+  if (!force && now - notificationSweepAt < 60_000) return;
+  notificationSweepAt = now;
+  const cutoff = new Date(now - NOTIFICATION_RETENTION_DAYS * 86_400_000).toISOString();
+  await getDb().delete(notifications).where(lt(notifications.createdAt, cutoff));
+}
+
+function notificationScope(workspaceId: string, userId: string) {
+  return and(
+    eq(notifications.userId, userId),
+    // A deleted workspace cannot be opened, so its farewell notice follows the member
+    // into whichever workspace they still have.
+    or(eq(notifications.workspaceId, workspaceId), eq(notifications.type, "workspace_deleted"))
+  );
+}
+
+function visibleNotification() {
+  const now = nowIso();
+  return and(
+    isNull(notifications.deletedAt),
+    ne(notifications.state, "done"),
+    or(sql`${notifications.snoozedUntil} IS NULL`, sql`${notifications.snoozedUntil} <= ${now}`)
+  );
+}
+
+function tabCondition(tab: NotificationTab) {
+  if (tab === "mentions") {
+    return inArray(notifications.type, ["mentioned", "doc_mentioned"]);
+  }
+  if (tab === "assigned") return eq(notifications.type, "assigned");
+  if (tab === "all") return undefined;
+  return eq(notifications.state, "unread");
+}
+
+function encodeNotificationCursor(row: NotificationRow): string {
+  return `${row.createdAt}|${row.id}`;
+}
+
+function decodeNotificationCursor(cursor: string): { createdAt: string; id: string } {
+  const at = cursor.lastIndexOf("|");
+  if (at <= 0) throw new TacosError("Invalid notification cursor", 400);
+  return { createdAt: cursor.slice(0, at), id: cursor.slice(at + 1) };
+}
+
+function notificationSearch(words: string[]) {
+  const clauses = words.map((word) => {
+    const pattern = `%${word.replace(/[\\%_]/g, "\\$&")}%`;
+    return sql`(${issues.identifier} LIKE ${pattern} ESCAPE '\\'
+      OR ${issues.title} LIKE ${pattern} ESCAPE '\\'
+      OR ${pages.title} LIKE ${pattern} ESCAPE '\\'
+      OR ${notifications.body} LIKE ${pattern} ESCAPE '\\'
+      OR ${notifications.data} LIKE ${pattern} ESCAPE '\\')`;
+  });
+  return and(...clauses);
+}
+
+export async function listNotificationPage(
+  workspaceId: string,
+  userId: string,
+  options: NotificationOptions = {}
+): Promise<NotificationPage> {
+  await purgeOldNotifications();
+  const limit = Math.min(Math.max(options.limit ?? 50, 1), 100);
+  const q = (options.q ?? "").trim();
+  const words = q ? q.split(/\s+/).filter(Boolean) : [];
+  const tab: NotificationTab = ["unread", "mentions", "assigned", "all"].includes(options.tab ?? "")
+    ? (options.tab as NotificationTab)
+    : "unread";
+
+  const conditions = [notificationScope(workspaceId, userId)];
+  if (words.length > 0) {
+    // Search covers everything, including Done rows, until the 90-day sweep.
+    conditions.push(
+      isNull(notifications.deletedAt),
+      or(sql`${notifications.snoozedUntil} IS NULL`, sql`${notifications.snoozedUntil} <= ${nowIso()}`),
+      notificationSearch(words)
+    );
+  } else {
+    conditions.push(visibleNotification());
+    const tabWhere = tabCondition(tab);
+    if (tabWhere) conditions.push(tabWhere);
+  }
+  if (options.cursor) {
+    const after = decodeNotificationCursor(options.cursor);
+    conditions.push(
+      or(
+        lt(notifications.createdAt, after.createdAt),
+        and(eq(notifications.createdAt, after.createdAt), lt(notifications.id, after.id))
+      )
+    );
+  }
+
   const rows = await getDb()
     .select({
       id: notifications.id,
       issueId: notifications.issueId,
       issueIdentifier: issues.identifier,
       issueNumber: issues.number,
+      issueProjectId: issues.projectId,
       issueProjectName: projects.name,
       issueTitle: issues.title,
       pageId: notifications.pageId,
+      pageProjectId: pages.projectId,
       pageTitle: pages.title,
       type: notifications.type,
       body: notifications.body,
+      data: notifications.data,
+      state: notifications.state,
+      snoozedUntil: notifications.snoozedUntil,
+      deletedAt: notifications.deletedAt,
       readAt: notifications.readAt,
       createdAt: notifications.createdAt,
     })
@@ -3292,47 +3498,86 @@ export async function listNotifications(workspaceId: string, userId: string): Pr
     .leftJoin(issues, eq(issues.id, notifications.issueId))
     .leftJoin(projects, eq(projects.id, issues.projectId))
     .leftJoin(pages, eq(pages.id, notifications.pageId))
-    // A deleted workspace cannot be opened, so its farewell notice follows the member
-    // into whichever workspace they still have.
-    .where(
-      and(
-        eq(notifications.userId, userId),
-        or(eq(notifications.workspaceId, workspaceId), eq(notifications.type, "workspace_deleted"))
-      )
-    )
-    .orderBy(sql`${notifications.createdAt} DESC`)
-    .limit(50);
-  return rows.map((row) => ({
+    .where(and(...conditions))
+    .orderBy(desc(notifications.createdAt), desc(notifications.id))
+    .limit(limit + 1);
+
+  const page = rows.slice(0, limit).map((row) => ({
     ...row,
+    data: parseNotificationData(row.data),
     issueIdentifier: row.issueIdentifier ?? "(deleted issue)",
     issueTitle: row.issueTitle ?? "(deleted issue)",
   }));
+  return {
+    rows: page,
+    nextCursor: rows.length > limit ? encodeNotificationCursor(page[page.length - 1]) : null,
+  };
 }
 
-export async function unreadNotificationCount(workspaceId: string, userId: string): Promise<number> {
+/** Backwards-compatible list: recent visible notifications as a plain array. */
+export async function listNotifications(
+  workspaceId: string,
+  userId: string
+): Promise<NotificationRow[]> {
+  return (await listNotificationPage(workspaceId, userId, { tab: "all", limit: 50 })).rows;
+}
+
+async function countNotifications(
+  workspaceId: string,
+  userId: string,
+  extra: ReturnType<typeof tabCondition>
+): Promise<number> {
   const [row] = await getDb()
     .select({ n: sql<number>`COUNT(*)` })
     .from(notifications)
     .where(
       and(
-        eq(notifications.userId, userId),
-        isNull(notifications.readAt),
-        or(eq(notifications.workspaceId, workspaceId), eq(notifications.type, "workspace_deleted"))
+        notificationScope(workspaceId, userId),
+        visibleNotification(),
+        extra
       )
     );
   return Number(row?.n ?? 0);
 }
 
+export async function notificationCounts(
+  workspaceId: string,
+  userId: string
+): Promise<NotificationCounts> {
+  await purgeOldNotifications();
+  const [unread, mentions, assigned, all] = await Promise.all([
+    countNotifications(workspaceId, userId, eq(notifications.state, "unread")),
+    countNotifications(workspaceId, userId, inArray(notifications.type, ["mentioned", "doc_mentioned"])),
+    countNotifications(workspaceId, userId, eq(notifications.type, "assigned")),
+    countNotifications(workspaceId, userId, undefined),
+  ]);
+  return { unread, mentions, assigned, all };
+}
+
+export async function unreadNotificationCount(workspaceId: string, userId: string): Promise<number> {
+  await purgeOldNotifications();
+  return countNotifications(workspaceId, userId, eq(notifications.state, "unread"));
+}
+
 // Members whose only workspace was deleted have no Inbox to read the farewell in;
 // the onboarding screen shows these rows instead.
-export type WorkspaceDeletionNotice = { id: string; workspaceId: string; body: string; createdAt: string };
+export type WorkspaceDeletionNotice = {
+  id: string;
+  workspaceId: string;
+  body: string;
+  data: NotificationData | null;
+  createdAt: string;
+};
 
-export async function listWorkspaceDeletionNotices(userId: string): Promise<WorkspaceDeletionNotice[]> {
-  return getDb()
+export async function listWorkspaceDeletionNotices(
+  userId: string
+): Promise<WorkspaceDeletionNotice[]> {
+  const rows = await getDb()
     .select({
       id: notifications.id,
       workspaceId: notifications.workspaceId,
       body: notifications.body,
+      data: notifications.data,
       createdAt: notifications.createdAt,
     })
     .from(notifications)
@@ -3340,24 +3585,27 @@ export async function listWorkspaceDeletionNotices(userId: string): Promise<Work
       and(
         eq(notifications.userId, userId),
         eq(notifications.type, "workspace_deleted"),
+        isNull(notifications.deletedAt),
+        ne(notifications.state, "done"),
         isNull(notifications.readAt)
       )
     )
     .orderBy(sql`${notifications.createdAt} DESC`)
     .limit(5);
+  return rows.map((row) => ({ ...row, data: parseNotificationData(row.data) }));
 }
 
 export async function markNotificationsRead(workspaceId: string, userId: string) {
+  const at = nowIso();
   await getDb()
     .update(notifications)
-    .set({ readAt: nowIso() })
+    .set({ readAt: at, state: "read" })
     .where(
       and(
-        eq(notifications.userId, userId),
-        isNull(notifications.readAt),
-        // Same set the inbox shows and the badge counts: this workspace plus any
-        // workspace-deletion notices, so "Mark all read" actually clears the badge.
-        or(eq(notifications.workspaceId, workspaceId), eq(notifications.type, "workspace_deleted"))
+        notificationScope(workspaceId, userId),
+        isNull(notifications.deletedAt),
+        ne(notifications.state, "done"),
+        ne(notifications.state, "read")
       )
     );
 }
@@ -3373,34 +3621,213 @@ export async function markNotificationRead(
 ) {
   await getDb()
     .update(notifications)
-    .set({ readAt: nowIso() })
+    .set({ readAt: nowIso(), state: "read" })
     .where(
       and(
         eq(notifications.userId, userId),
         eq(notifications.id, notificationId),
-        isNull(notifications.readAt)
+        isNull(notifications.deletedAt),
+        ne(notifications.state, "done")
       )
     );
 }
 
-// Same recipient-only scoping as markNotificationRead: a row is personal, and a
-// deletion notice may belong to a workspace the user can no longer open.
+export async function markNotificationUnread(userId: string, notificationId: string) {
+  await getDb()
+    .update(notifications)
+    .set({ readAt: null, state: "unread" })
+    .where(
+      and(
+        eq(notifications.userId, userId),
+        eq(notifications.id, notificationId),
+        isNull(notifications.deletedAt)
+      )
+    );
+}
+
+export async function setNotificationState(
+  userId: string,
+  notificationId: string,
+  state: "unread" | "read" | "done"
+) {
+  await getDb()
+    .update(notifications)
+    .set({
+      state,
+      readAt: state === "unread" ? null : nowIso(),
+      // Returning to the inbox clears the snooze so the row shows up again.
+      ...(state === "unread" ? { snoozedUntil: null } : {}),
+    })
+    .where(
+      and(
+        eq(notifications.userId, userId),
+        eq(notifications.id, notificationId),
+        isNull(notifications.deletedAt)
+      )
+    );
+}
+
+export async function snoozeNotification(
+  userId: string,
+  notificationId: string,
+  until: string | null
+) {
+  await getDb()
+    .update(notifications)
+    .set({ snoozedUntil: until })
+    .where(
+      and(
+        eq(notifications.userId, userId),
+        eq(notifications.id, notificationId),
+        isNull(notifications.deletedAt)
+      )
+    );
+}
+
+// Soft delete: clearing the inbox keeps an undo window instead of dropping rows.
 export async function deleteNotification(userId: string, notificationId: string) {
   await getDb()
-    .delete(notifications)
+    .update(notifications)
+    .set({ deletedAt: nowIso() })
     .where(and(eq(notifications.userId, userId), eq(notifications.id, notificationId)));
 }
 
 export async function clearNotifications(workspaceId: string, userId: string) {
   await getDb()
-    .delete(notifications)
+    .update(notifications)
+    .set({ deletedAt: nowIso() })
+    .where(and(notificationScope(workspaceId, userId), isNull(notifications.deletedAt)));
+}
+
+export async function restoreNotifications(userId: string, notificationIds: string[]) {
+  if (notificationIds.length === 0) return;
+  await getDb()
+    .update(notifications)
+    .set({ deletedAt: null })
+    .where(and(eq(notifications.userId, userId), inArray(notifications.id, notificationIds)));
+}
+
+export type NotificationMute = {
+  scopeType: "issue" | "page" | "project";
+  scopeId: string;
+  label: string;
+};
+
+export async function listNotificationMutes(
+  workspaceId: string,
+  userId: string
+): Promise<NotificationMute[]> {
+  const rows = await getDb()
+    .select({
+      scopeType: notificationMutes.scopeType,
+      scopeId: notificationMutes.scopeId,
+      label: notificationMutes.label,
+    })
+    .from(notificationMutes)
     .where(
       and(
-        eq(notifications.userId, userId),
-        // Exactly the set the inbox lists and the badge counts.
-        or(eq(notifications.workspaceId, workspaceId), eq(notifications.type, "workspace_deleted"))
+        eq(notificationMutes.workspaceId, workspaceId),
+        eq(notificationMutes.userId, userId)
+      )
+    )
+    .orderBy(desc(notificationMutes.createdAt));
+  return rows.map((row) => ({
+    scopeType: row.scopeType as NotificationMute["scopeType"],
+    scopeId: row.scopeId,
+    label: row.label,
+  }));
+}
+
+export async function addNotificationMute(
+  workspaceId: string,
+  userId: string,
+  scopeType: NotificationMute["scopeType"],
+  scopeId: string,
+  label: string
+) {
+  if (!["issue", "page", "project"].includes(scopeType) || !scopeId) {
+    throw new TacosError("Invalid mute scope", 400);
+  }
+  await getDb()
+    .insert(notificationMutes)
+    .values({
+      workspaceId,
+      userId,
+      scopeType,
+      scopeId,
+      label: label.slice(0, 200),
+      createdAt: nowIso(),
+    })
+    .onConflictDoNothing();
+}
+
+export async function removeNotificationMute(
+  workspaceId: string,
+  userId: string,
+  scopeType: string,
+  scopeId: string
+) {
+  await getDb()
+    .delete(notificationMutes)
+    .where(
+      and(
+        eq(notificationMutes.workspaceId, workspaceId),
+        eq(notificationMutes.userId, userId),
+        eq(notificationMutes.scopeType, scopeType),
+        eq(notificationMutes.scopeId, scopeId)
       )
     );
+}
+
+export async function getNotificationPrefs(
+  workspaceId: string,
+  userId: string
+): Promise<Record<string, boolean>> {
+  const [row] = await getDb()
+    .select({ prefs: notificationPrefs.prefs })
+    .from(notificationPrefs)
+    .where(
+      and(
+        eq(notificationPrefs.workspaceId, workspaceId),
+        eq(notificationPrefs.userId, userId)
+      )
+    )
+    .limit(1);
+  if (!row?.prefs) return {};
+  try {
+    const value = JSON.parse(row.prefs) as { types?: Record<string, unknown> };
+    const types: Record<string, boolean> = {};
+    for (const [key, enabled] of Object.entries(value.types ?? {})) {
+      if (typeof enabled === "boolean") types[key] = enabled;
+    }
+    return types;
+  } catch {
+    return {};
+  }
+}
+
+export async function saveNotificationPrefs(
+  workspaceId: string,
+  userId: string,
+  types: Record<string, boolean>
+): Promise<void> {
+  const allowed = new Set(NOTIFICATION_EVENT_GROUPS.map((group) => group.id));
+  const clean: Record<string, boolean> = {};
+  for (const [key, value] of Object.entries(types)) {
+    if (allowed.has(key as never) && typeof value === "boolean") clean[key] = value;
+  }
+  await getDb()
+    .insert(notificationPrefs)
+    .values({
+      workspaceId,
+      userId,
+      prefs: JSON.stringify({ types: clean }),
+      updatedAt: nowIso(),
+    })
+    .onConflictDoUpdate({
+      target: [notificationPrefs.workspaceId, notificationPrefs.userId],
+      set: { prefs: JSON.stringify({ types: clean }), updatedAt: nowIso() },
+    });
 }
 
 // --- API keys ---
@@ -3533,7 +3960,25 @@ export async function sendDueReminders(now: Date = new Date()): Promise<number> 
       if(row.reminderSentFor===key||reminderFireAt(row.dueDate,preset)>now)continue;
       tx.update(issues).set({reminderSentFor:key}).where(eq(issues.id,row.id)).run();
       const people=new Set([row.createdBy,row.claimedBy,...(byTask.get(row.id)??[])].filter((id):id is string=>Boolean(id)));
-      for(const userId of people)tx.insert(notifications).values({id:crypto.randomUUID(),workspaceId:row.workspaceId,userId,issueId:row.id,type:"due_soon",body:row.dueDate,createdAt:nowIso()}).run();
+      for(const userId of people){
+        // Due reminders follow the same preferences/mutes as the rest of the Inbox.
+        const prefRow=tx.select({prefs:notificationPrefs.prefs}).from(notificationPrefs)
+          .where(and(eq(notificationPrefs.workspaceId,row.workspaceId),eq(notificationPrefs.userId,userId))).get();
+        if(prefRow?.prefs){
+          try{const types=(JSON.parse(prefRow.prefs) as {types?:Record<string,boolean>}).types;if(types?.reminders===false)continue;}catch{/* bad JSON means defaults */}
+        }
+        const mute=tx.select({scopeId:notificationMutes.scopeId}).from(notificationMutes)
+          .where(and(
+            eq(notificationMutes.workspaceId,row.workspaceId),
+            eq(notificationMutes.userId,userId),
+            or(
+              and(eq(notificationMutes.scopeType,"issue"),eq(notificationMutes.scopeId,row.id)),
+              and(eq(notificationMutes.scopeType,"project"),eq(notificationMutes.scopeId,row.projectId))
+            )
+          )).get();
+        if(mute)continue;
+        tx.insert(notifications).values({id:crypto.randomUUID(),workspaceId:row.workspaceId,userId,issueId:row.id,type:"due_soon",body:row.dueDate,data:JSON.stringify({date:row.dueDate}),state:"unread",createdAt:nowIso()}).run();
+      }
       sent++;
     }
     return sent;

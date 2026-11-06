@@ -109,7 +109,14 @@ export function OnboardingForm({
                 key={notice.id}
                 className="flex items-start gap-2 rounded-lg border border-border bg-elevated/50 px-3 py-2 text-small leading-relaxed text-muted"
               >
-                <span className="min-w-0 flex-1">{notice.body}</span>
+                <span className="min-w-0 flex-1">
+                  {notice.data?.workspaceName
+                    ? t("{name} deleted the workspace “{workspace}”", {
+                        name: notice.data.ownerName ?? t("The owner"),
+                        workspace: notice.data.workspaceName,
+                      })
+                    : notice.body}
+                </span>
                 <button
                   type="button"
                   onClick={() => dismissNotice(notice.id)}

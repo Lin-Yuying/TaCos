@@ -543,14 +543,54 @@ export const notifications = sqliteTable(
     pageId: text("page_id"),
     // assigned | commented | mentioned | doc_commented | doc_mentioned | blocker
     type: text("type").notNull(),
+    // Legacy human-readable text kept as a fallback for rows created before the
+    // structured payload existed. New rows render from `data`.
     body: text("body").notNull(),
+    // JSON payload: actorName, title, task, date, workspaceName — rendered in the
+    // reader's language instead of storing a prebuilt English sentence.
+    data: text("data"),
+    // unread | read | done. done stays searchable until the 90-day sweep.
+    state: text("state").notNull().default("unread"),
+    // Snoozed rows are hidden until this time; the unread badge ignores them.
+    snoozedUntil: text("snoozed_until"),
+    // Soft delete: clearing the inbox keeps an undo window instead of dropping rows.
+    deletedAt: text("deleted_at"),
     readAt: text("read_at"),
     createdAt: text("created_at").notNull(),
   },
   (t) => [
     index("notifications_user_idx").on(t.workspaceId, t.userId),
     index("notifications_issue_idx").on(t.issueId),
+    index("notifications_user_created_idx").on(t.workspaceId, t.userId, t.createdAt),
   ]
+);
+
+// Per-user notification preferences, scoped to one workspace. JSON shape:
+// { types?: Record<string, boolean> } — a missing type means enabled.
+export const notificationPrefs = sqliteTable(
+  "notification_prefs",
+  {
+    workspaceId: text("workspace_id").notNull(),
+    userId: text("user_id").notNull(),
+    prefs: text("prefs").notNull().default("{}"),
+    updatedAt: text("updated_at").notNull(),
+  },
+  (t) => [primaryKey({ columns: [t.workspaceId, t.userId] })]
+);
+
+// One person's mute on a task, document or project. notify() skips the matching
+// scope; the Inbox shows the mute list so it can be removed.
+export const notificationMutes = sqliteTable(
+  "notification_mutes",
+  {
+    workspaceId: text("workspace_id").notNull(),
+    userId: text("user_id").notNull(),
+    scopeType: text("scope_type").notNull(),
+    scopeId: text("scope_id").notNull(),
+    label: text("label").notNull().default(""),
+    createdAt: text("created_at").notNull(),
+  },
+  (t) => [primaryKey({ columns: [t.workspaceId, t.userId, t.scopeType, t.scopeId] })]
 );
 
 export const apiKeys = sqliteTable(

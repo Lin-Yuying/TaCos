@@ -223,7 +223,13 @@ async function writeBack(
 ): Promise<void> {
   let text = "";
   let failure: string | null = null;
-  const base = { workspaceId: row.workspaceId, userId: row.userId, issueId: row.issueId!, body: identifier };
+  const base = {
+    workspaceId: row.workspaceId,
+    userId: row.userId,
+    issueId: row.issueId!,
+    body: identifier,
+    data: { task: identifier },
+  };
   async function* watched(): AsyncGenerator<TurnEvent> {
     for await (const event of events) {
       if (event.type === "delta") text += event.text;

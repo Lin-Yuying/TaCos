@@ -1,9 +1,9 @@
 import crypto from "node:crypto";
 import { and, asc, eq, inArray, sql } from "drizzle-orm";
 import { getDb } from "../db/client";
-import { notifications, pageComments, users } from "../db/schema";
+import { pageComments, users } from "../db/schema";
 import type { DocAnchor } from "./doc-anchor";
-import { TacosError, listMembers, nowIso } from "./issues";
+import { TacosError, listMembers, notify, nowIso } from "./issues";
 import { parseMentions } from "./mentions";
 import { getPage, pageVisible, requirePageLevel, type DocPage, type PageAuthor } from "./pages";
 
@@ -73,15 +73,14 @@ async function notifyPageComment(page: DocPage, body: string, authorId: string):
   const author = members.find((member) => member.id === authorId);
   const who = author?.displayName ?? "";
   const send = (userId: string, type: "doc_mentioned" | "doc_commented") =>
-    getDb().insert(notifications).values({
-      id: crypto.randomUUID(),
+    notify({
       workspaceId: page.workspaceId,
       userId,
       issueId: "",
       pageId: page.id,
       type,
       body: who,
-      createdAt: nowIso(),
+      data: { actorName: who },
     });
   const mentioned = new Set<string>();
   for (const member of members) {
