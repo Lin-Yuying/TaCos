@@ -266,7 +266,7 @@ export const DocMention = Mention.extend({
 }).configure({ HTMLAttributes: { class: "doc-mention", "data-testid": "mention-chip" } });
 
 export function documentExtensions(
-  options: { sharedHistory?: boolean; mention?: AnyExtension; embed?: AnyExtension } = {}
+  options: { sharedHistory?: boolean; mention?: AnyExtension; embed?: AnyExtension; pageRef?: AnyExtension } = {}
 ): AnyExtension[] {
   return [
     options.mention ?? DocMention,
@@ -299,7 +299,7 @@ export function documentExtensions(
     DetailsSummary,
     DetailsContent,
     Callout,
-    PageRef,
+    options.pageRef ?? PageRef,
     IssueRef,
     options.embed ?? PageEmbed,
   ];

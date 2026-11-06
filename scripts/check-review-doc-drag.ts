@@ -49,17 +49,17 @@ function staticChecks() {
     }
   }
 
-  // The two partitions and their explicit create-time sharing must remain.
+  // The two partitions and their explicit create-time sharing must remain. Creating a
+  // page moved into NewPageMenu (it can also start from a template), so the shared
+  // section's flag is checked where it is passed and where it is applied.
   assert(tree.includes("getData: () => ({ sectionShared })"), "sections are still identified via getData");
   assert(tree.includes("sectionShared={false}"), "the Private section still exists");
   assert(tree.split("\n").some((line) => line.trim() === "sectionShared"), "the Shared section still exists (bare sectionShared prop)");
-  const createAt = tree.indexOf("async function create(shared: boolean)");
-  assert(createAt >= 0, "create(shared) path still exists");
-  const createEnd = tree.indexOf("\n  }", createAt);
-  const createBody = tree.slice(createAt, createEnd >= 0 ? createEnd : createAt + 600);
-  assert(createBody.includes("setPageSharedAction"), "create path still sets sharing via setPageSharedAction");
-  assert(tree.includes("void create(true)"), "Shared section creates a shared document");
-  assert(tree.includes("void create(false)"), "Private section creates a private document");
+  assert(tree.includes("<NewPageMenu"), "the tree creates documents through the shared NewPageMenu");
+  assert(tree.includes("shared={sectionShared}"), "the section's sharing is handed to the create menu");
+  const menu = read("src/components/new-page-menu.tsx");
+  assert(menu.includes("if (shared) await setPageSharedAction"), "create path still sets sharing via setPageSharedAction");
+  assert(menu.includes("createPageFromTemplateAction"), "create path still offers page templates");
 
   // movePage's library semantics are untouched (we must not "fix" this by deleting them).
   const lib = read("src/lib/pages.ts");

@@ -259,6 +259,19 @@ function renderMentions(text: string, key: string): ReactNode {
   );
 }
 
+function MissingPageRef({ title }: { title: string }) {
+  const t = useT();
+  return (
+    <span
+      data-page-ref-missing={title}
+      title={t("This document is in the Trash or not available")}
+      className="text-muted underline decoration-dashed decoration-border-strong underline-offset-2"
+    >
+      {title}
+    </span>
+  );
+}
+
 function renderInline(
   nodes: Inline[],
   keyPrefix: string,
@@ -318,11 +331,7 @@ function renderInline(
       case "page": {
         const target = findPage(pages, node.text, node.pageId);
         if (!target || !pages) {
-          return (
-            <span key={key} className="text-muted">
-              {node.text}
-            </span>
-          );
+          return <MissingPageRef key={key} title={node.text} />;
         }
         return <PageChip key={key} target={target} ctx={pages} />;
       }

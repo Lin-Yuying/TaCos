@@ -6,10 +6,9 @@ import { BatchSelection } from "@/components/ui/batch-selection";
 import { EntityRow } from "@/components/ui/entity-row";
 
 import Link from "next/link";
-import { useRouter } from "next/navigation";
-import { useRef, useState } from "react";
-import { FileText, Lock, Plus, Users } from "lucide-react";
-import { createPageAction } from "@/app/pages-actions";
+import { useRef } from "react";
+import { FileText, Lock, Users } from "lucide-react";
+import { NewPageMenu } from "@/components/new-page-menu";
 import { timeAgo } from "@/lib/format";
 import type { PageSummary } from "@/lib/pages";
 import { useLocale, useT } from "@/components/i18n-context";
@@ -26,24 +25,8 @@ export function ProjectDocuments({
 }) {
   const t = useT();
   const locale = useLocale();
-  const router = useRouter();
-  const [error, setError] = useState<string | null>(null);
-  const [creating, setCreating] = useState(false);
 
   const scroller=useRef<HTMLDivElement>(null);useScrollMemory(scroller,`project-documents.${projectId}`);
-  const creatingRef=useRef(false);
-  async function createPage() {
-    if(creatingRef.current)return;creatingRef.current=true;
-    try {
-    setCreating(true);
-    const result = await createPageAction(workspaceId, { projectId });
-    if (!result.ok) {
-      setError(result.error);
-      return;
-    }
-    router.push(`/${workspaceId}/docs/${result.data.id}`);
-    }catch{setError("Could not save. Retry.");}finally{creatingRef.current=false;setCreating(false);}
-  }
 
   useDetailSource("document",pages.map(page=>page.id));
   return (
@@ -56,18 +39,10 @@ export function ProjectDocuments({
               {t("Pages created here belong to this project. They stay private until you share them with the workspace.")}
             </p>
           </div>
-          <button
-            type="button"
-            onClick={() => void createPage()}
-            disabled={creating}
-            className="flex shrink-0 items-center gap-1 rounded-md border border-border px-2.5 py-1.5 text-small font-medium text-muted transition-colors hover:border-border-strong hover:text-text disabled:opacity-50"
-          >
-            <Plus size={13} /> {t("New document")}
-          </button>
+          <NewPageMenu workspaceId={workspaceId} projectId={projectId} />
         </div>
 
         <BatchSelection workspaceId={workspaceId} kind="document" items={pages}/>
-        {error && <div className="mt-3 text-small text-danger">{t(error)}</div>}
 
         {pages.length === 0 ? (
           <p className="mt-8 text-body text-faint">

@@ -16,7 +16,9 @@ export function SettingsNavigation({
     const frame = requestAnimationFrame(() =>
       setSections(
         nodes.map((node, index) => {
-          node.id = `settings-${index}`;
+          // A section with an explicit id keeps it: deep links such as #labels or
+          // #page-templates point at the same section the navigation lists.
+          if (!node.id) node.id = `settings-${index}`;
           node.style.scrollMarginTop = "100px";
           return {
             id: node.id,

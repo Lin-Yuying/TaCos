@@ -1,17 +1,21 @@
 "use client";
 import Link from "next/link";
+import { FileText } from "lucide-react";
 import { useStoredJson } from "@/lib/use-stored-json";
 import { useUI } from "@/components/ui-context";
-import { useT } from "@/components/i18n-context";
+import { useLocale, useT } from "@/components/i18n-context";
+import { timeAgo } from "@/lib/format";
+
 export function RecentDocuments({
   workspaceId,
   pages,
 }: {
   workspaceId: string;
-  pages: { id: string; title: string }[];
+  pages: { id: string; title: string; icon: string | null; updatedAt: string }[];
 }) {
   const { scope } = useUI(),
-    t = useT();
+    t = useT(),
+    locale = useLocale();
   const [recent, setRecent] = useStoredJson<string[]>(
     `tacos.recent-documents.${scope}`,
     [],
@@ -32,9 +36,15 @@ export function RecentDocuments({
         <Link
           key={page.id}
           href={`/${workspaceId}/docs/${page.id}`}
-          className="block truncate rounded px-1 py-1 text-muted hover:bg-elevated"
+          className="flex items-center gap-1.5 rounded px-1 py-1 text-muted hover:bg-elevated"
         >
-          {page.title}
+          <span className="flex w-4 shrink-0 justify-center text-faint">
+            {page.icon ?? <FileText size={12} />}
+          </span>
+          <span className="min-w-0 flex-1 truncate">{page.title}</span>
+          <span suppressHydrationWarning className="shrink-0 text-caption text-faint">
+            {timeAgo(page.updatedAt, locale)}
+          </span>
         </Link>
       ))}
     </section>

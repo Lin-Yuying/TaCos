@@ -10,6 +10,7 @@ import type { EditorState } from "@tiptap/pm/state";
 import { BubbleMenu } from "@tiptap/react/menus";
 import { Extension } from "@tiptap/core";
 import { Plugin, PluginKey } from "@tiptap/pm/state";
+import type { Node as PMNode } from "@tiptap/pm/model";
 import { Decoration, DecorationSet } from "@tiptap/pm/view";
 import Collaboration from "@tiptap/extension-collaboration";
 import CollaborationCaret from "@tiptap/extension-collaboration-caret";
@@ -20,6 +21,7 @@ import {
   CheckSquare,
   ChevronRight,
   Code,
+  FileText,
   GripVertical,
   Info,
   Heading1,
@@ -39,14 +41,15 @@ import {
   Type,
 } from "lucide-react";
 import { AssigneeAvatar } from "@/components/issue-table";
-import { DocMention, PageEmbed, documentExtensions } from "@/lib/editor/extensions";
+import { DocMention, PageEmbed, PageRef, documentExtensions } from "@/lib/editor/extensions";
 import { embedPreview } from "@/lib/editor/page-embed";
-import { Markdown, type PageContext } from "@/components/markdown";
+import { Markdown, type PageContext, type PageRefEntry } from "@/components/markdown";
 import { documentColor, documentLinkHref } from "@/lib/markdown";
 import type { Member } from "@/lib/issues";
 import { BLOCK_TURNS, canTurnBlock, turnBlock } from "@/lib/editor/block-turn";
 import { incrementalMarkdown } from "@/lib/editor/incremental-markdown";
 import { documentMarkdown, markdownToDocument } from "@/lib/editor/document-markdown";
+import { outlineHeadings } from "@/lib/doc-outline";
 import { anchorFromSelection, anchorRanges } from "@/lib/editor/anchors";
 import type { DocAnchor } from "@/lib/doc-anchor";
 import type { DocCollab } from "@/components/use-doc-collab";
@@ -305,7 +308,118 @@ function PageEmbedNode({ node, extension }: NodeViewProps) {
   );
 }
 
+// `[[Page]]` in the document. The stored reference is the page id, so a renamed target
+// keeps working; a page in the Trash renders as an unresolved, dashed mention.
+function PageRefNode({ node, extension }: NodeViewProps) {
+  const store = extension.storage as EmbedPages;
+  const pages = useSyncExternalStore(store.subscribe, store.snapshot, () => undefined);
+  const title = String(node.attrs.title ?? "");
+  const preview = embedPreview(pages, title, (node.attrs.pageId as string | null) ?? null);
+  const t = useT();
+  return (
+    <NodeViewWrapper
+      as="span"
+      data-page-ref={preview.id ?? ""}
+      data-page-ref-missing={preview.missing ? title : undefined}
+      className={`inline-flex max-w-full items-baseline gap-1 align-baseline ${
+        preview.missing
+          ? "text-muted underline decoration-dashed decoration-border-strong underline-offset-2"
+          : "text-text"
+      }`}
+    >
+      <span aria-hidden className="shrink-0 text-muted">
+        <FileText size={13} className="inline align-[-2px]" />
+      </span>
+      <button
+        type="button"
+        title={preview.missing ? t("This document is in the Trash or not available") : undefined}
+        onMouseDown={(event) => event.preventDefault()}
+        onClick={(event) => {
+          event.stopPropagation();
+          if (preview.id) store.open(preview.id);
+        }}
+        className={`max-w-full truncate text-left ${preview.id ? "underline decoration-border-strong underline-offset-2 hover:decoration-text" : "cursor-default"}`}
+      >
+        {preview.label}
+      </button>
+    </NodeViewWrapper>
+  );
+}
+
 export type EditorAnchor = DocAnchor & { id: string };
+
+const headingsKey = new PluginKey<DecorationSet>("documentHeadings");
+
+// The `#` in a heading's left margin. It is a widget, not document content: copying the
+// link never changes the Markdown and collaboration never sees it.
+function headingAnchor(id: string, copyLabel: string, base: string): HTMLElement {
+  const button = document.createElement("button");
+  button.type = "button";
+  button.contentEditable = "false";
+  button.dataset.headingAnchor = id;
+  button.className = "doc-heading-anchor";
+  button.textContent = "#";
+  button.title = copyLabel;
+  button.setAttribute("aria-label", copyLabel);
+  button.addEventListener("mousedown", (event) => event.preventDefault());
+  button.addEventListener("click", (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+    const href = `${window.location.origin}${base || window.location.pathname}?heading=${encodeURIComponent(id)}`;
+    void navigator.clipboard?.writeText(href).then(() => {
+      button.dataset.copied = "true";
+      button.textContent = "✓";
+      window.setTimeout(() => {
+        delete button.dataset.copied;
+        button.textContent = "#";
+      }, 1200);
+    }).catch(() => {});
+  });
+  return button;
+}
+
+// The same text the Markdown outline reads. Atom nodes (a page reference, a task or a
+// mention) have no text content of their own, so their visible label fills in.
+function headingText(node: PMNode): string {
+  let out = "";
+  node.forEach((child) => {
+    if (child.isText) out += child.text ?? "";
+    else if (child.type.name === "pageRef") out += String(child.attrs.title ?? "");
+    else if (child.type.name === "issueRef") out += String(child.attrs.label ?? "");
+    else if (child.type.name === "mention" || child.type.name === "docMention")
+      out += `@${String(child.attrs.id ?? "")}`;
+    else out += child.textContent;
+  });
+  return out;
+}
+
+function headingDecorations(doc: PMNode, copyLabel: string, base: string): DecorationSet {
+  const headings: { level: number; text: string }[] = [];
+  doc.descendants((node) => {
+    if (node.type.name === "heading") {
+      headings.push({ level: Number(node.attrs.level) || 1, text: headingText(node) });
+    }
+  });
+  const outline = outlineHeadings(headings);
+  const decorations: Decoration[] = [];
+  let index = 0;
+  doc.descendants((node, pos) => {
+    if (node.type.name !== "heading") return;
+    const heading = outline[index++];
+    if (!heading) return;
+    decorations.push(
+      Decoration.node(pos, pos + node.nodeSize, {
+        class: "doc-heading",
+        id: heading.id,
+        "data-doc-heading": heading.id,
+      })
+    );
+    decorations.push(
+      Decoration.widget(pos + 1, () => headingAnchor(heading.id, copyLabel, base), { side: -10 })
+    );
+  });
+  return DecorationSet.create(doc, decorations);
+}
 
 /** Text from outside the editor, for a shared document where the page state cannot carry it. */
 export type OutsideEdit = { at: "start" | "end" | "all"; text: string };
@@ -395,6 +509,7 @@ export function DocumentEditor({
   editorRef,
   onEditorReady,
   outsideEditRef,
+  headingBase = "",
 }: {
   editorRef?: { current: Editor | null };
   onEditorReady?:(editor:Editor|null)=>void;
@@ -418,6 +533,8 @@ export function DocumentEditor({
   collab?: Extract<DocCollab, { doc: unknown }>;
   // Filled with the call that puts outside text into the editor and so into a shared document.
   outsideEditRef?: RefObject<((edit: OutsideEdit) => void) | null>;
+  // Canonical path of this document ("/<workspace>/docs/<page>"); heading links point here.
+  headingBase?: string;
 }) {
   const t = useT();
   const router = useRouter();
@@ -432,6 +549,8 @@ export function DocumentEditor({
   const menuRef = useRef<MenuState | null>(null);
   const [mentionMenu, setMentionMenu] = useState<MenuState<Member> | null>(null);
   const mentionMenuRef = useRef<MenuState<Member> | null>(null);
+  const [pageMenu, setPageMenu] = useState<MenuState<PageRefEntry> | null>(null);
+  const pageMenuRef = useRef<MenuState<PageRefEntry> | null>(null);
   const membersRef = useRef({ members, viewerId });
   // The text block under the pointer, for the comment button in the right margin.
   const [hovered, setHovered] = useState<{ from: number; to: number; top: number; block: number } | null>(null);
@@ -461,6 +580,7 @@ export function DocumentEditor({
     };
     menuRef.current = menu;
     mentionMenuRef.current = mentionMenu;
+    pageMenuRef.current = pageMenu;
     membersRef.current = { members, viewerId };
     anchorClickRef.current = onAnchorClick;
     locatedRef.current = onAnchorsLocated;
@@ -541,6 +661,86 @@ export function DocumentEditor({
     []
   );
 
+  const pageLink = useMemo(
+    () =>
+      Extension.create({
+        name: "pageLinkSuggestions",
+        addProseMirrorPlugins() {
+          const show = (props: SuggestionProps<PageRefEntry>, selected: number) => {
+            const rect = props.clientRect?.();
+            setPageMenu({
+              items: props.items,
+              selected,
+              rect: () => props.clientRect?.() ?? null,
+              x: rect?.left ?? 0,
+              y: rect?.bottom ?? 0,
+              pick: (page) => props.command(page),
+            });
+          };
+          return [
+            Suggestion<PageRefEntry>({
+              editor: this.editor,
+              pluginKey: new PluginKey("pageLinkSuggestion"),
+              // Our own matcher below owns the two-character trigger; the built-in one
+              // only understands one character.
+              char: "[[",
+              allowSpaces: true,
+              findSuggestionMatch: ({ $position }) => {
+                if ($position.parent.type.name === "codeBlock") return null;
+                const before = $position.nodeBefore;
+                if (!before?.isText || !before.text) return null;
+                // Code spans parse before page references, so `[[` in one is not a link.
+                if (before.marks.some((mark) => mark.type.name === "code")) return null;
+                const match = /\[\[([^\]\n|]*)$/.exec(before.text);
+                if (!match) return null;
+                return {
+                  range: {
+                    from: $position.pos - before.text.length + match.index,
+                    to: $position.pos,
+                  },
+                  query: match[1],
+                  text: match[0],
+                };
+              },
+              items: ({ query }) => {
+                // The store is updated in an effect, so the picker always reads the
+                // newest page list without closing over a ref during render.
+                const allPages = embedPages.pages;
+                const seen = new Set<string>();
+                const all: PageRefEntry[] = [];
+                for (const ref of Object.values(allPages?.lookup ?? {})) {
+                  if (seen.has(ref.id)) continue;
+                  seen.add(ref.id);
+                  all.push(ref);
+                }
+                const needle = query.trim().toLowerCase();
+                const found = needle
+                  ? all.filter((ref) => `${ref.title} ${ref.path ?? ""}`.toLowerCase().includes(needle))
+                  : all;
+                return found.slice(0, 8);
+              },
+              command: ({ editor, range, props }) =>
+                editor
+                  .chain()
+                  .focus()
+                  .insertContentAt(range, {
+                    type: "pageRef",
+                    attrs: { title: props.title, pageId: props.id },
+                  })
+                  .run(),
+              render: () => ({
+                onStart: (props) => show(props, 0),
+                onUpdate: (props) => show(props, 0),
+                onExit: () => setPageMenu(null),
+                onKeyDown: ({ event }) => menuKey(event, pageMenuRef.current, setPageMenu),
+              }),
+            }),
+          ];
+        },
+      }),
+    [embedPages]
+  );
+
   const embed = useMemo(
     () =>
       PageEmbed.extend({
@@ -554,6 +754,41 @@ export function DocumentEditor({
     [embedPages],
   );
 
+  const pageRef = useMemo(
+    () =>
+      PageRef.extend({
+        addStorage() {
+          return embedPages;
+        },
+        addNodeView() {
+          return ReactNodeViewRenderer(PageRefNode);
+        },
+      }),
+    [embedPages],
+  );
+
+  const headings = useMemo(() => {
+    const copyLabel = t("Copy link to heading");
+    return Extension.create({
+      name: "documentHeadings",
+      addProseMirrorPlugins() {
+        return [
+          new Plugin<DecorationSet>({
+            key: headingsKey,
+            state: {
+              init: (_, state) => headingDecorations(state.doc, copyLabel, headingBase),
+              apply: (tr, set) =>
+                tr.docChanged ? headingDecorations(tr.doc, copyLabel, headingBase) : set,
+            },
+            props: {
+              decorations: (state) => headingsKey.getState(state),
+            },
+          }),
+        ];
+      },
+    });
+  }, [headingBase, t]);
+
   const insertRef = useRef<(files: File[], at?: number) => void>(() => {});
   const dropFiles = (files: FileList | undefined | null, at?: number) => {
     if (!files?.length || !uploadRef.current) return false;
@@ -564,8 +799,8 @@ export function DocumentEditor({
   const editor = useEditor({
     immediatelyRender: false,
     extensions: [
-      ...documentExtensions({ sharedHistory: Boolean(collab), mention, embed }),
-      Placeholder.configure({ placeholder: placeholder ?? "" }), UploadMarkers, slash, CommentAnchors.configure({ store: anchorStore }),
+      ...documentExtensions({ sharedHistory: Boolean(collab), mention, embed, pageRef }),
+      Placeholder.configure({ placeholder: placeholder ?? "" }), UploadMarkers, slash, pageLink, headings, CommentAnchors.configure({ store: anchorStore }),
       ...(collab
         ? [
             Collaboration.configure({ document: collab.doc }),
@@ -939,6 +1174,30 @@ export function DocumentEditor({
               <AssigneeAvatar displayName={member.displayName} avatar={member.avatar} size={16} />
               <span className="min-w-0 flex-1 truncate">{member.displayName}</span>
               <span className="truncate text-small text-faint">@{member.username}</span>
+            </button>
+          ))}
+        </SuggestionMenu>
+      )}
+      {pageMenu && pageMenu.items.length > 0 && (
+        <SuggestionMenu rect={pageMenu.rect} context={editor?.view.dom} testId="doc-page-link-menu">
+          {pageMenu.items.map((page, index) => (
+            <button
+              key={page.id}
+              type="button"
+              role="option"
+              aria-selected={index === pageMenu.selected}
+              data-page-link-option={page.id}
+              onMouseDown={(event) => {
+                event.preventDefault();
+                pageMenu.pick(page);
+              }}
+              className={`flex w-full items-center gap-2 rounded px-2 py-1 text-left text-body ${
+                index === pageMenu.selected ? "bg-elevated text-text" : "text-muted"
+              }`}
+            >
+              <span className="shrink-0 text-lead">{page.icon ?? <FileText size={13} />}</span>
+              <span className="min-w-0 flex-1 truncate">{page.title}</span>
+              {page.path && <span className="max-w-40 truncate text-small text-faint">{page.path}</span>}
             </button>
           ))}
         </SuggestionMenu>

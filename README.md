@@ -236,6 +236,28 @@ Desktop binaries are not code-signed. On Windows 11, Smart App Control blocks un
 - Tasks carry a numeric `estimate` (nullable). The task panel and composer edit it, and
   the REST/MCP task fields accept it for planning work.
 
+## Documents, links and page templates
+
+- Type `[[` in a document to open the page picker; **Link a page** does the same from the
+  toolbar. The stored reference is `[[title|page-id]]`, and the title is read from the
+  page when the document renders, so renaming a target does not break the link.
+- A target page's **Linked from** panel lists the pages that point at it. It follows the
+  existing page visibility: a private page's references stay private. A target in the
+  Trash renders as an unresolved, dashed mention and disappears from backlinks; restoring
+  the page resolves it again. Links are rebuilt from the page text on every save, so
+  version restore and live collaboration need no separate link bookkeeping.
+- **Settings → Page templates** lets the workspace owner or an admin save a title and
+  Markdown body. **New document** in the document tree, document index or project
+  Documents can start from one. Available variables are `{date}`, `{author}` and
+  `{project}`; `{project}` is empty outside a project, and unknown placeholders stay as
+  written. The page and its first version record which template it came from, and deleting
+  a template changes nothing for pages already created.
+- The reader's **Outline** panel lists the document's headings; the `#` beside a heading
+  (or the copy button in the outline) copies a link that opens the document at that
+  heading. Heading ids are stable for duplicates and Chinese headings, and `[[` inside
+  code blocks or inline code is text, not a link.
+- Page history stays at 200 versions per page.
+
 ## How it fits together
 
 ```

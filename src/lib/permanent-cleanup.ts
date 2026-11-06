@@ -29,6 +29,7 @@ export function deletePageRecords(ids:string[]){if(!ids.length)return;const db=g
  for(const id of ids){db.prepare("DELETE FROM attachment_references WHERE source IN (?,?) OR source IN (SELECT 'page_versions:'||id FROM page_versions WHERE page_id=?) OR source IN (SELECT 'page_comments:'||id FROM page_comments WHERE page_id=?)").run(`pages:${id}`,`collaboration:${id}`,id,id);}
  queueFiles(`page_id IN (${q})`,ids,true);
  for(const table of ["page_collab","page_access","page_favorites","page_comments","page_versions"])db.prepare(`DELETE FROM ${table} WHERE page_id IN (${q})`).run(...ids);
+ db.prepare(`DELETE FROM page_links WHERE (source_kind='page' AND source_id IN (${q})) OR target_page_id IN (${q})`).run(...ids,...ids);
  db.prepare(`DELETE FROM personal_entity_state WHERE entity_type='document' AND entity_id IN (${q})`).run(...ids);
  db.prepare(`DELETE FROM project_resources WHERE page_id IN (${q})`).run(...ids);
  db.prepare(`DELETE FROM notifications WHERE page_id IN (${q})`).run(...ids);
@@ -66,7 +67,7 @@ export async function purgeWorkspaceRecords(workspaceId:string){await leased(`wo
  for(const [table,remove] of [["issues",deleteTaskRecords],["pages",deletePageRecords],["agent_threads",deleteThreadRecords],["projects",deleteProjects]] as const){
   while(true){const more=db.transaction(()=>{if(!expired())return false;const rows=db.prepare(`SELECT id FROM ${table} WHERE workspace_id=? LIMIT ?`).all(workspaceId,BATCH) as {id:string}[];remove(rows.map(row=>row.id));renew(rows.length);return rows.length===BATCH;}).immediate();if(!more)break;await nextTurn();}
  }
- db.transaction(()=>{renew();if(!expired())return;cancelRuns("workspace_id=?",[workspaceId]);db.prepare("DELETE FROM runner_event_batches WHERE run_id IN (SELECT id FROM agent_runs WHERE workspace_id=?)").run(workspaceId);queueFiles("workspace_id=?",[workspaceId]);for(const table of ["attachment_reference_checks","agent_runs","personal_entity_state","personal_task_views","ai_settings","task_fields","page_versions","page_comments","labels","notifications","join_codes","api_keys","workspace_members"])db.prepare(`DELETE FROM ${table} WHERE workspace_id=?`).run(workspaceId);
+ db.transaction(()=>{renew();if(!expired())return;cancelRuns("workspace_id=?",[workspaceId]);db.prepare("DELETE FROM runner_event_batches WHERE run_id IN (SELECT id FROM agent_runs WHERE workspace_id=?)").run(workspaceId);queueFiles("workspace_id=?",[workspaceId]);for(const table of ["attachment_reference_checks","agent_runs","personal_entity_state","personal_task_views","ai_settings","task_fields","page_templates","page_links","page_versions","page_comments","labels","notifications","join_codes","api_keys","workspace_members"])db.prepare(`DELETE FROM ${table} WHERE workspace_id=?`).run(workspaceId);
   db.prepare("DELETE FROM workspaces WHERE id=?").run(workspaceId);db.prepare("DELETE FROM workspace_revisions WHERE workspace_id=?").run(workspaceId);
  }).immediate();await processFileCleanup();});}
 export async function purgePageRecords(workspaceId:string,pageId:string){await leased(`page:${pageId}`,async renew=>{const db=getDb().$client;

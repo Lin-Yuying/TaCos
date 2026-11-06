@@ -17,6 +17,7 @@ import {
 import { getAiSettingsView } from "@/lib/ai";
 import { getHarnessSettingsView } from "@/lib/harness";
 import { getModelKeysView, harnessViewFor } from "@/lib/model-keys";
+import { canManagePageTemplates, listPageTemplates } from "@/lib/page-templates";
 import { SettingsView } from "@/components/settings-view";
 
 export default async function SettingsPage({
@@ -37,7 +38,7 @@ async function View({ params }: { params: Promise<{ workspaceId: string }> }) {
   const user = await getSessionUser();
   if (!user) redirect("/login");
   const ws = await requireWorkspace(workspaceId);
-  const [members, projects, labels, keys, joinCode, allWorkspaces, deletedWorkspaces, seeAll, ai, harness, modelKeys] =
+  const [members, projects, labels, keys, joinCode, allWorkspaces, deletedWorkspaces, seeAll, ai, harness, modelKeys, pageTemplates] =
     await Promise.all([
       listMembers(workspaceId),
       listProjects(workspaceId, user.id),
@@ -50,6 +51,7 @@ async function View({ params }: { params: Promise<{ workspaceId: string }> }) {
       getAiSettingsView(workspaceId),
       getHarnessSettingsView(workspaceId, ...(await harnessViewFor(ws.user.id))),
       getModelKeysView(ws.user.id),
+      listPageTemplates(workspaceId),
     ]);
   // Where deleting this workspace lands you: the next team you belong to, or the
   // create/join screen when it was your last one.
@@ -75,6 +77,8 @@ async function View({ params }: { params: Promise<{ workspaceId: string }> }) {
       isOwner={ws.workspace.createdBy === ws.user.id}
       nextWorkspaceHref={next ? `/${next.id}` : "/onboarding"}
       deletedWorkspaces={deletedWorkspaces}
+      pageTemplates={pageTemplates}
+      canManagePageTemplates={canManagePageTemplates(workspaceId, ws.user.id)}
     />
   );
 }

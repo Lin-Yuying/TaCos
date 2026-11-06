@@ -3,6 +3,7 @@ import { connection } from "next/server";
 import { redirect } from "next/navigation";
 import { getSessionUser, requireWorkspace } from "@/lib/auth";
 import { listPageMetadata } from "@/lib/pages";
+import { listUnresolvedPageLinks, pageLinkCounts } from "@/lib/page-links";
 import { DocsIndex } from "@/components/docs-index";
 
 export default function DocsPage({ params }: { params: Promise<{ workspaceId: string }> }) {
@@ -19,6 +20,17 @@ async function DocsContent({ params }: { params: Promise<{ workspaceId: string }
   const user = await getSessionUser();
   if (!user) redirect("/login");
   await requireWorkspace(workspaceId);
-  const pages = await listPageMetadata(workspaceId, user.id);
-  return <DocsIndex workspaceId={workspaceId} pages={pages} />;
+  const [pages, unresolvedLinks, backlinkCounts] = await Promise.all([
+    listPageMetadata(workspaceId, user.id),
+    listUnresolvedPageLinks(workspaceId, user.id),
+    pageLinkCounts(workspaceId, user.id),
+  ]);
+  return (
+    <DocsIndex
+      workspaceId={workspaceId}
+      pages={pages}
+      unresolvedLinks={unresolvedLinks}
+      backlinkCounts={backlinkCounts}
+    />
+  );
 }

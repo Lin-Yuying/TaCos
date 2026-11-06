@@ -9,13 +9,15 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useScrollMemory } from "@/lib/ui/scroll-memory";
 import { useMemo, useRef, useState } from "react";
-import { FileText, FolderOpen, Lock, Plus, Upload, Users } from "lucide-react";
-import { createPageAction, importMarkdownAction } from "@/app/pages-actions";
+import { FileText, FolderOpen, Lock, Upload, Users } from "lucide-react";
+import { importMarkdownAction } from "@/app/pages-actions";
 import { Menu, MenuItem } from "@/components/menu";
+import { NewPageMenu } from "@/components/new-page-menu";
 import { documentIndex } from "@/lib/ui/document-index";
 import { useStoredJson } from "@/lib/use-stored-json";
 import { useUI } from "@/components/ui-context";
 import type { PageMetadata } from "@/lib/pages";
+import type { UnresolvedPageLink } from "@/lib/page-links";
 import { useT } from "@/components/i18n-context";
 import { PAGE_INSET } from "@/lib/page-chrome";
 
@@ -33,9 +35,13 @@ function junkPath(path: string): boolean {
 export function DocsIndex({
   workspaceId,
   pages,
+  unresolvedLinks,
+  backlinkCounts,
 }: {
   workspaceId: string;
   pages: PageMetadata[];
+  unresolvedLinks: UnresolvedPageLink[];
+  backlinkCounts: Record<string, number>;
 }) {
   const t = useT();
   const router = useRouter();
@@ -45,8 +51,6 @@ export function DocsIndex({
   const filesRef = useRef<HTMLInputElement>(null);
   const folderRef = useRef<HTMLInputElement>(null);
   const importing = useRef(false);
-  const creatingRef=useRef(false);
-  const [creating,setCreating]=useState(false);
   const {scope,pins}=useUI();
   const scroller=useRef<HTMLDivElement>(null);useScrollMemory(scroller,"documents-index");
   const [query,setQuery]=useState("");
@@ -58,19 +62,6 @@ export function DocsIndex({
     ((ranks.get(a.id)??Infinity)-(ranks.get(b.id)??Infinity))||(sort==="title"?a.title.localeCompare(b.title):sort==="path"?(index.paths.get(a.id)??"").localeCompare(index.paths.get(b.id)??""):b.updatedAt.localeCompare(a.updatedAt))),[pages,index,query,sort,ranks]);
   const sharedPages = shown.filter((page) => page.shared);
   const privatePages = shown.filter((page) => !page.shared);
-
-  async function createPage() {
-    if(creatingRef.current)return;
-    creatingRef.current=true;setCreating(true);
-    try {
-    const result = await createPageAction(workspaceId);
-    if (!result.ok) {
-      setError(result.error);
-      return;
-    }
-    router.push(`/${workspaceId}/docs/${result.data.id}`);
-    }catch{setError("Could not save. Retry.");}finally{creatingRef.current=false;setCreating(false);}
-  }
 
   async function importFiles(picked: File[], stripRoot: boolean) {
     if (importing.current) return;
@@ -116,6 +107,17 @@ export function DocsIndex({
             >
               <span className="shrink-0">{page.icon ?? <FileText size={14} className="text-muted" />}</span>
               <span className="min-w-0 flex-1"><span className="block truncate">{page.title}</span><span className="block truncate text-caption text-faint">{index.paths.get(page.id)}</span></span>
+              {backlinkCounts[page.id] > 0 && (
+                <span
+                  data-doc-backlink-count={backlinkCounts[page.id]}
+                  title={t("Linked from")}
+                  className="shrink-0 text-caption text-faint"
+                >
+                  {t(backlinkCounts[page.id] === 1 ? "{count} link" : "{count} links", {
+                    count: backlinkCounts[page.id],
+                  })}
+                </span>
+              )}
               <span className="ml-auto flex shrink-0 items-center gap-1 text-caption text-faint">
                 {page.shared ? <Users size={11} /> : <Lock size={11} />}
                 {page.shared ? t("Shared") : t("Private")}
@@ -171,13 +173,7 @@ export function DocsIndex({
                 </>
               )}
             </Menu>
-            <button
-              type="button"
-              disabled={creating} onClick={() => void createPage()}
-              className="flex shrink-0 items-center gap-1 rounded-md border border-border px-2.5 py-1.5 text-small font-medium text-muted transition-colors hover:border-border-strong hover:text-text"
-            >
-              <Plus size={13} /> {t("New document")}
-            </button>
+            <NewPageMenu workspaceId={workspaceId} />
           </div>
         </div>
         {/* Folder structure becomes the page tree, so subfolders arrive as subpages. */}
@@ -213,6 +209,39 @@ export function DocsIndex({
         {!error && note && <div className="mt-3 text-small text-muted">{note}</div>}
         {section("shared", t("Shared"), sharedPages, t("No documents yet"))}
         {section("private", t("Private"), privatePages, t("No documents yet"))}
+        {unresolvedLinks.length > 0 && (
+          <section data-doc-unresolved className="mt-8">
+            <h2 className="text-small font-medium uppercase tracking-wider text-faint">
+              {t("Unresolved links")}
+            </h2>
+            <p className="mt-1 text-small text-muted">
+              {t("These references point at a document in the Trash or one that is no longer available.")}
+            </p>
+            <div className="mt-2 space-y-0.5">
+              {unresolvedLinks.map((link) => (
+                <div
+                  key={`${link.sourceId}:${link.targetPageId}`}
+                  data-doc-unresolved-link={`${link.sourceId}:${link.targetPageId}`}
+                  className="flex flex-wrap items-center gap-2 rounded-md px-2 py-1.5 text-body"
+                >
+                  <Link
+                    href={`/${workspaceId}/docs/${link.sourceId}`}
+                    className="min-w-0 truncate text-text underline decoration-border-strong underline-offset-2"
+                  >
+                    {link.sourceTitle}
+                  </Link>
+                  <span className="text-faint">→</span>
+                  <span
+                    title={t("Unresolved")}
+                    className="min-w-0 truncate text-muted underline decoration-dashed decoration-border-strong underline-offset-2"
+                  >
+                    {link.targetTitle || t("Untitled")}
+                  </span>
+                </div>
+              ))}
+            </div>
+          </section>
+        )}
       </div>
     </div>
   );

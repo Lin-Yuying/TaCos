@@ -39,8 +39,10 @@ import { AssigneeAvatar } from "@/components/issue-table";
 import { ProjectIcon, WorkspaceMark } from "@/components/icons";
 import { WorkspaceTrashList } from "@/components/workspace-trash-list";
 import { LabelsManager } from "@/components/labels-manager";
+import { PageTemplatesManager } from "@/components/page-templates-manager";
 import type { ApiKeyRecord, ApiKeyScope, DeletedWorkspace, Label, Member, Project } from "@/lib/issues";
 import type { HarnessSettingsView } from "@/lib/harness/types";
+import type { PageTemplate } from "@/lib/page-templates";
 import { BUILTIN_AVATARS, BUILTIN_AVATAR_LABELS, builtinAvatarId } from "@/lib/avatars";
 import { formatDate, timeAgo } from "@/lib/format";
 import { LOCALES, LOCALE_LABELS, type Locale } from "@/lib/i18n";
@@ -140,6 +142,8 @@ export function SettingsView({
   isOwner,
   nextWorkspaceHref,
   deletedWorkspaces,
+  pageTemplates,
+  canManagePageTemplates,
 }: {
   workspace: { id: string; name: string; key: string; icon: string | null };
   role: string;
@@ -159,6 +163,8 @@ export function SettingsView({
   isOwner: boolean;
   nextWorkspaceHref: string;
   deletedWorkspaces: DeletedWorkspace[];
+  pageTemplates: PageTemplate[];
+  canManagePageTemplates: boolean;
 }) {
   const router = useRouter();
   const t = useT();
@@ -939,6 +945,15 @@ export function SettingsView({
             </button>
           </div>
           {projError && <div className="text-small text-danger">{t(projError)}</div>}
+        </section>
+
+        <section id="page-templates" className="scroll-mt-6 space-y-3">
+          <h2 className="text-body font-semibold">{t("Page templates")}</h2>
+          <PageTemplatesManager
+            workspaceId={workspace.id}
+            initialTemplates={pageTemplates}
+            canManage={canManagePageTemplates}
+          />
         </section>
 
         <section id="labels" className="scroll-mt-6 space-y-3">

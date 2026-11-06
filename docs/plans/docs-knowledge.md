@@ -1,7 +1,7 @@
 # U-04: Documents and knowledge depth
 
-Status: plan for a future PR. No implementation started. Written 2026-11-06
-(loop round 3). Complements #78 (Inbox).
+Status: implemented on `feat/docs-knowledge` (2026-11-06); pending review and merge.
+Original plan written 2026-11-06 (loop round 3). Complements #78 (Inbox).
 
 ## Why
 
@@ -174,3 +174,39 @@ is the knowledge graph and reuse.
   doc tree/index components.
 - `src/lib/search.ts`, command palette for link/template results.
 - Settings for templates; i18n; new checks.
+
+## Implementation notes (2026-11-06)
+
+Per-commit state:
+
+1. **Links and backlinks** — done. `page_links` stores workspace, source kind/id,
+   target page id and the last known target title; v1 writes `source_kind='page'`
+   only. Outgoing rows are derived from the saved Markdown on create/save/restore
+   and replaced in the same transaction as the body, so Yjs stores never own link
+   state. `[[` opens a picker in the main (TipTap) editor; the compact Markdown
+   editor opens the same picker on `[[` as well as `/document`. References resolve
+   by page id first and title second at render time. A trashed or hidden target
+   renders dashed and unresolved; restoring it resolves again. The "Linked from"
+   side panel and the document index's unresolved list filter by page visibility.
+   Templates and links are not auto-converted from existing text or `@mentions`.
+2. **Page templates** — done, workspace-level only. Settings › Page templates is
+   visible to all members, editable by the owner/admin. New pages can start from
+   one in the document tree, document index and project Documents. Variables are
+   `{date}`, `{author}`, `{project}`; unknown placeholders are left alone. The page
+   keeps a template-name snapshot and its first version records the source, so a
+   deleted template has no effect on existing pages. Per-project templates and a
+   default template stay follow-ups.
+3. **Outline and anchors** — done except print. The reader sidebar builds from
+   headings; heading ids are stable for duplicates and Chinese text; `#` beside a
+   heading and the outline's copy button create `?heading=<id>` links, which the
+   reader scrolls to. The document index shows backlink counts and unresolved
+   links; recent documents show an icon and edit time. A print stylesheet was
+   skipped: PDF/print is U-05.
+4. **Checks and docs** — `check-doc-links.ts`, `check-doc-templates.ts` and
+   `check-doc-outline.ts` added; `check-review-doc-drag.ts` moved its create-path
+   assertions to `NewPageMenu`. README and this status updated. Browser
+   E2E/screenshots are run by the Lead.
+
+Not tested here: browser interaction (picker keyboard flow, panel layout at 1440
+and 1100, copied-link scroll), and a real multi-client Yjs session with link
+edits. Library checks cover the data rules; `npm run build` covers types.
