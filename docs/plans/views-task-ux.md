@@ -145,15 +145,21 @@ Default one PR; if shared views + subscriptions grow, split UX polish.
 - Cross-workspace views.
 - Native mobile view layouts (U-08).
 
-## Open decisions
+## Decisions (accepted as planned, 2026-11-06)
 
-1. One PR for views + bulk/templates (recommended) or split UX polish?
-2. View sharing: workspace/project levels only (recommended) or per-user
-   sharing too?
-3. Estimates: add a numeric estimate field in this PR (needed by U-03) or leave
-   to U-03?
-4. Bulk edit: include project move (recommended) or only field edits?
-5. Templates: workspace-level first (recommended) or per-project too?
+1. One PR with the four commits; commit boundaries are the review points.
+2. Views are shared at **workspace / project** level only; no per-user sharing
+   and no guest views (internal company use only).
+3. The **numeric estimate field** ships in U-09 because U-03 cycles/capacity
+   need it; it is not a custom field.
+4. Bulk edit **includes project move**, but status changes still respect the
+   "only assignees may change status" rule and report per-task errors.
+5. Task templates start at the **workspace level**; per-project templates are a
+   follow-up.
+6. View subscriptions are **off by default**, users opt in, and self-triggered
+   actions are excluded from notifications.
+7. Owners/admins set the default view for a shared scope; personal display
+   overrides never change the shared default.
 
 ## Dependencies
 
