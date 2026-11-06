@@ -1014,47 +1014,313 @@ function ensureInitialAvatars(sqlite: Database.Database) {
   }
 }
 
+// The index covers every entity the search page lists. Each source carries the SQL for
+// its trigger, its backfill, and the row a rebuild copies into search_entries.
+type SearchSource = {
+  table: string;
+  kind: string;
+  ref: string;
+  oldRef: string;
+  workspace: string;
+  oldWorkspace: string;
+  title: string;
+  body: string;
+  columns: string;
+  changed: string;
+  condition: string;
+  select: string;
+};
+
+const SEARCH_ENTITY_SOURCES: SearchSource[] = [
+  {
+    table: "pages",
+    kind: "doc",
+    ref: "new.id",
+    oldRef: "old.id",
+    workspace: "new.workspace_id",
+    oldWorkspace: "old.workspace_id",
+    title: "new.title",
+    body: "new.doc",
+    columns: "title, doc, deleted_at, workspace_id",
+    changed: "new.title IS NOT old.title OR new.doc IS NOT old.doc OR new.deleted_at IS NOT old.deleted_at OR new.workspace_id IS NOT old.workspace_id",
+    condition: "new.deleted_at IS NULL",
+    select: "SELECT 'doc' AS kind, id AS ref_id, workspace_id, title, doc AS body FROM pages WHERE deleted_at IS NULL",
+  },
+  {
+    table: "issues",
+    kind: "task",
+    ref: "new.id",
+    oldRef: "old.id",
+    workspace: "new.workspace_id",
+    oldWorkspace: "old.workspace_id",
+    title: "new.identifier || ' ' || new.title",
+    body: "new.description",
+    columns: "identifier, title, description, deleted_at, workspace_id",
+    changed: "new.identifier IS NOT old.identifier OR new.title IS NOT old.title OR new.description IS NOT old.description OR new.deleted_at IS NOT old.deleted_at OR new.workspace_id IS NOT old.workspace_id",
+    condition: "new.deleted_at IS NULL",
+    select: "SELECT 'task' AS kind, id AS ref_id, workspace_id, identifier || ' ' || title AS title, description AS body FROM issues WHERE deleted_at IS NULL",
+  },
+  {
+    table: "comments",
+    kind: "task_comment",
+    ref: "new.id",
+    oldRef: "old.id",
+    workspace: "(SELECT workspace_id FROM issues WHERE id=new.issue_id)",
+    oldWorkspace: "(SELECT workspace_id FROM issues WHERE id=old.issue_id)",
+    title: "''",
+    body: "new.body",
+    columns: "body, issue_id",
+    changed: "new.body IS NOT old.body OR new.issue_id IS NOT old.issue_id",
+    condition: "1",
+    select: "SELECT 'task_comment' AS kind, c.id AS ref_id, i.workspace_id, '' AS title, c.body AS body FROM comments c JOIN issues i ON i.id=c.issue_id",
+  },
+  {
+    table: "page_comments",
+    kind: "doc_comment",
+    ref: "new.id",
+    oldRef: "old.id",
+    workspace: "new.workspace_id",
+    oldWorkspace: "old.workspace_id",
+    title: "''",
+    body: "new.body",
+    columns: "body, deleted_at, workspace_id",
+    changed: "new.body IS NOT old.body OR new.deleted_at IS NOT old.deleted_at OR new.workspace_id IS NOT old.workspace_id",
+    condition: "new.deleted_at IS NULL",
+    select: "SELECT 'doc_comment' AS kind, id AS ref_id, workspace_id, '' AS title, body FROM page_comments WHERE deleted_at IS NULL",
+  },
+  {
+    table: "projects",
+    kind: "project",
+    ref: "new.id",
+    oldRef: "old.id",
+    workspace: "new.workspace_id",
+    oldWorkspace: "old.workspace_id",
+    title: "new.name",
+    body: "new.description",
+    columns: "name, description, deleted_at, workspace_id",
+    changed: "new.name IS NOT old.name OR new.description IS NOT old.description OR new.deleted_at IS NOT old.deleted_at OR new.workspace_id IS NOT old.workspace_id",
+    condition: "new.deleted_at IS NULL",
+    select: "SELECT 'project' AS kind, id AS ref_id, workspace_id, name AS title, description AS body FROM projects WHERE deleted_at IS NULL",
+  },
+  {
+    table: "workspace_members",
+    kind: "person",
+    ref: "new.user_id",
+    oldRef: "old.user_id",
+    workspace: "new.workspace_id",
+    oldWorkspace: "old.workspace_id",
+    title: "(SELECT display_name || ' ' || username FROM users WHERE id=new.user_id)",
+    body: "''",
+    columns: "user_id, workspace_id",
+    changed: "new.user_id IS NOT old.user_id OR new.workspace_id IS NOT old.workspace_id",
+    condition: "1",
+    select: "SELECT 'person' AS kind, wm.user_id AS ref_id, wm.workspace_id, u.display_name || ' ' || u.username AS title, '' AS body FROM workspace_members wm JOIN users u ON u.id=wm.user_id",
+  },
+  {
+    table: "labels",
+    kind: "label",
+    ref: "new.id",
+    oldRef: "old.id",
+    workspace: "new.workspace_id",
+    oldWorkspace: "old.workspace_id",
+    title: "new.name",
+    body: "''",
+    columns: "name, workspace_id",
+    changed: "new.name IS NOT old.name OR new.workspace_id IS NOT old.workspace_id",
+    condition: "1",
+    select: "SELECT 'label' AS kind, id AS ref_id, workspace_id, name AS title, '' AS body FROM labels",
+  },
+  {
+    table: "agent_threads",
+    kind: "agent_thread",
+    ref: "new.id",
+    oldRef: "old.id",
+    workspace: "new.workspace_id",
+    oldWorkspace: "old.workspace_id",
+    title: "new.title",
+    body: "(SELECT COALESCE(m.content,'') FROM agent_messages m WHERE m.thread_id=new.id AND m.role='assistant' ORDER BY m.created_at DESC, m.rowid DESC LIMIT 1)",
+    columns: "title, workspace_id",
+    changed: "new.title IS NOT old.title OR new.workspace_id IS NOT old.workspace_id",
+    condition: "1",
+    select: "SELECT 'agent_thread' AS kind, t.id AS ref_id, t.workspace_id, t.title, COALESCE((SELECT m.content FROM agent_messages m WHERE m.thread_id=t.id AND m.role='assistant' ORDER BY m.created_at DESC, m.rowid DESC LIMIT 1),'') AS body FROM agent_threads t",
+  },
+  {
+    table: "attachments",
+    kind: "attachment",
+    ref: "new.id",
+    oldRef: "old.id",
+    workspace: "new.workspace_id",
+    oldWorkspace: "old.workspace_id",
+    title: "new.name",
+    body: "''",
+    columns: "name, page_id, complete, workspace_id",
+    changed: "new.name IS NOT old.name OR new.page_id IS NOT old.page_id OR new.complete IS NOT old.complete OR new.workspace_id IS NOT old.workspace_id",
+    condition: "new.complete = 1 AND new.page_id <> 'agent-draft'",
+    select: "SELECT 'attachment' AS kind, id AS ref_id, workspace_id, name AS title, '' AS body FROM attachments WHERE complete=1 AND page_id <> 'agent-draft'",
+  },
+  {
+    table: "automation_rules",
+    kind: "automation",
+    ref: "new.id",
+    oldRef: "old.id",
+    workspace: "new.workspace_id",
+    oldWorkspace: "old.workspace_id",
+    title: "new.name",
+    body: "new.trigger",
+    columns: "name, trigger, workspace_id",
+    changed: "new.name IS NOT old.name OR new.trigger IS NOT old.trigger OR new.workspace_id IS NOT old.workspace_id",
+    condition: "1",
+    select: "SELECT 'automation' AS kind, id AS ref_id, workspace_id, name AS title, trigger AS body FROM automation_rules",
+  },
+];
+
+// Every trigger this module owns, including the two hand-written refresh paths below.
+const SEARCH_TRIGGERS = [
+  ...SEARCH_ENTITY_SOURCES.flatMap((source) =>
+    ["ai", "au", "ad"].map((suffix) => `search_${source.table}_${suffix}`)
+  ),
+  "search_users_au",
+  "search_users_ad",
+  "search_agent_messages_ai",
+  "search_agent_messages_au",
+  "search_agent_messages_ad",
+];
+
+function searchEntryUniqueIsScoped(sqlite: Database.Database): boolean {
+  const indexes = sqlite.prepare("PRAGMA index_list(search_entries)").all() as Array<{
+    name: string;
+    unique: number;
+  }>;
+  for (const index of indexes) {
+    if (!index.unique) continue;
+    const columns = (
+      sqlite.prepare(`PRAGMA index_info("${index.name.replace(/"/g, '""')}")`).all() as Array<{
+        name: string;
+      }>
+    )
+      .map((column) => column.name)
+      .sort();
+    if (
+      columns.length === 3 &&
+      columns[0] === "kind" &&
+      columns[1] === "ref_id" &&
+      columns[2] === "workspace_id"
+    ) {
+      return true;
+    }
+  }
+  return false;
+}
+
 // Triggers keep search_fts in step with every write path. The trigram tokenizer needs no word
 // breaks, so Chinese matches without a dictionary. Titles of tasks carry the identifier.
+// One entry is unique per workspace, so the same person can be indexed in two teams.
 function ensureSearchIndex(sqlite: Database.Database) {
   sqlite.transaction(() => {
-    const migrate = !tableExists(sqlite, "search_entries") || !tableExists(sqlite,"search_fts");
+    const fresh = !tableExists(sqlite, "search_entries") || !tableExists(sqlite, "search_fts");
     sqlite.exec(`CREATE VIRTUAL TABLE IF NOT EXISTS search_fts USING fts5(
       kind UNINDEXED, ref_id UNINDEXED, workspace_id UNINDEXED, title, body, tokenize = 'trigram'
     );
     CREATE TABLE IF NOT EXISTS search_entries (
       id INTEGER PRIMARY KEY, kind TEXT NOT NULL, ref_id TEXT NOT NULL,
-      workspace_id TEXT NOT NULL, UNIQUE(kind, ref_id)
+      workspace_id TEXT NOT NULL, UNIQUE(kind, workspace_id, ref_id)
     );
     CREATE INDEX IF NOT EXISTS search_entries_scope ON search_entries(workspace_id,kind,id);`);
-    const sources = [
-      {table:"pages",kind:"doc",workspace:"new.workspace_id",title:"new.title",body:"new.doc",columns:"title, doc",changed:"new.title IS NOT old.title OR new.doc IS NOT old.doc",condition:"1",select:"SELECT 'doc',id,workspace_id,title,doc FROM pages"},
-      {table:"issues",kind:"task",workspace:"new.workspace_id",title:"new.identifier || ' ' || new.title",body:"new.description",columns:"identifier, title, description",changed:"new.identifier IS NOT old.identifier OR new.title IS NOT old.title OR new.description IS NOT old.description",condition:"1",select:"SELECT 'task',id,workspace_id,identifier || ' ' || title,description FROM issues"},
-      {table:"comments",kind:"task_comment",workspace:"(SELECT workspace_id FROM issues WHERE id=new.issue_id)",title:"''",body:"new.body",columns:"body",changed:"new.body IS NOT old.body",condition:"1",select:"SELECT 'task_comment',c.id,i.workspace_id,'',c.body FROM comments c JOIN issues i ON i.id=c.issue_id"},
-      {table:"page_comments",kind:"doc_comment",workspace:"new.workspace_id",title:"''",body:"new.body",columns:"body, deleted_at",changed:"new.body IS NOT old.body OR new.deleted_at IS NOT old.deleted_at",condition:"new.deleted_at IS NULL",select:"SELECT 'doc_comment',id,workspace_id,'',body FROM page_comments WHERE deleted_at IS NULL"},
-    ];
-    for (const source of sources) {
-      if(migrate)for(const suffix of ["ai","au","ad"])sqlite.exec(`DROP TRIGGER IF EXISTS search_${source.table}_${suffix}`);
-      const insert = `INSERT OR IGNORE INTO search_entries(kind,ref_id,workspace_id) SELECT '${source.kind}',new.id,${source.workspace} WHERE ${source.condition};
-        INSERT INTO search_fts(rowid,kind,ref_id,workspace_id,title,body)
-        SELECT id,kind,ref_id,workspace_id,${source.title},${source.body} FROM search_entries WHERE kind='${source.kind}' AND ref_id=new.id AND ${source.condition};`;
-      const remove = `DELETE FROM search_fts WHERE rowid=(SELECT id FROM search_entries WHERE kind='${source.kind}' AND ref_id=old.id);`;
-      sqlite.exec(`CREATE TRIGGER IF NOT EXISTS search_${source.table}_ai AFTER INSERT ON ${source.table} BEGIN ${insert} END;
-      CREATE TRIGGER IF NOT EXISTS search_${source.table}_au AFTER UPDATE OF ${source.columns} ON ${source.table} WHEN ${source.changed} BEGIN ${remove} ${insert} END;
-      CREATE TRIGGER IF NOT EXISTS search_${source.table}_ad AFTER DELETE ON ${source.table} BEGIN ${remove} DELETE FROM search_entries WHERE kind='${source.kind}' AND ref_id=old.id; END;`);
+
+    // Triggers are dropped before the entry table is renamed: SQLite re-parses a
+    // trigger when a table it references is renamed, and an old trigger that still
+    // names search_entries would fail while that name is temporarily absent.
+    for (const name of SEARCH_TRIGGERS) sqlite.exec(`DROP TRIGGER IF EXISTS ${name}`);
+
+    // A database from before people were indexed keyed entries by (kind, ref_id) and
+    // would collide when one person belongs to two workspaces. Rebuild that table once.
+    const scoped = searchEntryUniqueIsScoped(sqlite);
+    if (!scoped) {
+      sqlite.exec(`CREATE TABLE search_entries_scoped (
+          id INTEGER PRIMARY KEY, kind TEXT NOT NULL, ref_id TEXT NOT NULL,
+          workspace_id TEXT NOT NULL, UNIQUE(kind, workspace_id, ref_id)
+        );
+        INSERT OR IGNORE INTO search_entries_scoped(id,kind,ref_id,workspace_id)
+          SELECT id,kind,ref_id,workspace_id FROM search_entries;
+        DROP TABLE search_entries;
+        ALTER TABLE search_entries_scoped RENAME TO search_entries;
+        CREATE INDEX IF NOT EXISTS search_entries_scope ON search_entries(workspace_id,kind,id);`);
     }
-    if(migrate){
+
+    const marker = "search_index_entities_v1";
+    const versioned = Boolean(
+      sqlite.prepare("SELECT 1 FROM schema_migrations WHERE name = ?").get(marker)
+    );
+    const rebuild = fresh || !versioned || !scoped;
+
+    if (rebuild) {
       sqlite.exec("DELETE FROM search_fts; DELETE FROM search_entries");
-      for(const source of sources){
-        const query=source.select.replace(`'${source.kind}',`, `'${source.kind}' AS kind,`).replace(/,([ci]\.)?id,/,",$1id AS ref_id,");
-        sqlite.exec(`INSERT INTO search_entries(kind,ref_id,workspace_id) SELECT kind,ref_id,workspace_id FROM (${query})`);
+      for (const source of SEARCH_ENTITY_SOURCES) {
+        sqlite.exec(
+          `INSERT OR IGNORE INTO search_entries(kind,ref_id,workspace_id)
+           SELECT kind,ref_id,workspace_id FROM (${source.select})`
+        );
       }
       // FTS is derived; rebuilding inside this transaction is restart-safe.
-      for(const source of sources){
+      for (const source of SEARCH_ENTITY_SOURCES) {
         sqlite.exec(`INSERT INTO search_fts(rowid,kind,ref_id,workspace_id,title,body)
-          SELECT e.id,s.* FROM (${source.select.replace(`'${source.kind}',`, `'${source.kind}' AS kind,`).replace(/,([ci]\.)?id,/,",$1id AS ref_id,")}) s
-          JOIN search_entries e ON e.kind=s.kind AND e.ref_id=s.ref_id`);
+          SELECT e.id,s.kind,s.ref_id,s.workspace_id,s.title,s.body
+          FROM (${source.select}) s
+          JOIN search_entries e ON e.kind=s.kind AND e.ref_id=s.ref_id AND e.workspace_id=s.workspace_id`);
       }
+    }
+
+    for (const source of SEARCH_ENTITY_SOURCES) {
+      const lookup = `kind='${source.kind}' AND ref_id=${source.ref} AND workspace_id=${source.workspace}`;
+      const insert = `INSERT OR IGNORE INTO search_entries(kind,ref_id,workspace_id)
+        SELECT '${source.kind}',${source.ref},${source.workspace} WHERE ${source.condition};
+        DELETE FROM search_fts WHERE rowid IN (SELECT id FROM search_entries WHERE ${lookup});
+        INSERT INTO search_fts(rowid,kind,ref_id,workspace_id,title,body)
+        SELECT e.id,e.kind,e.ref_id,e.workspace_id,${source.title},${source.body}
+        FROM search_entries e WHERE e.kind='${source.kind}' AND e.ref_id=${source.ref}
+          AND e.workspace_id=${source.workspace} AND ${source.condition};`;
+      const clear = `DELETE FROM search_fts WHERE rowid IN (
+          SELECT id FROM search_entries WHERE kind='${source.kind}' AND ref_id=${source.oldRef} AND workspace_id=${source.oldWorkspace});
+        DELETE FROM search_entries WHERE kind='${source.kind}' AND ref_id=${source.oldRef} AND workspace_id=${source.oldWorkspace};`;
+      sqlite.exec(`CREATE TRIGGER search_${source.table}_ai AFTER INSERT ON ${source.table} BEGIN ${insert} END;
+        CREATE TRIGGER search_${source.table}_au AFTER UPDATE OF ${source.columns} ON ${source.table} WHEN ${source.changed} BEGIN
+          DELETE FROM search_fts WHERE rowid IN (SELECT id FROM search_entries WHERE kind='${source.kind}' AND ref_id=${source.oldRef} AND workspace_id=${source.oldWorkspace}); ${insert}
+        END;
+        CREATE TRIGGER search_${source.table}_ad AFTER DELETE ON ${source.table} BEGIN ${clear} END;`);
+    }
+
+    // A person's name lives in users, not in the membership row: refresh every team's entry.
+    sqlite.exec(`
+      CREATE TRIGGER search_users_au AFTER UPDATE OF display_name, username ON users BEGIN
+        DELETE FROM search_fts WHERE rowid IN (SELECT id FROM search_entries WHERE kind='person' AND ref_id=new.id);
+        INSERT INTO search_fts(rowid,kind,ref_id,workspace_id,title,body)
+          SELECT e.id,e.kind,e.ref_id,e.workspace_id,new.display_name || ' ' || new.username,''
+          FROM search_entries e WHERE e.kind='person' AND e.ref_id=new.id;
+      END;
+      CREATE TRIGGER search_users_ad AFTER DELETE ON users BEGIN
+        DELETE FROM search_fts WHERE rowid IN (SELECT id FROM search_entries WHERE kind='person' AND ref_id=old.id);
+        DELETE FROM search_entries WHERE kind='person' AND ref_id=old.id;
+      END;`);
+
+    // An Agent thread is one result: its title plus the latest assistant reply. Editing
+    // any message refeshes that thread instead of indexing each turn separately.
+    const reply = `COALESCE((SELECT m2.content FROM agent_messages m2 WHERE m2.thread_id=t.id AND m2.role='assistant'
+      ORDER BY m2.created_at DESC, m2.rowid DESC LIMIT 1),'')`;
+    const refreshThread = (threadId: string) => `
+      DELETE FROM search_fts WHERE rowid IN (SELECT id FROM search_entries WHERE kind='agent_thread' AND ref_id=${threadId});
+      INSERT INTO search_fts(rowid,kind,ref_id,workspace_id,title,body)
+        SELECT e.id,e.kind,e.ref_id,e.workspace_id,t.title,${reply}
+        FROM search_entries e JOIN agent_threads t ON t.id=e.ref_id
+        WHERE e.kind='agent_thread' AND e.ref_id=${threadId};`;
+    sqlite.exec(`
+      CREATE TRIGGER search_agent_messages_ai AFTER INSERT ON agent_messages BEGIN ${refreshThread("new.thread_id")} END;
+      CREATE TRIGGER search_agent_messages_au AFTER UPDATE OF content, thread_id, role ON agent_messages BEGIN ${refreshThread("new.thread_id")} END;
+      CREATE TRIGGER search_agent_messages_ad AFTER DELETE ON agent_messages BEGIN ${refreshThread("old.thread_id")} END;`);
+
+    if (!versioned) {
+      sqlite
+        .prepare("INSERT OR IGNORE INTO schema_migrations (name, applied_at) VALUES (?, ?)")
+        .run(marker, new Date().toISOString());
     }
   })();
 }
