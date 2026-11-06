@@ -1,0 +1,72 @@
+/**
+ * 2.3 upgrade: a database created before the issue tree existed must still boot.
+ * A 2.2 board has no issues.parent_id, and bootstrap used to create the index on that
+ * column inside DDL — before the ALTER that adds it — so the whole script threw and
+ * every request answered 500. This check builds that old shape and opens it.
+ *   node --import tsx scripts/check-upgrade-old-db.ts
+ */
+import Database from "better-sqlite3";
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
+
+const dir = fs.mkdtempSync(path.join(os.tmpdir(), "tacos-upgrade-"));
+process.env.TACOS_DATA_DIR = dir;
+process.env.TACOS_SEED_DEMO = "0";
+
+function assert(ok: unknown, message: string): asserts ok {
+  if (!ok) throw new Error(message);
+}
+
+// The 2.2 shape of the tasks table: no parent_id, no issues_parent_idx, one row worth
+// keeping. Every other table is left to bootstrap, which creates what is missing.
+const old = new Database(path.join(dir, "tacos.db"));
+old.exec(`
+CREATE TABLE issues (
+  id TEXT PRIMARY KEY,
+  workspace_id TEXT NOT NULL,
+  project_id TEXT NOT NULL,
+  number INTEGER NOT NULL,
+  identifier TEXT NOT NULL,
+  title TEXT NOT NULL,
+  description TEXT NOT NULL DEFAULT '',
+  status TEXT NOT NULL DEFAULT 'todo',
+  priority INTEGER NOT NULL DEFAULT 0,
+  created_via TEXT NOT NULL DEFAULT 'web',
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
+INSERT INTO issues (id, workspace_id, project_id, number, identifier, title, created_at, updated_at)
+VALUES ('old-issue', 'ws-old', 'project-old', 1, 'OLD-1', 'kept', '2026-01-01T00:00:00.000Z', '2026-01-01T00:00:00.000Z');
+`);
+old.close();
+
+async function main() {
+  const { getDb } = await import("../src/db/client");
+  getDb(); // Threw "no such column: parent_id" before the fix.
+  const check = new Database(path.join(dir, "tacos.db"));
+  const columns = check.prepare("PRAGMA table_info(issues)").all() as Array<{ name: string }>;
+  assert(
+    columns.some((column) => column.name === "parent_id"),
+    "bootstrap must add issues.parent_id to an older database"
+  );
+  const index = check
+    .prepare("SELECT name FROM sqlite_master WHERE type = 'index' AND name = 'issues_parent_idx'")
+    .get();
+  assert(index, "bootstrap must create issues_parent_idx once the column exists");
+  const pageIndex = check
+    .prepare("SELECT name FROM sqlite_master WHERE type = 'index' AND name = 'pages_parent_idx'")
+    .get();
+  assert(pageIndex, "bootstrap must still index the page tree");
+  const row = check.prepare("SELECT title FROM issues WHERE id = 'old-issue'").get() as
+    | { title: string }
+    | undefined;
+  assert(row?.title === "kept", "an upgrade keeps the tasks that were already there");
+  check.close();
+  console.log("ok   2.3 upgrade boots on a database without issues.parent_id");
+}
+
+main().catch((err) => {
+  console.error(err);
+  process.exit(1);
+});

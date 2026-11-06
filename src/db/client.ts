@@ -274,7 +274,6 @@ CREATE TABLE IF NOT EXISTS page_collab (
   updated_at TEXT NOT NULL
 );
 CREATE UNIQUE INDEX IF NOT EXISTS page_versions_page_seq_idx ON page_versions (page_id, seq);
-CREATE INDEX IF NOT EXISTS pages_parent_idx ON pages (parent_id);
 
 CREATE TABLE IF NOT EXISTS issues (
   id TEXT PRIMARY KEY,
@@ -890,8 +889,16 @@ function bootstrap(sqlite: Database.Database) {
   addColumnIfMissing(sqlite, "projects", "description", "TEXT NOT NULL DEFAULT ''");
   addColumnIfMissing(sqlite, "projects", "doc", "TEXT NOT NULL DEFAULT ''");
   addColumnIfMissing(sqlite, "projects", "icon", "TEXT");
+  // A nullable parent link, one per tree. The column and its index stay out of DDL: an
+  // index on a column an older database has not got fails the whole script, and the
+  // ALTER that adds the column only runs after DDL. A server upgraded from 2.2 failed
+  // to boot that way, so the column comes first and the index follows it.
   addColumnIfMissing(sqlite, "issues", "parent_id", "TEXT");
-  sqlite.exec("CREATE INDEX IF NOT EXISTS issues_parent_idx ON issues (parent_id)");
+  addColumnIfMissing(sqlite, "pages", "parent_id", "TEXT");
+  sqlite.exec(`
+    CREATE INDEX IF NOT EXISTS issues_parent_idx ON issues (parent_id);
+    CREATE INDEX IF NOT EXISTS pages_parent_idx ON pages (parent_id);
+  `);
   addColumnIfMissing(sqlite, "issues", "deleted_at", "TEXT");
   addColumnIfMissing(sqlite, "task_fields", "disabled_at", "TEXT");
   for(const column of ["parent_id","edited_at","deleted_at"]) addColumnIfMissing(sqlite,"page_comments",column,"TEXT");
