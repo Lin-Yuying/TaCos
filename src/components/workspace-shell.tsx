@@ -969,7 +969,6 @@ function SidebarRail({
         className={`flex h-12 shrink-0 items-center gap-0.5 ${labeled ? "px-2" : "justify-center"}`}
       >
         <WorkspaceSwitcher workspace={workspace} workspaces={workspaces} compact={!named} />
-        <DesktopAppUpdateButton compact={!named} />
       </div>
       <nav
         className={
@@ -1709,6 +1708,8 @@ function TabBar({
 
       <Menu align="right" width={300} trigger={<span aria-label={t("Open tabs")}>▾</span>} triggerClassName="rounded px-2 py-1 text-muted">{close=><>{visible.map(key=><MenuItem key={key} onSelect={()=>{close();router.push(key);}}>{tabMeta(key,workspace,projects,members,pages,t).label}</MenuItem>)}{recentTabs.length>0&&<div className="border-t border-border px-2 py-1 text-small text-faint">{t("Recently closed")}</div>}{recentTabs.map(key=><MenuItem key={key} onSelect={()=>{close();setRecentTabs(previous=>previous.filter(item=>item!==key));router.push(key);}}>{tabMeta(key,workspace,projects,members,pages,t).label}</MenuItem>)}</>}</Menu>
 
+      <DesktopAppUpdateButton />
+
       <button
         type="button"
         onClick={() => setPaletteOpen(true)}
@@ -1861,7 +1862,6 @@ export function WorkspaceShell({
             <>
               <div className="flex h-12 shrink-0 items-center px-3">
                 <WorkspaceSwitcher workspace={workspace} workspaces={workspaces} />
-                <DesktopAppUpdateButton />
               </div>
 
               <Suspense fallback={<nav className="flex-1 px-2 py-3" />}>

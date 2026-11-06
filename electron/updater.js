@@ -605,6 +605,21 @@ function registerIpc() {
     }
     return confirmAndInstall({ force: true });
   });
+
+  // The top-bar pill asks the in-app questions (including a running Agent) and calls
+  // this, so restarting does not show the native install dialog a second time. A build
+  // that cannot replace itself still goes through the download-page prompt.
+  ipcMain.handle("tacos:app-update:restart", async () => {
+    if (status.state !== "downloaded") {
+      return { ok: false, error: "No downloaded update is ready to install.", status: snapshot() };
+    }
+    const route = installRoute();
+    const degraded = route !== "updater" && !(route === "self" && selfInstall);
+    if (degraded) return offerDownloadPage(status.availableVersion || "", false);
+    log("app update restart confirmed in the top bar");
+    runQuitAndInstall();
+    return { ok: true, confirmed: true, status: snapshot() };
+  });
 }
 
 function bindUpdaterEvents(updater) {
