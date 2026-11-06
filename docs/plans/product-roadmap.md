@@ -58,8 +58,8 @@ Areas deep-dived by rounds, with their reference products:
 | --- | --- | --- | --- |
 | 1 | Product surface + sharing/permissions | Notion, Linear, Google Drive, Confluence, GitHub, Figma | done → `sharing-permissions.md` |
 | 2 | Tasks/views/planning/insights | Linear, Asana, ClickUp | done for planning/insights → `planning.md`, `insights.md`; the views/task-UX slice is U-09 |
-| 3 | Docs/search/collaboration/notifications | Notion, Confluence, Slack, Google Docs | next |
-| 4 | Agent/automations/platform | Claude Code/Agent SDK, Codex, Cursor, OpenHands, A2A, MCP | later |
+| 3 | Docs/search/collaboration/notifications | Notion, Linear, GitHub, Google Docs, Slack | done → `docs-knowledge.md`, `search.md`, `collaboration.md`; notifications covered by #78 (in-app), U-11 (collab) and U-08 (channels) |
+| 4 | Agent/automations/platform | Claude Code/Agent SDK, Codex, Cursor, OpenHands, A2A, MCP | next |
 | 5 | Enterprise/desktop/import-export/channels | Linear/Notion enterprise, GitHub, mobile-first tools | later |
 
 ## 3. Gap and priority matrix
@@ -72,7 +72,9 @@ value; P2 later / depends on other work.
 | Sharing & permissions | External guests/public links, private projects/tasks, access audit, invite flow | P0 | U-01 |
 | Insights & analytics | No reporting on flow, delegation, agent usage | P1 (after #79/#80 data) | U-02 |
 | Planning | No cycles/milestones/roadmap/goals | P1 | U-03 |
-| Docs & knowledge | No version-diff review, backlinks, templates, unified doc search | P1/P2 | U-04 |
+| Docs & knowledge | Backlinks/templates/outline missing (version diff, comments, presence exist) | P1 | U-04 |
+| Search | FTS covers docs/tasks/comments only; no filters/scopes/page | P2 | U-10 |
+| Collaboration depth | Task comments flat; no follow/watchers; no workspace activity feed | P2 | U-11 |
 | Import/export & portability | No workspace export/import | P2 (anti-lock-in, pairs with enterprise) | U-05 |
 | Enterprise & governance | No SSO/OIDC, audit UI, retention, admin console | P2 (when team grows or TaCos is shared externally) | U-06 |
 | External agent platform | No A2A/registry/external agents | P2 (after #80 automations) | U-07 |
@@ -113,10 +115,13 @@ keeps existing board/list/calendar views.
 
 ### U-04 — Documents and knowledge depth
 
-Benchmarks: Notion, Confluence.
-Scope: version-diff review and restore UI (history already exists), backlinks,
-templates, unified document search, block/page references, possibly public
-pages later (but public sharing is part of U-01).
+Plan: `docs/plans/docs-knowledge.md`.
+Benchmarks: Notion, Confluence, Google Docs.
+Current strengths to keep: version history + diff + restore, quoted threaded
+comments with resolve, Yjs live collaboration with presence, attachments.
+Scope: page links and a backlinks panel, templates (workspace/project), table of
+contents/anchors, version lifecycle polish, and links/templates as searchable
+entities. Block/database editing stays out.
 
 ### U-05 — Import, export and data portability
 
@@ -153,11 +158,31 @@ per-user), saved-view subscriptions and notifications, display options
 lands, and quick filters/polish for table/calendar. Small-to-medium; can be
 pulled forward after U-01 because it improves every other feature.
 
+### U-10 — Unified search and command palette
+
+Plan: `docs/plans/search.md`.
+Benchmarks: Linear Search, GitHub search, Notion search.
+Scope: extend the FTS index to projects, people, labels, agent threads,
+attachments and automation rules; a full results page with kind/project/
+assignee/date filters, sorting and pagination; keyboard prefixes/recent items;
+CJK/short-term quality; permissions for guests/private projects. Today the
+palette covers docs/tasks/comments only with no filters or scopes.
+
+### U-11 — Collaboration depth
+
+Plan: `docs/plans/collaboration.md`.
+Benchmarks: Linear, GitHub, Google Docs, Notion.
+Scope: threaded/editable/deleteable/reactionable task comments (page comments
+already have threads/quotes/resolve), explicit follow/unfollow with watchers
+(auto-follow on create/assign/mention/comment), a workspace activity feed, and
+review comments attached to the review state (agent review from #79 reuses it).
+Presence is docs-only today; acceptable.
+
 ### Small continuous PRs
 
-- Unified search and command-palette expansion.
-- Notification channel polish.
+- Notification channel polish (fold into U-08).
 - UI/perf fixes from fresh-context reviews.
+- Keyboard/command palette polish (fold into U-10).
 
 These still get a plan note before coding, but can ride along with their area.
 
@@ -180,13 +205,15 @@ Round 2 (done): planning (`docs/plans/planning.md`) and insights
 (`docs/plans/insights.md`), plus the plan template; U-09 recorded for the
 views/task-UX slice.
 
-Round 3 (next): docs/search/collaboration/notifications; write the area plans
-and, if useful, split U-04 and a small search/notification PR.
+Round 3 (done): docs knowledge (`docs-knowledge.md`), unified search
+(`search.md`) and collaboration depth (`collaboration.md`); notifications are
+covered by #78 (in-app), U-11 (comments/follow) and U-08 (channels).
 
-Round 4: agent/automations/platform; reconcile with #79/#80 and write the
-platform (A2A/registry) plan.
+Round 4 (next): agent/automations/platform; reconcile with #79/#80, write the
+external agent platform (A2A/registry) plan and a desktop/self-host operations
+plan if useful.
 
-Round 5: enterprise/desktop/import-export/channels.
+Round 5: enterprise/import-export/channels and any remaining area plans.
 
 Round 6: consolidate, finalize the PR sequence and implementation orders, then
 mark the loop complete. Implementation starts only after the owner approves the
