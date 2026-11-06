@@ -8,7 +8,8 @@ const CHUNK_BYTES = 5 * 1024 * 1024;
 export async function uploadPageFile(
   workspaceId: string,
   pageId: string,
-  file: File
+  file: File,
+  controls?: {signal?:AbortSignal;onProgress?:(progress:number)=>void}
 ): Promise<{ id: string; url: string }> {
   const uppy = new Uppy({ autoProceed: false }).use(Tus, {
     endpoint: "/api/uploads",
@@ -17,7 +18,11 @@ export async function uploadPageFile(
     removeFingerprintOnSuccess: true,
     allowedMetaFields: ["workspaceId", "pageId", "name"],
   });
+  const cancel=()=>uppy.cancelAll();
+  controls?.signal?.addEventListener("abort",cancel,{once:true});
+  uppy.on("upload-progress",(_file,progress)=>controls?.onProgress?.(progress.bytesTotal?Math.round(progress.bytesUploaded/progress.bytesTotal*100):0));
   try {
+    if(controls?.signal?.aborted)throw new Error("Upload cancelled");
     uppy.addFile({ name: file.name, type: file.type, data: file, meta: { workspaceId, pageId } });
     const result = await uppy.upload();
     const location = result?.successful?.[0]?.uploadURL;
@@ -28,6 +33,7 @@ export async function uploadPageFile(
     const id = location.split("/").pop() ?? "";
     return { id, url: `/api/files/${id}` };
   } finally {
+    controls?.signal?.removeEventListener("abort",cancel);
     uppy.destroy();
   }
 }

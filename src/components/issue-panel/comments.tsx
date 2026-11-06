@@ -32,7 +32,7 @@ export function CommentsSection({
   return (
     <>
       {comments.map((item) => (
-        <div key={item.id} className="px-1 py-1">
+        <div key={item.id} data-comment-id={item.id} tabIndex={-1} className="px-1 py-1">
           <div className="flex items-baseline gap-2">
             {item.author ? (
               <AssigneeAvatar

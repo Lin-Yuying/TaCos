@@ -1,6 +1,7 @@
 "use client";
+import { OptionSearch,matchesOption } from "@/components/ui/option-search";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Lock, Users } from "lucide-react";
 import { useUI } from "@/components/ui-context";
 import { Menu } from "@/components/menu";
@@ -21,7 +22,9 @@ function LevelSelect({
   label,
   extra,
   onChange,
+  disabled,
 }: {
+  disabled?:boolean;
   value: string;
   label: string;
   extra?: string;
@@ -29,7 +32,7 @@ function LevelSelect({
 }) {
   const t = useT();
   return (
-    <select
+    <select disabled={disabled}
       value={value}
       aria-label={label}
       onChange={(event) => onChange(event.target.value)}
@@ -61,10 +64,13 @@ export function DocShareMenu({
   shared: boolean;
   compact: boolean;
   members: Member[];
-  onToggleShared: () => void;
+  onToggleShared: () => Promise<void>;
 }) {
   const t = useT();
+  const [memberQuery,setMemberQuery]=useState("");
   const {confirm}=useUI();
+  const running=useRef(false);const [busy,setBusy]=useState(false);
+  const [attempt,setAttempt]=useState(0);
   const [level, setLevel] = useState<PageLevel>("edit");
   const [people, setPeople] = useState<Record<string, PageLevel>>({});
   const [error, setError] = useState<string | null>(null);
@@ -78,32 +84,16 @@ export function DocShareMenu({
         return;
       }
       setLevel(result.data.level);
-      setPeople(result.data.people);
-    });
+      setPeople(result.data.people);setError(null);
+    }).catch(()=>{if(live)setError("Could not load permissions. Retry.");});
     return () => {
       live = false;
     };
-  }, [workspaceId, pageId]);
+  }, [workspaceId, pageId,attempt]);
 
-  async function changeLevel(next: PageLevel) {
-    if(!await confirm(t("Change permissions for this document and all its children?")))return;
-    const result = await setPageShareLevelAction(workspaceId, pageId, next);
-    if (result.ok) setLevel(next);
-    else setError(result.error);
-  }
-
-  async function changePerson(userId: string, next: PageLevel | null) {
-    if(!await confirm(t("Change permissions for this document and all its children?")))return;
-    const result = await setPageMemberLevelAction(workspaceId, pageId, userId, next);
-    if (!result.ok) {
-      setError(result.error);
-      return;
-    }
-    setPeople((current) => {
-      const { [userId]: _removed, ...rest } = current;
-      return next ? { ...rest, [userId]: next } : rest;
-    });
-  }
+  async function change(work:()=>Promise<{ok:boolean;error?:string}>,done?:()=>void,confirmChange=true){if(running.current)return;running.current=true;setBusy(true);try{if(confirmChange&&!await confirm(t("Change permissions for this document and all its children?")))return;const result=await work();if(!result.ok){setError(result.error??"Could not save. Retry.");return;}done?.();setError(null);}catch{setError("Could not save. Retry.");}finally{running.current=false;setBusy(false);}}
+  async function changeLevel(next:PageLevel){await change(()=>setPageShareLevelAction(workspaceId,pageId,next),()=>setLevel(next));}
+  async function changePerson(userId:string,next:PageLevel|null){await change(()=>setPageMemberLevelAction(workspaceId,pageId,userId,next),()=>setPeople(current=>{const rest={...current};delete rest[userId];return next?{...rest,[userId]:next}:rest;}));}
 
   return (
     <Menu
@@ -125,7 +115,8 @@ export function DocShareMenu({
             </span>
             <button
               type="button"
-              onClick={onToggleShared}
+              disabled={busy}
+              onClick={()=>void change(async()=>{await onToggleShared();return{ok:true};},undefined,false)}
               className="shrink-0 rounded-md border border-border px-2 py-0.5 text-small text-muted hover:border-border-strong hover:text-text"
             >
               {shared ? t("Make private") : t("Share with the workspace")}
@@ -135,19 +126,19 @@ export function DocShareMenu({
             <>
               <div className="flex items-center gap-2 border-t border-border pt-2">
                 <span className="min-w-0 flex-1 text-muted">{t("Everyone")}</span>
-                <LevelSelect
+                <LevelSelect disabled={busy}
                   value={level}
                   label={t("Everyone")}
                   onChange={(next) => void changeLevel(next as PageLevel)}
                 />
               </div>
-              {members
-                .filter((member) => member.id !== ownerId)
+              <OptionSearch value={memberQuery} onChange={setMemberQuery} selected={Object.keys(people).length}/>{members
+                .filter((member) => member.id !== ownerId&&matchesOption(memberQuery,member.displayName,member.username))
                 .map((member) => (
                   <div key={member.id} className="flex items-center gap-2">
                     <AssigneeAvatar displayName={member.displayName} avatar={member.avatar} size={16} />
                     <span className="min-w-0 flex-1 truncate text-text">{member.displayName}</span>
-                    <LevelSelect
+                    <LevelSelect disabled={busy}
                       value={people[member.id] ?? ""}
                       label={member.displayName}
                       extra={t("Same as everyone")}
@@ -157,7 +148,7 @@ export function DocShareMenu({
                 ))}
             </>
           )}
-          {error && <div className="text-small text-danger">{t(error)}</div>}
+          {error && <div className="text-small text-danger">{t(error)} <button onClick={()=>setAttempt(old=>old+1)}>{t("Retry")}</button></div>}
         </div>
       )}
     </Menu>

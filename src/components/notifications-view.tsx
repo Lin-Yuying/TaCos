@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Trash2 } from "lucide-react";
 import { useUI, NOTIFICATIONS_READ } from "@/components/ui-context";
@@ -24,7 +24,7 @@ export function NotificationsView({
   const t = useT();
   const locale = useLocale();
   const router = useRouter();
-  const { openIssue, openPage } = useUI();
+  const { openIssue, openPage, confirm } = useUI();
   const [marking, setMarking] = useState(false);
   const [clearing, setClearing] = useState(false);
   // Rows the user has opened since this view loaded. The server data refreshes a
@@ -40,55 +40,24 @@ export function NotificationsView({
     return !item.readAt && !opened.includes(item.id);
   }
 
-  function open(item: NotificationRow) {
-    // Workspace-deletion notices have no issue behind them and no workspace left to
-    // open; reading them is all a click can do.
-    if (item.pageId) openPage(item.pageId);
-    else if (item.type !== "workspace_deleted") openIssue(item.issueId);
-    if (!isUnread(item)) return;
-    setOpened((prev) => [...prev, item.id]);
-    void markNotificationReadAction(workspaceId, item.id).then(() => {
-      window.dispatchEvent(new Event(NOTIFICATIONS_READ));
-      router.refresh();
-    });
+  const locks=useRef(new Set<string>());
+  const [pending,setPending]=useState<string[]>([]);
+  const [errors,setErrors]=useState<Record<string,{message:string;retry:()=>void}>>({});
+  async function perform(key:string,work:()=>Promise<{ok:boolean;error?:string}>,optimistic:()=>void,rollback:()=>void){
+    if(locks.current.has(key)||locks.current.has("all")||(key==="all"&&locks.current.size))return;
+    locks.current.add(key);setPending([...locks.current]);optimistic();setErrors(old=>{const next={...old};delete next[key];return next;});
+    try{const result=await work();if(!result.ok)throw new Error(result.error);window.dispatchEvent(new Event(NOTIFICATIONS_READ));router.refresh();}
+    catch(error){rollback();setErrors(old=>({...old,[key]:{message:error instanceof Error?error.message:"Could not save. Retry.",retry:()=>void perform(key,work,optimistic,rollback)}}));}
+    finally{locks.current.delete(key);setPending([...locks.current]);}
   }
-
-  async function markAll() {
-    setMarking(true);
-    await markNotificationsReadAction(workspaceId);
-    setMarking(false);
-    window.dispatchEvent(new Event(NOTIFICATIONS_READ));
-    router.refresh();
+  function open(item:NotificationRow){
+    if(item.pageId)openPage(item.pageId);else if(item.type!=="workspace_deleted")openIssue(item.issueId);
+    if(!isUnread(item))return;
+    void perform(item.id,()=>markNotificationReadAction(workspaceId,item.id),()=>setOpened(old=>[...old,item.id]),()=>setOpened(old=>old.filter(id=>id!==item.id)));
   }
-
-  async function remove(item: NotificationRow) {
-    setRemoved((prev) => [...prev, item.id]);
-    const result = await deleteNotificationAction(workspaceId, item.id);
-    if (!result.ok) {
-      setRemoved((prev) => prev.filter((id) => id !== item.id));
-      return;
-    }
-    window.dispatchEvent(new Event(NOTIFICATIONS_READ));
-    router.refresh();
-  }
-
-  async function clearAll() {
-    if (visible.length === 0) return;
-    if (
-      !window.confirm(
-        t("Delete all {count} inbox notifications? This cannot be undone.", { count: visible.length })
-      )
-    ) {
-      return;
-    }
-    setClearing(true);
-    const result = await clearNotificationsAction(workspaceId);
-    setClearing(false);
-    if (!result.ok) return;
-    setRemoved(items.map((item) => item.id));
-    window.dispatchEvent(new Event(NOTIFICATIONS_READ));
-    router.refresh();
-  }
+  async function markAll(){setMarking(true);try{const previous=opened;await perform("all",()=>markNotificationsReadAction(workspaceId),()=>setOpened(items.map(item=>item.id)),()=>setOpened(previous));}finally{setMarking(false);}}
+  async function remove(item:NotificationRow){await perform(item.id,()=>deleteNotificationAction(workspaceId,item.id),()=>setRemoved(old=>[...old,item.id]),()=>setRemoved(old=>old.filter(id=>id!==item.id)));}
+  async function clearAll(){if(!visible.length||pending.length||!await confirm(t("Delete all {count} inbox notifications? This cannot be undone.",{count:visible.length})))return;setClearing(true);try{const previous=removed;await perform("all",()=>clearNotificationsAction(workspaceId),()=>setRemoved(items.map(item=>item.id)),()=>setRemoved(previous));}finally{setClearing(false);}}
 
   const unread = visible.filter(isUnread).length;
 
@@ -103,7 +72,7 @@ export function NotificationsView({
           <button
             type="button"
             onClick={() => void markAll()}
-            disabled={marking}
+            disabled={marking||pending.length>0}
             className="rounded-md border border-border px-2.5 py-1 text-small text-muted transition-colors hover:text-text"
           >
             {t("Mark all read")}
@@ -112,7 +81,7 @@ export function NotificationsView({
             <button
               type="button"
               onClick={() => void clearAll()}
-              disabled={clearing}
+              disabled={clearing||pending.length>0}
               className="rounded-md border border-border px-2.5 py-1 text-small text-muted transition-colors hover:border-danger/40 hover:text-danger"
             >
               {t("Clear all")}
@@ -120,6 +89,7 @@ export function NotificationsView({
           )}
         </div>
       </header>
+      {Object.entries(errors).map(([id,error])=><p key={id} role="alert" className="px-4 py-2 text-small text-danger">{t(error.message)} <button disabled={pending.length>0} onClick={error.retry}>{t("Retry")}</button></p>)}
       <div className="divide-y divide-border px-10 pb-8 lg:px-20 xl:px-32">
         {visible.length === 0 && (
           <div className="p-6 text-body text-faint">
@@ -135,6 +105,7 @@ export function NotificationsView({
           >
             <button
               type="button"
+              disabled={pending.includes(item.id)||pending.includes("all")}
               onClick={() => open(item)}
               className="flex min-w-0 flex-1 items-center gap-3 text-left"
             >
@@ -163,6 +134,7 @@ export function NotificationsView({
             <button
               type="button"
               aria-label={t("Delete notification")}
+              disabled={pending.includes(item.id)||pending.includes("all")}
               onClick={() => void remove(item)}
               className="shrink-0 rounded p-1 text-faint opacity-0 transition-opacity hover:bg-elevated hover:text-danger focus-visible:opacity-100 group-hover:opacity-100"
             >

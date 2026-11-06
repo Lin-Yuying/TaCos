@@ -1,3 +1,4 @@
+import { normalizeFieldValue, type TaskField } from "./task-view";
 import { TacosError } from "./tacos-error";
 import { removeWorkspaceAttachments } from "./attachments";
 import crypto from "node:crypto";
@@ -853,7 +854,7 @@ export async function listFavoriteProjects(workspaceId: string, userId: string):
     .from(favorites)
     .innerJoin(projects, eq(projects.id, favorites.projectId))
     .where(and(...conditions))
-    .orderBy(sql`${favorites.createdAt} DESC`);
+    .orderBy(favorites.position,sql`${favorites.createdAt} DESC`);
 }
 
 export async function isFavoriteProject(workspaceId: string, userId: string, projectId: string) {
@@ -2086,6 +2087,7 @@ export async function recordEvent(
 
 export type CreateIssueInput = {
   title: string;
+  fieldValues?: Record<string,string>;
   description?: string;
   status?: Status;
   priority?: Priority;
@@ -2109,7 +2111,7 @@ export type UpdateIssueInput = {
 function normalizeDueDate(value: unknown): string | null {
   if (value === null || value === undefined || value === "") return null;
   const text = String(value).trim();
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(text)) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(text) || !Number.isFinite(Date.parse(text)) || new Date(text).toISOString().slice(0,10)!==text) {
     throw new TacosError("Due date must be a calendar date (YYYY-MM-DD)");
   }
   return text;
@@ -2174,6 +2176,14 @@ export async function createIssue(
   }
 
   const db = getDb();
+  const customValues=[];
+  for(const [fieldId,raw] of Object.entries(input.fieldValues??{})){
+    if(typeof raw!=="string")throw new TacosError("Invalid field value",400);
+    const field=db.select().from(taskFields).where(and(eq(taskFields.id,fieldId),eq(taskFields.workspaceId,workspaceId),isNull(taskFields.disabledAt))).get();
+    if(!field)throw new TacosError("This field is no longer available. Reopen the form and review its properties.",409);
+    const value=normalizeFieldValue({...field,type:field.type as TaskField["type"],options:JSON.parse(field.options)},raw);
+    if(value!==null)customValues.push({issueId:id,fieldId,value});
+  }
   await db.run(sql`INSERT INTO issues
     (id, workspace_id, project_id, number, identifier, title, description, status, priority, due_date, reminder, created_by, published_by, review_status, source_thread_id, created_via, created_at, updated_at, position)
     VALUES (${id}, ${workspaceId}, ${project.id},
@@ -2193,6 +2203,7 @@ export async function createIssue(
   for (const assigneeId of assigneeIds) {
     await db.insert(issueAssignees).values({ issueId: id, userId: assigneeId, createdAt: now });
   }
+  if(customValues.length)await db.insert(taskFieldValues).values(customValues);
   await recordEvent(id, "created", { title }, actor);
   if (description) await notifyMentions(workspaceId, id, description, actor);
 

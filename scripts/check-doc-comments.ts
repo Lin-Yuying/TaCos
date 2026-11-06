@@ -105,7 +105,17 @@ async function main() {
   list = await comments.setPageCommentResolved(ws, page.id, "c", first.id, false);
   assert(!list[0].resolvedAt, "and reopen");
   assert(await status(() => comments.removePageComment(ws, page.id, "c", first.id)) === 403, "others cannot delete");
+  const reply = (await comments.addPageComment(ws,page.id,"a",{body:"Threaded answer",parentId:first.id})).find(c=>c.parentId===first.id)!;
+  assert(reply?.body==="Threaded answer","reply retains its parent");
+  assert(await status(()=>comments.editPageComment(ws,page.id,"c",reply.id,"Changed"))===403,"only author edits a reply");
+  const editedComment=(await comments.editPageComment(ws,page.id,"a",reply.id,"Edited answer")).find(c=>c.id===reply.id)!;
+  assert(editedComment.body==="Edited answer"&&editedComment.editedAt,"editing preserves identity and records time");
   await comments.removePageComment(ws, page.id, "b", first.id);
+  const deleted=(await comments.listPageComments(ws,page.id,"a")).find(c=>c.id===first.id)!;
+  assert(deleted.deletedAt&&deleted.body==="","soft delete hides body and retains thread");
+  assert(await status(()=>comments.restorePageComment(ws,page.id,"c",first.id))===403,"others cannot restore");
+  const restored=(await comments.restorePageComment(ws,page.id,"b",first.id)).find(c=>c.id===first.id)!;
+  assert(!restored.deletedAt&&restored.body===first.body,"author can restore original comment");
   await comments.removePageComment(ws, page.id, "a", (await comments.listPageComments(ws, page.id, "a"))[0].id);
 
   // Purging a page takes its comments and notices with it.

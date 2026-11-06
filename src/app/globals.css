@@ -302,3 +302,13 @@ html[data-desktop] .app-auth-menu {
   white-space: nowrap;
   user-select: none;
 }
+
+/* Personal density applies to object rows without changing the type scale. */
+:root { --entity-row-y: 7px; --entity-row-min: 36px; }
+:root[data-density="compact"] { --entity-row-y: 3px; --entity-row-min: 28px; }
+.density-entity > .pr-8 > a, .density-entity > .pr-8 > [role="button"] {
+ min-height: var(--entity-row-min); padding-block: var(--entity-row-y);
+}
+section[hidden] { display: none; }
+
+::highlight(document-find) { background-color: #fde68a; color: #171717; }

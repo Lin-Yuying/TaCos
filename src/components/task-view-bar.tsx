@@ -1,5 +1,6 @@
 "use client";
 
+import { TaskFieldManager } from "@/components/task-field-manager";
 import { useState } from "react";
 import { ArrowDownUp, Filter, ListPlus, Plus, Trash2, X } from "lucide-react";
 import { createTaskFieldAction, deleteTaskFieldAction, taskFieldImpactAction, restoreTaskFieldAction } from "@/app/actions";
@@ -281,6 +282,7 @@ export function TaskViewBar({
           </div>
         )}
       </Menu>
+      {manageFields&&<TaskFieldManager workspaceId={workspaceId}/>}
       {manageFields && (
         <Menu
           width={300}

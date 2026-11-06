@@ -1,8 +1,11 @@
 "use client";
 
+import { useDetailSource } from "@/components/detail-navigation";
+import { PersonalViews } from "@/components/personal-views";
+import { BatchSelection } from "@/components/ui/batch-selection";
 import dynamic from "next/dynamic";
 import { useMemo } from "react";
-import { useRouter } from "next/navigation";
+import { usePathname, useSearchParams, useRouter } from "next/navigation";
 import { CalendarDays, Columns3, List, Plus, Table2 } from "lucide-react";
 import { IssueBoard } from "@/components/issue-board";
 import { IssueTable } from "@/components/issue-table";
@@ -10,6 +13,7 @@ import { useUI, type IssueLayout as Layout } from "@/components/ui-context";
 import { TaskGrid } from "@/components/task-grid";
 import { TaskViewBar } from "@/components/task-view-bar";
 import type { IssueWithLabels } from "@/lib/issues";
+import { STATUS_ORDER } from "@/lib/constants";
 import { EMPTY_VIEW, applyView, type FieldValues, type TaskField, type TaskView } from "@/lib/task-view";
 import { useStoredJson } from "@/lib/use-stored-json";
 import { interpolate, useT } from "@/components/i18n-context";
@@ -57,7 +61,7 @@ function Empty() {
   const { setComposerOpen } = useUI();
   return (
     <div className="flex flex-1 flex-col items-center justify-center gap-3 text-center">
-      <div className="text-lead font-medium text-muted">{t("No issues found")}</div>
+      <div className="text-lead font-medium text-muted">{t("No tasks found")}</div>
       <div className="text-body text-faint">
         {interpolate(t("Adjust your filters, or press {key} to create one."), {
           key: <kbd className="rounded border border-border px-1 font-mono text-caption">C</kbd>,
@@ -68,7 +72,7 @@ function Empty() {
         onClick={() => setComposerOpen(true)}
         className="flex items-center gap-1 rounded-md bg-accent px-3 py-1.5 text-body font-medium text-white hover:bg-accent-hover"
       >
-        <Plus size={13} /> {t("New issue")}
+        <Plus size={13} /> {t("New task")}
       </button>
     </div>
   );
@@ -91,12 +95,17 @@ export function IssueLayout({
 }) {
   const t = useT();
   const router = useRouter();
-  const { layout } = useUI();
-  const [view, setView] = useStoredJson<TaskView>(`tacos.tasks.view.${workspaceId}`, EMPTY_VIEW);
-  const shown = useMemo(() => applyView(issues, view, fields, values), [issues, view, fields, values]);
+  const { layout, scope, pins } = useUI();
+  const pathname=usePathname(),params=useSearchParams();
+  const viewScope=`${pathname}?view=${params.get("view")??"all"}&assignee=${params.get("assignee")??""}`;
+  const [view, setView] = useStoredJson<TaskView>(`tacos.tasks.view.${scope}.${viewScope}`, EMPTY_VIEW);
+  const shown = useMemo(() => {const rank=new Map(pins.filter(p=>p.kind==="task").map((p,index)=>[p.id,index]));return applyView(issues,view,fields,values).sort((a,b)=>(rank.get(a.id)??Infinity)-(rank.get(b.id)??Infinity));}, [issues,view,fields,values,pins]);
+  const pinnedIds=new Set(pins.filter(pin=>pin.kind==="task").map(pin=>pin.id));
+  useDetailSource("task",(layout==="list"?[...shown.filter(issue=>pinnedIds.has(issue.id)),...STATUS_ORDER.flatMap(status=>shown.filter(issue=>issue.status===status&&!pinnedIds.has(issue.id)))]:shown).map(issue=>issue.id));
   if (issues.length === 0) return <Empty />;
   return (
     <>
+      <div className="flex items-center gap-2 border-b border-border px-3 py-1"><BatchSelection workspaceId={workspaceId} kind="task" items={shown}/><PersonalViews workspaceId={workspaceId} viewScope={viewScope} view={view} onChange={setView}/><span className="text-small text-faint">{shown.length} / {issues.length}</span></div>
       <TaskViewBar
         workspaceId={workspaceId}
         view={view}
@@ -113,7 +122,7 @@ export function IssueLayout({
       ) : layout === "board" ? (
         <IssueBoard issues={shown} workspaceId={workspaceId} currentUserId={currentUserId} manualOrder={view.sort.length===0} />
       ) : layout === "table" ? (
-        <TaskGrid
+        <TaskGrid currentUserId={currentUserId}
           workspaceId={workspaceId}
           issues={shown}
           fields={fields}

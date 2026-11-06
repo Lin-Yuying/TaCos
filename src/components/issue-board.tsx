@@ -226,7 +226,7 @@ export function IssueBoard({
               {over?.status === status && over.index === slot && !!drag && <DropLine />}
               {items.length === 0 && (
                 <div className="rounded-lg border border-dashed border-border px-3 py-4 text-center text-small text-faint">
-                  {t("No {status} issues", { status: t(STATUS_META[status].label) })}
+                  {t("No {status} tasks", { status: t(STATUS_META[status].label) })}
                 </div>
               )}
             </div>

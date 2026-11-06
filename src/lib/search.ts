@@ -98,7 +98,7 @@ export async function searchWorkspace(
     SELECT c.id, p.id AS open_id, p.title, NULL AS project_name, NULL AS number, NULL AS identifier,
            c.body, c.created_at AS updated_at
     FROM search_fts JOIN page_comments c ON c.id = search_fts.ref_id JOIN pages p ON p.id = c.page_id
-    WHERE search_fts.kind = 'doc_comment' AND ${scope} AND ${readablePage}
+    WHERE search_fts.kind = 'doc_comment' AND c.deleted_at IS NULL AND ${scope} AND ${readablePage}
     ORDER BY ${order} LIMIT ${PER_KIND}`);
 
   const hit = (kind: SearchHit["kind"]) => (row: Row): SearchHit => ({

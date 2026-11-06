@@ -107,8 +107,8 @@ export function CommandPalette({ workspaceId }: { workspaceId: string }) {
                         // The server already matched; the palette's own filter only sees this text.
                         keywords={[query]}
                         onSelect={() => {
-                          if (hit.kind === "doc" || hit.kind === "doc_comment") openPage(hit.openId);
-                          else openIssue(hit.openId);
+                          if (hit.kind === "doc" || hit.kind === "doc_comment") openPage(hit.openId,hit.kind==="doc_comment"?hit.id:undefined);
+                          else openIssue(hit.openId,hit.kind==="task_comment"?hit.id:undefined);
                           close();
                         }}
                       >
@@ -190,7 +190,7 @@ export function CommandPalette({ workspaceId }: { workspaceId: string }) {
                   close();
                 }}
               >
-                {t("Go to My Issues")}
+                {t("Go to My Tasks")}
               </Command.Item>
               <Command.Item
                 value="notifications inbox"

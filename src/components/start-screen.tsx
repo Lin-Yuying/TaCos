@@ -1,4 +1,5 @@
 "use client";
+import { usePrimaryModifier } from "@/lib/ui/platform";
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -84,6 +85,7 @@ export function StartScreen({
   pages: PageSummary[];
 }) {
   const t = useT();
+  const modifier=usePrimaryModifier();
   const router = useRouter();
   const { setComposerOpen, setProjectComposerOpen, setPaletteOpen } = useUI();
   // `listPageTree` is already ordered like the sidebar; recency is what belongs here.
@@ -189,7 +191,7 @@ export function StartScreen({
             className="flex items-center gap-1.5 transition-colors hover:text-text"
           >
             <kbd className="rounded border border-border bg-surface px-1 py-0.5 text-caption">
-              ⌘K
+              {modifier}K
             </kbd>
             {t("Jump anywhere")}
           </button>

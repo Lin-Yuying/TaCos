@@ -1,4 +1,5 @@
 "use client";
+import { usePrimaryModifier } from "@/lib/ui/platform";
 
 import { Modal } from "@/components/ui/modal";
 import { useDraft } from "@/lib/ui/draft-store";
@@ -18,6 +19,7 @@ export function NewProjectDialog({
   workspaceName: string;
 }) {
   const t = useT();
+  const modifier=usePrimaryModifier();
   const { projectComposerOpen, setProjectComposerOpen, projectComposerOnCreated } = useUI();
   const router = useRouter();
   const [name, setName] = useDraft("create-new-project-dialog.tsx", "name", "");
@@ -121,7 +123,7 @@ export function NewProjectDialog({
               className="rounded-md bg-accent px-3 py-1.5 text-body font-medium text-white transition-colors hover:bg-accent-hover disabled:opacity-40"
             >
               {t("Create project")}
-              <span className="ml-2 text-caption opacity-75">⌘↵</span>
+              <span className="ml-2 text-caption opacity-75">{modifier}↵</span>
             </button>
           </div>
         </div>

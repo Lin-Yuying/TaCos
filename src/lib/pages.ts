@@ -29,7 +29,7 @@ export type DocPage = {
 // What the sidebar and the child-page list need; the body is left in the database.
 export type PageSummary = Omit<DocPage, "doc" | "workspaceId" | "revision" | "shareLevel" | "position" | "cover"> & { depth: number; canEdit?: boolean };
 
-export type PageRef = { id: string; title: string; icon: string | null };
+export type PageRef = { id: string; title: string; icon: string | null;path?:string };
 
 // The one identity a shared page shows its reader: who wrote it.
 export type PageAuthor = { id: string; displayName: string; avatar: string | null };
@@ -375,6 +375,13 @@ export async function movePage(workspaceId:string,pageId:string,viewerId:string,
   if(impact.requiresConfirmation&&target.confirmedImpact!==impact.token)throw new TacosError("Review who can access the moved documents before continuing",409);
   getDb().transaction((tx)=>{
     if(moveVersion(workspaceId)!==impact.token)throw new TacosError("The document tree changed. Review the move again.",409);
+    applyPageMove(tx,workspaceId,pageId,target,{page,parent,ids,people,impact});
+  });
+  if(impact.sharingChanged)collabAccessChanged(ids);
+}
+
+function applyPageMove(tx:Pick<ReturnType<typeof getDb>,"select"|"insert"|"update"|"delete">,workspaceId:string,pageId:string,target:PageMoveTarget,prepared:Awaited<ReturnType<typeof preparePageMove>>) {
+ const {parent,ids,people,impact}=prepared;
     const siblings=tx.select({id:pages.id}).from(pages).where(and(eq(pages.workspaceId,workspaceId),siblingsOf(parent?.id??null),isNull(pages.deletedAt))).orderBy(pages.position,pages.createdAt).all().map((row)=>row.id).filter((id)=>id!==pageId);
     const before=target.beforeId?siblings.indexOf(target.beforeId):-1;
     if(target.beforeId&&before<0)throw new TacosError("The destination changed. Choose it again.",409);
@@ -386,8 +393,18 @@ export async function movePage(workspaceId:string,pageId:string,viewerId:string,
       tx.delete(pageAccess).where(inArray(pageAccess.pageId,ids)).run();
       if(people.length)tx.insert(pageAccess).values(ids.flatMap((id)=>people.map((person)=>({...person,pageId:id})))).run();
     }
-  });
-  if(impact.sharingChanged)collabAccessChanged(ids);
+}
+/** A batch is reviewed against one tree snapshot and committed in one transaction. */
+export async function movePages(workspaceId:string,viewerId:string,pageIds:string[],target:PageMoveTarget,tokens:Record<string,string>) {
+ const prepared=[];for(const id of pageIds)prepared.push({id,plan:await preparePageMove(workspaceId,id,viewerId,target)});
+ const selected=new Set(pageIds),covered=new Set<string>();
+ for(const item of prepared)for(const child of item.plan.ids)if(child!==item.id&&selected.has(child))covered.add(child);
+ const roots=prepared.filter(item=>!covered.has(item.id));
+ if(target.parentId&&prepared.some(item=>item.plan.ids.includes(target.parentId!)))throw new TacosError("Choose a destination outside the selected documents",400);
+ const snapshot=moveVersion(workspaceId);
+ for(const item of prepared)if(!tokens[item.id]||tokens[item.id]!==item.plan.impact.token||tokens[item.id]!==snapshot)throw new TacosError("The document tree changed. Review the move again.",409);
+ getDb().transaction(tx=>{if(moveVersion(workspaceId)!==snapshot)throw new TacosError("The document tree changed. Review the move again.",409);for(const item of roots)applyPageMove(tx,workspaceId,item.id,target,item.plan);});
+ for(const item of roots)if(item.plan.impact.sharingChanged)collabAccessChanged(item.plan.ids);
 }
 
 /** The page's parents, top first, as far up as this person may read. */
@@ -418,7 +435,7 @@ export async function listFavoritePages(workspaceId: string, viewerId: string): 
         or(eq(pages.shared, 1), eq(pages.createdBy, viewerId))
       )
     )
-    .orderBy(pageFavorites.createdAt);
+    .orderBy(pageFavorites.position,pageFavorites.createdAt);
 }
 
 export async function isPageFavorite(pageId: string, viewerId: string): Promise<boolean> {
@@ -908,7 +925,7 @@ export async function setPageShared(
   const page = await getPage(workspaceId, pageId, viewerId);
   if (!page) throw new TacosError("Page not found", 404);
   if (page.createdBy !== viewerId) throw new TacosError("Only the page owner can change sharing", 403);
-  const ids = [pageId, ...(await descendantsOf(workspaceId, pageId)).map((p) => p.id)];
+  const ids = await ownedSubtree(workspaceId,pageId,viewerId);
   await getDb()
     .update(pages)
     .set({ shared: shared ? 1 : 0 })
@@ -1029,7 +1046,7 @@ export async function purgePage(
 /** Backlinks and [[Title]] need a cheap title → page lookup for the viewer. */
 export async function listPageRefs(workspaceId: string, viewerId: string): Promise<PageRef[]> {
   const rows = await getDb()
-    .select({ id: pages.id, title: pages.title, icon: pages.icon })
+    .select({ id: pages.id, title: pages.title, icon: pages.icon,parentId:pages.parentId })
     .from(pages)
     .where(
       and(
@@ -1039,7 +1056,8 @@ export async function listPageRefs(workspaceId: string, viewerId: string): Promi
       )
     )
     .orderBy(pages.createdAt);
-  return rows;
+  const byId=new Map(rows.map(row=>[row.id,row]));
+  return rows.map(row=>{const path=[row.title],seen=new Set([row.id]);let parent=row.parentId;while(parent&&!seen.has(parent)){seen.add(parent);const ancestor=byId.get(parent);if(!ancestor)break;path.unshift(ancestor.title);parent=ancestor.parentId;}return{id:row.id,title:row.title,icon:row.icon,path:path.join(" / ")};});
 }
 
 /**
