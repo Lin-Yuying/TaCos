@@ -111,6 +111,16 @@ curl -X PUT http://localhost:3000/api/v1/issues/CORE-7/fields \
 curl -X POST http://localhost:3000/api/v1/issues/CORE-7/dependencies \
   -H "Authorization: Bearer tac_YOUR_KEY" \
   -H "Content-Type: application/json" -d '{"blockedBy":"CORE-3"}'
+
+# create a private document in a project, then comment on it
+curl -X POST http://localhost:3000/api/v1/pages \
+  -H "Authorization: Bearer tac_YOUR_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"title":"Release checklist","doc":"# Check\n- [ ] Tag","project":"CORE"}'
+
+curl -X POST http://localhost:3000/api/v1/pages/PAGE_ID/comments \
+  -H "Authorization: Bearer tac_YOUR_KEY" \
+  -H "Content-Type: application/json" -d '{"body":"Added the rollback step"}'
 ```
 
 | Endpoint | Methods |
@@ -130,6 +140,10 @@ curl -X POST http://localhost:3000/api/v1/issues/CORE-7/dependencies \
 | `/api/v1/projects/{id}/members` | `GET`, `POST` — `{"username":"sam"}` or `{"userId":"…"}` |
 | `/api/v1/projects/{id}/members/{userId}` | `DELETE` — the project lead cannot be removed |
 | `/api/v1/projects/{id}/tasks` | `GET` — same filters and page headers as `/api/v1/issues`, pinned to the project |
+| `/api/v1/pages` | `GET` (filters: `project`, `parentId`, `q`, `cursor`, `limit`; page headers `X-Total-Count`, `X-Next-Cursor`), `POST` (`title`, `doc`, `project`, `parentId`) — markdown bodies; pages start private |
+| `/api/v1/pages/tree` | `GET` — visible pages in tree order with `depth`; accepts the `project` filter |
+| `/api/v1/pages/{id}` | `GET` (markdown body + author), `PATCH` (`title`, `doc`, `icon`, `baseRevision`), `DELETE` (soft delete into Trash; the page author only) |
+| `/api/v1/pages/{id}/comments` | `GET` (cursor/limit), `POST` (`body`, optional `parentId` for a reply) |
 | `/api/v1/labels` | `GET`, `POST` |
 | `/api/v1/me` | `GET` (key name, scopes, project count, expiry, last used time/IP) |
 | `/api/mcp` | `POST` (MCP Streamable HTTP, same Bearer key) |
@@ -152,16 +166,22 @@ Tools: `list_issues`, `get_issue`, `create_issue`, `update_issue`,
 `list_members`, `get_project`, `create_project`, `update_project`,
 `list_project_tasks`, `set_task_fields`, `add_dependency`, `remove_dependency`,
 `claim_issue`, `release_issue`, `set_review_state`, `report_blocker`,
-`restore_issue`. The list tools take `cursor`/`limit` and return `nextCursor`.
-Every tool declares MCP annotations; the list/get tools also declare
-`outputSchema` and return `structuredContent`.
+`restore_issue`, `list_pages`, `get_page`, `create_page`, `update_page`,
+`list_page_comments`, `add_page_comment`. The list tools take `cursor`/`limit`
+and return `nextCursor`. Every tool declares MCP annotations; the list/get tools
+also declare `outputSchema` and return `structuredContent`.
 
-`claim_issue`, `release_issue`, `set_review_state`, `report_blocker` and
-`create_project` need a person: over HTTP the key's owner is that person, while
-the local stdio server has no signed-in user and refuses the first four.
+`claim_issue`, `release_issue`, `set_review_state`, `report_blocker`,
+`create_project`, `create_page`, `update_page` and `add_page_comment` need a
+person: over HTTP the key's owner is that person, while the local stdio server
+has no signed-in user and refuses those writes.
 `set_task_fields` takes raw values keyed by field name or id and `null` clears
 one. A server limited to a project allowlist can work in those projects but
-cannot create a new one.
+cannot create a new one; page tools follow the same allowlist, and a page
+without a project stays readable. Page visibility follows the web UI: a shared
+page is readable by the workspace, a private page only by its author. The stdio
+server reads every page in the workspace (it holds the database) but refuses
+page writes because it has no person to attribute them to.
 
 Remote (Claude Code):
 

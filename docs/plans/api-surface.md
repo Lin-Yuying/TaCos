@@ -202,3 +202,34 @@ the same plan.
 - README/API docs; new checks `check-api-projects.ts`,
   `check-api-task-extensions.ts`, `check-mcp-projects.ts`,
   `check-mcp-pages.ts`.
+
+## Implementation notes (2026-11-06)
+
+- **U-13a** merged as #86 (project CRUD/membership, task extensions).
+- **U-13b** implemented on `feat/pages-api`:
+  - REST: `GET/POST /api/v1/pages`, `GET /api/v1/pages/tree`,
+    `GET/PATCH/DELETE /api/v1/pages/{id}`,
+    `GET/POST /api/v1/pages/{id}/comments`.
+  - MCP: `list_pages`, `get_page`, `create_page`, `update_page`,
+    `list_page_comments`, `add_page_comment` (28 tools total, 10 read).
+- Visibility is the existing `src/lib/pages.ts` rule: a shared page is readable
+  by the workspace, a private page only by its author; `shareLevel`/`page_access`
+  decide comment and edit rights. HTTP MCP passes the key creator as the
+  viewer/person. The stdio server has no person: it reads every page (it already
+  holds the database) and refuses page writes with the existing person error.
+- The project allowlist applies to a page's `projectId`; a page without a
+  project stays readable. A scoped page outside the allowlist gets `403`.
+- Attribution: REST page versions/comments record `via = api:<key name>`; MCP
+  writes record `via = mcp`. A page created through either surface records its
+  first version when a body is supplied. Deletion uses the existing reversible
+  Trash; the page model has no separate event table, so versions and comments
+  are its audit trail.
+- Pagination: pages are newest-edit-first with a keyset cursor; comments are
+  oldest-first; the tree endpoint returns the full visible tree with `depth`.
+- `search_pages` was left out (the optional item). `list_pages` filters titles
+  and cross-entity search stays with U-10. No sharing/guest changes were added.
+- Checks: `scripts/check-api-pages.ts`, `scripts/check-mcp-pages.ts`; the tool
+  count and read-only lists in `check-mcp-projects.ts`, `check-mcp-http.ts` and
+  `test-mcp.ts` moved to 28 tools.
+- Not tested here: browser E2E (no UI changed) and real network HTTP E2E; the
+  Lead runs those.
