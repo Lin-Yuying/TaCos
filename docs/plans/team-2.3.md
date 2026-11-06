@@ -50,7 +50,7 @@ Item-level checks stay cheap (types, check scripts). End-to-end tests and screen
 | 24 | Recurring tasks | done | `node --import tsx scripts/check-recurrence.ts` |
 | 25 | Fix the six open security findings from the 2.2 review | done | `node --import tsx scripts/check-security-2.2.ts` |
 | 26 | Batch E2E and screenshots with real models and new data dirs; fresh-context review; fix findings | done | Report lists tested and untested |
-| 27 | Version 2.3.0, PR for the user to merge; after the merge, tag and publish | doing | PR open; release published after the merge |
+| 27 | Version 2.3.0, PR for the user to merge; after the merge, tag and publish | done | PR merged as #62; tag `v2.3.0` on `ed52d45`; release published |
 | 28 | Fix the four must-fix findings from the fresh-context review | done | Four fixes, three new check scripts, smoke and `npm run check:harness` 87/87 pass |
 
 ### Item 26: batch E2E and review
@@ -78,7 +78,10 @@ The review report is `/tmp/tacos-2.3-review.md` on this machine (142 lines, not 
 - After the merge commit, the smoke test and `npm run check:harness` were re-run: 84/84 checks pass.
 - PR #62 (`feat/team-2.3-all` into `main`) is open and ready. After the fresh-context review found a release blocker, it was converted to draft and a "do not merge yet" comment was added. Item 28 then fixed the four must-fix findings on this branch, and the PR was marked ready again. The user merges it manually.
 - Tagging `v2.3.0` and publishing the release follow the user's merge. Deploy stays with the user.
-- Status `doing`: the tag and release are not done.
+- Status `done`: release published.
+- Merged as PR #62 (merge commit `9c1f81f`). Two release blockers surfaced in CI and were fixed on top of `main`: PR #64 regenerated `package-lock.json` (`npm ci` missed `@emnapi/runtime@1.11.3` and `@emnapi/core@1.11.3`; the 2.3 batch added eight `@tiptap/extension-*` dependencies without regenerating the lock, and local `node_modules` kept every check green), and PR #65 moved the macOS release job to `macos-15` (GitHub retired the macOS 14 runner image on 2026-11-02, so `macos-14` no longer schedules runners).
+- The tag was deleted and re-tagged onto `ed52d45` after both fixes merged: a tag-triggered workflow reads its file from the tagged tree. The third build passed all three platforms and published the release.
+- Release `TaCos v2.3.0` at https://github.com/Lin-Yuying/TaCos/releases/tag/v2.3.0 with seven assets: Windows installer, `latest.yml`, macOS arm64 dmg, `*-mac.zip`, `latest-mac.yml`, Linux AppImage, and the Linux server tarball. Deploy stays with the user.
 
 ### Item 28: fix the fresh-context review's must-fix findings
 
