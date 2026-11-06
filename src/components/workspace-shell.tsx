@@ -36,6 +36,7 @@ import {
   PanelLeftClose,
   PanelLeftOpen,
   Plus,
+  Search,
   Settings,
   SlidersHorizontal,
   Star,
@@ -280,6 +281,20 @@ function SidebarNav({
           badge={unread}
         >
           {t("Inbox")}
+        </NavItem>
+      </div>
+      <div className="pb-1">
+        <NavItem
+          href={`/${workspaceId}/search`}
+          active={pathname.endsWith("/search")}
+          icon={<Search size={14} />}
+          tag={
+            <kbd className="rounded border border-border bg-bg px-1 font-mono text-caption">
+              /
+            </kbd>
+          }
+        >
+          {t("Search")}
         </NavItem>
       </div>
       <div className="pb-1">
@@ -986,6 +1001,13 @@ function SidebarRail({
           label={t("Inbox")}
           icon={<Inbox size={16} />}
           dot={(unread ?? 0) > 0}
+          labeled={labeled}
+        />
+        <RailLink
+          href={`/${workspaceId}/search`}
+          active={pathname.endsWith("/search")}
+          label={t("Search")}
+          icon={<Search size={16} />}
           labeled={labeled}
         />
         <RailLink

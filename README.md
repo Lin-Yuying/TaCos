@@ -329,6 +329,40 @@ the REST API and MCP have no rule-creation surface.
   reports back as a review, and the Inbox notices are the same. This feature has no Slack,
   GitHub, webhook, email, push or external-agent delivery.
 
+## Search
+
+- `/` opens the full search page and focuses its query bar; `Cmd/Ctrl K` opens the
+  command palette. The sidebar has one **Search** row, and the two surfaces run the
+  same server search, so a query returns the same hits in both. Focused text fields
+  keep their own `/`; no existing shortcut is rebound.
+- The index covers tasks and their comments, documents and their comments, projects,
+  people, labels, Agent threads (title plus the latest assistant reply), attachment
+  names and automation rules. A deleted task, trashed project/document/comment,
+  unfinished agent draft and private thread are not results. The existing project,
+  page and agent-thread visibility rules decide what each member sees; there is no
+  guest access.
+- The search page has kind tabs with live counts, one filter row (project, assignee,
+  status, created, updated), sorting by best match/updated/created, grouped results
+  and pagination. A task or document opens in the existing side panel while the
+  query, filters, scroll position and URL stay put; projects, people, labels, Agent
+  threads, files and rules link to their own surfaces. Recent searches and recently
+  opened results are kept in this browser per person and workspace.
+- The palette keeps results in entity groups and commands in their own groups.
+  Prefixes `i`, `p`, `u`, `d`, `a` and `f` scope to tasks, projects, people,
+  documents, Agent and attachments; `@me`, `@none` and `@<status>` add filters. The
+  prefix and filter chips are clickable and removable, so the syntax is optional.
+  Commands still include New task and the existing navigation.
+- Search is FTS5 with the trigram tokenizer plus a LIKE fallback for one- and
+  two-character terms (most Chinese words); there is no per-language tokenizer and no
+  external or vector index. Snippets come from the matching body and the client
+  highlights the query.
+- Performance: `npx tsx scripts/check-search-filters.ts` seeds 10,000 tasks and 1,000
+  documents and asserts a filtered search stays under 300 ms of server time.
+  `npx tsx scripts/check-search-coverage.ts` exercises every entity and permission
+  boundary. Both run inside `npm run check:harness`.
+- Saved searches in this release are the personal recent list only. U-09 shared views
+  stay the shared saved-view mechanism.
+
 ## How it fits together
 
 ```
