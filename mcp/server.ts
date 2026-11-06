@@ -36,6 +36,9 @@ async function main() {
     readOnly: READ_ONLY,
     allowedProjectIds: null,
     toolFilter: TOOL_FILTER,
+    // A local stdio server runs under the machine's OS account, not a TaCos user, so
+    // actions that need a person (claim, review, blocker, project lead) refuse.
+    userId: null,
   });
   const transport = new StdioServerTransport();
   await server.connect(transport);

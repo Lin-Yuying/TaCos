@@ -130,7 +130,10 @@ async function main() {
   const readOnly = new Client({ name: "tacos-smoke-read-only", version: "0.0.0" });
   await readOnly.connect(transportFor({ TACOS_MCP_READ_ONLY: "1" }));
   const readOnlyNames = (await readOnly.listTools()).tools.map((tool) => tool.name).sort();
-  if (readOnlyNames.join(",") !== "get_issue,list_issues,list_labels,list_members,list_projects") {
+  if (
+    readOnlyNames.join(",") !==
+    "get_issue,get_project,list_issues,list_labels,list_members,list_project_tasks,list_projects"
+  ) {
     throw new Error(`read-only tools: ${readOnlyNames.join(",")}`);
   }
   const rejected = await readOnly.callTool({ name: "create_issue", arguments: { title: "nope" } });
