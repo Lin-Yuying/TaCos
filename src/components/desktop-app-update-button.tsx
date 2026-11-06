@@ -20,6 +20,7 @@ type AppUpdateStatus = {
   progress: number | null;
   error: string | null;
   stage?: string | null;
+  cancelable?: boolean;
 };
 
 export type AppUpdateApi = {
@@ -29,7 +30,7 @@ export type AppUpdateApi = {
   download: () => Promise<{ ok: boolean; error?: string; status?: AppUpdateStatus }>;
   install: () => Promise<{ ok: boolean; error?: string; status?: AppUpdateStatus }>;
   // The in-app pill confirms by itself; this path skips the native install dialog.
-  restart?: () => Promise<{ ok: boolean; error?: string; degraded?: boolean; status?: AppUpdateStatus }>;
+  restart?: () => Promise<{ ok: boolean; error?: string; degraded?: boolean; busy?: boolean; status?: AppUpdateStatus }>;
   onStatus: (handler: (status: AppUpdateStatus) => void) => () => void;
 };
 
@@ -138,12 +139,15 @@ export function DesktopAppUpdateButton() {
     setConfirmOpen(false);
     if (!api) return;
     setPreparing(true);
-    const run: () => Promise<{ ok: boolean; degraded?: boolean }> =
+    const run: () => Promise<{ ok: boolean; degraded?: boolean; busy?: boolean }> =
       api.restart ?? api.install;
     try {
       const result = await run();
       if (!result?.ok || result.degraded) {
         setPreparing(false);
+        // The main process checks the Agent again; ask the person once more when it
+        // could not prove that nothing is running.
+        if (result?.busy) setConfirmOpen(true);
         return;
       }
       // quitAndInstall replaces this window; if it does not, the pill must not stay stuck.
@@ -158,7 +162,10 @@ export function DesktopAppUpdateButton() {
     if (status?.state === "downloaded") {
       setClicking(true);
       try {
-        if (await agentIsWorking()) setConfirmOpen(true);
+        // An older shell has no dialog-free restart; its install() runs the native
+        // prompt, so do not add the in-app confirmation on top of it.
+        if (!api.restart) await api.install();
+        else if (await agentIsWorking()) setConfirmOpen(true);
         else await restart();
       } finally {
         setClicking(false);
@@ -202,7 +209,7 @@ export function DesktopAppUpdateButton() {
   const Icon = preparing || unpacking ? Loader2 : status?.state === "error" ? RotateCcw : Download;
   const spinning = preparing || unpacking;
   const pulsing = status?.state === "downloading" && !unpacking;
-  const cancelable = status?.state === "downloading" && Boolean(api.cancel);
+  const cancelable = status?.state === "downloading" && Boolean(status.cancelable) && Boolean(api.cancel);
 
   return (
     <>

@@ -16,6 +16,8 @@ async function main() {
   const handlers: Record<string, (info?: { version?: string }) => void> = {};
   let quitCalls: number = 0;
   let dialogCalls: number = 0;
+  // "busy" is what /api/agent/busy answers; null means the probe failed.
+  let busyState: boolean | null = false;
 
   const fakeUpdater = {
     autoDownload: false,
@@ -63,7 +65,8 @@ async function main() {
         session: {
           defaultSession: {
             async fetch() {
-              return { ok: true, json: async () => ({ busy: false }) };
+              if (busyState === null) throw new Error("busy probe failed");
+              return { ok: true, json: async () => ({ busy: busyState === true }) };
             },
           },
         },
@@ -82,13 +85,21 @@ async function main() {
     // eslint-disable-next-line @typescript-eslint/no-require-imports
     const mod = require(abs) as {
       initAppUpdater: (o?: object) => { enabled: boolean };
+      getAppUpdateStatus: () => Record<string, unknown>;
       setTrustedSignatureForTests?: (value: boolean | null) => void;
       stopSchedule: () => void;
     };
 
-    const ready = mod.initAppUpdater({ log: () => {} });
+    const ready = mod.initAppUpdater({
+      log: () => {},
+      getServerUrl: () => "http://localhost:3000",
+    });
     assert(ready.enabled === true, "packaged mock must enable the updater");
     mod.setTrustedSignatureForTests?.(true);
+
+    const status = mod.getAppUpdateStatus();
+    assert("stage" in status, "status must carry the preparation stage");
+    assert("cancelable" in status, "status must say whether cancel is real");
 
     const restart = ipcHandlers["tacos:app-update:restart"];
     assert(typeof restart === "function", "restart IPC must be registered");
@@ -101,6 +112,17 @@ async function main() {
 
     handlers["update-downloaded"]?.({ version: "2.0.1" });
     await new Promise((resolve) => setTimeout(resolve, 20));
+
+    // A live or unknown Agent blocks the restart in the main process too.
+    busyState = true;
+    const busy = (await restart()) as { ok: boolean; busy?: boolean };
+    assert(busy.ok === false && busy.busy === true, "restart must refuse while the Agent works");
+    assert(quitCalls === 0, "busy restart must not quit");
+    busyState = null;
+    const unknown = (await restart()) as { ok: boolean; busy?: boolean };
+    assert(unknown.ok === false && unknown.busy === true, "restart must refuse when the probe fails");
+    assert(quitCalls === 0, "unknown restart must not quit");
+    busyState = false;
 
     const result = (await restart()) as { ok: boolean; confirmed?: boolean };
     assert(result.ok === true && result.confirmed === true, "restart must confirm");

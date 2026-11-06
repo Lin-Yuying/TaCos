@@ -79,6 +79,31 @@ function main() {
     !restart.includes("confirmAndInstall("),
     "restart must not re-open the native install dialog",
   );
+  assert(restart.includes("agentBusy()"), "the main process must re-check the Agent");
+  assert(
+    restart.includes("busy !== false"),
+    "restart must refuse while the Agent is working or its state is unknown",
+  );
+  assert(updater.includes("stage: status.stage"), "status must carry the preparation stage");
+  assert(
+    updater.includes("cancelable: Boolean(preparationAbort)"),
+    "status must say whether the cancel is real",
+  );
+  assert(
+    component.includes("Boolean(status.cancelable)"),
+    "the pill must only offer a cancel that reaches the download",
+  );
+  assert(component.includes("if (!api.restart)"), "older shells keep their own native prompt");
+
+  const header = read("src/components/list-header.tsx");
+  assert(
+    header.includes('t("Views")') && header.includes("@min-[640px]:hidden"),
+    "a narrow list column needs a view menu instead of losing the filters",
+  );
+  assert(
+    header.includes("buildUrl({ q: undefined })"),
+    "clearing the search box must also clear the q parameter",
+  );
 
   // Harness Settings copy stays intact and separate.
   const zh = read("src/lib/i18n/zh.ts");

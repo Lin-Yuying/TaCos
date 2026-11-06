@@ -88,6 +88,10 @@ function snapshot() {
     currentVersion: status.currentVersion,
     availableVersion: status.availableVersion,
     progress: status.progress,
+    stage: status.stage,
+    // Only the macOS self-install preparation can be cancelled for real; the
+    // electron-updater download keeps running, so the pill hides the X then.
+    cancelable: Boolean(preparationAbort),
     error: status.error,
   };
 }
@@ -170,8 +174,8 @@ async function maybeDownload() {
 
 async function downloadForSelfInstall() {
   if (!availableInfo) throw new Error("No update information to download from.");
-  setStatus({ state: "downloading", progress: 0, error: null });
   preparationAbort=new AbortController();
+  setStatus({ state: "downloading", progress: 0, error: null });
   selfInstall = await macUpdate.prepare({
     signal:preparationAbort.signal,
     bundle:currentBundle(),
@@ -612,6 +616,13 @@ function registerIpc() {
   ipcMain.handle("tacos:app-update:restart", async () => {
     if (status.state !== "downloaded") {
       return { ok: false, error: "No downloaded update is ready to install.", status: snapshot() };
+    }
+    // The pill asks the renderer first, but its probe can fail (expired session, network).
+    // Restarting ends a live Agent turn, so the main process refuses unless it can prove
+    // that no Agent is working; the renderer then asks the person again.
+    const busy = await agentBusy();
+    if (busy !== false) {
+      return { ok: false, busy: true, error: "The Agent may still be working.", status: snapshot() };
     }
     const route = installRoute();
     const degraded = route !== "updater" && !(route === "self" && selfInstall);
