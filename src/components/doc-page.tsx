@@ -33,6 +33,7 @@ import type { PageContext, PageRefEntry } from "@/components/markdown";
 import { DocumentEditor, type EditorAnchor, type OutsideEdit } from "@/components/document-editor";
 import { useDocCollab } from "@/components/use-doc-collab";
 import { DocCommentsPanel } from "@/components/doc-comments";
+import { DocLinksPanel } from "@/components/doc-links";
 import { DocShareMenu } from "@/components/doc-share";
 import { AssigneeAvatar } from "@/components/issue-table";
 import { AiEditPanel } from "@/components/ai-assist";
@@ -145,7 +146,7 @@ export function DocPageView({
   const contentRef = useRef(doc); contentRef.current = doc;
   const [aiPanel, setAiPanel] = useState<{ x: number; y: number } | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [side, setSide] = useState<"updates" | "comments" | null>(null);
+  const [side, setSide] = useState<"updates" | "comments" | "links" | null>(null);
   const [comments, setComments] = useState<PageComment[]>([]);
   const mergeComments=(patch:PageComment[],bodyOnly=false)=>setComments(previous=>{const byId=new Map(previous.map(row=>[row.id,row]));for(const row of patch){const current=byId.get(row.id);if(bodyOnly){if(current&&current.editedAt===row.editedAt&&current.deletedAt===row.deletedAt)byId.set(row.id,{...current,body:row.body,bodyLoaded:true});}else byId.set(row.id,row);}return [...byId.values()].sort((a,b)=>a.createdAt.localeCompare(b.createdAt)||a.id.localeCompare(b.id));});
   const refreshCommentIndex=(index:PageComment[])=>setComments(previous=>{const old=new Map(previous.map(row=>[row.id,row]));return index.map(row=>{const cached=old.get(row.id);return cached&&cached.editedAt===row.editedAt&&cached.deletedAt===row.deletedAt?{...row,body:cached.body,bodyLoaded:cached.bodyLoaded}:row;});});
@@ -540,6 +541,20 @@ export function DocPageView({
           >
             <MessageSquare size={12} />
             {openComments > 0 && <span data-comment-count>{openComments}</span>}
+          </button>
+          <button
+            type="button"
+            data-doc-links-toggle
+            onClick={() => setSide((open) => (open === "links" ? null : "links"))}
+            title={t("Linked from")}
+            aria-label={t("Linked from")}
+            aria-pressed={side === "links"}
+            className={`flex items-center gap-1 rounded-md border px-2 py-1 text-small font-medium transition-colors hover:border-border-strong hover:text-text ${
+              side === "links" ? "border-border-strong text-text" : "border-border text-muted"
+            }`}
+          >
+            <Link2 size={12} />
+            {!compact && t("Linked from")}
           </button>
           <button
             type="button"
@@ -953,6 +968,15 @@ export function DocPageView({
           onClose={() => setSide(null)}
           page={{ shared, createdBy: page.createdBy }}
           onShare={() => void toggleShared()}
+        />
+      )}
+      {side === "links" && (
+        <DocLinksPanel
+          workspaceId={workspaceId}
+          pageId={page.id}
+          compact={compact}
+          onOpen={onOpenPage}
+          onClose={() => setSide(null)}
         />
       )}
       </div>

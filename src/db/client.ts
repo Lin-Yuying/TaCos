@@ -331,6 +331,22 @@ CREATE TABLE IF NOT EXISTS page_collab (
 );
 CREATE UNIQUE INDEX IF NOT EXISTS page_versions_page_seq_idx ON page_versions (page_id, seq);
 
+-- One row per page-to-page reference. v1 is page → page only; source_kind keeps the
+-- column ready for task and comment sources without a second table. Target titles are
+-- resolved from pages at render time; target_title is the last known name, used only
+-- while the target is in the Trash or gone.
+CREATE TABLE IF NOT EXISTS page_links (
+  workspace_id TEXT NOT NULL,
+  source_kind TEXT NOT NULL DEFAULT 'page',
+  source_id TEXT NOT NULL,
+  target_page_id TEXT NOT NULL,
+  target_title TEXT NOT NULL DEFAULT '',
+  created_at TEXT NOT NULL,
+  PRIMARY KEY (source_kind, source_id, target_page_id)
+);
+CREATE INDEX IF NOT EXISTS page_links_target_idx ON page_links (workspace_id, target_page_id);
+CREATE INDEX IF NOT EXISTS page_links_source_idx ON page_links (workspace_id, source_kind, source_id);
+
 CREATE TABLE IF NOT EXISTS issues (
   id TEXT PRIMARY KEY,
   workspace_id TEXT NOT NULL,

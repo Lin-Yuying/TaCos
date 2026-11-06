@@ -1259,21 +1259,48 @@ export const MarkdownEditor = forwardRef<
     splitBlock(editing!);
   }
 
+  function inlineCodeOpen(text: string, at: number): boolean {
+    let ticks = 0;
+    for (let i = 0; i < at; i += 1) if (text[i] === "`" && text[i - 1] !== "\\") ticks += 1;
+    return ticks % 2 === 1;
+  }
+
   function updateMenu(area: HTMLTextAreaElement, text: string) {
     const pos = area.selectionStart ?? text.length;
     const lineStart = text.lastIndexOf("\n", pos - 1) + 1;
-    // The doc picker stays open while you type: what is typed on the line filters it.
+    // The doc picker stays open while you type: what is typed after the trigger filters it.
     if (menu?.stage === "pages") {
-      setMenu({
-        query: text.slice(lineStart, pos).toLowerCase(),
-        selected: 0,
-        stage: "pages",
-        filterFrom: menu.filterFrom,
-      });
+      const from = menu.filterFrom ?? lineStart;
+      let query = text.slice(from, pos);
+      if (query.startsWith("[[")) query = query.slice(2);
+      if (query.includes("]") || query.includes("\n")) {
+        setMenu(null);
+        return;
+      }
+      setMenu({ query: query.toLowerCase(), selected: 0, stage: "pages", filterFrom: from });
       return;
     }
-    const match = SLASH.exec(text.slice(lineStart, pos));
-    setMenu(match ? { query: match[1].toLowerCase(), selected: 0, stage: "blocks" } : null);
+    const line = text.slice(lineStart, pos);
+    const match = SLASH.exec(line);
+    if (match) {
+      setMenu({ query: match[1].toLowerCase(), selected: 0, stage: "blocks" });
+      return;
+    }
+    // `[[` opens the same page picker. It stays off inside a code block or inline code,
+    // where the characters are text rather than a reference.
+    if (pages && marker.kind !== "code") {
+      const bracket = /\[\[([^\]\n|]*)$/.exec(line);
+      if (bracket && !inlineCodeOpen(line, bracket.index)) {
+        setMenu({
+          query: bracket[1].toLowerCase(),
+          selected: 0,
+          stage: "pages",
+          filterFrom: lineStart + bracket.index,
+        });
+        return;
+      }
+    }
+    setMenu(null);
   }
 
   function visibleCommands() {
@@ -1351,21 +1378,20 @@ export const MarkdownEditor = forwardRef<
     caretRef.current = Math.max(0, parsed.body.length - (body.length - caretInBody));
   }
 
-  // The line the picker filtered on becomes the reference itself; `[[title|id]]` is the
-  // same form the docs page's "Link a page" button writes.
+  // The text the picker filtered on becomes the reference itself; `[[title|id]]` is the
+  // same form the docs page's "Link a page" button writes. Only the trigger and its
+  // query are replaced, so anything after the caret survives.
   function insertPage(ref: PageRefEntry) {
     const area = areaRef.current;
     const pos = area?.selectionStart ?? draft.length;
-    const lineStart = draft.lastIndexOf("\n", pos - 1) + 1;
-    const lineEnd = draft.indexOf("\n", pos);
-    const end = lineEnd === -1 ? draft.length : lineEnd;
+    const anchor = Math.min(menu?.filterFrom ?? draft.lastIndexOf("\n", pos - 1) + 1, pos);
     const link = `[[${ref.title}|${ref.id}]]`;
-    const body = `${draft.slice(0, lineStart)}${link}${draft.slice(end)}`;
+    const body = `${draft.slice(0, anchor)}${link}${draft.slice(pos)}`;
     const parsed = splitMarker(body);
     setMarker(parsed.marker);
     setDraft(parsed.body);
     setMenu(null);
-    caretRef.current = Math.max(0, Math.min(parsed.body.length, lineStart + link.length));
+    caretRef.current = Math.max(0, Math.min(parsed.body.length, anchor + link.length));
     if (editing !== null) {
       const list = doc.slice();
       list[editing] = joinMarker(parsed.marker, parsed.body);

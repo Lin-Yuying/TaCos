@@ -34,6 +34,7 @@ import {
   type PageVersionChange,
 } from "@/lib/pages";
 import { TacosError, listMembers, listProjects, type Member } from "@/lib/issues";
+import { listPageBacklinks, type PageBacklink } from "@/lib/page-links";
 import {
   addPageComment,
   editPageComment,
@@ -137,6 +138,17 @@ export async function listPageVersionsAction(
   return run(async () => {
     const { user } = await requireWorkspace(workspaceId);
     return listPageVersions(workspaceId, pageId, user.id);
+  });
+}
+
+/** The "Linked from" panel reloads this when it opens, so a new reference shows at once. */
+export async function listPageBacklinksAction(
+  workspaceId: string,
+  pageId: string
+): Promise<ActionResult<PageBacklink[]>> {
+  return run(async () => {
+    const { user } = await requireWorkspace(workspaceId);
+    return listPageBacklinks(workspaceId, pageId, user.id);
   });
 }
 

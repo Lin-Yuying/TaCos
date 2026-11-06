@@ -9,6 +9,7 @@ import { isPageLevel, levelAllows, type PageLevel } from "./page-level";
 import { TacosError, getProject, listMembers, notify, nowIso } from "./issues";
 import { DOC_UPDATE_MERGE_MS } from "./doc-update-groups";
 import { parseDocMentions } from "./mentions";
+import { pageLinkTargets, replacePageLinks } from "./page-links";
 
 export type DocPage = {
   id: string;
@@ -201,6 +202,7 @@ export async function createPage(
   }
   const created = await findPage(workspaceId, id);
   if (!created) throw new TacosError("Page not found", 404);
+  if (created.doc.includes("[[")) await refreshPageLinks(workspaceId, viewerId, created);
   return created;
 }
 
@@ -644,6 +646,16 @@ export async function updatePage(
   }
   if (Object.keys(next).length === 0) return page;
   next.updatedAt = nowIso();
+  // Links are derived from the text this save is about to store, before the transaction
+  // and against what this editor may see. The saved document stays the only source.
+  // A document without the `[[` trigger has no outgoing links, but it still has to
+  // replace whatever this page recorded before.
+  const links =
+    next.doc === undefined
+      ? null
+      : next.doc.includes("[[")
+        ? pageLinkTargets(next.doc, await listPageRefs(workspaceId, viewerId))
+        : [];
   getDb().transaction(() => {
   const written = getDb()
     .update(pages)
@@ -665,6 +677,7 @@ export async function updatePage(
       reason: "edit",
     });
   }
+  if (links) replacePageLinks(workspaceId, pageId, links);
   });
   const updated = await findPage(workspaceId, pageId);
   if (!updated) throw new TacosError("Page not found", 404);
@@ -814,12 +827,16 @@ export async function restorePageVersion(
 }
 
 async function writeBack(page: DocPage, write: VersionWrite): Promise<DocPage> {
+  const links = write.doc.includes("[[")
+    ? pageLinkTargets(write.doc, await listPageRefs(page.workspaceId, write.actorId))
+    : [];
   const written = await getDb()
     .update(pages)
     .set({ title: write.title, doc: write.doc, revision: page.revision + 1, updatedAt: nowIso() })
     .where(and(eq(pages.workspaceId, page.workspaceId), eq(pages.id, page.id), eq(pages.revision, page.revision)));
   if (written.changes === 0) throw new TacosError(PAGE_CONFLICT, 409);
   await recordVersion(page, write);
+  replacePageLinks(page.workspaceId, page.id, links);
   const updated = await findPage(page.workspaceId, page.id);
   if (!updated) throw new TacosError("Page not found", 404);
   collabDocWritten(page.id, updated.doc, updated.revision);
@@ -1043,6 +1060,12 @@ export function pageLookup(refs: PageRef[]): Record<string, PageRef> {
     if (!(key in out)) out[key] = ref;
   }
   return out;
+}
+
+/** Rebuilds a page's outgoing links from what it stores. The page is the source of truth. */
+async function refreshPageLinks(workspaceId: string, viewerId: string, page: DocPage): Promise<void> {
+  const refs = await listPageRefs(workspaceId, viewerId);
+  replacePageLinks(workspaceId, page.id, pageLinkTargets(page.doc, refs));
 }
 
 export async function pageEmbedSources(

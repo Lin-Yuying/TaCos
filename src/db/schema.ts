@@ -266,6 +266,26 @@ export const pages = sqliteTable(
   ]
 );
 
+// One row per page-to-page reference. v1 is page → page only (source_kind is 'page');
+// target titles resolve from pages at render time, while target_title is the fallback
+// used only while that page is in the Trash or gone.
+export const pageLinks = sqliteTable(
+  "page_links",
+  {
+    workspaceId: text("workspace_id").notNull(),
+    sourceKind: text("source_kind").notNull().default("page"),
+    sourceId: text("source_id").notNull(),
+    targetPageId: text("target_page_id").notNull(),
+    targetTitle: text("target_title").notNull().default(""),
+    createdAt: text("created_at").notNull(),
+  },
+  (t) => [
+    primaryKey({ columns: [t.sourceKind, t.sourceId, t.targetPageId] }),
+    index("page_links_target_idx").on(t.workspaceId, t.targetPageId),
+    index("page_links_source_idx").on(t.workspaceId, t.sourceKind, t.sourceId),
+  ]
+);
+
 // What a document looked like after each change; the Updates panel reads these.
 export const pageVersions = sqliteTable(
   "page_versions",
