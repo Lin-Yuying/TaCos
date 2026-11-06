@@ -169,4 +169,5 @@ blocker (host, command, expected credential) and do not fake success.
 | Loop setup | done | #83 | goal + this contract |
 | U-13a projects/task API | merged | #86 | 113/113 checks, build, HTTP+MCP network E2E, visibility fix merged |
 | U-09 views/task UX | merged | #87 | 117/117 checks, browser E2E (views/display/bulk/template/estimate), screenshots 1440/1100 |
-| U-04 documents | next | — | — |
+| U-04 documents | merged | #88 | 120/120 checks, browser E2E (backlinks/template/outline), screenshots 1440/1100 |
+| U-13b pages API | next | — | — |
