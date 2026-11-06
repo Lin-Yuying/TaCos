@@ -7,7 +7,8 @@ with Linear's and GitHub's notification inboxes.
 Decisions recorded 2026-11-06: retention is **90 days**; Done rows stay
 **searchable**; keyboard shortcuts are the **full Linear set**; server-mode
 digest/email is a **follow-up**, not this PR; notification preferences are
-still open (per user vs per workspace, explained at the bottom).
+decided as **per user** with per-user mutes; workspace-level policy is a
+follow-up.
 
 ## Why
 
@@ -196,8 +197,7 @@ as a follow-up (see below).
 
 ## Open questions
 
-- Preferences granularity: per user or per workspace (explained below).
-- Digest/email is recorded as a follow-up, not part of this PR.
+- None blocking. Digest/email and per-workspace policy are follow-ups.
 
 ## Follow-ups (not this PR)
 
