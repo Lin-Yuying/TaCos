@@ -1,4 +1,5 @@
 import { ensureRevisions } from "./revisions";
+import { parseLegacyNotificationBody } from "../lib/notification-data";
 import { DATA_DIR } from "@/lib/data-dir";
 import Database from "better-sqlite3";
 import { drizzle } from "drizzle-orm/better-sqlite3";
@@ -938,6 +939,43 @@ function bootstrap(sqlite: Database.Database) {
   }
   addColumnIfMissing(sqlite, "pages", "revision", "INTEGER NOT NULL DEFAULT 0");
   addColumnIfMissing(sqlite, "notifications", "page_id", "TEXT");
+  addColumnIfMissing(sqlite, "notifications", "data", "TEXT");
+  addColumnIfMissing(sqlite, "notifications", "state", "TEXT NOT NULL DEFAULT 'unread'");
+  addColumnIfMissing(sqlite, "notifications", "snoozed_until", "TEXT");
+  addColumnIfMissing(sqlite, "notifications", "deleted_at", "TEXT");
+  sqlite.exec(`
+    CREATE INDEX IF NOT EXISTS notifications_user_created_idx
+      ON notifications (workspace_id, user_id, created_at);
+    CREATE TABLE IF NOT EXISTS notification_prefs (
+      workspace_id TEXT NOT NULL,
+      user_id TEXT NOT NULL,
+      prefs TEXT NOT NULL DEFAULT '{}',
+      updated_at TEXT NOT NULL,
+      PRIMARY KEY (workspace_id, user_id)
+    );
+    CREATE TABLE IF NOT EXISTS notification_mutes (
+      workspace_id TEXT NOT NULL,
+      user_id TEXT NOT NULL,
+      scope_type TEXT NOT NULL,
+      scope_id TEXT NOT NULL,
+      label TEXT NOT NULL DEFAULT '',
+      created_at TEXT NOT NULL,
+      PRIMARY KEY (workspace_id, user_id, scope_type, scope_id)
+    );
+    UPDATE notifications
+      SET state = CASE WHEN read_at IS NULL THEN 'unread' ELSE 'read' END
+      WHERE state IS NULL OR state = '';
+  `);
+  for (const row of sqlite
+    .prepare("SELECT id, type, body FROM notifications WHERE data IS NULL OR data = ''")
+    .all() as { id: string; type: string; body: string }[]) {
+    const parsed = parseLegacyNotificationBody(row.type, row.body);
+    if (parsed) {
+      sqlite
+        .prepare("UPDATE notifications SET data = ? WHERE id = ?")
+        .run(JSON.stringify(parsed), row.id);
+    }
+  }
   addColumnIfMissing(sqlite, "pages", "cover", "TEXT");
   addColumnIfMissing(sqlite, "pages", "position", "INTEGER NOT NULL DEFAULT 0");
   addColumnIfMissing(sqlite, "pages", "share_level", "TEXT NOT NULL DEFAULT 'edit'");
