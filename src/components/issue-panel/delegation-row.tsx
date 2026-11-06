@@ -80,6 +80,16 @@ export function DelegationRow({
   );
 
   const status = panel?.run?.status;
+  // After a review decision the run row is still `done`; the issue's delegation
+  // state carries approved/changes_requested, so prefer that for the label.
+  const shownStatus =
+    panel?.run?.reviewStatus === "approved"
+      ? "approved"
+      : panel?.run?.reviewStatus === "changes_requested"
+        ? "changes_requested"
+        : status === "done"
+          ? panel?.status ?? "review"
+          : status ?? panel?.status ?? null;
   const open = status === "queued" || status === "running";
   const review = panel?.run?.status === "done" && panel.run.reviewStatus === "pending";
   const failedOrChanges =
@@ -129,8 +139,8 @@ export function DelegationRow({
           <span className="text-text" data-testid="delegation-agent">
             {panel.agent.name}
           </span>
-          <span data-delegation-status={run?.status ?? panel.status ?? "idle"}>
-            {statusLabel(t, run?.status ?? panel.status)}
+          <span data-delegation-status={shownStatus ?? "idle"}>
+            {statusLabel(t, shownStatus)}
           </span>
           {run?.source && (
             <span className="rounded-full bg-elevated px-1.5 py-0.5 text-caption" data-testid="delegation-source">
