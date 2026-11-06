@@ -1,7 +1,7 @@
 /** Multi-harness adapter contract (H-P1-05). Authority: docs/harness-contracts.md */
 
 
-export type HarnessId = "codex" | "pi" | "opencode" | "dsh" | "codebuddy";
+export type HarnessId = "codex" | "pi" | "opencode" | "dsh" | "codebuddy" | "acp";
 
 export type ApprovalMode = "ask" | "auto" | "full";
 
@@ -70,6 +70,16 @@ export type TurnInput = {
   keys?: HarnessKeys | null;
   /** Replaces the adapter's five-minute limit on this turn. */
   timeoutMs?: number;
+  /** #79: the harness's own session for this thread, when it has one to resume. */
+  nativeSessionId?: string | null;
+};
+
+/** Tokens one turn reported. Observe-only: no limit reads this. */
+export type TurnUsage = {
+  inputTokens: number;
+  outputTokens: number;
+  cachedTokens: number;
+  reasoningTokens: number;
 };
 
 export type TurnEvent =
@@ -84,8 +94,35 @@ export type TurnEvent =
       params?: unknown;
     }
   | { type: "approval_done"; requestId: string; decision: ApprovalDecision }
+  // #79: the harness's own session id, saved so the next turn resumes instead of replaying.
+  | { type: "session"; id: string }
+  // #79: token counts the adapter could read from its protocol.
+  | { type: "usage"; usage: TurnUsage }
   | { type: "error"; message: string }
   | { type: "done" };
+
+/** One window of a subscription's rate limit, as the harness reports it. */
+export type SubscriptionWindow = {
+  id: string;
+  label: string;
+  usedPercent: number;
+  remainingPercent: number;
+  /** ISO time the window resets, when reported. */
+  resetsAt: string | null;
+  windowMinutes: number | null;
+};
+
+/**
+ * A harness's own subscription usage. `none` means it reports nothing: show that, never
+ * estimate. Codex fills this from its app-server rate limits; the rest have no source.
+ */
+export type SubscriptionInfo = {
+  source: "app-server" | "cli" | "none";
+  plan: string | null;
+  windows: SubscriptionWindow[];
+  hint: string | null;
+  checkedAt: string;
+};
 
 export type InstallResult = {
   ok: boolean;
@@ -101,6 +138,8 @@ export type HarnessAdapter = {
   openTurn: (input: TurnInput) => AsyncIterable<TurnEvent>;
   install?: () => Promise<InstallResult>;
   upgrade?: () => Promise<InstallResult>;
+  /** #79: plan usage, only for harnesses that actually report it. */
+  subscription?: () => Promise<SubscriptionInfo>;
 };
 
 export type HarnessStatus = DetectResult & {

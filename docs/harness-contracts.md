@@ -138,3 +138,50 @@ Rules:
 
 P1 foundation registry + delete old gates + unbound session + Codex end-state path, then P2 settings, P3 Agent page, P4 other adapters, P5 hardening.
 
+## 6. Agent runtime v2 (#79, 2026-11-06)
+
+This section extends the frozen contract; it does not replace it.
+
+### Adapter additions
+
+- `TurnInput.nativeSessionId` — the harness's own session for this thread, or null.
+- `TurnEvent` adds `{ type: "session"; id }` and `{ type: "usage"; usage }`, where usage is
+  `{ inputTokens, outputTokens, cachedTokens, reasoningTokens }`.
+- `HarnessAdapter.subscription?(): Promise<SubscriptionInfo>` — plan windows when the
+  harness reports them. `source: "none"` is a valid answer and renders "Not reported".
+- Display: Settings → Harness per row, the Agent composer chip, and the run panel snapshot.
+  Codex is the only built-in source (app-server `account/rateLimits/read`, with a
+  `TACOS_CODEX_SUBSCRIPTION_JSON` override for tests/headless).
+
+### Sessions
+
+| Harness | Native session | Behaviour |
+|---|---|---|
+| codex | app-server thread id | `thread/start` (persistent) first; `thread/resume` on the next turn. A stale id falls back to a new thread. |
+| opencode | OpenCode session id | `run --session <id>`. |
+| dsh | dsh session id | `--session-id <id>`. |
+| pi | none | Replays the TaCos thread history (`--no-session`) by design. |
+| codebuddy | none | Replays the TaCos thread history. |
+
+`agent_harness_sessions` stores one row per `(thread, engine)`, so switching engines keeps
+each harness's own session. `getHarnessSession` / `saveHarnessSession` live in
+`src/lib/agent-threads.ts`; both the local route and the desktop runner pass them through.
+
+### ACP adapter
+
+`src/lib/agent-acp.ts` is one generic adapter for ACP-compatible agents (JSON-RPC over
+stdio), opt-in with `TACOS_ACP_BIN`. It maps `session/new` (or `session/load`), streams
+`session/update` message chunks and tool calls, forwards the TaCos MCP stdio server, and
+maps `session/request_permission` to the existing approval events/cards. It is not one of
+the five first-class Settings rows.
+
+### Built-in API agent
+
+`src/lib/agent-api-loop.ts` is the server-side loop. It uses the viewer's model endpoints
+(OpenAI-compatible Chat Completions), executes `AGENT_TOOLS` in-process through
+`executeAgentTool` and `decideToolApproval`, and streams the same TurnEvent frames. On a
+server with no member keys, set `TACOS_API_AGENT_BASE_URL` / `TACOS_API_AGENT_KEY` /
+`TACOS_API_AGENT_MODEL`. It retries 429/5xx, falls back across endpoints, compacts long
+threads with `src/lib/agent-context.ts`, and keeps a hard internal iteration guard
+(`TACOS_API_AGENT_MAX_ITERATIONS`, default 20). The guard is process safety; it is not a
+budget or a user-facing limit.

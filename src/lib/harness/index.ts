@@ -11,8 +11,11 @@ export type {
   InstallResult,
   McpStdioConfig,
   ModelOption,
+  SubscriptionInfo,
+  SubscriptionWindow,
   TurnEvent,
   TurnInput,
+  TurnUsage,
 } from "./types";
 
 export {

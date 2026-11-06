@@ -481,3 +481,42 @@ adapter addition, not new UI. No open questions remain for this PR.
 - `src/lib/i18n/zh.ts`, README, `docs/harness-contracts.md`.
 - New checks listed above (including `check-agent-subscription.ts`); existing
   harness/agent checks updated.
+
+## Implementation record (2026-11-06, branch `feat/agent-runtime`)
+
+Status: implemented; `npx tsc --noEmit`, i18n, `npm run check:harness` (128/128) and
+`npm run build` are green. Browser E2E, fresh-context review and merge are pending; one
+PR, five commit groups as decided.
+
+- **Agent identity + delegation + review.** `workspace_agents`, `issues.delegated_agent_id`
+  and `delegation_status`, `src/lib/workspace-agents.ts`, `src/lib/agent-delegation.ts`.
+  Task panel `DelegationRow`: delegate / cancel / approve / request changes / retry,
+  run source, tokens and the plan snapshot. Personal agent is the old handoff identity;
+  the human assignees do not change. Task-row bot indicator, `?view=delegated`,
+  `?delegated=<agentId>`, timeline events and Inbox notices.
+- **Built-in API agent.** `src/lib/agent-api-loop.ts` + `agent-api-client.ts` +
+  `agent-context.ts`. OpenAI-compatible Chat Completions, streaming, AGENT_TOOLS through
+  the existing grant/approval cards, bounded 429/5xx retries, endpoint fallback, stored
+  compaction summary + boundary step, hard internal iteration guard. Composer option
+  "API agent"; fallback when the desktop runner is away; server env endpoint documented.
+- **Usage + subscription.** `agent_usage` ledger (input/output/cached/reasoning, model,
+  run/thread/task/agent), run-panel and Settings → Agent usage views, no USD/budget.
+  `HarnessAdapter.subscription()`; Codex app-server rate limits plus
+  `TACOS_CODEX_SUBSCRIPTION_JSON`; other harnesses "not reported". Surfaces: Settings →
+  Harness row, composer chip, run snapshot.
+- **Notifications.** `delegation_started`, `delegation_review`, `delegation_failed`,
+  `delegation_changes_requested` in the existing handoff preference group. Start/review/
+  failure notices; no automation rule builder (that remains #80).
+- **Harness v2.** `nativeSessionId`, `session` and `usage` events, `agent_harness_sessions`
+  (Codex `thread/resume`, OpenCode `--session`, dsh `--session-id`, Pi replay), generic
+  ACP adapter `src/lib/agent-acp.ts` via `TACOS_ACP_BIN` (not one of the five Settings
+  rows). Existing adapters, approvals, handoff and server mode keep their paths.
+
+Checks: `check-agent-delegation.ts`, `check-agent-api-loop.ts`, `check-agent-usage.ts`,
+`check-agent-subscription.ts`, `check-agent-session.ts`, `check-agent-acp.ts`; existing
+harness/handoff/agent checks still run under `npm run check:harness`.
+
+Not implemented / follow-up: Responses API translation (Chat Completions only), parsing
+Codex CLI `/status` text (the fallback is the documented status command), workspace-level
+agent-source governance beyond per-agent enable/project/approval, per-day chart styling
+(the totals are shown as chips), USD/cost (explicitly out of scope).

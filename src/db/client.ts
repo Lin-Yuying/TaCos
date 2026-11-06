@@ -584,6 +584,59 @@ CREATE TABLE IF NOT EXISTS agent_runs (
   finished_at TEXT
 );
 CREATE INDEX IF NOT EXISTS agent_runs_user_status ON agent_runs(user_id, status);
+
+-- #79: named workspace agents and each member's personal agent.
+CREATE TABLE IF NOT EXISTS workspace_agents (
+  id TEXT PRIMARY KEY,
+  workspace_id TEXT NOT NULL,
+  name TEXT NOT NULL,
+  description TEXT NOT NULL DEFAULT '',
+  source TEXT NOT NULL,
+  engine TEXT NOT NULL DEFAULT '',
+  model TEXT NOT NULL DEFAULT '',
+  approval TEXT NOT NULL DEFAULT 'ask',
+  project_ids TEXT NOT NULL DEFAULT '[]',
+  enabled INTEGER NOT NULL DEFAULT 1,
+  personal INTEGER NOT NULL DEFAULT 0,
+  created_by TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS workspace_agents_workspace_idx ON workspace_agents (workspace_id);
+CREATE UNIQUE INDEX IF NOT EXISTS workspace_agents_personal_unique ON workspace_agents (workspace_id, created_by) WHERE personal = 1;
+
+-- #79: observe-only token ledger. Nothing reads it to stop a run.
+CREATE TABLE IF NOT EXISTS agent_usage (
+  id TEXT PRIMARY KEY,
+  workspace_id TEXT NOT NULL,
+  run_id TEXT,
+  thread_id TEXT,
+  message_id TEXT,
+  issue_id TEXT,
+  agent_id TEXT,
+  user_id TEXT NOT NULL,
+  engine TEXT NOT NULL,
+  model TEXT NOT NULL DEFAULT '',
+  source TEXT NOT NULL DEFAULT 'runner',
+  input_tokens INTEGER NOT NULL DEFAULT 0,
+  output_tokens INTEGER NOT NULL DEFAULT 0,
+  cached_tokens INTEGER NOT NULL DEFAULT 0,
+  reasoning_tokens INTEGER NOT NULL DEFAULT 0,
+  duration_ms INTEGER NOT NULL DEFAULT 0,
+  created_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS agent_usage_workspace_idx ON agent_usage (workspace_id, created_at);
+CREATE INDEX IF NOT EXISTS agent_usage_agent_idx ON agent_usage (agent_id);
+CREATE INDEX IF NOT EXISTS agent_usage_thread_idx ON agent_usage (thread_id);
+
+-- #79: a harness's own session id for one thread, so the next turn can resume it.
+CREATE TABLE IF NOT EXISTS agent_harness_sessions (
+  thread_id TEXT NOT NULL,
+  engine TEXT NOT NULL,
+  session_id TEXT NOT NULL,
+  updated_at TEXT NOT NULL,
+  PRIMARY KEY (thread_id, engine)
+);
 `;
 
 export function hashPassword(password: string): string {
@@ -1119,6 +1172,22 @@ function bootstrap(sqlite: Database.Database) {
   addColumnIfMissing(sqlite, "issues", "reviewed_by", "TEXT");
   addColumnIfMissing(sqlite, "issues", "reviewed_at", "TEXT");
   sqlite.exec("CREATE INDEX IF NOT EXISTS issues_claimed_idx ON issues (claimed_by)");
+  // #79: delegation keeps the human assignees and records the agent that is working.
+  addColumnIfMissing(sqlite, "issues", "delegated_agent_id", "TEXT");
+  addColumnIfMissing(sqlite, "issues", "delegated_by", "TEXT");
+  addColumnIfMissing(sqlite, "issues", "delegated_at", "TEXT");
+  addColumnIfMissing(sqlite, "issues", "delegation_status", "TEXT");
+  addColumnIfMissing(sqlite, "issues", "delegation_run_id", "TEXT");
+  sqlite.exec("CREATE INDEX IF NOT EXISTS issues_delegated_agent_idx ON issues (delegated_agent_id)");
+  addColumnIfMissing(sqlite, "agent_threads", "agent_id", "TEXT");
+  addColumnIfMissing(sqlite, "agent_threads", "context_summary", "TEXT");
+  addColumnIfMissing(sqlite, "agent_threads", "context_summary_through", "TEXT");
+  addColumnIfMissing(sqlite, "agent_runs", "agent_id", "TEXT");
+  addColumnIfMissing(sqlite, "agent_runs", "source", "TEXT NOT NULL DEFAULT 'runner'");
+  addColumnIfMissing(sqlite, "agent_runs", "review_status", "TEXT");
+  addColumnIfMissing(sqlite, "agent_runs", "model", "TEXT NOT NULL DEFAULT ''");
+  addColumnIfMissing(sqlite, "agent_runs", "subscription", "TEXT");
+  sqlite.exec("CREATE INDEX IF NOT EXISTS agent_runs_agent_idx ON agent_runs (agent_id)");
   // Inline comments quote the passage they belong to instead of storing offsets, which
   // would drift as soon as the overview is edited.
   addColumnIfMissing(sqlite, "ai_settings", "engine", "TEXT NOT NULL DEFAULT 'api'");

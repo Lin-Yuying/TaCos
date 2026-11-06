@@ -35,6 +35,11 @@ import { SettingsNavigation } from "@/components/settings-navigation";
 import { useUI } from "@/components/ui-context";
 import { PAGE_INSET } from "@/lib/page-chrome";
 import { ModelKeysSection } from "@/components/model-keys-section";
+import { AgentSettingsSection } from "@/components/agent-settings-section";
+import { AgentUsageSection } from "@/components/agent-usage-section";
+import { HarnessSubscription } from "@/components/harness-subscription";
+import type { AgentView } from "@/lib/workspace-agents";
+import type { AgentUsageSummary } from "@/lib/agent-usage";
 import { AssigneeAvatar } from "@/components/issue-table";
 import { ProjectIcon, WorkspaceMark } from "@/components/icons";
 import { WorkspaceTrashList } from "@/components/workspace-trash-list";
@@ -144,6 +149,8 @@ export function SettingsView({
   deletedWorkspaces,
   pageTemplates,
   canManagePageTemplates,
+  agents,
+  agentUsage,
 }: {
   workspace: { id: string; name: string; key: string; icon: string | null };
   role: string;
@@ -165,6 +172,8 @@ export function SettingsView({
   deletedWorkspaces: DeletedWorkspace[];
   pageTemplates: PageTemplate[];
   canManagePageTemplates: boolean;
+  agents: AgentView[];
+  agentUsage: AgentUsageSummary;
 }) {
   const router = useRouter();
   const t = useT();
@@ -1034,6 +1043,7 @@ export function SettingsView({
                       {row.hint ? t(row.hint) : null}
                     </div>
                   )}
+                  <HarnessSubscription workspaceId={workspace.id} harnessId={row.id} />
                 </div>
                 <div className="flex flex-wrap items-center gap-2">
                   {isAdmin && !serverMode && !row.installed && (
@@ -1076,6 +1086,15 @@ export function SettingsView({
             <p className="text-small text-faint">{t("Only a workspace admin can change harness toggles.")}</p>
           )}
         </section>
+
+        <AgentSettingsSection
+          workspaceId={workspace.id}
+          agents={agents}
+          projects={projects}
+          isAdmin={isAdmin}
+        />
+
+        <AgentUsageSection usage={agentUsage} />
 
         <ModelKeysSection workspaceId={workspace.id} view={modelKeys} serverMode={serverMode} />
 

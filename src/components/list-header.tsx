@@ -11,13 +11,14 @@ import type { Status } from "@/lib/constants";
 import { useT } from "@/components/i18n-context";
 import { PAGE_INSET } from "@/lib/page-chrome";
 
-type View = "all" | "active" | "open" | "agent" | Status;
+type View = "all" | "active" | "open" | "agent" | "delegated" | Status;
 
 const TITLES: Record<string, string> = {
   all: "All Tasks",
   active: "Active",
   open: "Open Tasks",
   agent: "Agent tasks",
+  delegated: "Delegated tasks",
 };
 for (const status of ["in_progress", "todo", "done", "canceled"] as const) {
   TITLES[status] = STATUS_META[status].label;
@@ -26,7 +27,7 @@ for (const status of ["in_progress", "todo", "done", "canceled"] as const) {
 // The three views that used to sit in the sidebar are quick filters in the header now;
 // the sidebar keeps the four main queues (My Tasks, Open Tasks, All Tasks, Review).
 const QUICK_VIEWS: {
-  key: "all" | "active" | "unassigned" | "agent";
+  key: "all" | "active" | "unassigned" | "agent" | "delegated";
   label: string;
   overrides: Record<string, string | undefined>;
 }[] = [
@@ -34,6 +35,7 @@ const QUICK_VIEWS: {
   { key: "active", label: "Active", overrides: { view: "active", assignee: undefined } },
   { key: "unassigned", label: "Unassigned", overrides: { view: undefined, assignee: "none" } },
   { key: "agent", label: "Agent tasks", overrides: { view: "agent", assignee: undefined } },
+  { key: "delegated", label: "Delegated tasks", overrides: { view: "delegated", assignee: undefined } },
 ];
 
 export function ListHeader({
@@ -94,6 +96,7 @@ export function ListHeader({
     active: view === "active",
     unassigned: view === "all" && assigneeParam === "none",
     agent: view === "agent",
+    delegated: view === "delegated",
   };
 
   return (

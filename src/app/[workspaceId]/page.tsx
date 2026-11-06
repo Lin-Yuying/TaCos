@@ -9,7 +9,7 @@ import { queryTaskView,type TaskQuery } from "@/lib/task-query";
 import { defaultTaskView, getTaskView, type TaskViewSummary } from "@/lib/task-views";
 import { EMPTY_VIEW } from "@/lib/task-view";
 
-type View = "all" | "active" | "open" | "my" | "unassigned" | "agent" | Status;
+type View = "all" | "active" | "open" | "my" | "unassigned" | "agent" | "delegated" | Status;
 
 export default async function WorkspaceIssuesPage({
   params,
@@ -43,6 +43,8 @@ async function IssuesView({
   const label = typeof sp.label === "string" ? sp.label : "";
   const projectId = typeof sp.project === "string" ? sp.project : undefined;
   const assigneeParam = typeof sp.assignee === "string" ? sp.assignee : undefined;
+  // #79: ?delegated=1 lists every delegated task; ?delegated=<agentId> narrows to one agent.
+  const delegatedParam = typeof sp.delegated === "string" ? sp.delegated : undefined;
 
   const projects = await listProjects(workspaceId, user.id);
   const [project] = projectId
@@ -75,6 +77,9 @@ async function IssuesView({
           ? null
           : (assigneeMember?.id ?? undefined),
     agent: view === "agent",
+    delegated: view === "delegated" || delegatedParam === "1",
+    delegatedAgentId:
+      delegatedParam && delegatedParam !== "1" && delegatedParam !== "me" ? delegatedParam : undefined,
   };
   // ?viewId= opens a saved view; without one the scope default (if a manager chose
   // one) applies. Personal views keep their own saved definition from the menu.
@@ -103,7 +108,7 @@ async function IssuesView({
   return (
     <div className="flex min-h-0 min-w-0 flex-1 flex-col">
       <ListHeader
-        view={view === "all" || view === "active" || view === "open" || view === "agent" ? view : (view as Status)}
+        view={view === "all" || view === "active" || view === "open" || view === "agent" || view === "delegated" ? view : (view as Status)}
         q={q}
         label={label}
         count={result.total}

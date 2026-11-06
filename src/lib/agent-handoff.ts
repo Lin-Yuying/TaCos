@@ -5,6 +5,7 @@ import { agentContext, agentMessages, agentRuntime, flattenMessages } from "@/li
 import { answerAgentApproval, type ToolApprovalCard } from "@/lib/agent-sessions";
 import {
   appendAgentMessage,
+  getHarnessSession,
   loadThreadForTurn,
   setAgentThreadApproval,
   setThreadEngine,
@@ -195,6 +196,7 @@ export async function beginHandoff(row: RunRow): Promise<TurnPayload | null> {
       model: thread.model,
       effort: thread.effort,
       approval: thread.approval,
+      nativeSessionId: await getHarnessSession(thread.id, queued.harness),
       autoApproveTools: AGENT_TOOLS.filter((tool) => !tool.write).map((tool) => tool.name),
       neverAutoApproveTools: AGENT_TOOLS.filter((tool) => tool.delete).map((tool) => tool.name),
       proxy: runtime.proxy,

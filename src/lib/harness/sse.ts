@@ -18,6 +18,8 @@ export function turnEventsToSse(events: AsyncIterable<TurnEvent>): ReadableStrea
         else if(event.type==="error")chunk=frame({error:{message:event.message}});
         else if(event.type==="delta")chunk=frame({choices:[{delta:{content:event.text}}]});
         else if(event.type==="step")chunk=frame({tacos:{type:"step",step:{key:event.id,kind:event.kind??"info",title:event.title,detail:event.detail,status:event.status}}});
+        else if(event.type==="usage")chunk=frame({tacos:{type:"usage",usage:event.usage}});
+        else if(event.type==="session")chunk=frame({tacos:{type:"session",id:event.id}});
         else if(event.type==="approval")chunk=frame({tacos:{type:"approval",request:{requestId:event.requestId,tool:event.tool,message:event.message,description:event.description??null,params:event.params==null?null:typeof event.params==="string"?event.params:JSON.stringify(event.params,null,2)}}});
         else chunk=frame({tacos:{type:"approval_done",requestId:event.requestId,decision:browserDecision(event.decision)}});
         controller.enqueue(ENCODER.encode(chunk));

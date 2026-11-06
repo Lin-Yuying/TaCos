@@ -29,6 +29,7 @@ export const HARNESS_BIN_ENV: Record<HarnessId, string> = {
   opencode: "TACOS_OPENCODE_BIN",
   dsh: "TACOS_DSH_BIN",
   codebuddy: "TACOS_CODEBUDDY_BIN",
+  acp: "TACOS_ACP_BIN",
 };
 
 export const HARNESS_CANDIDATES: Record<HarnessId, string[]> = {
@@ -62,6 +63,11 @@ export const HARNESS_CANDIDATES: Record<HarnessId, string[]> = {
     "/opt/homebrew/bin/codebuddy",
     "/usr/local/bin/codebuddy",
   ],
+  acp: [
+    path.join(HOME, ".local/bin/acp"),
+    "/opt/homebrew/bin/acp",
+    "/usr/local/bin/acp",
+  ],
 };
 
 /** Primary CLI name for PATH lookup. codebuddy also accepts `cbc`. */
@@ -71,6 +77,7 @@ export const HARNESS_SHELL_NAMES: Record<HarnessId, string[]> = {
   opencode: ["opencode"],
   dsh: ["dsh"],
   codebuddy: ["codebuddy", "cbc"],
+  acp: ["acp"],
 };
 
 export const HARNESS_VERSION_ARGS: Record<HarnessId, string[]> = {
@@ -79,6 +86,7 @@ export const HARNESS_VERSION_ARGS: Record<HarnessId, string[]> = {
   opencode: ["--version"],
   dsh: ["-V"],
   codebuddy: ["--version"],
+  acp: ["--version"],
 };
 
 export function executable(file: string): boolean {

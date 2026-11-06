@@ -1,3 +1,4 @@
+import { acpAdapter } from "./adapters/acp";
 import { codebuddyAdapter } from "./adapters/codebuddy";
 import { codexAdapter } from "./adapters/codex";
 import { dshAdapter } from "./adapters/dsh";
@@ -14,7 +15,10 @@ const ADAPTERS: HarnessAdapter[] = [
   codebuddyAdapter,
 ];
 
-const BY_ID = new Map<HarnessId, HarnessAdapter>(ADAPTERS.map((a) => [a.id, a]));
+// #79: ACP is an opt-in extra, not one of the five built-in harnesses. It only reaches the
+// composer when TACOS_ACP_BIN is set, so listHarnessAdapters/listHarnessDetect stay the five.
+const EXTRA_ADAPTERS: HarnessAdapter[] = [acpAdapter];
+const BY_ID = new Map<HarnessId, HarnessAdapter>([...ADAPTERS, ...EXTRA_ADAPTERS].map((a) => [a.id, a]));
 
 export function listHarnessAdapters(): HarnessAdapter[] {
   return [...ADAPTERS];

@@ -195,6 +195,8 @@ export async function* openCodexTurn(input: TurnInput, log?: TurnLog): AsyncGene
   let lastError = "";
   let child: ChildProcess | null = null;
   let timer: NodeJS.Timeout | null = null;
+  // #79: true while message id 2 is thread/resume; a missing session falls back to start.
+  let resuming = false;
 
   const push = (event: TurnEvent) => {
     queue.push(event);queuedBytes+=Buffer.byteLength(JSON.stringify(event));
@@ -360,6 +362,26 @@ export async function* openCodexTurn(input: TurnInput, log?: TurnLog): AsyncGene
         }
         return;
       }
+      if (method === "thread/tokenUsage/updated") {
+        const usage = (params.tokenUsage ?? params.usage) as
+          | { total?: Record<string, unknown> }
+          | Record<string, unknown>
+          | undefined;
+        const raw = (usage && "total" in usage ? usage.total : usage) as Record<string, unknown> | undefined;
+        if (raw) {
+          const num = (value: unknown) => (Number.isFinite(Number(value)) ? Math.max(0, Number(value)) : 0);
+          push({
+            type: "usage",
+            usage: {
+              inputTokens: num(raw.input_tokens ?? raw.inputTokens ?? raw.prompt_tokens),
+              outputTokens: num(raw.output_tokens ?? raw.outputTokens ?? raw.completion_tokens),
+              cachedTokens: num(raw.cached_input_tokens ?? raw.cached_tokens ?? raw.cachedTokens),
+              reasoningTokens: num(raw.reasoning_output_tokens ?? raw.reasoning_tokens ?? raw.reasoningTokens),
+            },
+          });
+        }
+        return;
+      }
       if (method === "mcpServer/startupStatus/updated") {
         if (params.name === "tacos" && params.status === "failed") {
           const reason = String(params.error ?? params.failureReason ?? "unknown error");
@@ -378,7 +400,24 @@ export async function* openCodexTurn(input: TurnInput, log?: TurnLog): AsyncGene
           status?: string;
           error?: unknown;
           items?: { type?: string; text?: string }[];
+          usage?: {
+            input_tokens?: number;
+            output_tokens?: number;
+            cached_input_tokens?: number;
+            reasoning_output_tokens?: number;
+          };
         } | undefined;
+        if (turn?.usage) {
+          push({
+            type: "usage",
+            usage: {
+              inputTokens: Math.max(0, Number(turn.usage.input_tokens) || 0),
+              outputTokens: Math.max(0, Number(turn.usage.output_tokens) || 0),
+              cachedTokens: Math.max(0, Number(turn.usage.cached_input_tokens) || 0),
+              reasoningTokens: Math.max(0, Number(turn.usage.reasoning_output_tokens) || 0),
+            },
+          });
+        }
         if (turn?.status === "failed") return finish(errorText(turn.error));
         if (!text.trim()) {
           const fallback = turn?.items?.find((item) => item.type === "agent_message")?.text;
@@ -401,25 +440,53 @@ export async function* openCodexTurn(input: TurnInput, log?: TurnLog): AsyncGene
     if (message.id === 1) {
       if (message.error) return finish(errorText(message.error));
       send({ jsonrpc: "2.0", method: "initialized" });
-      send({
-        jsonrpc: "2.0",
-        id: 2,
-        method: "thread/start",
-        params: {
-          cwd: input.cwd,
-          sandbox: input.approval === "full" ? "danger-full-access" : "workspace-write",
-          // Full keeps machine sandbox open. MCP still uses on-request so delete tools can ask (H-P3-19).
-          approvalPolicy: "on-request",
-          ephemeral: true,
-          baseInstructions: input.prompt.system,
-        },
-      });
+      const common = {
+        cwd: input.cwd,
+        sandbox: input.approval === "full" ? "danger-full-access" : "workspace-write",
+        // Full keeps machine sandbox open. MCP still uses on-request so delete tools can ask (H-P3-19).
+        approvalPolicy: "on-request",
+      };
+      // #79: resume this thread's earlier Codex session instead of replaying the prompt.
+      if (input.nativeSessionId) {
+        resuming = true;
+        send({
+          jsonrpc: "2.0",
+          id: 2,
+          method: "thread/resume",
+          params: { ...common, threadId: input.nativeSessionId },
+        });
+      } else {
+        send({
+          jsonrpc: "2.0",
+          id: 2,
+          method: "thread/start",
+          params: { ...common, ephemeral: false, baseInstructions: input.prompt.system },
+        });
+      }
       return;
     }
     if (message.id === 2) {
+      if (message.error && resuming) {
+        // The stored session is gone (CLI upgraded or thread archived): start fresh.
+        resuming = false;
+        send({
+          jsonrpc: "2.0",
+          id: 2,
+          method: "thread/start",
+          params: {
+            cwd: input.cwd,
+            sandbox: input.approval === "full" ? "danger-full-access" : "workspace-write",
+            approvalPolicy: "on-request",
+            ephemeral: false,
+            baseInstructions: input.prompt.system,
+          },
+        });
+        return;
+      }
       if (message.error) return finish(errorText(message.error));
       const threadId = (message.result?.thread as { id?: string } | undefined)?.id;
       if (!threadId) return finish("Codex did not open a conversation.");
+      if (!input.nativeSessionId || threadId !== input.nativeSessionId) push({ type: "session", id: threadId });
       send({
         jsonrpc: "2.0",
         id: 3,

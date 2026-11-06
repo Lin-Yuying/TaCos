@@ -212,3 +212,11 @@ export function subscribeToolApprovals(
     if (set && set.size === 0) approvalListeners.delete(threadId);
   };
 }
+
+/**
+ * #79: cards queued for a background run (no browser stream attached). The task panel
+ * reads these for a delegated run and answers through `answerAgentApproval`.
+ */
+export function pendingApprovalsForThread(threadId: string): ToolApprovalCard[] {
+  return [...(approvalQueues.get(threadId) ?? [])];
+}

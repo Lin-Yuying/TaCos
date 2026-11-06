@@ -14,14 +14,24 @@ type StepFrame = {
 type TacosFrame =
   | StepFrame
   | { type: "approval"; request: unknown }
-  | { type: "approval_done"; requestId: string; decision: string };
+  | { type: "approval_done"; requestId: string; decision: string }
+  | { type: "usage"; usage: { inputTokens?: number; outputTokens?: number; cachedTokens?: number; reasoningTokens?: number } }
+  | { type: "session"; id: string };
 
 // The turn is already part of TaCos by the time the bytes reach the browser: this tap
 // keeps the assistant text and every tool/command step in the database, so a reopened
 // conversation shows the same trajectory that scrolled past live.
 export function recordTurn(
   upstream: ReadableStream<Uint8Array>,
-  turn: { threadId: string; messageId: string; onEnd?: () => void }
+  turn: {
+    threadId: string;
+    messageId: string;
+    onEnd?: () => void;
+    /** #79: called once with the last usage frame this turn reported. Never stops the turn. */
+    onUsage?: (usage: { inputTokens: number; outputTokens: number; cachedTokens: number; reasoningTokens: number }) => void;
+    /** #79: called when the adapter names its own session id. */
+    onSession?: (id: string) => void;
+  }
 ): ReadableStream<Uint8Array> {
   const decoder = new TextDecoder();
   const reader = upstream.getReader();
@@ -30,6 +40,7 @@ export function recordTurn(
   let text = "";
   let queue: Promise<unknown> = Promise.resolve();
   let settled = false;
+  let usage: { inputTokens: number; outputTokens: number; cachedTokens: number; reasoningTokens: number } | null = null;
 
   const recordStep = async (step: StepFrame["step"]) => {
     // A step's codex item id is stable across started/completed, but not every item has
@@ -66,6 +77,19 @@ export function recordTurn(
         const step = frame.tacos.step;
         queue = queue.then(() => recordStep(step)).catch(() => {});
       }
+      if (frame.tacos?.type === "usage") {
+        const raw = frame.tacos.usage;
+        usage = {
+          inputTokens: Number(raw?.inputTokens ?? 0) || 0,
+          outputTokens: Number(raw?.outputTokens ?? 0) || 0,
+          cachedTokens: Number(raw?.cachedTokens ?? 0) || 0,
+          reasoningTokens: Number(raw?.reasoningTokens ?? 0) || 0,
+        };
+      }
+      if (frame.tacos?.type === "session" && typeof frame.tacos.id === "string") {
+        const id = frame.tacos.id;
+        queue = queue.then(() => turn.onSession?.(id)).catch(() => {});
+      }
       const delta = frame.choices?.[0]?.delta?.content;
       if (typeof delta === "string") text += delta;
     }
@@ -77,6 +101,7 @@ export function recordTurn(
     try {
       await queue;
       await (text.trim() ? updateAgentMessage(turn.messageId, text) : removeAgentMessage(turn.messageId));
+      if (usage) turn.onUsage?.(usage);
     } finally {
       // The shared-chat lock and the per-turn MCP grant are released here. A failed
       // database write must still let them go, otherwise the next sender is stuck.

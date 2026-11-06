@@ -166,8 +166,10 @@ export async function* openDshTurn(input: TurnInput, log?: TurnLog): AsyncGenera
 
   const patchFile = writePatch(input.cwd, input);
   const args = ["--profile", "headless", "--patch", patchFile, "--json"];
-  if (input.sessionId && /^session-/.test(input.sessionId)) {
-    args.push("--session-id", input.sessionId);
+  // #79: prefer the saved dsh session; the TaCos thread id only matches for old rows.
+  const nativeSession = input.nativeSessionId ?? (/^session-/.test(input.sessionId) ? input.sessionId : null);
+  if (nativeSession) {
+    args.push("--session-id", nativeSession);
   }
   args.push("-");
   const promptText = messageText(input);
@@ -199,6 +201,7 @@ export async function* openDshTurn(input: TurnInput, log?: TurnLog): AsyncGenera
   let child: ChildProcess | null = null;
   let finished = false;
   let stderr = "";
+  let announcedSession = input.nativeSessionId ?? "";
 
   const finish = (error?: string) => {
     if (finished) return;
@@ -271,6 +274,17 @@ export async function* openDshTurn(input: TurnInput, log?: TurnLog): AsyncGenera
       return;
     }
     const type = String(message.type ?? "");
+    // #79: dsh names its session in some events; save it so the next turn resumes.
+    const sessionCandidate =
+      (typeof message.session_id === "string" && message.session_id) ||
+      (typeof message.sessionId === "string" && message.sessionId) ||
+      (typeof (message.session as { id?: unknown } | undefined)?.id === "string"
+        ? ((message.session as { id: string }).id)
+        : "");
+    if (sessionCandidate && sessionCandidate !== announcedSession) {
+      announcedSession = sessionCandidate;
+      push({ type: "session", id: sessionCandidate });
+    }
 
     if (type === "delta" || type === "text" || type === "text_delta" || type === "assistant_delta") {
       const text = typeof message.text === "string" ? message.text : typeof message.delta === "string" ? message.delta : "";

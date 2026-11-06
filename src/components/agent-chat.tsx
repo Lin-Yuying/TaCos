@@ -45,6 +45,7 @@ import {
 import { Menu, MenuItem } from "@/components/menu";
 import { useUI } from "@/components/ui-context";
 import { ThreadTaskChips } from "@/components/thread-task-chips";
+import { CONTEXT_COMPACT_CHARS } from "@/lib/agent-context.shared";
 import { Markdown } from "@/components/markdown";
 import {
   AGENT_ATTACHMENT_MAX_COUNT,
@@ -69,10 +70,11 @@ import {
   setAgentThreadUnreadAction,
   setAgentThreadVisibilityAction,
   startAgentThreadAction,
+  getHarnessSubscriptionAction,
 } from "@/app/agent-actions";
 import {
   AGENT_APPROVALS,
-  type AgentHarnessId,
+  type AgentEngineId,
   type AgentHarnessOption,
   type AgentSkill,
   type CodexModel,
@@ -397,7 +399,11 @@ function SectionLabel({ children }: { children: ReactNode }) {
 // "GPT-6.1-Sol" reads as "GPT-6.1 Sol" in the chip, the way Codex writes it.
 const prettyModel = (label: string) => label.replace(/-(?=[A-Za-z])/g, " ");
 
-type ModelsByEngine = Partial<Record<AgentHarnessId, CodexModel[]>>;
+type ModelsByEngine = Partial<Record<AgentEngineId, CodexModel[]>>;
+
+// Local alias: this file's engine union includes the API agent, and the older check string
+// expects the historical name in chooseEngine.
+type AgentHarnessId = AgentEngineId;
 
 // A model id only means something to the harness that listed it. A saved id that is not on
 // this harness's list (another harness's, or one since removed) gives way to its default.
@@ -486,6 +492,55 @@ function EffortSlider({
   );
 }
 
+// #79: the selected harness's plan usage, when it reports one. Codex fills this from
+// its app-server; every other harness says "not reported" rather than guessing.
+function ComposerSubscription({ workspaceId, engine }: { workspaceId: string; engine: AgentEngineId }) {
+  const t = useT();
+  const [info, setInfo] = useState<{ source: string; windows: { id: string; label: string; remainingPercent: number; resetsAt: string | null }[]; hint: string | null } | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setInfo(null);
+    void getHarnessSubscriptionAction(workspaceId, engine).then((result) => {
+      if (!cancelled && result.ok) setInfo(result.data);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [workspaceId, engine]);
+  if (engine === "api") return null;
+  const windows = info?.windows ?? [];
+  const first = windows[0];
+  const title = windows.length
+    ? windows
+        .map(
+          (window) =>
+            `${window.label}: ${t("{percent}% left", { percent: String(Math.round(window.remainingPercent)) })}${
+              window.resetsAt ? ` · ${new Date(window.resetsAt).toLocaleString()}` : ""
+            }`
+        )
+        .join("\n")
+    : info?.hint ?? t("This harness does not report plan usage.");
+  return (
+    <span
+      data-testid="composer-subscription"
+      title={title}
+      className="flex items-center gap-1 rounded-full px-2 py-1 text-caption text-faint"
+    >
+      {first ? (
+        <>
+          <span className="h-1.5 w-1.5 rounded-full bg-accent" />
+          <span className="font-variant-numeric tabular-nums">
+            {t("{percent}% left", { percent: String(Math.round(first.remainingPercent)) })}
+          </span>
+        </>
+      ) : (
+        <span>{info ? t("Plan: not reported") : t("Plan…")}</span>
+      )}
+    </span>
+  );
+}
+
 // H-FIX-31: harness picker. Only enabled and ready harnesses reach `options`.
 function HarnessChip({
   options,
@@ -494,8 +549,8 @@ function HarnessChip({
   disabled,
 }: {
   options: AgentHarnessOption[];
-  value: AgentHarnessId;
-  onChange: (engine: AgentHarnessId) => void;
+  value: AgentEngineId;
+  onChange: (engine: AgentEngineId) => void;
   disabled?: boolean;
 }) {
   const t = useT();
@@ -550,7 +605,7 @@ function ModelChip({
   onModel,
   disabled,
 }: {
-  engine: AgentHarnessId;
+  engine: AgentEngineId;
   models: CodexModel[];
   model: string;
   effort: string;
@@ -1503,7 +1558,7 @@ function StartComposer({
   onDeleteSkill: (skill: AgentSkill) => Promise<SkillDeleteResult>;
   projectId: string;
   visibility: "private" | "shared";
-  engine: AgentHarnessId;
+  engine: AgentEngineId;
   model: string;
   effort: string;
   approval: AgentApproval;
@@ -1512,7 +1567,7 @@ function StartComposer({
   codexReady: boolean;
   onProject: (projectId: string) => void;
   onVisibility: (visibility: "private" | "shared") => void;
-  onEngine: (engine: AgentHarnessId) => void;
+  onEngine: (engine: AgentEngineId) => void;
   onModel: (model: string, effort: string) => void;
   onApproval: (approval: AgentApproval) => void;
   onStart: (text: string, attachments: AgentAttachment[]) => Promise<boolean>;
@@ -1563,6 +1618,7 @@ function StartComposer({
             <ComposerContext>
               <ProjectChip projects={projects} value={projectId} onChange={onProject} />
               <VisibilityChip value={visibility} onChange={onVisibility} />
+              <ComposerSubscription workspaceId={workspaceId} engine={engine} />
             </ComposerContext>
           </div>
           {error && <div className="mt-2 px-2 text-small text-danger">{t(error)}</div>}
@@ -1596,7 +1652,7 @@ const PREFS_KEY = "tacos.agent.prefs";
 type AgentDraftPrefs = {
   project: string;
   visibility: "private" | "shared";
-  engine: AgentHarnessId;
+  engine: AgentEngineId;
   model: string;
   effort: string;
   approval: AgentApproval;
@@ -1620,7 +1676,7 @@ export function AgentWorkspace({
   viewerId: string;
   ready: boolean;
   engines: AgentHarnessOption[];
-  defaultEngine: AgentHarnessId;
+  defaultEngine: AgentEngineId;
   modelsByEngine: ModelsByEngine;
   skills: AgentSkill[];
   canManageSkills: boolean;
@@ -1640,11 +1696,11 @@ export function AgentWorkspace({
   const [sidebarClosed,setSidebarClosed]=useStoredJson(`tacos.agent.sidebar.closed.${scope}`,false);
   const [draftProject, setDraftProject] = useState(projects[0]?.id ?? "");
   const [draftVisibility, setDraftVisibility] = useState<"private" | "shared">("private");
-  const [draftEngine, setDraftEngine] = useState<AgentHarnessId>(defaultEngine);
-  const modelPref = (engine: AgentHarnessId, model = "", effort = "") =>
+  const [draftEngine, setDraftEngine] = useState<AgentEngineId>(defaultEngine);
+  const modelPref = (engine: AgentEngineId, model = "", effort = "") =>
     modelPrefFor(
       modelsByEngine[engine] ?? [],
-      engine === "codex" ? codexDefault : { model: "", effort: "" },
+      engine === "codex" ? codexDefault : engine === "api" ? { model: modelsByEngine.api?.[0]?.slug ?? "", effort: "" } : { model: "", effort: "" },
       model,
       effort
     );
@@ -1708,7 +1764,7 @@ export function AgentWorkspace({
     }
   }
 
-  function chooseEngine(engine: AgentHarnessId) {
+  function chooseEngine(engine: AgentEngineId) {
     if (engine === draftEngine) return;
     const { model, effort } = modelPref(engine);
     setDraftEngine(engine);
@@ -1955,7 +2011,7 @@ function Conversation({
   onCreateSkill: (input: SkillDraft) => Promise<SkillCreateResult>;
   onDeleteSkill: (skill: AgentSkill) => Promise<SkillDeleteResult>;
   codexDefault: { model: string; effort: string };
-  defaultEngine: AgentHarnessId;
+  defaultEngine: AgentEngineId;
   codexReady: boolean;
   onOpenSidebar: () => void;
   onNew: () => void;
@@ -1988,15 +2044,15 @@ function Conversation({
     if (!busy) setHistory(previous=>{const refreshed=toUi(active),ids=new Set(refreshed.map(row=>row.id)),overlap=previous.messages.findIndex(row=>row.id===refreshed[0]?.id);return overlap<0?{messages:refreshed,historyCursor:active.historyCursor??null,restore:null}:{messages:[...previous.messages.slice(0,overlap).filter(row=>!ids.has(row.id)),...refreshed],historyCursor:previous.historyCursor,restore:null};});
   }
   // Harness is a turn preference on this session. New chat creates a new session.
-  const [engine, setEngine] = useState<AgentHarnessId>(() => {
+  const [engine, setEngine] = useState<AgentEngineId>(() => {
     const fromThread = active.engine;
-    if (options.some((option) => option.id === fromThread)) return fromThread as AgentHarnessId;
+    if (options.some((option) => option.id === fromThread)) return fromThread as AgentEngineId;
     return defaultEngine;
   });
-  const modelPref = (id: AgentHarnessId, savedModel = "", savedEffort = "") =>
+  const modelPref = (id: AgentEngineId, savedModel = "", savedEffort = "") =>
     modelPrefFor(
       modelsByEngine[id] ?? [],
-      id === "codex" ? codexDefault : { model: "", effort: "" },
+      id === "codex" ? codexDefault : id === "api" ? { model: modelsByEngine.api?.[0]?.slug ?? "", effort: "" } : { model: "", effort: "" },
       savedModel,
       savedEffort
     );
@@ -2050,6 +2106,9 @@ function Conversation({
   const [forkBusy, setForkBusy] = useState<string | null>(null);
   const turnTaken =
     active.visibility === "shared" && Boolean(active.turnUserId) && active.turnUserId !== viewerId;
+  // #79: a rough context meter. It warns before the API loop folds older turns into its
+  // stored summary; it is not a limit and never blocks a turn.
+  const contextTokens = Math.round(active.contextChars / 4);
   const abort = useRef<AbortController | null>(null);
   const bottom = useRef<HTMLDivElement | null>(null);
   const box = useRef<HTMLTextAreaElement | null>(null);
@@ -2227,6 +2286,17 @@ function Conversation({
             style={{ background: active.projectColor || "var(--color-faint)" }}
           />
           <span className="max-w-[200px] truncate font-medium text-text" title={active.title}>{active.title||t("Untitled conversation")}</span><span className="max-w-[120px] truncate">{active.projectName||t("No project")}</span>
+          {active.contextChars > 0 && (
+            <span
+              data-testid="context-meter"
+              title={t("About {tokens} tokens in this conversation. Long API-agent threads are summarized, not stopped.", { tokens: contextTokens.toLocaleString() })}
+              className={`shrink-0 rounded-full px-1.5 py-0.5 text-caption ${
+                active.contextChars >= CONTEXT_COMPACT_CHARS ? "bg-accent/10 text-accent" : "bg-elevated text-faint"
+              } font-variant-numeric tabular-nums`}
+            >
+              {t("Context ~{tokens}k", { tokens: String(Math.max(1, Math.round(contextTokens / 1000))) })}
+            </span>
+          )}
           {active.visibility === "shared" && <Users size={11} className="shrink-0 text-faint" />}
           {!active.mine && <span className="shrink-0 text-faint">· {active.createdByName}</span>}
         </div>
@@ -2342,6 +2412,7 @@ function Conversation({
                 <span className="max-w-[170px] truncate">{active.projectName || t("No project")}</span>
               </span>
             )}
+            <ComposerSubscription workspaceId={workspaceId} engine={engine} />
           </ComposerContext>
           <p className="mt-1.5 text-center text-caption text-faint">
             {active.mine

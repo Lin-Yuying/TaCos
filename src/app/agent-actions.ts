@@ -35,9 +35,29 @@ import {
   type ThreadTask,
 } from "@/lib/agent-threads";
 import type { ActionResult } from "./actions";
+import {
+  answerDelegation,
+  cancelDelegation,
+  delegateTask,
+  delegationPanel,
+  reviewDelegation,
+  type DelegationPanel,
+} from "@/lib/agent-delegation";
+import {
+  createAgent,
+  deleteAgent,
+  ensurePersonalAgent,
+  listAgents,
+  updateAgent,
+  type AgentView,
+} from "@/lib/workspace-agents";
+import { getHarnessAdapter } from "@/lib/harness";
+import type { SubscriptionInfo } from "@/lib/harness/types";
+import { isServerMode } from "@/lib/server-mode";
 
 function refresh(workspaceId: string) {
   revalidatePath(`/${workspaceId}/agent`, "page");
+  revalidatePath(`/${workspaceId}/settings`, "page");
 }
 
 async function run<T>(fn: () => Promise<T>): Promise<ActionResult<T>> {
@@ -319,3 +339,173 @@ export async function searchAgentThreadsAction(ws:string,query:string,offset=0){
 
 export async function loadAgentHistoryAction(ws:string,threadId:string,before:{createdAt:string;id:string}){return run(async()=>{const {user}=await requireWorkspace(ws);const {getAgentThreadPage}=await import("@/lib/agent-threads");return getAgentThreadPage(ws,user.id,threadId,before);});}
 export async function loadAgentStepDetailAction(ws:string,threadId:string,id:string){return run(async()=>{const {user}=await requireWorkspace(ws);const {getAgentStepDetail}=await import("@/lib/agent-threads");return getAgentStepDetail(ws,user.id,threadId,id);});}
+
+// --- #79 delegation --------------------------------------------------------
+
+export async function getDelegationAction(workspaceId: string, issueId: string): Promise<ActionResult<DelegationPanel>> {
+  return run(async () => {
+    const { user } = await requireWorkspace(workspaceId);
+    return delegationPanel(workspaceId, issueId, user.id);
+  });
+}
+
+export async function delegateTaskAction(
+  workspaceId: string,
+  issueId: string,
+  input: { agentId: string; note?: string; approval?: string }
+): Promise<ActionResult<DelegationPanel>> {
+  return run(async () => {
+    const { user } = await requireWorkspace(workspaceId);
+    const panel = await delegateTask({ workspaceId, issueId, userId: user.id, ...input });
+    refresh(workspaceId);
+    return panel;
+  });
+}
+
+export async function reviewDelegationAction(
+  workspaceId: string,
+  issueId: string,
+  action: "approve" | "request_changes" | "retry",
+  note?: string
+): Promise<ActionResult<DelegationPanel>> {
+  return run(async () => {
+    const { user } = await requireWorkspace(workspaceId);
+    const panel = await reviewDelegation({ workspaceId, issueId, userId: user.id, action, note });
+    refresh(workspaceId);
+    return panel;
+  });
+}
+
+export async function answerDelegationAction(
+  workspaceId: string,
+  issueId: string,
+  runId: string,
+  requestId: string,
+  allow: boolean
+): Promise<ActionResult<DelegationPanel>> {
+  return run(async () => {
+    const { user } = await requireWorkspace(workspaceId);
+    return answerDelegation({ workspaceId, issueId, userId: user.id, runId, requestId, allow });
+  });
+}
+
+export async function cancelDelegationAction(
+  workspaceId: string,
+  issueId: string
+): Promise<ActionResult<DelegationPanel>> {
+  return run(async () => {
+    const { user } = await requireWorkspace(workspaceId);
+    const panel = await cancelDelegation(workspaceId, issueId, user.id);
+    refresh(workspaceId);
+    return panel;
+  });
+}
+
+// --- #79 agent identity and subscription -----------------------------------
+
+export async function listAgentsAction(workspaceId: string): Promise<ActionResult<AgentView[]>> {
+  return run(async () => {
+    const { user } = await requireWorkspace(workspaceId);
+    return listAgents(workspaceId, user.id);
+  });
+}
+
+export async function ensurePersonalAgentAction(workspaceId: string): Promise<ActionResult<AgentView>> {
+  return run(async () => {
+    const { user } = await requireWorkspace(workspaceId);
+    return ensurePersonalAgent(workspaceId, user.id);
+  });
+}
+
+export async function createAgentAction(
+  workspaceId: string,
+  input: {
+    name: string;
+    description?: string;
+    source: string;
+    engine?: string;
+    model?: string;
+    approval?: string;
+    projectIds?: string[];
+  }
+): Promise<ActionResult<AgentView>> {
+  return run(async () => {
+    const { user, role } = await requireWorkspace(workspaceId);
+    if (role !== "admin") throw new Error("Only a workspace admin can add a shared agent");
+    const agent = await createAgent({ workspaceId, userId: user.id, ...input });
+    refresh(workspaceId);
+    return agent;
+  });
+}
+
+export async function updateAgentAction(
+  workspaceId: string,
+  agentId: string,
+  patch: {
+    name?: string;
+    description?: string;
+    source?: string;
+    engine?: string;
+    model?: string;
+    approval?: string;
+    projectIds?: string[];
+    enabled?: boolean;
+  }
+): Promise<ActionResult<AgentView>> {
+  return run(async () => {
+    const { user, role } = await requireWorkspace(workspaceId);
+    const agents = await listAgents(workspaceId, user.id);
+    const target = agents.find((agent) => agent.id === agentId);
+    if (!target) throw new Error("Agent not found");
+    if (!target.personal && role !== "admin") throw new Error("Only a workspace admin can change a shared agent");
+    const agent = await updateAgent({ workspaceId, userId: user.id, agentId, patch });
+    refresh(workspaceId);
+    return agent;
+  });
+}
+
+export async function deleteAgentAction(workspaceId: string, agentId: string): Promise<ActionResult<{ id: string }>> {
+  return run(async () => {
+    const { user, role } = await requireWorkspace(workspaceId);
+    const agents = await listAgents(workspaceId, user.id);
+    const target = agents.find((agent) => agent.id === agentId);
+    if (!target) throw new Error("Agent not found");
+    if (!target.personal && role !== "admin") throw new Error("Only a workspace admin can remove a shared agent");
+    await deleteAgent(workspaceId, user.id, agentId);
+    refresh(workspaceId);
+    return { id: agentId };
+  });
+}
+
+export async function getHarnessSubscriptionAction(
+  workspaceId: string,
+  harnessId: string
+): Promise<ActionResult<SubscriptionInfo>> {
+  return run(async () => {
+    const { user } = await requireWorkspace(workspaceId);
+    if (isServerMode()) {
+      const { runnerViewFor } = await import("@/lib/runner/hub");
+      const { capabilities } = await runnerViewFor(user.id);
+      return (
+        capabilities?.subscriptions?.[harnessId as never] ?? {
+          source: "none",
+          plan: null,
+          windows: [],
+          hint: "Open TaCos on your computer to read this harness's plan usage, or run its status command.",
+          checkedAt: new Date().toISOString(),
+        }
+      );
+    }
+    const adapter = getHarnessAdapter(harnessId as never);
+    if (!adapter?.subscription) {
+      return {
+        source: "none",
+        plan: null,
+        windows: [],
+        hint: "This harness does not report plan usage. Check the CLI's own status command.",
+        checkedAt: new Date().toISOString(),
+      };
+    }
+    return adapter.subscription();
+  });
+}

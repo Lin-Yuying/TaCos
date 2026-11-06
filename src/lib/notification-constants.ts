@@ -19,7 +19,19 @@ export const NOTIFICATION_EVENT_GROUPS: {
   { id: "mentions", label: "Mentions", types: ["mentioned", "doc_mentioned", "doc_commented"] },
   { id: "claims", label: "Claims and handovers", types: ["claimed", "released", "claim_transferred"] },
   { id: "blockers", label: "Blockers", types: ["blocker"] },
-  { id: "handoff", label: "Agent handoffs", types: ["handoff_done", "handoff_failed", "handoff_waiting"] },
+  {
+    id: "handoff",
+    label: "Agent handoffs and delegation",
+    types: [
+      "handoff_done",
+      "handoff_failed",
+      "handoff_waiting",
+      "delegation_started",
+      "delegation_review",
+      "delegation_failed",
+      "delegation_changes_requested",
+    ],
+  },
   { id: "reminders", label: "Due reminders", types: ["due_soon"] },
   { id: "views", label: "View subscriptions", types: ["view_added", "view_completed"] },
 ];

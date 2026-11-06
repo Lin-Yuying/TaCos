@@ -5,6 +5,7 @@ import { findHarnessBinary, readHarnessVersion, readJsonFile } from "../detect-b
 import type { DetectResult, HarnessAdapter, ModelOption, TurnInput } from "../types";
 import { installHarnessRecipe, upgradeHarnessRecipe } from "../install-recipes";
 import { openCodexTurn } from "./codex-turn";
+import { codexSubscription } from "./codex-subscription";
 import { loggedTurn } from "../turn-log";
 
 const LABEL = "Codex";
@@ -83,5 +84,8 @@ export const codexAdapter: HarnessAdapter = {
   },
   upgrade() {
     return upgradeHarnessRecipe("codex");
+  },
+  subscription() {
+    return codexSubscription();
   },
 };
