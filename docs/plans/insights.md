@@ -155,19 +155,24 @@ lists, not a separate query language.
   subscription usage snapshots from the harness).
 - Email scheduled reports (U-08 channels).
 
-## Open decisions
+## Decisions (accepted per recommendation, 2026-11-06)
 
-1. Time definitions: cycle time starts at the first `in_progress` status or at
-   the claim? Recommendation: first `in_progress`; claim tracked separately.
-2. Sub-tasks: counted as separate issues (recommended) with a roll-up toggle,
-   or always aggregated into the parent?
-3. On-demand aggregation first (recommended for a small SQLite team) or daily
-   snapshots from day one?
-4. Dashboard set for v1: task flow first, agent/automation panels second
-   (recommended), or all at once?
-5. Report sharing: workspace members only (recommended) or also guests per
-   sharing? (external sharing is not planned.)
-6. Export: CSV only (recommended) or CSV + JSON?
+1. Cycle time starts at the first `in_progress` status; lead time runs from
+   creation; claim is tracked separately and does not enter cycle time.
+2. Sub-tasks are counted as separate issues by default; roll-up into the parent
+   is a follow-up toggle.
+3. Aggregation is on-demand first; add an `insight_daily` snapshot only if the
+   seeded performance budget requires it.
+4. v1 prioritises task-flow metrics; the Agent/token and automation panels ship
+   in the same PR but after the task-flow commit.
+5. Reports are shared with workspace members only (no guests, no external
+   sharing).
+6. CSV export only for v1; JSON export is a follow-up.
+7. Date boundaries use the workspace display timezone; canceled and deleted
+   tasks are excluded per the documented definitions.
+8. **UI gate:** charts need explicit empty/loading/error states, filters must
+   not squeeze the chart area, 1100/640 widths stay usable, and a
+   wireframe/screenshot review precedes final polish.
 
 ## Dependencies
 
