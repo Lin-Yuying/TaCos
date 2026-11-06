@@ -505,6 +505,8 @@ const zh: Record<string, string> = {
   "No pages yet — create one.": "还没有页面，新建一个吧。",
   "Nothing has been shared with you yet.": "还没有人分享页面给你。",
   "Document deleted": "文档已删除",
+  "Couldn’t load this document.": "无法加载这份文档。",
+  Retry: "重试",
   Projects: "项目",
   Documents: "文档",
   Owner: "所有者",
