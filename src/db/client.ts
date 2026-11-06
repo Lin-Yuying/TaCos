@@ -1,3 +1,4 @@
+import { ensureRevisions } from "./revisions";
 import { DATA_DIR } from "@/lib/data-dir";
 import Database from "better-sqlite3";
 import { drizzle } from "drizzle-orm/better-sqlite3";
@@ -1012,6 +1013,7 @@ function bootstrap(sqlite: Database.Database) {
   ensureSuperAdmin(sqlite);
   ensureInitialAvatars(sqlite);
   ensureSearchIndex(sqlite);
+  ensureRevisions(sqlite);
   // Rows that predate manual ordering (and freshly seeded demo issues) get a slot in
   // insertion order. New issues are created with MAX(position) + 1, so they never hit 0.
   sqlite.exec("UPDATE issues SET position = rowid * 1000 WHERE position = 0");

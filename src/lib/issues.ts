@@ -3622,22 +3622,12 @@ export function startDueReminderScheduler(intervalMs = 60_000) {
 // notices. A window polls it and refreshes when it changes.
 export async function workspacePulse(workspaceId: string, userId: string): Promise<string> {
   const db = getDb();
-  const [row] = await db.all<Record<string, string | number | null>>(sql`
-    SELECT
-      (SELECT count(*) || ':' || coalesce(max(updated_at), '') || ':' || coalesce(max(claimed_at), '') || ':' || coalesce(max(deleted_at), '') || ':' || coalesce(sum(claimed_by IS NULL), 0)
-         FROM issues WHERE workspace_id = ${workspaceId}) AS t,
-      (SELECT count(*) || ':' || coalesce(max(e.created_at), '')
-         FROM events e JOIN issues i ON i.id = e.issue_id WHERE i.workspace_id = ${workspaceId}) AS e,
-      (SELECT count(*) || ':' || coalesce(max(c.created_at), '')
-         FROM comments c JOIN issues i ON i.id = c.issue_id WHERE i.workspace_id = ${workspaceId}) AS c,
-      (SELECT count(*) || ':' || coalesce(max(m.created_at), '')
-         FROM agent_messages m JOIN agent_threads th ON th.id = m.thread_id WHERE th.workspace_id = ${workspaceId}) AS m,
-      (SELECT count(*) || ':' || coalesce(max(updated_at), '') || ':' || coalesce(sum(turn_user_id IS NOT NULL), 0)
-         FROM agent_threads WHERE workspace_id = ${workspaceId}) AS a,
-      (SELECT count(*) || ':' || coalesce(sum(read_at IS NULL), 0)
-         FROM notifications WHERE workspace_id = ${workspaceId} AND user_id = ${userId}) AS n
+  const rows = await db.all<{ workspace_id: string; domain: string; revision: number }>(sql`
+    SELECT workspace_id, domain, revision FROM workspace_revisions
+    WHERE workspace_id IN (${workspaceId}, ${"@user:" + userId})
+    ORDER BY workspace_id, domain
   `);
-  return crypto.createHash("sha1").update(JSON.stringify(row ?? {})).digest("hex").slice(0, 16);
+  return crypto.createHash("sha1").update(JSON.stringify(rows)).digest("hex").slice(0, 16);
 }
 
 /** A single checkbox changes one relationship; another editor's choices survive. */

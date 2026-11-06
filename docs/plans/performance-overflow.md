@@ -10,7 +10,7 @@ Baseline: production build and TypeScript pass; harness 88/88 plus upgrade check
 
 | Item | Goal | State | Evidence |
 | --- | --- | --- | --- |
-| B01 | 工作区实时 pulse 每次聚合全部历史 | todo | — |
+| B01 | 工作区实时 pulse 每次聚合全部历史 | pass | Transactional domain revisions; live-refresh and cross-process checks |
 | B02 | 小改动的失效范围过大，项目页提前读取未打开页签的数据 | todo | — |
 | B03 | 任务 `limit` 发生在全量查询与排序之后 | todo | — |
 | B04 | 任务 id 精确查找与兼容名称混在同一个 OR | todo | — |
@@ -118,3 +118,5 @@ Baseline: production build and TypeScript pass; harness 88/88 plus upgrade check
 - V39: pending (source report matrix).
 
 ## Implementation evidence
+
+B01: replaced history aggregates with indexed revision rows maintained by database triggers across writers/processes. Added timeout/abort to the existing visible/single-flight polling. Existing live refresh behavior check passes. Structural probe verifies primary-key revision reads, unchanged idle revisions, raw second-connection writes and notification user isolation; full two-browser timing remains in V11.
