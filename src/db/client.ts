@@ -815,71 +815,46 @@ function ensureInitialAvatars(sqlite: Database.Database) {
 // Triggers keep search_fts in step with every write path. The trigram tokenizer needs no word
 // breaks, so Chinese matches without a dictionary. Titles of tasks carry the identifier.
 function ensureSearchIndex(sqlite: Database.Database) {
-  const fresh = !tableExists(sqlite, "search_fts");
-  sqlite.exec(`
-    CREATE VIRTUAL TABLE IF NOT EXISTS search_fts USING fts5(
+  sqlite.transaction(() => {
+    const migrate = !tableExists(sqlite, "search_entries") || !tableExists(sqlite,"search_fts");
+    sqlite.exec(`CREATE VIRTUAL TABLE IF NOT EXISTS search_fts USING fts5(
       kind UNINDEXED, ref_id UNINDEXED, workspace_id UNINDEXED, title, body, tokenize = 'trigram'
     );
-    CREATE TRIGGER IF NOT EXISTS search_pages_ai AFTER INSERT ON pages BEGIN
-      INSERT INTO search_fts (kind, ref_id, workspace_id, title, body)
-      VALUES ('doc', new.id, new.workspace_id, new.title, new.doc);
-    END;
-    CREATE TRIGGER IF NOT EXISTS search_pages_au AFTER UPDATE OF title, doc ON pages BEGIN
-      DELETE FROM search_fts WHERE kind = 'doc' AND ref_id = old.id;
-      INSERT INTO search_fts (kind, ref_id, workspace_id, title, body)
-      VALUES ('doc', new.id, new.workspace_id, new.title, new.doc);
-    END;
-    CREATE TRIGGER IF NOT EXISTS search_pages_ad AFTER DELETE ON pages BEGIN
-      DELETE FROM search_fts WHERE kind = 'doc' AND ref_id = old.id;
-    END;
-    CREATE TRIGGER IF NOT EXISTS search_issues_ai AFTER INSERT ON issues BEGIN
-      INSERT INTO search_fts (kind, ref_id, workspace_id, title, body)
-      VALUES ('task', new.id, new.workspace_id, new.identifier || ' ' || new.title, new.description);
-    END;
-    CREATE TRIGGER IF NOT EXISTS search_issues_au AFTER UPDATE OF identifier, title, description ON issues BEGIN
-      DELETE FROM search_fts WHERE kind = 'task' AND ref_id = old.id;
-      INSERT INTO search_fts (kind, ref_id, workspace_id, title, body)
-      VALUES ('task', new.id, new.workspace_id, new.identifier || ' ' || new.title, new.description);
-    END;
-    CREATE TRIGGER IF NOT EXISTS search_issues_ad AFTER DELETE ON issues BEGIN
-      DELETE FROM search_fts WHERE kind = 'task' AND ref_id = old.id;
-    END;
-    CREATE TRIGGER IF NOT EXISTS search_comments_ai AFTER INSERT ON comments BEGIN
-      INSERT INTO search_fts (kind, ref_id, workspace_id, title, body)
-      VALUES ('task_comment', new.id, (SELECT workspace_id FROM issues WHERE id = new.issue_id), '', new.body);
-    END;
-    CREATE TRIGGER IF NOT EXISTS search_comments_au AFTER UPDATE OF body ON comments BEGIN
-      DELETE FROM search_fts WHERE kind = 'task_comment' AND ref_id = old.id;
-      INSERT INTO search_fts (kind, ref_id, workspace_id, title, body)
-      VALUES ('task_comment', new.id, (SELECT workspace_id FROM issues WHERE id = new.issue_id), '', new.body);
-    END;
-    CREATE TRIGGER IF NOT EXISTS search_comments_ad AFTER DELETE ON comments BEGIN
-      DELETE FROM search_fts WHERE kind = 'task_comment' AND ref_id = old.id;
-    END;
-    CREATE TRIGGER IF NOT EXISTS search_page_comments_au AFTER UPDATE OF body, deleted_at ON page_comments BEGIN
-      DELETE FROM search_fts WHERE kind = 'doc_comment' AND ref_id = old.id;
-      INSERT INTO search_fts (kind, ref_id, workspace_id, title, body)
-      SELECT 'doc_comment',new.id,new.workspace_id,'',new.body WHERE new.deleted_at IS NULL;
-    END;
-    CREATE TRIGGER IF NOT EXISTS search_page_comments_ai AFTER INSERT ON page_comments BEGIN
-      INSERT INTO search_fts (kind, ref_id, workspace_id, title, body)
-      SELECT 'doc_comment', new.id, new.workspace_id, '', new.body WHERE new.deleted_at IS NULL;
-    END;
-    CREATE TRIGGER IF NOT EXISTS search_page_comments_ad AFTER DELETE ON page_comments BEGIN
-      DELETE FROM search_fts WHERE kind = 'doc_comment' AND ref_id = old.id;
-    END;
-  `);
-  if (!fresh) return;
-  sqlite.exec(`
-    INSERT INTO search_fts (kind, ref_id, workspace_id, title, body)
-    SELECT 'doc', id, workspace_id, title, doc FROM pages;
-    INSERT INTO search_fts (kind, ref_id, workspace_id, title, body)
-    SELECT 'task', id, workspace_id, identifier || ' ' || title, description FROM issues;
-    INSERT INTO search_fts (kind, ref_id, workspace_id, title, body)
-    SELECT 'task_comment', c.id, i.workspace_id, '', c.body FROM comments c JOIN issues i ON i.id = c.issue_id;
-    INSERT INTO search_fts (kind, ref_id, workspace_id, title, body)
-    SELECT 'doc_comment', id, workspace_id, '', body FROM page_comments WHERE deleted_at IS NULL;
-  `);
+    CREATE TABLE IF NOT EXISTS search_entries (
+      id INTEGER PRIMARY KEY, kind TEXT NOT NULL, ref_id TEXT NOT NULL,
+      workspace_id TEXT NOT NULL, UNIQUE(kind, ref_id)
+    );
+    CREATE INDEX IF NOT EXISTS search_entries_scope ON search_entries(workspace_id,kind,id);`);
+    const sources = [
+      {table:"pages",kind:"doc",workspace:"new.workspace_id",title:"new.title",body:"new.doc",columns:"title, doc",changed:"new.title IS NOT old.title OR new.doc IS NOT old.doc",condition:"1",select:"SELECT 'doc',id,workspace_id,title,doc FROM pages"},
+      {table:"issues",kind:"task",workspace:"new.workspace_id",title:"new.identifier || ' ' || new.title",body:"new.description",columns:"identifier, title, description",changed:"new.identifier IS NOT old.identifier OR new.title IS NOT old.title OR new.description IS NOT old.description",condition:"1",select:"SELECT 'task',id,workspace_id,identifier || ' ' || title,description FROM issues"},
+      {table:"comments",kind:"task_comment",workspace:"(SELECT workspace_id FROM issues WHERE id=new.issue_id)",title:"''",body:"new.body",columns:"body",changed:"new.body IS NOT old.body",condition:"1",select:"SELECT 'task_comment',c.id,i.workspace_id,'',c.body FROM comments c JOIN issues i ON i.id=c.issue_id"},
+      {table:"page_comments",kind:"doc_comment",workspace:"new.workspace_id",title:"''",body:"new.body",columns:"body, deleted_at",changed:"new.body IS NOT old.body OR new.deleted_at IS NOT old.deleted_at",condition:"new.deleted_at IS NULL",select:"SELECT 'doc_comment',id,workspace_id,'',body FROM page_comments WHERE deleted_at IS NULL"},
+    ];
+    for (const source of sources) {
+      if(migrate)for(const suffix of ["ai","au","ad"])sqlite.exec(`DROP TRIGGER IF EXISTS search_${source.table}_${suffix}`);
+      const insert = `INSERT OR IGNORE INTO search_entries(kind,ref_id,workspace_id) SELECT '${source.kind}',new.id,${source.workspace} WHERE ${source.condition};
+        INSERT INTO search_fts(rowid,kind,ref_id,workspace_id,title,body)
+        SELECT id,kind,ref_id,workspace_id,${source.title},${source.body} FROM search_entries WHERE kind='${source.kind}' AND ref_id=new.id AND ${source.condition};`;
+      const remove = `DELETE FROM search_fts WHERE rowid=(SELECT id FROM search_entries WHERE kind='${source.kind}' AND ref_id=old.id);`;
+      sqlite.exec(`CREATE TRIGGER IF NOT EXISTS search_${source.table}_ai AFTER INSERT ON ${source.table} BEGIN ${insert} END;
+      CREATE TRIGGER IF NOT EXISTS search_${source.table}_au AFTER UPDATE OF ${source.columns} ON ${source.table} WHEN ${source.changed} BEGIN ${remove} ${insert} END;
+      CREATE TRIGGER IF NOT EXISTS search_${source.table}_ad AFTER DELETE ON ${source.table} BEGIN ${remove} DELETE FROM search_entries WHERE kind='${source.kind}' AND ref_id=old.id; END;`);
+    }
+    if(migrate){
+      sqlite.exec("DELETE FROM search_fts; DELETE FROM search_entries");
+      for(const source of sources){
+        const query=source.select.replace(`'${source.kind}',`, `'${source.kind}' AS kind,`).replace(/,([ci]\.)?id,/,",$1id AS ref_id,");
+        sqlite.exec(`INSERT INTO search_entries(kind,ref_id,workspace_id) SELECT kind,ref_id,workspace_id FROM (${query})`);
+      }
+      // FTS is derived; rebuilding inside this transaction is restart-safe.
+      for(const source of sources){
+        sqlite.exec(`INSERT INTO search_fts(rowid,kind,ref_id,workspace_id,title,body)
+          SELECT e.id,s.* FROM (${source.select.replace(`'${source.kind}',`, `'${source.kind}' AS kind,`).replace(/,([ci]\.)?id,/,",$1id AS ref_id,")}) s
+          JOIN search_entries e ON e.kind=s.kind AND e.ref_id=s.ref_id`);
+      }
+    }
+  })();
 }
 
 function bootstrap(sqlite: Database.Database) {
@@ -953,6 +928,16 @@ function bootstrap(sqlite: Database.Database) {
   addColumnIfMissing(sqlite, "pages", "deleted_at", "TEXT");
   addColumnIfMissing(sqlite, "pages", "trash_root", "TEXT");
   addColumnIfMissing(sqlite, "issues", "reminder_sent_for", "TEXT");
+  const reminderScheduleFresh=!sqlite.prepare("PRAGMA table_info(issues)").all().some((row)=> (row as {name:string}).name==="reminder_next_fire");
+  addColumnIfMissing(sqlite,"issues","reminder_next_fire","INTEGER");
+  const reminderFire=`CASE WHEN due_date IS NOT NULL AND reminder IN ('12h','1d','3d','5d','7d') AND status NOT IN ('done','canceled') AND deleted_at IS NULL AND reminder_sent_for IS NOT due_date || '|' || reminder THEN unixepoch(due_date || ' 23:59:59','utc') - CASE reminder WHEN '12h' THEN 12 WHEN '1d' THEN 24 WHEN '3d' THEN 72 WHEN '5d' THEN 120 WHEN '7d' THEN 168 END * 3600 ELSE NULL END`;
+  sqlite.exec(`CREATE INDEX IF NOT EXISTS issues_reminder_due ON issues(reminder_next_fire) WHERE reminder_next_fire IS NOT NULL;
+  CREATE TRIGGER IF NOT EXISTS reminder_schedule_ai AFTER INSERT ON issues BEGIN UPDATE issues SET reminder_next_fire=${reminderFire} WHERE id=new.id; END;
+  CREATE TRIGGER IF NOT EXISTS reminder_schedule_au AFTER UPDATE OF due_date,reminder,status,deleted_at,reminder_sent_for ON issues BEGIN UPDATE issues SET reminder_next_fire=${reminderFire} WHERE id=new.id; END;
+  CREATE INDEX IF NOT EXISTS attachments_stale_idx ON attachments(workspace_id,created_at) WHERE complete=0 OR page_id='agent:draft';`);
+  if(reminderScheduleFresh)sqlite.exec(`UPDATE issues SET reminder_next_fire=${reminderFire}`);
+
+
   const addedIssueCreator = addColumnIfMissing(sqlite, "issues", "created_by", "TEXT");
   if (!hadIssueAssignees && hasColumn(sqlite, "issues", "assignee_id")) {
     // Old boards held exactly one assignee per issue; carry it into the join table.

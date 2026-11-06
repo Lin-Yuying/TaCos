@@ -35,9 +35,11 @@ function terms(query: string): string[] {
 
 /** The trigram index only answers terms of 3+ characters; shorter ones, such as most Chinese words, scan. */
 function matchClause(words: string[]) {
-  if (words.every((word) => [...word].length >= 3)) {
-    const phrases = words.map((word) => `"${word.replace(/"/g, '""')}"`).join(" ");
-    return { where: sql`search_fts MATCH ${phrases}`, order: sql`bm25(search_fts)` };
+  const longWords=words.filter(word=>[...word].length>=3);
+  if (longWords.length) {
+    const phrases = longWords.map((word) => `"${word.replace(/"/g, '""')}"`).join(" ");
+    const shortLikes=words.filter(word=>[...word].length<3).map(word=>{const pattern=`%${word.replace(/[\\%_]/g,"\\$&")}%`;return sql`(search_fts.title LIKE ${pattern} ESCAPE '\\' OR search_fts.body LIKE ${pattern} ESCAPE '\\')`;});
+    return { where: sql`search_fts MATCH ${phrases}${shortLikes.length?sql` AND ${sql.join(shortLikes,sql` AND `)}`:sql``}`, order: sql`bm25(search_fts)` };
   }
   const likes = words.map((word) => {
     const pattern = `%${word.replace(/[\\%_]/g, "\\$&")}%`;
@@ -79,26 +81,26 @@ export async function searchWorkspace(
     SELECT p.id, p.id AS open_id, p.title, NULL AS project_name, NULL AS number, NULL AS identifier,
            p.doc AS body, p.updated_at
     FROM search_fts JOIN pages p ON p.id = search_fts.ref_id
-    WHERE search_fts.kind = 'doc' AND ${scope} AND ${readablePage}
+    WHERE search_fts.rowid IN (SELECT id FROM search_entries WHERE workspace_id=${workspaceId} AND kind='doc') AND ${scope} AND ${readablePage}
     ORDER BY ${order} LIMIT ${PER_KIND}`);
   const tasks = run(sql`
     SELECT i.id, i.id AS open_id, i.title, pr.name AS project_name, i.number, i.identifier,
            i.description AS body, i.updated_at
     FROM search_fts JOIN issues i ON i.id = search_fts.ref_id LEFT JOIN projects pr ON pr.id = i.project_id
-    WHERE search_fts.kind = 'task' AND ${scope} AND ${readableIssue}
+    WHERE search_fts.rowid IN (SELECT id FROM search_entries WHERE workspace_id=${workspaceId} AND kind='task') AND ${scope} AND ${readableIssue}
     ORDER BY ${order} LIMIT ${PER_KIND}`);
   const taskComments = run(sql`
     SELECT c.id, i.id AS open_id, i.title, pr.name AS project_name, i.number, i.identifier,
            c.body, c.created_at AS updated_at
     FROM search_fts JOIN comments c ON c.id = search_fts.ref_id JOIN issues i ON i.id = c.issue_id
     LEFT JOIN projects pr ON pr.id = i.project_id
-    WHERE search_fts.kind = 'task_comment' AND ${scope} AND ${readableIssue}
+    WHERE search_fts.rowid IN (SELECT id FROM search_entries WHERE workspace_id=${workspaceId} AND kind='task_comment') AND ${scope} AND ${readableIssue}
     ORDER BY ${order} LIMIT ${PER_KIND}`);
   const docComments = run(sql`
     SELECT c.id, p.id AS open_id, p.title, NULL AS project_name, NULL AS number, NULL AS identifier,
            c.body, c.created_at AS updated_at
     FROM search_fts JOIN page_comments c ON c.id = search_fts.ref_id JOIN pages p ON p.id = c.page_id
-    WHERE search_fts.kind = 'doc_comment' AND c.deleted_at IS NULL AND ${scope} AND ${readablePage}
+    WHERE search_fts.rowid IN (SELECT id FROM search_entries WHERE workspace_id=${workspaceId} AND kind='doc_comment') AND c.deleted_at IS NULL AND ${scope} AND ${readablePage}
     ORDER BY ${order} LIMIT ${PER_KIND}`);
 
   const hit = (kind: SearchHit["kind"]) => (row: Row): SearchHit => ({

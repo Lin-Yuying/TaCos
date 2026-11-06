@@ -3560,53 +3560,24 @@ function reminderFireAt(dueDate: string, preset: ReminderPreset): Date {
 // Sends one "due_soon" notice per task when now reaches dueDate minus the preset.
 // The creator, the claimer and the assignees get it. Returns the number of tasks.
 export async function sendDueReminders(now: Date = new Date()): Promise<number> {
-  const db = getDb();
-  const rows = await db
-    .select({
-      id: issues.id,
-      workspaceId: issues.workspaceId,
-      dueDate: issues.dueDate,
-      reminder: issues.reminder,
-      sentFor: issues.reminderSentFor,
-      createdBy: issues.createdBy,
-      claimedBy: issues.claimedBy,
-    })
-    .from(issues)
-    .where(
-      and(
-        isNotNull(issues.dueDate),
-        isNotNull(issues.reminder),
-        isNull(issues.deletedAt),
-        notInArray(issues.status, ["done", "canceled"])
-      )
-    );
-  let sent = 0;
-  for (const row of rows) {
-    const preset = row.reminder as ReminderPreset;
-    if (!row.dueDate || !REMINDER_META[preset]) continue;
-    const key = `${row.dueDate}|${preset}`;
-    if (row.sentFor === key || reminderFireAt(row.dueDate, preset) > now) continue;
-    // Claim the key first so two overlapping runs cannot both send.
-    const claimed = await db
-      .update(issues)
-      .set({ reminderSentFor: key })
-      .where(and(eq(issues.id, row.id), or(isNull(issues.reminderSentFor), ne(issues.reminderSentFor, key))))
-      .returning({ id: issues.id });
-    if (claimed.length === 0) continue;
-    const people = new Set<string>();
-    if (row.createdBy) people.add(row.createdBy);
-    if (row.claimedBy) people.add(row.claimedBy);
-    const assigned = await db
-      .select({ userId: issueAssignees.userId })
-      .from(issueAssignees)
-      .where(eq(issueAssignees.issueId, row.id));
-    for (const a of assigned) people.add(a.userId);
-    for (const userId of people) {
-      await notify({ workspaceId: row.workspaceId, userId, issueId: row.id, type: "due_soon", body: row.dueDate });
+  const db=getDb();
+  // A single transaction owns the claim and every recipient insert. A crash rolls
+  // both back, and another process can safely retry the same schedule key.
+  return db.transaction(tx=>{
+    const rows=tx.select().from(issues).where(sql`reminder_next_fire IS NOT NULL AND reminder_next_fire <= ${Math.floor(now.getTime()/1000)}`).orderBy(sql`reminder_next_fire`).limit(100).all();
+    const assigned=rows.length?tx.select().from(issueAssignees).where(inArray(issueAssignees.issueId,rows.map(row=>row.id))).all():[];
+    const byTask=new Map<string,string[]>();for(const entry of assigned){const list=byTask.get(entry.issueId)??[];list.push(entry.userId);byTask.set(entry.issueId,list);}
+    let sent=0;
+    for(const row of rows){const preset=row.reminder as ReminderPreset;if(!row.dueDate||!REMINDER_META[preset])continue;
+      const key=`${row.dueDate}|${preset}`;
+      if(row.reminderSentFor===key||reminderFireAt(row.dueDate,preset)>now)continue;
+      tx.update(issues).set({reminderSentFor:key}).where(eq(issues.id,row.id)).run();
+      const people=new Set([row.createdBy,row.claimedBy,...(byTask.get(row.id)??[])].filter((id):id is string=>Boolean(id)));
+      for(const userId of people)tx.insert(notifications).values({id:crypto.randomUUID(),workspaceId:row.workspaceId,userId,issueId:row.id,type:"due_soon",body:row.dueDate,createdAt:nowIso()}).run();
+      sent++;
     }
-    sent++;
-  }
-  return sent;
+    return sent;
+  },{behavior:"immediate"});
 }
 
 let reminderTimer: ReturnType<typeof setInterval> | null = null;

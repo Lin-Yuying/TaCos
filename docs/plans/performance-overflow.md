@@ -15,15 +15,15 @@ Baseline: production build and TypeScript pass; harness 88/88 plus upgrade check
 | B03 | 任务 `limit` 发生在全量查询与排序之后 | doing | SQL ordering/limit, stable cursor and separate count; UI data paging remains |
 | B04 | 任务 id 精确查找与兼容名称混在同一个 OR | pass | Primary-key fast path; aliases and visibility checks retained |
 | B05 | 鉴权、置顶、批量操作反复加载完整任务详情 | doing | Shared lightweight visibility predicate; task inspection and pre-write checks avoid history |
-| B06 | FTS 更新和删除按未索引字段查旧记录 | todo | — |
-| B07 | 一个短词就使全文搜索整体退回包含匹配 | todo | — |
-| B08 | 提醒调度每分钟重新检查所有带提醒的未完成任务 | todo | — |
+| B06 | FTS 更新和删除按未索引字段查旧记录 | pass | Indexed kind/ref → rowid map, transactional restart-safe rebuild; search lifecycle harness pass | 
+| B07 | 一个短词就使全文搜索整体退回包含匹配 | pass | Long-word MATCH plus literal short-word validation; indexed workspace/kind candidates for short-only queries; search harness pass | 
+| B08 | 提醒调度每分钟重新检查所有带提醒的未完成任务 | pass | Indexed due moment and bounded 100-task batches; claim+recipient inserts in immediate transaction; due reminders harness pass | 
 | B09 | 通知红点每 10 秒获取用不到的 50 条正文 | pass | Count-only endpoint; hidden pause, single flight, deadline and unmount abort |
 | B10 | 创建任务的 MAX 聚合缺乏匹配排序键的复合索引 | pass | Real SQLite EXPLAIN uses covering indexes for both maxima |
 | B11 | 每次 API key 验证都产生元数据写入 | doing | Introspection no longer writes; exact usage timestamps on data requests retained |
 | F01 | 任务列表逐行查找下标，单次渲染形成平方级计算 | pass | ID → visual index Map replaces every row scan; TypeScript pass | 
-| F02 | 列表、看板和批量候选全量挂载，表格虚拟化尚未覆盖这些入口 | todo | — |
-| F03 | 看板拖动反复扫描整列并读取卡片位置 | todo | — |
+| F02 | 列表、看板和批量候选全量挂载，表格虚拟化尚未覆盖这些入口 | doing | Measured virtual windows for grouped task list, board columns and batch candidates; complete selection arrays retained; browser checks pending | 
+| F03 | 看板拖动反复扫描整列并读取卡片位置 | doing | Virtual item coordinates replace DOM card scans; drag state commits at most once/frame | 
 | F04 | 共享 UI 状态扩大重绘范围，置顶检查随列表规模重复 | doing | Stable actions and pins contexts for entity controls; memoized pin Set/rank | 
 | F05 | 连续调宽和草稿输入把同步持久化放在交互路径上 | doing | Grid onEnd and local side-panel drag; durable draft writes retained | 
 | F06 | 草稿和偏好缺少缓存回收，配额失败会重复提示 | doing | Shared storage listener, bounded persisted cache, unsubscription cleanup, empty scalar drafts removed, errors throttled and export offered | 
@@ -32,8 +32,8 @@ Baseline: production build and TypeScript pass; harness 88/88 plus upgrade check
 | F09 | 对象菜单的鼠标打开路径重复发起能力检查 | pass | One open trigger, shared in-flight request, retryable error | 
 | F10 | 宽度恢复、工具栏和菜单没有统一依据实际可用空间 | todo | — |
 | F11 | 项目概览的历史侧栏和评论浮层仍采用固定空间假设 | todo | — |
-| F12 | 日历未控制单日事件密度，未排期托盘仍全量绘制 | todo | — |
-| F13 | 项目评论定位在纯尺寸变化时也重建全文字符映射 | todo | — |
+| F12 | 日历未控制单日事件密度，未排期托盘仍全量绘制 | doing | Virtual undated tray and 3-event day limit with full popover; browser dragging pending | 
+| F13 | 项目评论定位在纯尺寸变化时也重建全文字符映射 | pass | DOM text/anchor map rebuilt on content changes; resize only measures retained ranges | 
 | D01 | 协作缓存每次更新都重写完整 Yjs 状态 | doing | Append incremental Yjs updates, transactional cross-tab merge at 128 updates/1MiB; browser replay validation pending | 
 | D02 | 每次编辑重复序列化全文和定位全部评论 | doing | WeakMap immutable document text index and no-anchor short circuit | 
 | D03 | 文内搜索与目录工具重复扫描，并在滚动中测量全部标题 | todo | — |
@@ -41,39 +41,39 @@ Baseline: production build and TypeScript pass; harness 88/88 plus upgrade check
 | D05 | 路径筛选与排序为每个文档重建完整索引 | pass | Memoized path/search/descendant/pin indexes across index and move selectors |
 | D06 | 树构建、后代遍历与移动复核反复扫描大集合 | doing | Iterative adjacency traversal, batched subtree permissions, revision token |
 | D07 | 文件夹导入重复读取工作区，超大文件先完整解码 | doing | Indexed same-parent title lookup; streaming client size check pending |
-| D08 | 大版本差异同步计算，所有增删行一次渲染 | todo | — |
+| D08 | 大版本差异同步计算，所有增删行一次渲染 | doing | Large diffs run in cancellable Worker; virtual block window and incremental table rows; browser/build pending | 
 | D09 | 评论修改后全量回传，未解决评论全量挂载 | todo | — |
-| D10 | 完成附件缺少引用回收，插入失败重试会再上传 | todo | — |
-| D11 | 一次新上传可能同步清扫所有工作区的过期文件 | todo | — |
-| D12 | 配额检查与容量预留不在同一事务 | todo | — |
+| D10 | 完成附件缺少引用回收，插入失败重试会再上传 | doing | Uploaded URL survives failed insertion and retries reuse file; reference tracking pending | 
+| D11 | 一次新上传可能同步清扫所有工作区的过期文件 | pass | Per-workspace bounded asynchronous sweep, throttled upload path; uploads harness pass | 
+| D12 | 配额检查与容量预留不在同一事务 | pass | Quota sum and reservation insert in same immediate transaction; uploads harness pass | 
 | D13 | 原图展示只限制文件字节与 CSS 尺寸 | todo | — |
 | D14 | 历史虽有上限，完整快照仍放大空间和写入量 | todo | — |
 | D15 | 本地协作数据库缺少容量和生命周期管理 | todo | — |
 | D16 | 斜杠与 @ 候选菜单缺少视口碰撞处理 | todo | — |
 | D17 | 文档树的无限视觉缩进会挤掉标题与操作空间 | doing | Capped visual indent at 8 levels; real parent/depth retained |
-| D18 | 选中评论后，每次文字更新都可能重新滚回引用处 | todo | — |
+| D18 | 选中评论后，每次文字更新都可能重新滚回引用处 | pass | Scroll effect only reacts to explicit active comment selection; edits repaint separately | 
 | A01 | 流式回复反复处理整个历史，折叠轨迹仍参与计算 | todo | — |
-| A02 | 修改会话设置、发送下一轮之前都加载完整历史与步骤 | todo | — |
-| A03 | 会话列表计数先把所有消息 ID 读取到 JavaScript | todo | — |
-| A04 | 一次会话菜单操作会重新请求已加载的所有历史页 | todo | — |
+| A02 | 修改会话设置、发送下一轮之前都加载完整历史与步骤 | doing | Metadata authorization no longer loads bodies/steps; turn tail query pushed into SQL; UI paging pending | 
+| A03 | 会话列表计数先把所有消息 ID 读取到 JavaScript | pass | SQL count grouped per thread; shared chat harness pass | 
+| A04 | 一次会话菜单操作会重新请求已加载的所有历史页 | doing | Menu result patches loaded rows by id without reloading old pages; mutation/browser tests pending | 
 | A05 | Markdown 为每个块重复计算待办位置，产生平方级遍历 | pass | Memoized blocks and one optional linear todo prefix | 
 | A06 | 长串未闭合方括号使 Markdown 行内解析重复扫描后缀 | pass | Delimiter index and URL suffix cache; 12000-case differential and roundtrip pass | 
-| A07 | SSE、内部事件队列和网关未把消费速度反馈给生产端 | todo | — |
+| A07 | SSE、内部事件队列和网关未把消费速度反馈给生产端 | doing | Pull-based SSE stream; internal queues/gateway still pending | 
 | A08 | Runner 发送批次持续排队，取消后旧批次仍可能完整重试 | todo | — |
 | A09 | Runner 没有限制同时启动的 Agent 工作数量 | todo | — |
 | A10 | 取消状态轮询可在慢网下叠加多个在途请求 | todo | — |
 | A11 | 运行结束后仍持续保留完整、重复的提示上下文 | todo | — |
-| A12 | Harness 日志逐块同步写入，缺少目录保留边界 | todo | — |
-| A13 | 适配器清理放在 yield 之后，部分错误路径会跳过 timer 回收 | todo | — |
-| A14 | 无订阅者时暂存的审批卡缺少过期和终态清理 | todo | — |
+| A12 | Harness 日志逐块同步写入，缺少目录保留边界 | doing | Asynchronous buffered per-turn log stream with awaited close; archive management pending | 
+| A13 | 适配器清理放在 yield 之后，部分错误路径会跳过 timer 回收 | pass | Iterator finally always clears timer/listener/subscription and kills child, even after yield | 
+| A14 | 无订阅者时暂存的审批卡缺少过期和终态清理 | doing | Queued approvals expire, answered/terminal grants clear pending cards; regression pending | 
 | A15 | 版本探测缓存到期后同步串行执行多个 CLI | todo | — |
 | A16 | 会话头部的任务胶囊可能覆盖标题和菜单 | todo | — |
 | A17 | 聊天长词和审批卡缺少稳定的断行策略 | todo | — |
 | S01 | 永久清除没有覆盖所有归属数据 | todo | — |
 | S02 | 大批清除逐行多次写入，过期工作区又依赖打开回收站才清理 | todo | — |
 | S03 | 应分别统计数据库有效数据、空闲页、WAL、附件和备份 | todo | — |
-| S04 | 桌面服务日志写两份，且其中一份逐块同步追加 | todo | — |
-| S05 | macOS 更新中的同步解压和签名检查占用主进程 | todo | — |
+| S04 | 桌面服务日志写两份，且其中一份逐块同步追加 | doing | Server chunks have one log sink; lifecycle remains separate | 
+| S05 | macOS 更新中的同步解压和签名检查占用主进程 | doing | Async unpack/PlistBuddy/codesign, disk preflight and failed unpack cleanup; platform flow pending | 
 
 ## Acceptance ledger
 
