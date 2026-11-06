@@ -129,16 +129,24 @@ export path. Import also unlocks migration from Notion/Linear/Markdown.
 - Hosted migration service; this is file-based export/import.
 - Real-time backup/restore (U-12).
 
-## Open decisions
+## Decisions (accepted per recommendation, 2026-11-06)
 
-1. Export format: canonical JSON + markdown + CSV + attachments (recommended)
-   or a single JSON file (simpler, less usable)?
-2. First import source: Notion export (recommended, matches docs-first product)
-   or Markdown folder (simplest) or Linear CSV?
-3. Merge strategy: new workspace only (recommended for v1) or merge into
-   existing with skip/rename?
-4. Attachments: include by default or opt-in (size)?
-5. Import API: expose in v1 (recommended for automation) or UI/CLI only?
+1. The export is a canonical zip: `workspace.json`, markdown docs, `tasks.csv`,
+   attachments and a manifest (not a single JSON file).
+2. v1 import covers **Markdown folders including Notion-exported Markdown** and
+   task CSV; native Notion database mapping and Linear/Asana importers are
+   follow-ups.
+3. Import targets a **new workspace** only; merging into an existing workspace
+   is a follow-up.
+4. Attachments are included by default with a size cap and opt-out; large
+   workspaces stream with bounded memory.
+5. **No import API in v1**; Settings UI + CLI only. Export may expose an ops
+   API/CLI.
+6. Owner/admin only; every export/import is audited; API keys export names and
+   scopes only, never hashes/secrets.
+7. **UI gate:** the import preview must show counts/conflicts/unmapped fields;
+   progress, failure and rollback states must be explicit; 1440/1100 screenshots
+   are required.
 
 ## Dependencies
 
