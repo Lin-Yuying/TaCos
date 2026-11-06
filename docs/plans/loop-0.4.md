@@ -172,4 +172,5 @@ blocker (host, command, expected credential) and do not fake success.
 | U-04 documents | merged | #88 | 120/120 checks, browser E2E (backlinks/template/outline), screenshots 1440/1100 |
 | U-13b pages API | merged | #89 | 122/122 checks, HTTP + MCP network E2E |
 | #79 Agent runtime | merged | #90 | 128/128 checks; browser E2E: API agent delegation, review/approve, usage; 1440/1100 shots |
-| #80 internal automations | next | — | — |
+| #80 internal automations | merged | #91 | 130/130 checks, template rule + dry-run + real run E2E, screenshots |
+| U-10 search | next | — | — |
