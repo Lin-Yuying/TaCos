@@ -542,20 +542,27 @@ function useUnreadNotifications(workspaceId: string) {
 
   useEffect(() => {
     let active = true;
-    const load = () =>
-      fetch(`/api/internal/${workspaceId}/notifications`)
-        .then((res) => res.json())
-        .then((data) => {
-          if (active) setCount(data.unread);
-        })
-        .catch(() => {});
-    load();
-    const timer = setInterval(load, 10_000);
+    let request: AbortController | null = null;
+    const load = async () => {
+      if (!active || request || document.visibilityState !== "visible") return;
+      request = new AbortController();
+      const timeout = window.setTimeout(() => request?.abort(),8000);
+      try {
+        const res=await fetch(`/api/internal/${workspaceId}/notifications?countOnly=1`,{signal:request.signal,cache:"no-store"});
+        if (!res.ok) return;
+        const data=await res.json();
+        if (active && typeof data.unread === "number") setCount(data.unread);
+      } catch { /* retry on the next visible tick */ }
+      finally {window.clearTimeout(timeout);request=null;}
+    };
+    void load();
+    const timer = setInterval(() => void load(), 10_000);
     window.addEventListener(NOTIFICATIONS_READ, load);
+    document.addEventListener("visibilitychange",load);
     return () => {
-      active = false;
-      clearInterval(timer);
-      window.removeEventListener(NOTIFICATIONS_READ, load);
+      active=false;request?.abort();clearInterval(timer);
+      window.removeEventListener(NOTIFICATIONS_READ,load);
+      document.removeEventListener("visibilitychange",load);
     };
   }, [workspaceId]);
 

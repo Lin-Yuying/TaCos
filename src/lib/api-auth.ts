@@ -21,7 +21,7 @@ export async function requireApiKey(req: Request): Promise<ApiKeyRecord> {
 export async function readApiKey(req: Request): Promise<ApiKeyRecord | null> {
   const raw = extractRawKey(req);
   if (!raw) return null;
-  return verifyApiKey(raw.trim());
+  return verifyApiKey(raw.trim(), { recordUse: false });
 }
 
 export function errorResponse(err: unknown): Response {

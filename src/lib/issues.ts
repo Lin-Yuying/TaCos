@@ -3486,7 +3486,7 @@ export async function createApiKey(
   return { key, record };
 }
 
-export async function verifyApiKey(rawKey: string): Promise<ApiKeyRecord | null> {
+export async function verifyApiKey(rawKey: string, options: { recordUse?: boolean } = {}): Promise<ApiKeyRecord | null> {
   const db = getDb();
   const [row] = await db
     .select({ key: apiKeys, deletedAt: workspaces.deletedAt })
@@ -3505,7 +3505,7 @@ export async function verifyApiKey(rawKey: string): Promise<ApiKeyRecord | null>
     .where(and(eq(workspaceMembers.workspaceId, record.workspaceId), eq(workspaceMembers.userId, record.createdBy)))
     .limit(1);
   if (!creator) return null;
-  await db.update(apiKeys).set({ lastUsedAt: nowIso() }).where(eq(apiKeys.id, record.id));
+  if (options.recordUse !== false) await db.update(apiKeys).set({ lastUsedAt: nowIso() }).where(eq(apiKeys.id, record.id));
   return {
     id: record.id,
     workspaceId: record.workspaceId,

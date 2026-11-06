@@ -18,9 +18,9 @@ Baseline: production build and TypeScript pass; harness 88/88 plus upgrade check
 | B06 | FTS 更新和删除按未索引字段查旧记录 | todo | — |
 | B07 | 一个短词就使全文搜索整体退回包含匹配 | todo | — |
 | B08 | 提醒调度每分钟重新检查所有带提醒的未完成任务 | todo | — |
-| B09 | 通知红点每 10 秒获取用不到的 50 条正文 | todo | — |
+| B09 | 通知红点每 10 秒获取用不到的 50 条正文 | pass | Count-only endpoint; hidden pause, single flight, deadline and unmount abort |
 | B10 | 创建任务的 MAX 聚合缺乏匹配排序键的复合索引 | pass | Real SQLite EXPLAIN uses covering indexes for both maxima |
-| B11 | 每次 API key 验证都产生元数据写入 | todo | — |
+| B11 | 每次 API key 验证都产生元数据写入 | doing | Introspection no longer writes; exact usage timestamps on data requests retained |
 | F01 | 任务列表逐行查找下标，单次渲染形成平方级计算 | todo | — |
 | F02 | 列表、看板和批量候选全量挂载，表格虚拟化尚未覆盖这些入口 | todo | — |
 | F03 | 看板拖动反复扫描整列并读取卡片位置 | todo | — |
@@ -122,3 +122,5 @@ Baseline: production build and TypeScript pass; harness 88/88 plus upgrade check
 B01: replaced history aggregates with indexed revision rows maintained by database triggers across writers/processes. Added timeout/abort to the existing visible/single-flight polling. Existing live refresh behavior check passes. Structural probe verifies primary-key revision reads, unchanged idle revisions, raw second-connection writes and notification user isolation; full two-browser timing remains in V11.
 
 B03/B04/B10: real better-sqlite3 fixture (1000 additional mixed-status tasks with equal timestamps/positions) fully paginates without duplicate/missing ids; id/case-insensitive identifier/project-name aliases retained. SQL orders by the existing status order and position/date, with id as final tie-breaker. REST response remains an array; optional cursor and total/next-cursor headers add paging. Existing task database and visibility checks pass. UI full-set filters/bulk semantics will be retained until server equivalents are wired.
+
+B09: badge requests only unread count and preserves the existing deleted-workspace notification predicate. In-flight badge requests are bounded to one, timeout at 8s, abort on unmount and resume on visibility. B11: pure key introspection no longer changes usage metadata; exact usage recording for real API calls remains until a durable coalescing design is verified.
