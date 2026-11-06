@@ -854,7 +854,7 @@ export async function listFavoriteProjects(workspaceId: string, userId: string):
     .from(favorites)
     .innerJoin(projects, eq(projects.id, favorites.projectId))
     .where(and(...conditions))
-    .orderBy(sql`${favorites.createdAt} DESC`);
+    .orderBy(favorites.position,sql`${favorites.createdAt} DESC`);
 }
 
 export async function isFavoriteProject(workspaceId: string, userId: string, projectId: string) {

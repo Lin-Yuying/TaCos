@@ -150,3 +150,13 @@ export async function restoreTaskField(workspaceId: string, viewerId: string, fi
   if(field.createdBy !== viewerId && member?.role !== "admin") throw new TacosError("Only its creator or an admin can restore a field",403);
   await getDb().update(taskFields).set({disabledAt:null}).where(eq(taskFields.id,fieldId));
 }
+
+export async function updateTaskField(workspaceId:string,viewerId:string,fieldId:string,input:{name:string;options?:string[]}):Promise<TaskField>{
+ const field=await findField(workspaceId,fieldId),db=getDb();const member=db.select().from(workspaceMembers).where(and(eq(workspaceMembers.workspaceId,workspaceId),eq(workspaceMembers.userId,viewerId))).get();
+ if(field.createdBy!==viewerId&&member?.role!=="admin")throw new TacosError("Only its creator or an admin can edit a field",403);
+ const name=input.name.trim();if(!name||name.length>60)throw new TacosError("Enter a field name between 1 and 60 characters",400);
+ if((await listTaskFields(workspaceId,true)).some(other=>other.id!==fieldId&&other.name.toLowerCase()===name.toLowerCase()))throw new TacosError("A field with that name already exists",409);
+ const options=field.type==="select"?cleanOptions(input.options??field.options):[];if(field.type==="select"&&!options.length)throw new TacosError("A select field needs options",400);
+ // Old option values remain stored and readable even when no longer offered for new edits.
+ await db.update(taskFields).set({name,options:JSON.stringify(options)}).where(eq(taskFields.id,fieldId));return findField(workspaceId,fieldId);
+}
