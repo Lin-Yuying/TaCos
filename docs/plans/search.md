@@ -163,6 +163,63 @@ implementation must be design-reviewed before merge:
 - A wireframe/screenshot review with the owner is part of the UI commits before
   final polish; acceptance includes screenshots at 1440/1100/640.
 
+## Implementation status (2026-11-06, branch feat/search)
+
+| Commit | Scope | State |
+| --- | --- | --- |
+| 1 | Index projects, people, labels, Agent threads (latest reply), attachment names and automation rules; central `search()` with entity adapters, permissions, counts, filtering, sorting, snippets | done |
+| 2 | `/search` page: query bar, kind tabs, one filter row, grouped results, pagination, side-panel peek that preserves the query/URL, recent searches/items, empty/loading/error states | done |
+| 3 | Palette: results and commands in separate groups, `i p u d a f` prefixes, `@me`/`@none`/`@<status>`, clickable scope chips, recents, suggestions; `/` and `Cmd/Ctrl K` | done |
+| 4 | `check-search-coverage.ts`, `check-search-filters.ts` (10k tasks + 1k docs under 300 ms), README, screenshots | done |
+
+Key implementation notes:
+
+- `search_entries` is unique per `(kind, workspace_id, ref_id)`; a bootstrap marker
+  (`search_index_entities_v1`) rebuilds a database from before this change once.
+  Triggers keep the FTS row for an Agent thread pointed at its latest assistant reply,
+  so editing a message updates the thread instead of adding a second entry.
+- Filter semantics: project applies to tasks/comments/documents/projects/threads/files;
+  assignee and status apply to tasks only and zero the other kinds. People, labels and
+  rules are excluded while a project filter is active. Date filters use `YYYY-MM-DD`
+  bounds and apply wherever the entity has created/updated timestamps.
+- Ranking is group-first: the group with the strongest first hit leads, then the fixed
+  tab order, with relevance (title phrase/prefix/word bonuses, then updated) or the
+  chosen date order inside a group. A page fetches at least 200 rows per kind so a page
+  boundary does not overlap the previous page; hard cap 400 per kind, 300 ms budget.
+- Palette and page share `src/lib/search-query.ts` (groups, prefix parser, `@` filters)
+  and `src/lib/search-recents.ts` (per-browser recents). Saved searches remain personal
+  recents until U-09 shared views land.
+- Screenshots (Electron Chromium, seeded workspace) at 1440/1100/640:
+  `/tmp/tacos-e2e/evidence/u-10/search-*.png`, `palette-*.png`, `search-idle-1440.png`,
+  `search-peek-1440.png`. The Lead still runs the real Edge/Playwright E2E.
+
+Verification on this branch:
+
+- `npx tsc --noEmit`: clean.
+- `npm run i18n:check`: 1194 strings in code, 1603 in zh.ts, 0 missing.
+- `npm run check:harness`: 132/132 checks pass, including
+  `check-search-coverage.ts` (all entities, four permission boundaries, trash/delete/
+  restore, cross-workspace people, old-database rebuild) and
+  `check-search-filters.ts` (groups, filters, sorts, pagination, snippets, palette
+  grammar; seed 10k tasks + 1k docs: needle query 2 ms, broad 10k-match query 77 ms,
+  2-character Chinese 28 ms; budget 300 ms).
+- `npm run build`: succeeds (Next 16.4.2).
+- `npm run lint`: the repository baseline already reports 87 errors outside this
+  change (electron `require()`, updater checks, existing effects). Every file touched
+  by U-10 passes eslint on its own; no new lint error was added.
+- Browser flow (Electron 45 Chromium against the production build, seeded demo
+  workspace): query, tab, project filter, clear, document peek with preserved URL,
+  project link, explicit empty state, palette open/prefix/@me/See all, `/` focus and
+  navigation. Screenshots listed above at 1440/1100/640.
+
+Not covered by this branch:
+
+- The `/` shortcut is ignored while a dialog/menu is open, while typing, and while the
+  palette is open (the palette input consumes text); it is not bound to `Cmd/Ctrl F`.
+- The palette shows the first 4 hits of every kind; kinds beyond the fold need scrolling
+  or a prefix. Pagination stays stable within the fetched 200–400 hits per kind.
+- The Lead still needs to run the system-Edge Playwright pass and view final screenshots.
+
 ## Dependencies
 
 - U-04 for page links/backlinks and templates as searchable entities.
