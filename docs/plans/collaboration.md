@@ -138,16 +138,24 @@ edit/delete history + a place (activity/inbox) that surfaces changes.
 - Presence/cursors on tasks/projects (optional follow-up).
 - Comment moderation/anti-abuse tooling.
 
-## Open decisions
+## Decisions (accepted per recommendation, 2026-11-06)
 
-1. Comments: full threads (recommended) or single-level replies?
-2. Reactions: fixed emoji set (recommended) or free emoji picker?
-3. Follow model: auto-follow on create/assign/mention/comment (recommended,
-   Linear-style) with explicit unfollow, or explicit follow only?
-4. Activity feed: workspace-wide with filters (recommended) or only per-object
-   timelines?
-5. Review thread: reuse task comments with a review marker (recommended) or a
-   separate review entity?
+1. Task comments support full threading; the UI shows a single reply level with
+   a quoted parent (no infinite indentation).
+2. Reactions use a small fixed emoji set; no free emoji picker.
+3. Follow model: auto-follow on create/assign/mention/comment, with explicit
+   Follow/Unfollow and a watcher list; existing creator/assignee behavior is
+   migrated to the initial watcher set.
+4. A workspace-level Activity feed with filters is in scope; it must be clearly
+   distinct from the Inbox (raw activity vs actionable notifications).
+5. Review discussions reuse task comments with a review marker; no separate
+   review entity.
+6. Notifications are deduplicated per event (watcher + mention + reply produce
+   one Inbox notice) and self-actions do not notify the actor.
+7. Presence/cursors on tasks and projects stay a follow-up.
+8. **UI gate:** wireframe/screenshot review before final polish; Activity vs
+   Inbox must read differently, the task comment composer must not become
+   heavy, and 1440/1100 screenshots are required for acceptance.
 
 ## Dependencies
 
