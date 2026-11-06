@@ -28,7 +28,7 @@ export function LiveRefresh({ workspaceId }: { workspaceId: string }) {
         if (last !== null && pulse !== last) {
           const changed=revisions&&previous?Object.keys({...previous,...revisions}).filter(domain=>revisions[domain]!==previous![domain]):null;
           const url=new URL(location.href),path=url.pathname,tab=url.searchParams.get("tab")??(path.endsWith("/issues")?"issues":"overview");
-          const relevant=!changed||changed.some(domain=>["permissions","projects","personal"].includes(domain)||(domain==="tasks"&&(!path.includes("/docs")&&!path.includes("/agent")))||(domain==="documents"&&(path.includes("/docs")||path.includes("/projects/")&&tab!=="issues"))||(domain==="threads"&&path.includes("/agent"))||(domain==="notifications"&&path.endsWith("/notifications")));
+          const relevant=!changed||changed.some(domain=>["permissions","projects","personal"].includes(domain)||(domain==="tasks"&&(!path.includes("/docs")&&!path.includes("/agent")))||(domain==="documents"&&(path.includes("/docs")||path.includes("/projects/")&&tab!=="issues"))||(domain==="threads"&&path.includes("/agent"))||(domain==="notifications"&&path.endsWith("/notifications"))||(domain==="automations"&&path.includes("/settings")));
           if(relevant)router.refresh();
           window.dispatchEvent(new CustomEvent(LIVE_EVENT,{detail:{domains:changed}}));
         }

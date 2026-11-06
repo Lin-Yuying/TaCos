@@ -20,6 +20,7 @@ import { getModelKeysView, harnessViewFor } from "@/lib/model-keys";
 import { canManagePageTemplates, listPageTemplates } from "@/lib/page-templates";
 import { listAgents } from "@/lib/workspace-agents";
 import { agentUsageSummary } from "@/lib/agent-usage";
+import { getAutomationSettingsView } from "@/lib/automations/store";
 import { SettingsView } from "@/components/settings-view";
 
 export default async function SettingsPage({
@@ -40,7 +41,7 @@ async function View({ params }: { params: Promise<{ workspaceId: string }> }) {
   const user = await getSessionUser();
   if (!user) redirect("/login");
   const ws = await requireWorkspace(workspaceId);
-  const [members, projects, labels, keys, joinCode, allWorkspaces, deletedWorkspaces, seeAll, ai, harness, modelKeys, pageTemplates, agents, usage] =
+  const [members, projects, labels, keys, joinCode, allWorkspaces, deletedWorkspaces, seeAll, ai, harness, modelKeys, pageTemplates, agents, usage, automations] =
     await Promise.all([
       listMembers(workspaceId),
       listProjects(workspaceId, user.id),
@@ -56,6 +57,7 @@ async function View({ params }: { params: Promise<{ workspaceId: string }> }) {
       listPageTemplates(workspaceId),
       listAgents(workspaceId, ws.user.id),
       agentUsageSummary(workspaceId),
+      getAutomationSettingsView(workspaceId, ws.user.id),
     ]);
   // Where deleting this workspace lands you: the next team you belong to, or the
   // create/join screen when it was your last one.
@@ -85,6 +87,7 @@ async function View({ params }: { params: Promise<{ workspaceId: string }> }) {
       canManagePageTemplates={canManagePageTemplates(workspaceId, ws.user.id)}
       agents={agents}
       agentUsage={usage}
+      automations={automations}
     />
   );
 }
