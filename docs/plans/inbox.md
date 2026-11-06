@@ -4,6 +4,11 @@ Status: planned as **one PR** (decided 2026-11-06). No implementation started.
 This plan was written after checking the current Inbox code and comparing it
 with Linear's and GitHub's notification inboxes.
 
+Decisions recorded 2026-11-06: retention is **90 days**; Done rows stay
+**searchable**; keyboard shortcuts are the **full Linear set**; server-mode
+digest/email is a **follow-up**, not this PR; notification preferences are
+still open (per user vs per workspace, explained at the bottom).
+
 ## Why
 
 The current Inbox is a flat list of the latest 50 notifications, with only
@@ -77,8 +82,10 @@ phase is done. Status words are `todo`, `doing`, `done`, `blocked`.
 - [ ] Group rows by issue/page and collapse repeats into one row with a count;
       expanding shows the individual events.
 - [ ] Mark read / mark unread per row; Mark all read stays.
-- [ ] Done (archive) with undo; Clear all and per-row delete become soft
-      deletes with an undo toast.
+- [ ] Done (archive) with undo. Done rows leave the Unread / Mentions /
+      Assigned / All tabs but stay reachable from search until the 90-day
+      sweep.
+- [ ] Clear all and per-row delete become soft deletes with an undo toast.
 - [ ] Quick search across issue identifier/title, actor and notification type.
 
 ### P2 — control
@@ -90,30 +97,70 @@ phase is done. Status words are `todo`, `doing`, `done`, `blocked`.
       notifications" on/off.
 - [ ] Snooze a notification until a time; it returns to the inbox then (reuse
       the existing reminder presets and date handling).
-- [ ] Keyboard shortcuts: G I, J/K, U / Alt-U, Backspace, H (snooze),
-      Shift-S (unsubscribe) at minimum.
+- [ ] Keyboard shortcuts: the full Linear set — G then I (go to Inbox),
+      J/K and Up/Down (move), U (read/unread), Alt-U (mark all read),
+      H (snooze), Backspace (delete read), Shift-S (unsubscribe).
 
 ### P3 — lifecycle
 
-- [ ] Retention policy (for example 2,000 rows or 90 days) and a documented
-      statement in the UI.
-- [ ] Server mode: optional daily digest or email delivery behind a setting,
-      only if it can reuse the existing mail configuration; otherwise record it
-      as a follow-up.
+- [ ] Retention: notifications older than **90 days** are swept lazily when the
+      inbox or its badge is read (no background job, same pattern as the
+      workspace recycle-bin sweep) and the inbox states the policy. Done rows
+      stay searchable until the sweep.
 - [ ] Audit counters for the new actions in the existing activity/log paths.
+
+Server-mode daily digest / email delivery is **out of this PR** and recorded
+as a follow-up (see below).
 
 ## Schema and API notes
 
-- `notifications.body` becomes a JSON payload column (or a new `data` column
-  added with `addColumnIfMissing`); keep a one-time backfill for existing rows
-  so old notifications still render.
-- New columns for triage: `state` (unread/read/done), `snoozed_until`,
-  `deleted_at` (soft delete). New table for mutes and preferences
-  (`notification_prefs` per user/workspace, `notification_mutes` with scope
-  type/id). All schema changes must go through `bootstrap()` and be idempotent.
+- Add a `data` JSON column to `notifications` with `addColumnIfMissing()`.
+  `notify()` writes the payload there; new rows never store prebuilt English
+  sentences in `body`. Keep `body` as the legacy fallback.
+- One-time backfill for existing rows: parse the known legacy formats
+  (`<who> assigned you to “<title>”`, `<who> commented on “<title>”`,
+  `The owner deleted the workspace "<name>".`, plus the types that already
+  store a bare actor name or identifier) into `data`. Unknown rows keep
+  `data = NULL` and render the stored `body`, so nothing disappears.
+- New columns for triage: `state` (`unread`/`read`/`done`), `snoozed_until`,
+  `deleted_at` (soft delete). All added with `addColumnIfMissing()` in
+  `bootstrap()`; existing rows keep `state = 'unread'` when `read_at` is null,
+  otherwise `'read'`.
+- New tables: `notification_prefs` (per user, JSON per-event settings; whether
+  it also carries workspace defaults is the open question) and
+  `notification_mutes` (`user_id`, `workspace_id`, `scope_type`
+  issue/page/project, `scope_id`).
+- Retention sweep: delete rows older than 90 days (Done included) the first
+  time the inbox or the count endpoint is read in a process; keep the badge
+  query in the same sweep path.
 - Server actions in `src/app/workspace-misc-actions.ts` and lib functions in
   `src/lib/issues.ts`; same business-layer rule as everywhere else.
 - The internal API used by the badge must stay lightweight (count only).
+
+## Files the PR will touch
+
+- `src/db/client.ts` — `bootstrap()`: new columns, new tables, legacy backfill,
+  90-day sweep helper. Idempotent.
+- `src/db/schema.ts` — Drizzle types for the new columns/tables.
+- `src/lib/issues.ts` — `notify()` payload; all notification call sites
+  (`notifyAssigned`, comments, mentions, claims/release, blockers, handoff,
+  due reminders); `listNotifications` with filters/cursor/search and grouped
+  rows; mark read/unread; done/undo; soft delete/undo; mute filtering;
+  preferences; retention.
+- `src/app/workspace-misc-actions.ts` — mark unread, done, undo, mute,
+  preferences, load-more/cursor actions (all return `ActionResult`).
+- `src/app/[workspaceId]/notifications/page.tsx` — read `searchParams`
+  (tab, q, cursor), pass them down; keep `await connection()` + `<Suspense>`.
+- `src/components/notifications-view.tsx` — tabs, search box, grouped rows with
+  counts, row actions, undo toast, snooze, load more, keyboard handling.
+- `src/components/workspace-shell.tsx` — `G I` shortcut and the badge count
+  matching the same 90-day/readable set.
+- `src/lib/i18n/zh.ts` — new copy; structured notification sentences rendered
+  with existing i18n helpers.
+- New checks: `check-inbox-payload.ts`, `check-inbox-triage.ts`,
+  `check-inbox-prefs.ts`; update the existing badge check. All are discovered
+  by `scripts/check-all.ts`.
+- No change to `mcp/server.ts` or `/api/v1/*`; notifications stay web-only.
 
 ## Checks and evidence
 
@@ -133,8 +180,8 @@ phase is done. Status words are `todo`, `doing`, `done`, `blocked`.
 
 1. Chinese UI shows no English notification sentences; English UI still reads
    naturally; language switch changes the rendered text without a DB rewrite.
-2. The inbox can reach more than 50 notifications; the badge equals the unread
-   rows the inbox can show.
+2. The inbox can reach more than 50 notifications inside the 90-day window; the
+   badge equals the unread rows the inbox can show.
 3. Tabs, grouping and search return the expected rows; repeated events on one
    task collapse into one row with a count.
 4. Mark unread, Done, undo, soft delete and Clear all have no data-loss dead
@@ -142,12 +189,32 @@ phase is done. Status words are `todo`, `doing`, `done`, `blocked`.
 5. Muting a task/document/project stops new notifications for it; preferences
    gate each event type.
 6. Snooze hides a row and brings it back at the chosen time.
-7. Old rows created before this PR still render after the backfill.
+7. Old rows created before this PR still render after the backfill; unknown
+   legacy rows keep their stored text.
+8. A row marked Done disappears from the four tabs but appears in search, and
+   is swept together with the rest after 90 days.
 
 ## Open questions
 
-- Retention: row cap or age-based, and what the number is.
-- Whether "Done" should keep the row searchable or hide it entirely.
-- Which shortcut set to ship (the Linear set above, or a subset).
-- Digest/email: whether it ships in this PR or is recorded as a follow-up.
-- Do we expose preferences per workspace or per user?
+- Preferences granularity: per user or per workspace (explained below).
+- Digest/email is recorded as a follow-up, not part of this PR.
+
+## Follow-ups (not this PR)
+
+- Server-mode daily digest / email delivery. Needs a mail configuration that
+  does not exist yet; revisit after the Inbox PR.
+- Notification channels beyond in-app (email/mobile push) for team servers.
+
+## Per-user vs per-workspace preferences
+
+- **Per user**: every member has their own event-type switches and mutes.
+  Matches Linear/GitHub; a member can turn off comments or mute a noisy
+  project without affecting anyone else. The workspace cannot enforce a
+  minimum, so someone can switch off assignments and miss them.
+- **Per workspace**: one owner/admin setting applies to everyone. Predictable
+  and simpler, but one person's choice changes everyone's inbox, and per-person
+  mutes are impossible.
+
+Recommendation: per-user preferences with sane defaults for every member, plus
+per-user mutes. If the workspace needs a policy, add an owner-level "defaults"
+row later instead of forcing everyone. Confirm before the PR starts.
