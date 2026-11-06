@@ -3,7 +3,7 @@ import { parseLabelNames, parsePriority, parseStatus } from "@/lib/api-input";
 import {
   assertSeesProject,
   createIssue,
-  listIssues,
+  listIssuesPage,
   listProjects,
   PRIORITY_NAMES,
   resolveAssigneeId,
@@ -36,7 +36,7 @@ export async function GET(req: Request) {
     const limitParam = params.get("limit");
     const limit = limitParam ? Math.min(Math.max(parseInt(limitParam, 10) || 100, 1), 200) : 100;
 
-    const issues = await listIssues(key.workspaceId, {
+    const page = await listIssuesPage(key.workspaceId, {
       viewerId: key.createdBy,
       status,
       priority,
@@ -45,9 +45,11 @@ export async function GET(req: Request) {
       projectId: params.get("project") ?? undefined,
       assigneeId,
       limit,
+      cursor: params.get("cursor") ?? undefined,
     });
     return Response.json(
-      issues.map((issue) => ({ ...issue, priorityLabel: PRIORITY_NAMES[issue.priority] }))
+      page.items.map((issue) => ({ ...issue, priorityLabel: PRIORITY_NAMES[issue.priority] })),
+      { headers: { "X-Total-Count": String(page.total), ...(page.nextCursor ? { "X-Next-Cursor": page.nextCursor } : {}) } }
     );
   } catch (err) {
     return errorResponse(err);

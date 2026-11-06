@@ -5,6 +5,7 @@ import crypto from "node:crypto";
 import { mentionText, parseMentions } from "./mentions";
 import {
   and,
+  asc,
   desc,
   eq,
   gt,
@@ -1914,6 +1915,7 @@ export type ListFilters = {
   q?: string;
   label?: string;
   limit?: number;
+  cursor?: string;
   // The signed-in user. Omitted by agents, which are unrestricted; when present it
   // applies the workspace's task-visibility setting.
   viewerId?: string;
@@ -1952,10 +1954,7 @@ export async function countIssuesByStatus(
   return counts;
 }
 
-export async function listIssues(
-  workspaceId: string,
-  filters: ListFilters = {}
-): Promise<IssueWithLabels[]> {
+async function issueConditions(workspaceId: string, filters: ListFilters) {
   const db = getDb();
   // Issues under a trashed project disappear with it, and come back on restore.
   const conditions = [
@@ -2018,31 +2017,45 @@ export async function listIssues(
       .from(labels)
       .where(and(eq(labels.workspaceId, workspaceId), sql`${labels.name} = ${filters.label} COLLATE NOCASE`))
       .limit(1);
-    if (!labelRow) return [];
-    const matched = await db
-      .select({ issueId: issueLabels.issueId })
-      .from(issueLabels)
-      .where(eq(issueLabels.labelId, labelRow.id));
-    const ids = matched.map((m) => m.issueId);
-    if (ids.length === 0) return [];
-    conditions.push(inArray(issues.id, ids));
+    if (!labelRow) return null;
+    conditions.push(sql`EXISTS (SELECT 1 FROM issue_labels WHERE issue_id=${issues.id} AND label_id=${labelRow.id})`);
   }
+  return and(...conditions);
+}
 
-  const rows = await db
-    .select()
-    .from(issues)
-    .where(and(...conditions));
-  const sorted = rows.sort((a, b) => {
-    const sa = STATUS_ORDER.indexOf(a.status as Status);
-    const sb = STATUS_ORDER.indexOf(b.status as Status);
-    if (sa !== sb) return sa - sb;
-    // Manual board order wins: new issues are created at the top and dragging a card
-    // persists its slot, so priority is no longer the sort key here.
-    if (a.position !== b.position) return b.position - a.position;
-    return b.createdAt.localeCompare(a.createdAt);
-  });
-  const limited = filters.limit ? sorted.slice(0, filters.limit) : sorted;
-  return toIssueRows(workspaceId, limited);
+const issueRank = sql<number>`CASE ${issues.status} WHEN 'in_progress' THEN 0 WHEN 'todo' THEN 1 WHEN 'done' THEN 2 WHEN 'canceled' THEN 3 ELSE -1 END`;
+type IssueCursor = { rank: number; position: number; createdAt: string; id: string };
+function decodeIssueCursor(value: string): IssueCursor {
+  try {
+    const row = JSON.parse(Buffer.from(value,"base64url").toString("utf8")) as IssueCursor;
+    if (!Number.isInteger(row.rank) || !Number.isFinite(row.position) || typeof row.createdAt!=="string" || typeof row.id!=="string") throw new Error();
+    return row;
+  } catch { throw new TacosError("Invalid task cursor",400); }
+}
+async function issueRows(workspaceId: string, filters: ListFilters, extra = 0) {
+  const where = await issueConditions(workspaceId,filters);
+  if (!where) return [];
+  const after = filters.cursor ? decodeIssueCursor(filters.cursor) : null;
+  const cursorWhere = after ? or(gt(issueRank,after.rank),and(eq(issueRank,after.rank),or(
+    lt(issues.position,after.position),and(eq(issues.position,after.position),or(
+      lt(issues.createdAt,after.createdAt),and(eq(issues.createdAt,after.createdAt),gt(issues.id,after.id))))))) : undefined;
+  return getDb().select().from(issues).where(and(where,cursorWhere))
+    .orderBy(asc(issueRank),desc(issues.position),desc(issues.createdAt),asc(issues.id))
+    .limit(filters.limit ? Math.max(1,Math.trunc(filters.limit))+extra : -1);
+}
+export async function listIssues(workspaceId: string, filters: ListFilters = {}): Promise<IssueWithLabels[]> {
+  return toIssueRows(workspaceId,await issueRows(workspaceId,filters));
+}
+export async function listIssuesPage(workspaceId: string, filters: ListFilters = {}) {
+  const limit = Math.min(200,Math.max(1,Math.trunc(filters.limit ?? 100)));
+  const rows = await issueRows(workspaceId,{...filters,limit},1);
+  const hasMore = rows.length>limit;
+  const current = rows.slice(0,limit);
+  const last = current.at(-1);
+  const where = await issueConditions(workspaceId,filters);
+  const count = where ? getDb().select({n:sql<number>`count(*)`}).from(issues).where(where).get()?.n ?? 0 : 0;
+  return { items: await toIssueRows(workspaceId,current), total: Number(count), nextCursor: hasMore&&last
+    ? Buffer.from(JSON.stringify({rank:STATUS_ORDER.indexOf(last.status as Status),position:last.position,createdAt:last.createdAt,id:last.id})).toString("base64url") : null };
 }
 
 export async function findIssueRow(workspaceId: string, idOrIdentifier: string): Promise<IssueRow | null> {
