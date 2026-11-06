@@ -86,6 +86,7 @@ async function main() {
     readOnly: false,
     allowedProjectIds: null,
     toolFilter: null,
+    viewerId: "m-owner",
     userId: "m-owner",
   };
 
@@ -269,7 +270,7 @@ async function main() {
   );
 
   // 11. Person-only tools refuse when the server has no signed-in person (stdio).
-  const anon = await connect({ userId: null });
+  const anon = await connect({ viewerId: null, userId: null });
   for (const [name, args] of [
     ["claim_issue", { id: alphaOne.issue.identifier }],
     ["release_issue", { id: alphaOne.issue.identifier }],

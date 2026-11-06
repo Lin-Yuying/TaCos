@@ -9,14 +9,14 @@ export async function GET(req: Request) {
         {
           product: "tacos",
           authenticated: false,
-          hint: "Create a key in Settings → Agent access, then send Authorization: Bearer <key>",
+          hint: "Create a key in Settings → Advanced → Agent access, then send Authorization: Bearer <key>",
         },
         { status: 200 }
       );
     }
     const [members, allProjects] = await Promise.all([
       listMembers(key.workspaceId),
-      listProjects(key.workspaceId),
+      listProjects(key.workspaceId, key.createdBy),
     ]);
     const allowlist = key.projectIds;
     const projects =

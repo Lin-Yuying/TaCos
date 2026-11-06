@@ -1297,6 +1297,7 @@ export function SettingsView({
                                 type="button"
                                 onClick={() => void rotateKey(key)}
                                 disabled={rotatingKeyId !== null}
+                                aria-label={t("Rotate {name}", { name: key.name })}
                                 className="rounded-md border border-border px-2 py-0.5 text-small text-muted transition-colors hover:border-border-strong hover:text-text disabled:opacity-40"
                               >
                                 {rotatingKeyId === key.id ? t("Rotating…") : t("Rotate")}
@@ -1304,6 +1305,7 @@ export function SettingsView({
                               <button
                                 type="button"
                                 onClick={() => void revokeKey(key)}
+                                aria-label={t("Revoke {name}", { name: key.name })}
                                 className="rounded-md border border-border px-2 py-0.5 text-small text-muted transition-colors hover:border-danger hover:text-danger"
                               >
                                 {t("Revoke")}
@@ -1326,7 +1328,12 @@ export function SettingsView({
                             ? t("last used {time}", { time: timeAgo(key.lastUsedAt, locale) })
                             : t("never used")}
                           {key.lastUsedIp && (
-                            <span className="ml-1.5 font-mono text-faint">· {key.lastUsedIp}</span>
+                            <span
+                              aria-label={t("Last used from {ip}", { ip: key.lastUsedIp })}
+                              className="ml-1.5 font-mono text-faint"
+                            >
+                              · {key.lastUsedIp}
+                            </span>
                           )}
                         </span>
                       </div>

@@ -826,6 +826,9 @@ const zh: Record<string, string> = {
   "{label} CLI": "{label} CLI",
   "last used {time} ago": "上次使用：{time}",
   "last used {time}": "上次使用：{time}",
+  "Rotate {name}": "轮换 {name}",
+  "Revoke {name}": "撤销 {name}",
+  "Last used from {ip}": "上次使用来源 {ip}",
   "created {date}": "创建于 {date}",
   "AI agents and scripts read and write issues at {path} with a Bearer token scoped to this workspace ({key}). Agent activity is attributed in every issue timeline.":
     "AI Agent 和脚本通过 {path} 读写任务，使用只对这个工作区（{key}）有效的 Bearer token。Agent 的每次操作都会记录在任务时间线里。",

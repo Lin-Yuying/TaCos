@@ -37,7 +37,9 @@ async function main() {
     allowedProjectIds: null,
     toolFilter: TOOL_FILTER,
     // A local stdio server runs under the machine's OS account, not a TaCos user, so
-    // actions that need a person (claim, review, blocker, project lead) refuse.
+    // actions that need a person (claim, review, blocker, project lead) refuse, and
+    // there is no viewer for per-user task visibility.
+    viewerId: null,
     userId: null,
   });
   const transport = new StdioServerTransport();
