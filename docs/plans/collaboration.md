@@ -74,7 +74,7 @@ edit/delete history + a place (activity/inbox) that surfaces changes.
 5. **Presence is docs-only.** Tasks/projects have no "who is viewing/editing"
    signal; acceptable for v1, but note it.
 6. **Task comment notifications are not configurable per thread** (mute thread/
-   task); U-08 and #78 handle channels/preferences broadly.
+   task); #78 handles in-app preferences.
 
 ## Candidate scope (one PR, four commits)
 
@@ -133,7 +133,7 @@ edit/delete history + a place (activity/inbox) that surfaces changes.
 ## Out of scope
 
 - Real-time co-editing outside documents (docs already have Yjs).
-- Voice/video, chat channels/DMs (Slack integration is #80/U-08).
+- Voice/video, chat channels/DMs (Slack integration is #80; no personal channels are planned).
 - External guest commenting (not planned: internal company use only).
 - Presence/cursors on tasks/projects (optional follow-up).
 - Comment moderation/anti-abuse tooling.
@@ -161,7 +161,6 @@ edit/delete history + a place (activity/inbox) that surfaces changes.
 
 - #78 for notification preferences/Inbox behaviors.
 - #79 for agent review/handoff integration.
-- U-08 for email/push channels of the same events.
 
 ## Files likely touched
 

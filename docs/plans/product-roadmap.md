@@ -76,7 +76,6 @@ value; P2 later / depends on other work.
 | Collaboration depth | Task comments flat; no follow/watchers; no workspace activity feed | P2 | U-11 |
 | Import/export & portability | No workspace export/import | P2 (anti-lock-in, pairs with enterprise) | U-05 |
 | Desktop & self-host ops | No health/diagnostics, backup restore UX, update channels | P2 (operational trust) | U-12 |
-| Channels & mobile | No email/push/PWA/mobile | P2/P3 | U-08 |
 | External API/MCP coverage | Tasks/comments/labels only; no projects CRUD, pages, task extensions | P1 (after #77) | U-13a/U-13b |
 | Views & task UX | Personal saved views only; no shared views/subscriptions/display options | P2 (can pull forward) | U-09 |
 
@@ -145,13 +144,12 @@ a registry and remote delegation are **not planned**. The plan stays at
 `docs/plans/external-agents.md` as a benchmark record; revisit only if external
 agents become a real requirement.
 
-### U-08 — Channels and mobile
+### U-08 — Channels and mobile (deferred, not planned)
 
-Plan: `docs/plans/channels-mobile.md`.
-Scope: per-event channel preferences (in-app/email/push/Slack), SMTP delivery
-with queue/retries/unsubscribe, web push + installable PWA (native apps later),
-quiet hours and digest, read-state sync. Can be pulled earlier if the team works
-away from the desktop app.
+Decision 2026-11-06: the team works at the computer only, so email, web push,
+PWA/mobile and digests are **not planned**. In-app Inbox (#78) is the only
+notification surface. The plan stays at `docs/plans/channels-mobile.md` as a
+benchmark record.
 
 ### U-09 — Views and task UX
 
@@ -208,7 +206,6 @@ Inbox, search and API webhooks are recorded as later follow-ups.
 
 ### Small continuous PRs
 
-- Notification channel polish (fold into U-08).
 - UI/perf fixes from fresh-context reviews.
 - Keyboard/command palette polish (fold into U-10).
 
@@ -235,7 +232,7 @@ views/task-UX slice.
 
 Round 3 (done): docs knowledge (`docs-knowledge.md`), unified search
 (`search.md`) and collaboration depth (`collaboration.md`); notifications are
-covered by #78 (in-app), U-11 (comments/follow) and U-08 (channels).
+covered by #78 (in-app) and U-11 (comments/follow).
 
 Round 4 (done): external agents/platform (`external-agents.md`), views and task
 UX (`views-task-ux.md`), desktop/self-host operations (`self-host-ops.md`).
@@ -260,8 +257,9 @@ respect dependencies and put value early:
    search → U-11 collaboration → U-03 planning.
 4. **Insight and operations**: U-02 insights → U-05 import/export → U-12
    desktop/self-host ops.
-5. **Channels**: U-08 channels/mobile. Enterprise governance and external
-   agents are not planned (5-person internal team, internal agents only).
+No channel/mobile work is planned: the team uses TaCos at the computer only.
+Enterprise governance, external agents, sharing and channel work are all
+deferred (5-person internal team).
 
 Each implementation PR references its plan document, updates the plan status,
 ships one item per commit, and must pass the smoke test, `check:harness`, build
@@ -272,11 +270,10 @@ plan's status is updated when its implementation PR starts.
 
 ## 7. Open decisions for the owner
 
-All areas now have a plan; these are the choices before implementation starts.
+All active areas have a plan; U-01, U-06, U-07 and U-08 are deferred. Remaining
+choices before implementation:
 
 1. Approve the recommended implementation waves above, or reorder them.
-2. U-03 cycles scope: workspace-wide or per-project?
-3. U-08 channels: email first or PWA/web push first?
-4. U-12: are code-signing/notarization certificates available (owner action)?
+2. U-12: are code-signing/notarization certificates available (owner action)?
 
 Plan PRs are draft #77-#81; no code has been written.

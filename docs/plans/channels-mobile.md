@@ -1,9 +1,11 @@
 # U-08: Notification channels and mobile
 
-Status: plan for a future PR. No implementation started. Written 2026-11-06
-(loop round 4). In-app Inbox is #78; Slack/webhooks are #80.
+Status: **not planned** (decision 2026-11-06: the team works at the computer
+only; email, push, PWA/mobile and digests are unnecessary). Kept as a benchmark
+and design record; no implementation is scheduled. In-app Inbox is #78;
+Slack/webhooks are #80.
 
-## Why
+## Why (recorded before the decision)
 
 Notifications exist only inside TaCos (Inbox + unread badge). Team members who
 are not looking at the app miss assignments, mentions, review requests and

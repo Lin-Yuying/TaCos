@@ -153,7 +153,7 @@ lists, not a separate query language.
 - Forecast/velocity prediction (part of U-03 capacity maybe).
 - Billing/invoice reconciliation for subscriptions (we only show tokens and
   subscription usage snapshots from the harness).
-- Email scheduled reports (U-08 channels).
+- Email scheduled reports (not planned: in-app only).
 
 ## Decisions (accepted per recommendation, 2026-11-06)
 

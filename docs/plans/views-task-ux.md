@@ -143,7 +143,7 @@ Default one PR; if shared views + subscriptions grow, split UX polish.
 - WIP limits per column (can be a follow-up).
 - Custom field types beyond the existing task fields.
 - Cross-workspace views.
-- Native mobile view layouts (U-08).
+- Native mobile view layouts (not planned: desktop only).
 
 ## Decisions (accepted as planned, 2026-11-06)
 
