@@ -16,11 +16,24 @@ const TITLES: Record<string, string> = {
   all: "All Tasks",
   active: "Active",
   open: "Open Tasks",
-  agent: "Agent",
+  agent: "Agent tasks",
 };
 for (const status of ["in_progress", "todo", "done", "canceled"] as const) {
   TITLES[status] = STATUS_META[status].label;
 }
+
+// The three views that used to sit in the sidebar are quick filters in the header now;
+// the sidebar keeps the four main queues (My Tasks, Open Tasks, All Tasks, Review).
+const QUICK_VIEWS: {
+  key: "all" | "active" | "unassigned" | "agent";
+  label: string;
+  overrides: Record<string, string | undefined>;
+}[] = [
+  { key: "all", label: "All Tasks", overrides: { view: undefined, assignee: undefined } },
+  { key: "active", label: "Active", overrides: { view: "active", assignee: undefined } },
+  { key: "unassigned", label: "Unassigned", overrides: { view: undefined, assignee: "none" } },
+  { key: "agent", label: "Agent tasks", overrides: { view: "agent", assignee: undefined } },
+];
 
 export function ListHeader({
   view,
@@ -69,10 +82,18 @@ export function ListHeader({
     view === "all" && assigneeParam
       ? assigneeParam === "none"
         ? t("Unassigned")
-        : assigneeName
-          ? t("{name}’s tasks", { name: assigneeName })
-          : t("All Tasks")
+        : assigneeParam === "me"
+          ? t("My Tasks")
+          : assigneeName
+            ? t("{name}’s tasks", { name: assigneeName })
+            : t("All Tasks")
       : t(TITLES[view] ?? "Tasks");
+  const quickViewActive: Record<(typeof QUICK_VIEWS)[number]["key"], boolean> = {
+    all: view === "all" && !assigneeParam,
+    active: view === "active",
+    unassigned: view === "all" && assigneeParam === "none",
+    agent: view === "agent",
+  };
 
   return (
     <header className={`flex h-12 shrink-0 items-center gap-2 overflow-hidden border-b border-border ${PAGE_INSET}`}>
@@ -84,6 +105,29 @@ export function ListHeader({
       <span className="shrink-0 rounded-full bg-elevated px-2 py-0.5 text-caption text-muted">
         {count}
       </span>
+      <div
+        data-task-quick-views
+        className="hidden shrink-0 items-center gap-0.5 rounded-full border border-border bg-elevated/40 p-0.5 @min-[640px]:flex"
+      >
+        {QUICK_VIEWS.map((item) => {
+          const on = quickViewActive[item.key];
+          return (
+            <button
+              key={item.key}
+              type="button"
+              onClick={() => router.replace(buildUrl(item.overrides), { scroll: false })}
+              aria-pressed={on}
+              className={`flex h-6 items-center rounded-full px-2 text-small transition-colors ${
+                on
+                  ? "bg-bg text-text shadow-[0_1px_2px_rgba(0,0,0,0.06)]"
+                  : "text-muted hover:text-text"
+              }`}
+            >
+              {t(item.label)}
+            </button>
+          );
+        })}
+      </div>
       {projectName && (
         <span className="hidden max-w-[140px] shrink-0 truncate rounded-full bg-elevated px-2 py-0.5 text-caption text-muted @min-[420px]:inline">
           {projectName}

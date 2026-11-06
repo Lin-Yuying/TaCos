@@ -8,7 +8,14 @@ import {
   listUserWorkspaces,
   setLastWorkspace,
 } from "@/lib/auth";
-import { listFavoriteProjects, listMembers, listProjects, getJoinCode } from "@/lib/issues";
+import {
+  countOpenTasks,
+  countPendingReview,
+  getJoinCode,
+  listFavoriteProjects,
+  listMembers,
+  listProjects,
+} from "@/lib/issues";
 import { listFavoritePages, listPageTree } from "@/lib/pages";
 import { UIProvider } from "@/components/ui-context";
 import { RunnerBridge } from "@/components/runner-bridge";
@@ -55,7 +62,20 @@ export default async function WorkspaceLayout({
     await setLastWorkspace(user.id, active.id);
   }
   // Server-sourced so router.refresh() after create/delete updates the sidebar list.
-  const [projects, members, favorites, favoritePages, pages, aiEnabled, joinCode, harnessGate, locale, hasThreads] = await Promise.all([
+  const [
+    projects,
+    members,
+    favorites,
+    favoritePages,
+    pages,
+    aiEnabled,
+    joinCode,
+    harnessGate,
+    locale,
+    hasThreads,
+    openTasks,
+    reviewTasks,
+  ] = await Promise.all([
     listProjects(workspaceId, user.id),
     listMembers(workspaceId),
     listFavoriteProjects(workspaceId, user.id),
@@ -66,6 +86,8 @@ export default async function WorkspaceLayout({
     getWorkspaceHarnessGate(workspaceId, ...(await harnessViewFor(user.id))),
     resolveLocale(user),
     hasAgentThreads(workspaceId, user.id),
+    countOpenTasks(workspaceId, user.id),
+    countPendingReview(workspaceId),
   ]);
 
   return (
@@ -89,6 +111,8 @@ export default async function WorkspaceLayout({
           pages={pages}
           joinCode={joinCode}
           agentAllowed={harnessGate.agentAllowed || hasThreads}
+          openTasks={openTasks}
+          reviewTasks={reviewTasks}
         >
           {children}
         </WorkspaceShell>

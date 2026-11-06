@@ -25,7 +25,7 @@ export type ViewSort = { key: string; dir: "asc" | "desc" };
 export type TaskView = { filters: ViewFilter[]; sort: ViewSort[] };
 
 export const EMPTY_VIEW: TaskView = { filters: [], sort: [] };
-export const BUILTIN_KEYS = ["title", "status", "priority", "assignee", "project", "dueDate"] as const;
+export const BUILTIN_KEYS = ["title", "status", "priority", "assignee", "project", "dueDate", "source"] as const;
 
 // The part of a task a view reads, so this file needs nothing from the server's types.
 export type ViewTask = {
@@ -36,6 +36,8 @@ export type ViewTask = {
   dueDate: string | null;
   projectName: string;
   assignees: { id: string }[];
+  // Tasks an agent created through the API or MCP, not ones a person opened.
+  createdVia?: string;
 };
 
 const FIELD_PREFIX = "field:";
@@ -58,6 +60,8 @@ function rawValues(task: ViewTask, key: string, values: FieldValues): string[] {
       return task.assignees.map((person) => person.id);
     case "project":
       return [task.projectName];
+    case "source":
+      return [task.createdVia === "api" || task.createdVia === "mcp" ? "agent" : "person"];
     case "dueDate":
       return task.dueDate ? [task.dueDate] : [];
     default:
@@ -66,6 +70,12 @@ function rawValues(task: ViewTask, key: string, values: FieldValues): string[] {
 }
 
 function matches(task: ViewTask, filter: ViewFilter, numericKeys: Set<string>, values: FieldValues): boolean {
+  // "Active" is the two open statuses together, so a saved view can say what the quick
+  // filter says without two OR-ed status filters.
+  if (filter.key === "status" && filter.value === "active" && (filter.op === "is" || filter.op === "is_not")) {
+    const active = task.status === "todo" || task.status === "in_progress";
+    return filter.op === "is" ? active : !active;
+  }
   const raw = rawValues(task, filter.key, values);
   const wanted = (filter.value ?? "").trim().toLowerCase();
   switch (filter.op) {

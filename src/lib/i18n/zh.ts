@@ -1112,6 +1112,7 @@ const zh: Record<string, string> = {
   Title: "标题",
   Status: "状态",
   Priority: "优先级",
+  Source: "来源",
   "set {field} to {value}": "把{field}设为 {value}",
   "cleared {field}": "清空了{field}",
   Fields: "字段",
