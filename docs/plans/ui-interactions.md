@@ -110,3 +110,5 @@ Commands: npx tsc --noEmit; npm run lint; npm run i18n:check; npm run build; npm
 - Extended check-collab-realtime passed: acknowledged but unstored text is preserved before restore; delayed store cannot overwrite restoration; undo refuses newer text.
 - ESLint upstream baseline has 79 errors; new errors are being removed without disabling rules.
 - Browser acceptance pending; items stay doing until their real flows are checked.
+
+Batch 1 final validation: production build, TypeScript, i18n and MCP smoke pass. Full harness: 61/62 pass; check-editor-roundtrip also fails unchanged origin/main on README.md block 2 (raw HTML paragraph differs), recorded as a pre-existing check failure. Lint baseline: 79 errors; no new errors in changed files after integration fixes. Fresh review found and fixed permission-revocation sockets and initial handshake timeout. Browser: registered isolated user/workspace, inline document rename preserved route and updated tree, task deep link opened, detail separator dragged. No Windows/Electron/native IME validation yet.

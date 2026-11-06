@@ -184,6 +184,15 @@ async function main() {
   try { await pages.undoAgentEdit("w1", pageId, "ann", {versionId: agentVersion.id}); } catch { refusedUndo = true; }
   assert(refusedUndo && (await stored()).doc.includes("After agent "), "undo refuses to discard newer collaboration text");
 
+  // Live connections must reauthenticate when access is removed.
+  await pages.setPageShared("w1",pageId,"ann",false);
+  await until("former readers to lose access",()=>b.refused());
+  const privateBefore = b.text();
+  await pages.updatePage("w1",pageId,"ann",{doc:(await stored()).doc+"\n\nPrivate after revoke."});
+  await sleep(250);
+  assert(b.text()===privateBefore,"revoked connections receive no private text");
+  await pages.setPageShared("w1",pageId,"ann",true);
+
   // Everyone leaves, and the text changes while the document is closed.
   await until("the store to finish", async () => (await stored()).doc.includes("Later "));
   await sleep(2600);

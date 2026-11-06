@@ -11,7 +11,7 @@ function socketUrl(){const scheme=location.protocol==="https:"?"wss":"ws";return
 export function useDocCollab(workspaceId:string,pageId:string):DocCollab {
   const {scope}=useUI();const [state,setState]=useState<DocCollab>({status:"connecting"});
   useEffect(()=>{
-    let closed=false;let provider:HocuspocusProvider|null=null;let closeCache:(()=>void)|null=null;let doc:Y.Doc|null=null;
+    let closed=false;let provider:HocuspocusProvider|null=null;let closeCache:(()=>void)|null=null;let doc:Y.Doc|null=null;let handshake:ReturnType<typeof setTimeout>|null=null;
     const cacheKey=`tacos.collab.v1.${scope}.${pageId}`;
     void (async()=>{
       const result=await getCollabSessionAction(workspaceId,pageId).catch(()=>null);
@@ -32,6 +32,7 @@ export function useDocCollab(workspaceId:string,pageId:string):DocCollab {
         return next.ok&&next.data?next.data.token:token;
       }});provider=current;
       let synced=false, connected=false;
+      handshake=setTimeout(()=>{if(!closed&&!synced)setState({status:"connecting",error:"Could not connect to collaboration. Retry."});},8000);
       const show=()=>{
         if(closed)return;
         const peers:CollabPeer[]=[...(current.awareness?.getStates().entries()??[])].flatMap(([clientId,value])=>{
@@ -41,10 +42,10 @@ export function useDocCollab(workspaceId:string,pageId:string):DocCollab {
         if(!synced&&currentDoc.getXmlFragment("default").length===0)return;
         setState({status:synced&&connected?"live":"reconnecting",doc:currentDoc,provider:current,user,peers,pending:current.unsyncedChanges,storageError});
       };
-      current.on("synced",()=>{synced=true;show();});current.on("status",({status}:{status:string})=>{connected=status==="connected";show();});current.on("awarenessChange",show);current.on("unsyncedChanges",show);
+      current.on("synced",()=>{synced=true;if(handshake)clearTimeout(handshake);show();});current.on("status",({status}:{status:string})=>{connected=status==="connected";show();});current.on("awarenessChange",show);current.on("unsyncedChanges",show);
       current.on("authenticationFailed",()=>{if(!closed)setState({status:"connecting",error:"Collaboration access expired. Reload to sign in again."});});
       show();
     })().catch(()=>{if(!closed)setState({status:"connecting",error:"Could not connect to collaboration. Retry."});});
-    return()=>{closed=true;provider?.destroy();closeCache?.();doc?.destroy();};
+    return()=>{closed=true;if(handshake)clearTimeout(handshake);provider?.destroy();closeCache?.();doc?.destroy();};
   },[workspaceId,pageId,scope]);return state;
 }

@@ -7,7 +7,7 @@ export function tabIdentity(href: string): string {
   if (kind === "projects" && id) return `${workspace}:project:${id}`;
   if (kind === "agent") return `${workspace}:agent`;
   const params = new URLSearchParams();
-  for (const key of ["view", "project", "assignee"]) {
+  for (const key of ["view", "project", "assignee", "label"]) {
     const value = url.searchParams.get(key);
     if (value && !(key === "view" && value === "all")) params.set(key, value);
   }

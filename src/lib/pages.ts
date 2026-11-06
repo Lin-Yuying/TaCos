@@ -3,7 +3,7 @@ import { and, desc, eq, inArray, isNotNull, isNull, lt, or } from "drizzle-orm";
 import { getDb } from "../db/client";
 import { notifications, pageAccess, pageCollab, pageComments, pageFavorites, pageVersions, pages, users } from "../db/schema";
 import { attachmentImageType, getAttachment, removePageAttachments } from "./attachments";
-import { collabDocWritten, withStoredCollabPage } from "./collab/live";
+import { collabDocWritten, withStoredCollabPage, collabAccessChanged } from "./collab/live";
 import { isPageLevel, levelAllows, type PageLevel } from "./page-level";
 import { TacosError, getProject, listMembers, nowIso } from "./issues";
 import { parseDocMentions } from "./mentions";
@@ -387,6 +387,7 @@ export async function movePage(workspaceId:string,pageId:string,viewerId:string,
       if(people.length)tx.insert(pageAccess).values(ids.flatMap((id)=>people.map((person)=>({...person,pageId:id})))).run();
     }
   });
+  if(impact.sharingChanged)collabAccessChanged(ids);
 }
 
 /** The page's parents, top first, as far up as this person may read. */
@@ -491,6 +492,7 @@ export async function setPageShareLevel(
     .update(pages)
     .set({ shareLevel: level })
     .where(and(eq(pages.workspaceId, workspaceId), inArray(pages.id, ids)));
+  collabAccessChanged(ids);
 }
 
 /** A null level puts the person back on the page's shareLevel. */
@@ -505,6 +507,7 @@ export async function setPageMemberLevel(
   const db = getDb();
   await db.delete(pageAccess).where(and(inArray(pageAccess.pageId, ids), eq(pageAccess.userId, userId)));
   if (level) await db.insert(pageAccess).values(ids.map((id) => ({ pageId: id, userId, level })));
+  collabAccessChanged(ids);
 }
 
 // Edits by the same person within this window are one version, so typing does not fill
@@ -910,6 +913,7 @@ export async function setPageShared(
     .update(pages)
     .set({ shared: shared ? 1 : 0 })
     .where(and(eq(pages.workspaceId, workspaceId), inArray(pages.id, ids)));
+  collabAccessChanged(ids);
   const updated = await findPage(workspaceId, pageId);
   if (!updated) throw new TacosError("Page not found", 404);
   return updated;
@@ -929,6 +933,8 @@ export async function deletePage(
     .update(pages)
     .set({ deletedAt: nowIso(), trashRoot: pageId })
     .where(and(eq(pages.workspaceId, workspaceId), inArray(pages.id, ids)));
+  // The owner may finish sending text already typed; it is retained in the Trash state.
+  collabAccessChanged(ids,viewerId);
   return ids;
 }
 

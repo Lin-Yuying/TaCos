@@ -125,7 +125,7 @@ export function DocPageView({
   const [icon, setIcon] = useState(page.icon);
   const [shared, setShared] = useState(page.shared);
   const [doc, setDoc] = useState(page.doc);
-  const [saved, setSaved] = useState(false);
+  const [saved, setSaved] = useState(true);
   const contentRef = useRef(doc); contentRef.current = doc;
   const [aiPanel, setAiPanel] = useState<{ x: number; y: number } | null>(null);
   const [error, setError] = useState<string | null>(null);

@@ -1486,6 +1486,12 @@ function TabBar({
     router.push(back ?? startKey);
   }
 
+  function closeMany(key:string,right:boolean) {
+    const keep=visible.filter((item,index)=>fixedTabs.includes(item)||(right?index<=visible.indexOf(key):item===key));
+    setTabs(keep);setRecentTabs(previous=>[...visible.filter(item=>!keep.includes(item)),...previous].slice(0,20));
+    if(!keep.includes(current))router.push(key);
+  }
+
   // A deleted doc must not leave a dead route in the strip: drop its tab (and any
   // subpage tabs that went with it) and activate the neighbour, like closing a tab.
   useEffect(() => {
@@ -1560,7 +1566,10 @@ function TabBar({
                 <X size={12} />
               </button>
             </div></ContextMenu.Trigger><ContextMenu.Portal><ContextMenu.Content className="z-[90] rounded-lg border border-border bg-overlay p-1 text-body shadow-lg">
-              {[{label:fixedTabs.includes(key)?"Unpin tab":"Pin tab",run:()=>setFixedTabs(previous=>previous.includes(key)?previous.filter(item=>item!==key):[...previous,key])},{label:"Close tab",run:()=>closeTab(key)},{label:"Close other tabs",run:()=>{const keep=visible.filter(item=>item===key||fixedTabs.includes(item));setTabs(keep);setRecentTabs(previous=>[...visible.filter(item=>!keep.includes(item)),...previous].slice(0,20));if(!keep.includes(current))router.push(key);}},{label:"Close tabs to the right",run:()=>{const keep=visible.filter((item,index)=>index<=visible.indexOf(key)||fixedTabs.includes(item));setTabs(keep);setRecentTabs(previous=>[...visible.filter(item=>!keep.includes(item)),...previous].slice(0,20));if(!keep.includes(current))router.push(key);}}].map(action=><ContextMenu.Item key={action.label} onSelect={()=>action.run()} className="rounded px-3 py-1.5 outline-none data-[highlighted]:bg-elevated">{t(action.label)}</ContextMenu.Item>)}
+              <ContextMenu.Item onSelect={()=>setFixedTabs(previous=>previous.includes(key)?previous.filter(item=>item!==key):[...previous,key])} className="rounded px-3 py-1.5 data-[highlighted]:bg-elevated">{t(fixedTabs.includes(key)?"Unpin tab":"Pin tab")}</ContextMenu.Item>
+              <ContextMenu.Item disabled={fixedTabs.includes(key)} onSelect={()=>closeTab(key)} className="rounded px-3 py-1.5 data-[highlighted]:bg-elevated">{t("Close tab")}</ContextMenu.Item>
+              <ContextMenu.Item onSelect={()=>closeMany(key,false)} className="rounded px-3 py-1.5 data-[highlighted]:bg-elevated">{t("Close other tabs")}</ContextMenu.Item>
+              <ContextMenu.Item onSelect={()=>closeMany(key,true)} className="rounded px-3 py-1.5 data-[highlighted]:bg-elevated">{t("Close tabs to the right")}</ContextMenu.Item>
             </ContextMenu.Content></ContextMenu.Portal></ContextMenu.Root>
           );
         })}

@@ -2,6 +2,7 @@
 // code does not load the socket server. Set when the socket starts; absent in the desktop app.
 type CollabLive = {
   replace: (pageId: string, markdown: string, revision: number) => void;
+  accessChanged: (pageIds: string[], keepUserId?: string) => void;
   withStored: <T>(pageId: string, work: () => Promise<T>) => Promise<T>;
 };
 
@@ -23,3 +24,5 @@ export function collabDocWritten(pageId: string, markdown: string, revision: num
 export function withStoredCollabPage<T>(pageId: string, work: () => Promise<T>): Promise<T> {
   return shared.__tacosCollab?.withStored(pageId, work) ?? work();
 }
+
+export function collabAccessChanged(pageIds: string[], keepUserId?: string): void { shared.__tacosCollab?.accessChanged(pageIds,keepUserId); }

@@ -158,6 +158,16 @@ export async function startCollabServer(port = collabPort()): Promise<{ stop: ()
   const { hocuspocus } = server;
 
   setCollabLive({
+    accessChanged(pageIds,keepUserId) {
+      for(const pageId of pageIds) {
+        const document=hocuspocus.documents.get(pageId);
+        for(const connection of [...(document?.connections.keys()??[])]) {
+          if(keepUserId&&connection.context.userId===keepUserId)continue;
+          connection.close();
+          connection.webSocket.close(4000,"Document access changed");
+        }
+      }
+    },
     async withStored(pageId, work) {
       const document = hocuspocus.documents.get(pageId);
       if (!document) return work();

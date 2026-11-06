@@ -1072,6 +1072,8 @@ const zh: Record<string, string> = {
   "Close tabs to the right": "关闭右侧标签",
   "Synchronized": "已同步",
   "Local storage is unavailable. Keep this page open until connected.": "本机存储不可用，请保持此页打开直到网络恢复。",
+  "Change sharing for this document and all its children?": "更改此文档及全部子文档的共享范围？",
+  "Change permissions for this document and all its children?": "更改此文档及全部子文档的权限？",
 };
 
 export default zh;
