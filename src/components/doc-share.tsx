@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { Lock, Users } from "lucide-react";
+import { useUI } from "@/components/ui-context";
 import { Menu } from "@/components/menu";
 import { AssigneeAvatar } from "@/components/issue-table";
 import { useT } from "@/components/i18n-context";
@@ -63,6 +64,7 @@ export function DocShareMenu({
   onToggleShared: () => void;
 }) {
   const t = useT();
+  const {confirm}=useUI();
   const [level, setLevel] = useState<PageLevel>("edit");
   const [people, setPeople] = useState<Record<string, PageLevel>>({});
   const [error, setError] = useState<string | null>(null);
@@ -84,12 +86,14 @@ export function DocShareMenu({
   }, [workspaceId, pageId]);
 
   async function changeLevel(next: PageLevel) {
+    if(!await confirm(t("Change permissions for this document and all its children?")))return;
     const result = await setPageShareLevelAction(workspaceId, pageId, next);
     if (result.ok) setLevel(next);
     else setError(result.error);
   }
 
   async function changePerson(userId: string, next: PageLevel | null) {
+    if(!await confirm(t("Change permissions for this document and all its children?")))return;
     const result = await setPageMemberLevelAction(workspaceId, pageId, userId, next);
     if (!result.ok) {
       setError(result.error);

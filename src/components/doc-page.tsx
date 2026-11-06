@@ -1,6 +1,9 @@
 "use client";
 
 import Link from "next/link";
+import type { Editor } from "@tiptap/react";
+import { documentMarkdown, markdownToDocument } from "@/lib/editor/document-markdown";
+import { useDraft } from "@/lib/ui/draft-store";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
@@ -107,7 +110,11 @@ export function DocPageView({
 }) {
   const t = useT();
   const router = useRouter();
-  const { aiReady } = useUI();
+  const { aiReady, confirm } = useUI();
+  const editorRef = useRef<Editor | null>(null);
+  const markdown = useMemo(() => documentMarkdown(), []);
+  const [recovery, setRecovery] = useDraft<{body:string;revision:number;token:string}|null>("document",page.id,null);
+  const recoveryRef = useRef(recovery); recoveryRef.current = recovery;
   const [favorite, setFavorite] = useState(initialFavorite);
   const [cover, setCover] = useState(page.cover);
   const [uploading, setUploading] = useState(0);
@@ -119,6 +126,7 @@ export function DocPageView({
   const [shared, setShared] = useState(page.shared);
   const [doc, setDoc] = useState(page.doc);
   const [saved, setSaved] = useState(false);
+  const contentRef = useRef(doc); contentRef.current = doc;
   const [aiPanel, setAiPanel] = useState<{ x: number; y: number } | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [side, setSide] = useState<"updates" | "comments" | null>(null);
@@ -131,6 +139,7 @@ export function DocPageView({
   const [conflict, setConflict] = useState<{ doc: string; revision: number; by: string | null } | null>(null);
   const collab = useDocCollab(workspaceId, page.id);
   const sharing = collab.status === "live" || collab.status === "reconnecting";
+  const canEditBody = canEdit && collab.status !== "connecting";
   const pending = useRef<string | null>(null);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
   // Saves run one at a time: each one names the revision the one before it produced.
@@ -143,16 +152,19 @@ export function DocPageView({
     timer.current = null;
     if (conflicted.current) return;
     const next = pending.current;
+    const token = recoveryRef.current?.token;
     pending.current = null;
     if (next === null) return;
     setSaved(false);
     saves.current = saves.current.then(async () => {
+      if (conflicted.current) return;
       const result = await savePageDocAction(workspaceId, page.id, next, revision.current).catch(() => null);
-      if (!result) setError("Something went wrong");
-      else if (!result.ok) setError(result.error);
+      if (!result || !result.ok) { if (contentRef.current === next) pending.current ??= next; setError(result && !result.ok ? result.error : "Could not save. Retry."); }
       else if (result.data.kind === "saved") {
         revision.current = result.data.revision;
-        setSaved(true);
+        const confirmed = contentRef.current === next && pending.current === null;
+        setSaved(confirmed);
+        if (confirmed) {setRecovery((current)=>current?.token === token ? null : current);setError(null);}
       } else {
         // Hold the text: newer typing wins over it, and leaving the page still keeps it.
         pending.current ??= next;
@@ -171,12 +183,13 @@ export function DocPageView({
     flushDoc();
   }
 
-  function useTheirs() {
+  async function useTheirs() {
     if (!conflict) return;
-    if (!window.confirm(t("Discard your unsaved text?"))) return;
+    if (!(await confirm(t("Discard your unsaved text?")))) return;
     revision.current = conflict.revision;
     conflicted.current = false;
     pending.current = null;
+    setRecovery(null);
     setDoc(conflict.doc);
     setConflict(null);
   }
@@ -185,9 +198,13 @@ export function DocPageView({
   // leaving the page never costs the last keystrokes.
   function editDoc(next: string) {
     setDoc(next);
+    contentRef.current = next;
+    setSaved(false);
     // The socket stores a shared document.
     if (sharing) return;
     pending.current = next;
+    const snapshot = {body:next,revision:revision.current,token:crypto.randomUUID()};
+    recoveryRef.current = snapshot; setRecovery(snapshot);
     if (timer.current) clearTimeout(timer.current);
     timer.current = setTimeout(flushDoc, 700);
   }
@@ -197,10 +214,12 @@ export function DocPageView({
       if (timer.current) clearTimeout(timer.current);
       timer.current = null;
       const next = pending.current;
+      const token = recoveryRef.current?.token;
       pending.current = null;
       if (next === null) return;
       saves.current = saves.current.then(async () => {
-        await savePageDocAction(workspaceId, page.id, next, revision.current, { keepOnConflict: true });
+        const result = await savePageDocAction(workspaceId, page.id, next, revision.current, { keepOnConflict: true }).catch(() => null);
+        if (result?.ok && result.data.kind === "saved") setRecovery((current)=>current?.token === token ? null : current);
       });
     },
     [workspaceId, page.id]
@@ -210,6 +229,7 @@ export function DocPageView({
   async function beforeRestore() {
     flushDoc();
     await saves.current;
+    if (pending.current !== null || conflicted.current || sharing && collab.provider.hasUnsyncedChanges) throw new Error("Save or synchronize your current text before restoring a version");
   }
 
   function restored(next: DocPage) {
@@ -226,7 +246,8 @@ export function DocPageView({
   useEffect(() => {
     let live = true;
     void listPageCommentsAction(workspaceId, page.id).then((result) => {
-      if (!live || !result.ok) return;
+      if (!live) return;
+      if (!result.ok) {setError(result.error);return;}
       setComments(result.data.comments);
       setMembers(result.data.members);
     });
@@ -266,6 +287,7 @@ export function DocPageView({
   }
 
   async function removeComment(id: string) {
+    if (!(await confirm(t("Delete this comment?")))) return;
     const result = await removePageCommentAction(workspaceId, page.id, id);
     if (result.ok) setComments(result.data);
     else setError(result.error);
@@ -280,16 +302,18 @@ export function DocPageView({
     const result = await updatePageAction(workspaceId, page.id, { title: next });
     if (!result.ok) {
       setError(result.error);
-      setTitle(page.title);
       return;
     }
+    setTitle(result.data.title);
     router.refresh();
   }
 
   async function pickIcon(next: string) {
+    if (!canEdit) return;
+    const previous = icon;
     setIcon(next);
     const result = await updatePageAction(workspaceId, page.id, { icon: next });
-    if (!result.ok) setError(result.error);
+    if (!result.ok) {setIcon(previous);setError(result.error);}
     else router.refresh();
   }
 
@@ -328,6 +352,7 @@ export function DocPageView({
   }
 
   async function toggleShared() {
+    if(!await confirm(t("Change sharing for this document and all its children?")))return;
     const result = await setPageSharedAction(workspaceId, page.id, !shared);
     if (!result.ok) {
       setError(result.error);
@@ -338,7 +363,7 @@ export function DocPageView({
   }
 
   async function removePage() {
-    if (!window.confirm(t("Move “{title}” and everything inside it to the Trash?", { title: page.title }))) return;
+    if (!(await confirm(t("Move “{title}” and everything inside it to the Trash?", { title: page.title })))) return;
     const result = await deletePageAction(workspaceId, page.id);
     if (!result.ok) {
       setError(result.error);
@@ -365,16 +390,17 @@ export function DocPageView({
   // Inserting at the end is predictable; the editor owns the caret and has no public
   // "insert at cursor" API, and a page reference is usually added as its own block.
   function insertRef(reference: PageRefEntry, embed: boolean) {
+    if (!canEditBody || !editorRef.current?.isEditable) return;
     const syntax = embed ? `![[${reference.title}|${reference.id}]]` : `[[${reference.title}|${reference.id}]]`;
-    const next = doc.trim() ? `${doc.replace(/\s+$/, "")}\n\n${syntax}` : syntax;
-    editDoc(next);
+    editorRef.current?.chain().focus().insertContent(markdownToDocument(markdown, syntax).content ?? []).run();
   }
 
   // Putting the reference at the top of the text keeps the row where the list showed
   // it; from there it is an ordinary line the editor can move anywhere.
   function placeSubpage(child: PageSummary) {
+    if (!canEditBody || !editorRef.current?.isEditable) return;
     const syntax = `[[${child.title}|${child.id}]]`;
-    editDoc(doc.trim() ? `${syntax}\n\n${doc}` : syntax);
+    editorRef.current?.chain().focus().insertContent(markdownToDocument(markdown, syntax).content ?? []).run();
   }
 
   function openAi(origin: HTMLElement) {
@@ -386,8 +412,9 @@ export function DocPageView({
   }
 
   function acceptAi(text: string, action: string) {
+    if (!canEditBody || !editorRef.current?.isEditable) return;
     const next = action === "continue" && doc.trim() ? `${doc.replace(/\s+$/, "")}\n\n${text}` : text;
-    editDoc(next);
+    editorRef.current?.commands.setContent(markdownToDocument(markdown, next));
     setAiPanel(null);
   }
 
@@ -451,6 +478,7 @@ export function DocPageView({
           )}
         </span>
         <div className="ml-auto flex shrink-0 items-center gap-2">
+          {sharing && collab.storageError && <p role="alert" className="text-small text-danger">{t(collab.storageError)}</p>}
           {collab.status === "reconnecting" && (
             <span data-doc-reconnecting className="text-small text-faint">
               {t("Reconnecting…")}
@@ -472,10 +500,10 @@ export function DocPageView({
           )}
           <span
             className={`text-small text-faint transition-opacity duration-300 ${
-              saved ? "opacity-100" : "opacity-0"
+              saved || sharing ? "opacity-100" : "opacity-70"
             }`}
           >
-            {t("Saved")}
+            {t(sharing ? collab.pending || collab.status === "reconnecting" ? "Offline changes are kept on this device" : "Synchronized" : saved ? "Saved" : "Unsaved changes")}
           </span>
           <button
             type="button"
@@ -654,6 +682,7 @@ export function DocPageView({
             </div>
           )}
           <div className="flex items-start gap-3">
+            {canEdit ? (
             <Menu
               width={196}
               triggerClassName="shrink-0 rounded-md p-1 text-display leading-none transition-colors hover:bg-elevated"
@@ -681,12 +710,14 @@ export function DocPageView({
                 </div>
               )}
             </Menu>
+            ) : <span className="text-display">{icon ?? "📄"}</span>}
             <div className="min-w-0 flex-1">
               <input
                 value={title}
                 onChange={(event) => setTitle(event.target.value)}
                 onBlur={() => void saveTitle()}
                 onKeyDown={(event) => {
+                  if (event.nativeEvent.isComposing || event.nativeEvent.keyCode === 229) return;
                   if (event.key === "Enter") event.currentTarget.blur();
                   if (event.key === "Escape") setTitle(page.title);
                 }}
@@ -700,7 +731,9 @@ export function DocPageView({
             </div>
           </div>
 
-          {error && <div className="mt-3 text-small text-danger">{t(error)}</div>}
+          {error && <div role="alert" className="mt-3 text-small text-danger">{t(error)} <button onClick={flushDoc}>{t("Retry")}</button> <button onClick={()=>void navigator.clipboard.writeText(doc)}>{t("Copy draft")}</button></div>}
+          {collab.status === "connecting" && collab.error && <p role="alert" className="my-2 text-small text-danger">{t(collab.error)} <button onClick={()=>location.reload()}>{t("Retry")}</button></p>}
+          {recovery && !sharing && <div role="status" className="my-2 flex flex-wrap gap-3 text-small text-muted">{t("A local draft is kept until saving succeeds.")}<button disabled={!canEditBody} onClick={()=>{if(!canEditBody)return;revision.current=recovery.revision;setDoc(recovery.body);contentRef.current=recovery.body;pending.current=recovery.body;flushDoc();}}>{t("Restore draft")}</button><button onClick={()=>void navigator.clipboard.writeText(recovery.body)}>{t("Copy draft")}</button></div>}
 
           {conflict && (
             <div data-doc-conflict className="mt-3 rounded-lg border border-border-strong bg-surface p-3 text-body">
@@ -780,12 +813,13 @@ export function DocPageView({
             {!canEdit && !doc.trim() && <p className="text-body text-faint">{t("This page is empty.")}</p>}
             {(canEdit || doc.trim()) && (
               <DocumentEditor
+                editorRef={editorRef}
                 key={sharing ? "shared" : "alone"}
                 collab={sharing ? collab : undefined}
                 value={doc}
                 onChange={editDoc}
                 pages={pageCtx}
-                editable={canEdit && collab.status !== "connecting"}
+                editable={canEditBody}
                 placeholder={t("Write something, or type / for commands…")}
                 anchors={anchors}
                 members={members}
@@ -861,6 +895,7 @@ export function DocPageView({
       )}
       {side === "comments" && (
         <DocCommentsPanel
+          pageId={page.id}
           comments={comments}
           members={members}
           userId={viewerId}

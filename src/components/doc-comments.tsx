@@ -1,5 +1,6 @@
 "use client";
 
+import { useDraft } from "@/lib/ui/draft-store";
 import { useState } from "react";
 import { Check, MessageSquare, RotateCcw, Trash2, X } from "lucide-react";
 import { Markdown } from "@/components/markdown";
@@ -13,6 +14,7 @@ import type { PageComment } from "@/lib/page-comments";
 
 export function DocCommentsPanel({
   comments,
+  pageId,
   members,
   userId,
   isOwner,
@@ -30,6 +32,7 @@ export function DocCommentsPanel({
   onClose,
 }: {
   comments: PageComment[];
+  pageId: string;
   members: Member[];
   userId: string | null;
   isOwner: boolean;
@@ -49,7 +52,7 @@ export function DocCommentsPanel({
 }) {
   const t = useT();
   const locale = useLocale();
-  const [body, setBody] = useState("");
+  const [body, setBody] = useDraft("document-comment", `${pageId}.${draftAnchor?.quote ?? "document"}`, "");
   const [showResolved, setShowResolved] = useState(false);
   const open = comments.filter((comment) => !comment.resolvedAt);
   const resolved = comments.filter((comment) => comment.resolvedAt);

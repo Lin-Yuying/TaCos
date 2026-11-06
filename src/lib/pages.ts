@@ -3,7 +3,7 @@ import { and, desc, eq, inArray, isNotNull, isNull, lt, or } from "drizzle-orm";
 import { getDb } from "../db/client";
 import { notifications, pageAccess, pageCollab, pageComments, pageFavorites, pageVersions, pages, users } from "../db/schema";
 import { attachmentImageType, getAttachment, removePageAttachments } from "./attachments";
-import { collabDocWritten } from "./collab/live";
+import { collabDocWritten, withStoredCollabPage } from "./collab/live";
 import { isPageLevel, levelAllows, type PageLevel } from "./page-level";
 import { TacosError, getProject, listMembers, nowIso } from "./issues";
 import { parseDocMentions } from "./mentions";
@@ -27,7 +27,7 @@ export type DocPage = {
 };
 
 // What the sidebar and the child-page list need; the body is left in the database.
-export type PageSummary = Omit<DocPage, "doc" | "workspaceId" | "revision" | "shareLevel" | "position" | "cover"> & { depth: number };
+export type PageSummary = Omit<DocPage, "doc" | "workspaceId" | "revision" | "shareLevel" | "position" | "cover"> & { depth: number; canEdit?: boolean };
 
 export type PageRef = { id: string; title: string; icon: string | null };
 
@@ -103,7 +103,9 @@ export function pageTree(items: DocPage[]): PageSummary[] {
 }
 
 export async function listPageTree(workspaceId: string, viewerId: string): Promise<PageSummary[]> {
-  return pageTree(await listPages(workspaceId, viewerId));
+  const rows = await listPages(workspaceId, viewerId);
+  const levels = new Map(await Promise.all(rows.map(async(page)=>[page.id, await pageLevel(page,viewerId)] as const)));
+  return pageTree(rows).map((page)=>({...page,canEdit:levels.get(page.id)==="edit"}));
 }
 
 export async function getPage(
@@ -333,60 +335,58 @@ function siblingsOf(parentId: string | null) {
  * the end. A page under a parent has the parent's sharing, so a move that changes who can see a
  * page takes its owner; `shared` asks for that at the top level.
  */
-export async function movePage(
-  workspaceId: string,
-  pageId: string,
-  viewerId: string,
-  target: { parentId: string | null; beforeId?: string | null; shared?: boolean }
-): Promise<void> {
-  const db = getDb();
-  const page = await getPage(workspaceId, pageId, viewerId);
-  if (!page) throw new TacosError("Page not found", 404);
-  await requirePageLevel(page, viewerId, "edit");
-  const subtree = [pageId, ...(await descendantsOf(workspaceId, pageId)).map((p) => p.id)];
-  let parent: DocPage | null = null;
-  if (target.parentId) {
-    if (subtree.includes(target.parentId)) throw new TacosError("A page cannot move inside itself", 400);
-    parent = await getPage(workspaceId, target.parentId, viewerId);
-    if (!parent) throw new TacosError("Parent page not found", 404);
-    await requirePageLevel(parent, viewerId, "edit");
+export type PageMoveTarget = { parentId: string | null; beforeId?: string | null; shared?: boolean; projectId?: string | null; confirmedImpact?: string };
+function moveVersion(workspaceId: string): string {
+  const db=getDb();
+  const rows=db.select({id:pages.id,parentId:pages.parentId,projectId:pages.projectId,shared:pages.shared,shareLevel:pages.shareLevel,revision:pages.revision,deletedAt:pages.deletedAt,position:pages.position}).from(pages).where(eq(pages.workspaceId,workspaceId)).all().sort((a,b)=>a.id.localeCompare(b.id));
+  const access=db.select().from(pageAccess).all().filter((row)=>rows.some((page)=>page.id===row.pageId)).sort((a,b)=>`${a.pageId}:${a.userId}`.localeCompare(`${b.pageId}:${b.userId}`));
+  return crypto.createHash("sha256").update(JSON.stringify([rows,access])).digest("hex");
+}
+async function preparePageMove(workspaceId:string,pageId:string,viewerId:string,target:PageMoveTarget) {
+  const db=getDb(),page=await getPage(workspaceId,pageId,viewerId);
+  if(!page)throw new TacosError("Document not found",404);
+  await requirePageLevel(page,viewerId,"edit");
+  const descendants=await descendantsOf(workspaceId,pageId);
+  for(const child of descendants) {
+    const readable=await getPage(workspaceId,child.id,viewerId);
+    if(!readable)throw new TacosError("You cannot move every document in this subtree",403);
+    await requirePageLevel(readable,viewerId,"edit");
   }
-  const shared = parent ? parent.shared : target.shared ?? page.shared;
-  if (shared !== page.shared && page.createdBy !== viewerId) {
-    throw new TacosError("Only the page owner can change sharing", 403);
-  }
-
-  const siblings = (
-    await db
-      .select({ id: pages.id })
-      .from(pages)
-      .where(and(eq(pages.workspaceId, workspaceId), siblingsOf(parent?.id ?? null), isNull(pages.deletedAt)))
-      .orderBy(pages.position, pages.createdAt)
-  )
-    .map((row) => row.id)
-    .filter((id) => id !== pageId);
-  const before = target.beforeId ? siblings.indexOf(target.beforeId) : -1;
-  siblings.splice(before >= 0 ? before : siblings.length, 0, pageId);
-  for (const [index, id] of siblings.entries()) {
-    await db.update(pages).set({ position: (index + 1) * POSITION_STEP }).where(eq(pages.id, id));
-  }
-  await db
-    .update(pages)
-    .set({ parentId: parent?.id ?? null, projectId: parent ? parent.projectId : page.projectId })
-    .where(eq(pages.id, pageId));
-  if (shared === page.shared) return;
-  await db
-    .update(pages)
-    .set({ shared: shared ? 1 : 0, ...(parent ? { shareLevel: parent.shareLevel } : {}) })
-    .where(and(eq(pages.workspaceId, workspaceId), inArray(pages.id, subtree)));
-  if (!parent) return;
-  const people = await db.select().from(pageAccess).where(eq(pageAccess.pageId, parent.id));
-  await db.delete(pageAccess).where(inArray(pageAccess.pageId, subtree));
-  if (people.length) {
-    await db
-      .insert(pageAccess)
-      .values(subtree.flatMap((id) => people.map((person) => ({ ...person, pageId: id }))));
-  }
+  const ids=[pageId,...descendants.map((child)=>child.id)];
+  const parent=target.parentId?await getPage(workspaceId,target.parentId,viewerId):null;
+  if(target.parentId&&!parent)throw new TacosError("Parent page not found",404);
+  if(parent){if(ids.includes(parent.id))throw new TacosError("A page cannot move inside itself",400);await requirePageLevel(parent,viewerId,"edit");}
+  const projectId=parent?parent.projectId:target.projectId===undefined?page.projectId:target.projectId;
+  if(projectId&&!(await getProject(workspaceId,projectId)))throw new TacosError("Project not found",404);
+  const shared=parent?parent.shared:target.shared??page.shared;
+  const people=parent?db.select().from(pageAccess).where(eq(pageAccess.pageId,parent.id)).all():[];
+  const oldPeople=db.select().from(pageAccess).where(eq(pageAccess.pageId,pageId)).all();
+  const key=(members:typeof people)=>JSON.stringify(members.map((p)=>[p.userId,p.level]).sort());
+  const sharingChanged=shared!==page.shared||!!parent&&(parent.shareLevel!==page.shareLevel||key(people)!==key(oldPeople));
+  if(sharingChanged&&page.createdBy!==viewerId)throw new TacosError("Only the page owner can change sharing",403);
+  const impact={token:moveVersion(workspaceId),requiresConfirmation:sharingChanged||projectId!==page.projectId,descendantCount:descendants.length,shared,level:parent?.shareLevel??page.shareLevel,projectId,sharingChanged};
+  return {page,parent,ids,people,impact};
+}
+export async function previewPageMove(workspaceId:string,pageId:string,viewerId:string,target:PageMoveTarget) {
+  return (await preparePageMove(workspaceId,pageId,viewerId,target)).impact;
+}
+export async function movePage(workspaceId:string,pageId:string,viewerId:string,target:PageMoveTarget):Promise<void> {
+  const {page,parent,ids,people,impact}=await preparePageMove(workspaceId,pageId,viewerId,target);
+  if(impact.requiresConfirmation&&target.confirmedImpact!==impact.token)throw new TacosError("Review who can access the moved documents before continuing",409);
+  getDb().transaction((tx)=>{
+    if(moveVersion(workspaceId)!==impact.token)throw new TacosError("The document tree changed. Review the move again.",409);
+    const siblings=tx.select({id:pages.id}).from(pages).where(and(eq(pages.workspaceId,workspaceId),siblingsOf(parent?.id??null),isNull(pages.deletedAt))).orderBy(pages.position,pages.createdAt).all().map((row)=>row.id).filter((id)=>id!==pageId);
+    const before=target.beforeId?siblings.indexOf(target.beforeId):-1;
+    if(target.beforeId&&before<0)throw new TacosError("The destination changed. Choose it again.",409);
+    siblings.splice(before<0?siblings.length:before,0,pageId);
+    for(const [index,id]of siblings.entries())tx.update(pages).set({position:(index+1)*POSITION_STEP}).where(eq(pages.id,id)).run();
+    tx.update(pages).set({parentId:parent?.id??null}).where(eq(pages.id,pageId)).run();
+    tx.update(pages).set({projectId:impact.projectId,...(impact.sharingChanged?{shared:impact.shared?1:0,shareLevel:impact.level}:{})}).where(and(eq(pages.workspaceId,workspaceId),inArray(pages.id,ids))).run();
+    if(impact.sharingChanged&&parent){
+      tx.delete(pageAccess).where(inArray(pageAccess.pageId,ids)).run();
+      if(people.length)tx.insert(pageAccess).values(ids.flatMap((id)=>people.map((person)=>({...person,pageId:id})))).run();
+    }
+  });
 }
 
 /** The page's parents, top first, as far up as this person may read. */
@@ -627,7 +627,8 @@ export async function updatePage(
 
   const next: Partial<typeof pages.$inferInsert> = {};
   if (patch.title != null) {
-    const title = patch.title.trim().slice(0, 120);
+    const title = patch.title.trim();
+    if (title.length > 120) throw new TacosError("Document title must be at most 120 characters", 400);
     if (!title) throw new TacosError("Page title is required");
     if (title !== page.title) next.title = title;
   }
@@ -774,6 +775,10 @@ export async function restorePageVersion(
   versionId: string,
   options: { via?: string } = {}
 ): Promise<DocPage> {
+  const initial = await getPage(workspaceId, pageId, viewerId);
+  if (!initial) throw new TacosError("Page not found", 404);
+  await requirePageLevel(initial, viewerId, "edit");
+  return withStoredCollabPage(pageId, async () => {
   const page = await getPage(workspaceId, pageId, viewerId);
   if (!page) throw new TacosError("Page not found", 404);
   await requirePageLevel(page, viewerId, "edit");
@@ -790,6 +795,7 @@ export async function restorePageVersion(
     via: options.via ?? "you",
     reason: "restore",
     restoredFrom: version.seq,
+  });
   });
 }
 
@@ -820,6 +826,10 @@ export async function undoAgentEdit(
   viewerId: string,
   options: { versionId?: string; via?: string } = {}
 ): Promise<DocPage> {
+  const initial = await getPage(workspaceId, pageId, viewerId);
+  if (!initial) throw new TacosError("Page not found", 404);
+  await requirePageLevel(initial, viewerId, "edit");
+  return withStoredCollabPage(pageId, async () => {
   const page = await getPage(workspaceId, pageId, viewerId);
   if (!page) throw new TacosError("Page not found", 404);
   await requirePageLevel(page, viewerId, "edit");
@@ -846,6 +856,7 @@ export async function undoAgentEdit(
     via: options.via ?? "you",
     reason: "undo",
     restoredFrom: latest.seq,
+  });
   });
 }
 

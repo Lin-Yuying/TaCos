@@ -64,6 +64,40 @@ export async function startCollabServer(port = collabPort()): Promise<{ stop: ()
   // no person on it: going by that would drop typing that was still waiting to store.
   const editors = new Map<string, Context>();
 
+  async function persistDocument(documentName: string, document: Y.Doc): Promise<void> {
+      const editor = editors.get(documentName);
+      if (!editor) return;
+      const { workspaceId, userId } = editor;
+      const state = Y.encodeStateAsUpdate(document);
+      const text = toMarkdown(document);
+      const page = await getPage(workspaceId, documentName, userId);
+      if (!page) {
+        // In the Trash: the page cannot take the text, and restoring it should bring the text back.
+        await getDb()
+          .update(pageCollab)
+          .set({ state: Buffer.from(state), updatedAt: new Date().toISOString() })
+          .where(eq(pageCollab.pageId, documentName));
+        return;
+      }
+      let revision = page.revision;
+      try {
+        if (text !== page.doc && text !== settled.get(documentName)) {
+          const written = await updatePage(
+            workspaceId,
+            documentName,
+            userId,
+            { doc: text, baseRevision: page.revision },
+            { fromCollab: true }
+          );
+          revision = written.revision;
+          settled.set(documentName, text);
+        }
+      } finally {
+        // Also when the page refused the text: it stays here for the next store to try.
+        await saveState(documentName, state, revision);
+      }
+  }
+
   const server = new Server<Context>({
     port,
     address: "127.0.0.1",
@@ -111,37 +145,7 @@ export async function startCollabServer(port = collabPort()): Promise<{ stop: ()
     },
 
     async onStoreDocument({ document, documentName }) {
-      const editor = editors.get(documentName);
-      if (!editor) return;
-      const { workspaceId, userId } = editor;
-      const state = Y.encodeStateAsUpdate(document);
-      const text = toMarkdown(document);
-      const page = await getPage(workspaceId, documentName, userId);
-      if (!page) {
-        // In the Trash: the page cannot take the text, and restoring it should bring the text back.
-        await getDb()
-          .update(pageCollab)
-          .set({ state: Buffer.from(state), updatedAt: new Date().toISOString() })
-          .where(eq(pageCollab.pageId, documentName));
-        return;
-      }
-      let revision = page.revision;
-      try {
-        if (text !== page.doc && text !== settled.get(documentName)) {
-          const written = await updatePage(
-            workspaceId,
-            documentName,
-            userId,
-            { doc: text, baseRevision: page.revision },
-            { fromCollab: true }
-          );
-          revision = written.revision;
-          settled.set(documentName, text);
-        }
-      } finally {
-        // Also when the page refused the text: it stays here for the next store to try.
-        await saveState(documentName, state, revision);
-      }
+      await persistDocument(documentName, document);
     },
 
     async afterUnloadDocument({ documentName }) {
@@ -154,6 +158,14 @@ export async function startCollabServer(port = collabPort()): Promise<{ stop: ()
   const { hocuspocus } = server;
 
   setCollabLive({
+    async withStored(pageId, work) {
+      const document = hocuspocus.documents.get(pageId);
+      if (!document) return work();
+      return document.saveMutex.runExclusive(async () => {
+        await persistDocument(pageId, document);
+        return work();
+      });
+    },
     replace(pageId, markdown, revision) {
       const document = hocuspocus.documents.get(pageId);
       if (!document) return;

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { History, X } from "lucide-react";
 import { AssigneeAvatar } from "@/components/issue-table";
 import { useLocale, useT } from "@/components/i18n-context";
@@ -78,6 +78,9 @@ export function DocUpdatesPanel({
   const [versions, setVersions] = useState<PageVersion[] | null>(null);
   const [selected, setSelected] = useState<string | null>(null);
   const [change, setChange] = useState<PageVersionChange | null>(null);
+  const selectedRef = useRef<string | null>(null);
+  const restoring = useRef(false);
+  const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   async function load() {
@@ -99,24 +102,25 @@ export function DocUpdatesPanel({
   }, [workspaceId, pageId]);
 
   async function open(id: string) {
+    selectedRef.current = id;
     setSelected(id);
     setChange(null);
     const result = await getPageVersionChangeAction(workspaceId, pageId, id);
+    if (selectedRef.current !== id) return;
     if (result.ok) setChange(result.data);
     else setError(result.error);
   }
 
   async function restore(id: string, action = restorePageVersionAction) {
-    await beforeRestore();
-    const result = await action(workspaceId, pageId, id);
-    if (!result.ok) {
-      setError(result.error);
-      return;
-    }
-    onRestored(result.data);
-    setSelected(null);
-    setChange(null);
-    await load();
+    if (restoring.current || selectedRef.current !== id) return;
+    restoring.current = true; setBusy(true); setError(null);
+    try {
+      await beforeRestore();
+      const result = await action(workspaceId,pageId,id);
+      if(!result.ok){setError(result.error);return;}
+      onRestored(result.data);setSelected(null);selectedRef.current=null;setChange(null);await load();
+    } catch(err) {setError(err instanceof Error ? err.message : "Something went wrong");}
+    finally {restoring.current=false;setBusy(false);}
   }
 
   const current = versions?.find((version) => version.reason !== "unsaved")?.id;
@@ -143,6 +147,7 @@ export function DocUpdatesPanel({
       </div>
       <div className="min-h-0 flex-1 overflow-y-auto p-2">
         {error && <div className="px-1 pb-2 text-small text-danger">{t(error)}</div>}
+        {versions === null && !error && <p className="p-2 text-small text-faint">{t("Loading…")}</p>}
         {versions?.length === 0 && <p className="px-1 py-2 text-body text-faint">{t("No updates yet.")}</p>}
         {versions?.map((version) => (
           <div key={version.id} className="rounded-md">
@@ -178,6 +183,7 @@ export function DocUpdatesPanel({
                     <button
                       type="button"
                       data-doc-undo-agent
+                      disabled={busy}
                       onClick={() => void restore(version.id, undoAgentEditAction)}
                       className="ml-auto rounded-md border border-border px-2 py-1 text-small font-medium text-muted hover:border-border-strong hover:text-text"
                     >
@@ -187,6 +193,7 @@ export function DocUpdatesPanel({
                   {canEdit && version.id !== current && (
                     <button
                       type="button"
+                      disabled={busy}
                       onClick={() => void restore(version.id)}
                       className="ml-auto rounded-md border border-border px-2 py-1 text-small font-medium text-muted hover:border-border-strong hover:text-text"
                     >

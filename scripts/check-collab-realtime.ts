@@ -161,6 +161,29 @@ async function main() {
   typeInto(b.doc, "Later ");
   await until("typing after outside text to store", async () => (await stored()).doc.includes("Later "));
 
+  // A network acknowledgement precedes the debounced database write. Restoring must
+  // first preserve that text as a version and then replace both live clients.
+  const restoreTarget = (await pages.listPageVersions("w1", pageId, "ann"))[0];
+  const restoreText = (await pages.getPageVersionChange("w1", pageId, "ann", restoreTarget.id)).doc;
+  typeInto(a.doc, "Before restore ");
+  await until("pending text acknowledged", () => !a.provider.hasUnsyncedChanges);
+  assert(!(await stored()).doc.includes("Before restore "), "restore starts before debounce storage");
+  const restored = await pages.restorePageVersion("w1", pageId, "ann", restoreTarget.id);
+  await until("restore to reach both clients", () => a.text() === b.text() && !a.text().includes("Before restore "));
+  assert(restored.doc === restoreText, "restore returns the chosen text exactly");
+  const preserved = await Promise.all((await pages.listPageVersions("w1", pageId, "ann")).map(v => pages.getPageVersionChange("w1", pageId, "ann", v.id)));
+  assert(preserved.some(v => v.doc.includes("Before restore ")), "restore preserves pending text in history");
+  await sleep(2600);
+  assert((await stored()).doc === restoreText, "debounced store cannot overwrite restore");
+  await pages.updatePage("w1", pageId, "ann", { doc: restored.doc + "\n\nAgent change." }, { via: "mcp" });
+  const agentVersion = (await pages.listPageVersions("w1", pageId, "ann"))[0];
+  await until("agent text reaches editor", () => a.text().includes("Agent change."));
+  typeInto(a.doc, "After agent ");
+  await until("post-agent text acknowledged", () => !a.provider.hasUnsyncedChanges);
+  let refusedUndo = false;
+  try { await pages.undoAgentEdit("w1", pageId, "ann", {versionId: agentVersion.id}); } catch { refusedUndo = true; }
+  assert(refusedUndo && (await stored()).doc.includes("After agent "), "undo refuses to discard newer collaboration text");
+
   // Everyone leaves, and the text changes while the document is closed.
   await until("the store to finish", async () => (await stored()).doc.includes("Later "));
   await sleep(2600);

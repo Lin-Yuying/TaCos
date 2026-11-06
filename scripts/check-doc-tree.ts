@@ -27,6 +27,10 @@ async function status(call: () => Promise<unknown>): Promise<number> {
 
 async function main() {
   const lib = await import("../src/lib/pages");
+  const moveConfirmed = async (id:string, target: Parameters<typeof lib.movePage>[3]) => {
+    const impact = await lib.previewPageMove("w1",id,"owner",target);
+    await lib.movePage("w1",id,"owner",{...target,confirmedImpact:impact.token});
+  };
   const ws = "w1";
   const owner = "owner";
   const member = "member";
@@ -66,7 +70,8 @@ async function main() {
   await lib.setPageShared(ws, team.id, owner, true);
   await lib.setPageShareLevel(ws, team.id, owner, "comment");
   await lib.setPageMemberLevel(ws, team.id, owner, member, "edit");
-  await lib.movePage(ws, b.id, owner, { parentId: team.id });
+  assert((await status(()=>lib.movePage(ws,b.id,owner,{parentId:team.id})))===409,"sharing changes require reviewed impact");
+  await moveConfirmed(b.id,{parentId:team.id});
   const moved = (await lib.getPage(ws, c.id, member))!;
   assert(moved?.shared && moved.shareLevel === "comment", "moved subtree takes the parent's sharing");
   assert((await lib.pageLevel(moved, member)) === "edit", "moved subtree takes people's levels");
@@ -84,15 +89,25 @@ async function main() {
   assert((await status(() => lib.movePage(ws, mine.id, member, { parentId: team.id }))) === 403, "view on the parent refuses a move in");
 
   // A section drop: top level plus the section's sharing.
-  await lib.movePage(ws, b.id, owner, { parentId: null, shared: false });
+  await moveConfirmed(b.id,{parentId:null,shared:false});
   assert(!(await lib.getPage(ws, c.id, owner))?.shared, "dropping on Private unshares the subtree");
   assert(!(await lib.getPage(ws, c.id, member)), "and hides it");
-  await lib.movePage(ws, b.id, owner, { parentId: null, shared: true });
+  await moveConfirmed(b.id,{parentId:null,shared:true});
   assert((await lib.getPage(ws, c.id, member))?.shared, "dropping on Shared shares the subtree");
   const hidden = await lib.createPage(ws, owner, { title: "Hidden root" });
   const under = await lib.createPage(ws, owner, { title: "Under", parentId: hidden.id });
   await lib.setPageShared(ws, under.id, owner, true);
   assert((await lib.pageAncestors(ws, (await lib.getPage(ws, under.id, member))!, member)).length === 0, "breadcrumb stops at a hidden parent");
+
+  const {getDb} = await import("../src/db/client");
+  const {projects}=await import("../src/db/schema");
+  for(const id of ["p1","p2"])await getDb().insert(projects).values({id,workspaceId:ws,name:id,key:id,createdAt:new Date().toISOString()});
+  await moveConfirmed(b.id,{parentId:null,projectId:"p1"});
+  const stale=await lib.previewPageMove(ws,b.id,owner,{parentId:null,projectId:"p2"});
+  await lib.createPage(ws,owner,{title:"Tree changed"});
+  assert((await status(()=>lib.movePage(ws,b.id,owner,{parentId:null,projectId:"p2",confirmedImpact:stale.token})))===409,"stale move confirmation is rejected");
+  await moveConfirmed(b.id,{parentId:null,projectId:"p2"});
+  assert((await lib.getPage(ws,c.id,owner))?.projectId==="p2"&&(await lib.getPage(ws,d.id,owner))?.projectId==="p2","cross-project moves update the entire subtree");
 
   // Favorites are per person, follow visibility and go with a purge.
   assert((await lib.togglePageFavorite(ws, c.id, member)) === true, "star");

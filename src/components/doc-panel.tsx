@@ -30,11 +30,7 @@ export function DocPanelHost({ workspaceId }: { workspaceId: string }) {
   if (!openPageId) return null;
   return (
     <aside
-      className={`flex min-h-0 flex-col overflow-hidden rounded-xl border border-border bg-bg shadow-[0_1px_2px_rgba(0,0,0,0.05)] ${
-        panelExpanded
-          ? "min-w-0 flex-1"
-          : "w-[min(50%,460px)] min-w-[280px] shrink-0 @max-[600px]:absolute @max-[600px]:inset-0 @max-[600px]:z-20 @max-[600px]:w-auto @max-[600px]:min-w-0"
-      }`}
+      className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-xl border border-border bg-bg"
     >
       <DocPanel
         key={openPageId}
@@ -81,7 +77,9 @@ function DocPanel({
         // Anything else is an error payload, not a page: handing it to the view would
         // read a missing `page` and crash the pane.
         if (!res.ok) throw new Error(`Request failed: ${res.status}`);
-        return res.json();
+        const data = await res.json();
+        if (!data?.page || typeof data.page.id !== "string" || !Array.isArray(data.refs)) throw new Error("Invalid response");
+        return data;
       })
       .then((data) => {
         if (!cancelled && data) setDetail(data as PageDetail);
@@ -94,25 +92,17 @@ function DocPanel({
     };
   }, [id, workspaceId, attempt]);
 
-  // Deleted here or on another device: there is nothing left to read, so the pane goes
-  // away instead of holding a dead page.
-  useEffect(() => {
-    if (!missing) return;
-    toast(t("Document deleted"));
-    onClose();
-  }, [missing, toast, onClose, t]);
-
   // A failed fetch has no header of its own to close it, so the error state carries the
   // two ways out: try again, or give the space back.
-  if (failed) {
+  if (failed || missing) {
     return (
       <div className="flex flex-1 flex-col items-center justify-center gap-3 p-6 text-center">
-        <p className="text-body text-muted">{t("Couldn’t load this document.")}</p>
+        <p className="text-body text-muted">{t(missing ? "This item is unavailable or you do not have access" : "Couldn’t load this document.")}</p>
         <div className="flex items-center gap-2">
           <button
             type="button"
             onClick={() => {
-              setFailed(false);
+              setFailed(false); setMissing(false);
               setAttempt((n) => n + 1);
             }}
             className="rounded-md border border-border px-2.5 py-1 text-small text-muted transition-colors hover:border-border-strong hover:text-text"

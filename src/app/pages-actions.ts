@@ -13,6 +13,8 @@ import {
   keepUnsavedText,
   listPageAccess,
   movePage,
+  previewPageMove,
+  type PageMoveTarget,
   setPageCover,
   togglePageFavorite,
   listPageVersions,
@@ -303,7 +305,7 @@ export async function setPageMemberLevelAction(
 export async function movePageAction(
   workspaceId: string,
   pageId: string,
-  target: { parentId: string | null; beforeId?: string | null; shared?: boolean }
+  target: PageMoveTarget
 ): Promise<ActionResult<void>> {
   return run(async () => {
     const { user } = await requireWorkspace(workspaceId);
@@ -348,4 +350,8 @@ export async function getCollabSessionAction(
       user: { name: user.displayName, color: `hsl(${hue} 55% 45%)` },
     };
   });
+}
+
+export async function previewPageMoveAction(workspaceId:string,pageId:string,target:PageMoveTarget) {
+  return run(async()=>{const {user}=await requireWorkspace(workspaceId);return previewPageMove(workspaceId,pageId,user.id,target);});
 }
