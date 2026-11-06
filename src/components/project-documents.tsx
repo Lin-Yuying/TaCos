@@ -1,5 +1,6 @@
 "use client";
 
+import { BatchSelection } from "@/components/ui/batch-selection";
 import { EntityRow } from "@/components/ui/entity-row";
 
 import Link from "next/link";
@@ -60,6 +61,7 @@ export function ProjectDocuments({
           </button>
         </div>
 
+        <BatchSelection workspaceId={workspaceId} kind="document" items={pages}/>
         {error && <div className="mt-3 text-small text-danger">{t(error)}</div>}
 
         {pages.length === 0 ? (

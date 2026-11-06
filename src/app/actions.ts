@@ -505,3 +505,5 @@ export async function taskFieldImpactAction(workspaceId:string,fieldId:string) {
 export async function restoreTaskFieldAction(workspaceId:string,fieldId:string) {
   return run(async()=>{const {user}=await requireWorkspace(workspaceId);await restoreTaskField(workspaceId,user.id,fieldId);refresh(workspaceId);});
 }
+
+export async function listTaskFieldsAction(workspaceId:string,includeDisabled=false){return run(async()=>{await requireWorkspace(workspaceId);const {listTaskFields}=await import("@/lib/task-fields");return listTaskFields(workspaceId,includeDisabled);});}

@@ -5,7 +5,7 @@ import { EntityRow } from "@/components/ui/entity-row";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { ChevronRight, FileText } from "lucide-react";
+import { ChevronRight, FileText, Lock, Users } from "lucide-react";
 import {
   draggable,
   dropTargetForElements,
@@ -118,7 +118,7 @@ function DocRow({
           <span className="flex w-4 shrink-0 items-center justify-center text-faint">
             {page.icon ?? <FileText size={13} />}
           </span>
-          <span className="truncate">{page.title || t("Untitled")}</span>
+          <span className="truncate">{page.title || t("Untitled")}</span><span title={t(page.canEdit?"Can edit":"Read only")} className="ml-auto flex shrink-0 gap-1 text-faint">{page.shared?<Users size={10}/>:<Lock size={10}/>}{!page.canEdit&&t("Read only")}</span>
         </Link>
       </div>
       </EntityRow>
@@ -145,14 +145,17 @@ function DocRow({
 /** The sidebar's document tree: every page in one tree — sharing is shown on the page. */
 export function DocTree({ workspaceId, pages }: { workspaceId: string; pages: PageSummary[] }) {
   const t = useT();
-  const {confirm}=useUI();
+  const {confirm,scope,openPageId}=useUI();
   const moving=useRef(false);
   const router = useRouter();
   const pathname = usePathname();
-  const [expanded, setExpanded] = useStoredJson(EXPANDED_KEY, NO_EXPANDED);
+  const [expanded, setExpanded] = useStoredJson(`${EXPANDED_KEY}.${scope}`, NO_EXPANDED);
   const [error, setError] = useState<string | null>(null);
-  const active = pathname.match(new RegExp(`^/${workspaceId}/docs/([^/]+)$`))?.[1] ?? null;
+  const root=useRef<HTMLDivElement>(null);
+  const routeActive = pathname.match(new RegExp(`^/${workspaceId}/docs/([^/]+)$`))?.[1] ?? null;
 
+  const active=openPageId??routeActive;
+  useEffect(()=>{if(active)root.current?.querySelector(`[data-doc-row="${CSS.escape(active)}"]`)?.scrollIntoView({block:"nearest"});},[active,pages]);
   const { byId, byParent } = useMemo(() => {
     const ids = new Map(pages.map((page) => [page.id, page]));
     const children = new Map<string | null, PageSummary[]>();
@@ -174,7 +177,7 @@ export function DocTree({ workspaceId, pages }: { workspaceId: string; pages: Pa
     return out;
   }, [active, byId]);
 
-  const isOpen = (id: string) => expanded[id] ?? openByDefault.has(id);
+  const isOpen = (id: string) => openByDefault.has(id) || expanded[id] === true;
 
   function toggle(id: string) {
     setExpanded({ ...expanded, [id]: !isOpen(id) });
@@ -249,7 +252,7 @@ export function DocTree({ workspaceId, pages }: { workspaceId: string; pages: Pa
   const rowProps = { byParent, isOpen, onToggle: toggle, active, blocked };
 
   return (
-    <div data-doc-tree className="pb-1">
+    <div ref={root} data-doc-tree className="pb-1">
       <div className="space-y-0.5 rounded-md pb-1">
         {roots.length === 0 ? (
           <div className="px-2 py-1 text-small text-faint">{t("No documents yet")}</div>

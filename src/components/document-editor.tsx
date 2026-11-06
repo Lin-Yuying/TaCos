@@ -48,24 +48,28 @@ type SlashCommand = {
   run: (editor: Editor, range: Range) => void;
 };
 
+const uploadMarkersKey=new PluginKey<DecorationSet>("uploadMarkers");
+const UploadMarkers=Extension.create({name:"uploadMarkers",addProseMirrorPlugins(){return [new Plugin<DecorationSet>({key:uploadMarkersKey,state:{init:()=>DecorationSet.empty,apply(tr,old){let next=old.map(tr.mapping,tr.doc);const meta=tr.getMeta(uploadMarkersKey) as {add?:{id:string;pos:number;name:string};remove?:string}|undefined;if(meta?.remove)next=next.remove(next.find(undefined,undefined,spec=>spec.id===meta.remove));if(meta?.add){const {id,pos,name}=meta.add;next=next.add(tr.doc,[Decoration.widget(pos,()=>{const span=document.createElement("span");span.className="rounded bg-elevated px-1 text-small text-muted";span.textContent=`[${name}]`;return span;},{id,side:1})]);}return next;}},props:{decorations:state=>uploadMarkersKey.getState(state)}})];}});
+type UploadItem={id:string;file:File;progress:number;status:"queued"|"uploading"|"failed"|"done"|"cancelled";controller:AbortController;error?:string};
+
 const PICK_FILE_EVENT = "tacos:pick-file";
 
 const COMMANDS: SlashCommand[] = [
-  { label: "Text", hint: "Plain paragraph", keywords: "plain body p", icon: Type, run: (e, r) => e.chain().focus().deleteRange(r).setParagraph().run() },
-  { label: "Heading 1", hint: "Large section title", keywords: "h1 title", icon: Heading1, run: (e, r) => e.chain().focus().deleteRange(r).setHeading({ level: 1 }).run() },
-  { label: "Heading 2", hint: "Medium section title", keywords: "h2 subtitle", icon: Heading2, run: (e, r) => e.chain().focus().deleteRange(r).setHeading({ level: 2 }).run() },
-  { label: "Heading 3", hint: "Small section title", keywords: "h3", icon: Heading3, run: (e, r) => e.chain().focus().deleteRange(r).setHeading({ level: 3 }).run() },
-  { label: "Bulleted list", hint: "Unordered items", keywords: "bullet ul dash list", icon: List, run: (e, r) => e.chain().focus().deleteRange(r).toggleBulletList().run() },
-  { label: "Numbered list", hint: "Ordered items", keywords: "ordered ol number list", icon: ListOrdered, run: (e, r) => e.chain().focus().deleteRange(r).toggleOrderedList().run() },
-  { label: "To-do list", hint: "Checkable items", keywords: "todo task checkbox check", icon: CheckSquare, run: (e, r) => e.chain().focus().deleteRange(r).toggleTaskList().run() },
-  { label: "Quote", hint: "Set text apart", keywords: "blockquote citation", icon: Quote, run: (e, r) => e.chain().focus().deleteRange(r).toggleBlockquote().run() },
-  { label: "Code", hint: "Fenced block", keywords: "code block pre", icon: Code, run: (e, r) => e.chain().focus().deleteRange(r).toggleCodeBlock().run() },
-  { label: "Table", hint: "Rows and columns", keywords: "table grid", icon: TableIcon, run: (e, r) => e.chain().focus().deleteRange(r).insertTable({ rows: 3, cols: 3, withHeaderRow: true }).run() },
-  { label: "Image or file", hint: "Upload to this document", keywords: "image picture photo attachment upload file", icon: ImageIcon, run: (e, r) => {
+  { label: "Text", hint: "Plain paragraph", keywords: "plain body p 正文 段落 文本", icon: Type, run: (e, r) => e.chain().focus().deleteRange(r).setParagraph().run() },
+  { label: "Heading 1", hint: "Large section title", keywords: "h1 title 一级 标题", icon: Heading1, run: (e, r) => e.chain().focus().deleteRange(r).setHeading({ level: 1 }).run() },
+  { label: "Heading 2", hint: "Medium section title", keywords: "h2 subtitle 二级 标题", icon: Heading2, run: (e, r) => e.chain().focus().deleteRange(r).setHeading({ level: 2 }).run() },
+  { label: "Heading 3", hint: "Small section title", keywords: "h3 三级 标题", icon: Heading3, run: (e, r) => e.chain().focus().deleteRange(r).setHeading({ level: 3 }).run() },
+  { label: "Bulleted list", hint: "Unordered items", keywords: "bullet ul dash list 无序 列表", icon: List, run: (e, r) => e.chain().focus().deleteRange(r).toggleBulletList().run() },
+  { label: "Numbered list", hint: "Ordered items", keywords: "ordered ol number list 有序 编号 列表", icon: ListOrdered, run: (e, r) => e.chain().focus().deleteRange(r).toggleOrderedList().run() },
+  { label: "To-do list", hint: "Checkable items", keywords: "todo task checkbox check 待办 任务 清单", icon: CheckSquare, run: (e, r) => e.chain().focus().deleteRange(r).toggleTaskList().run() },
+  { label: "Quote", hint: "Set text apart", keywords: "blockquote citation 引用", icon: Quote, run: (e, r) => e.chain().focus().deleteRange(r).toggleBlockquote().run() },
+  { label: "Code", hint: "Fenced block", keywords: "code block pre 代码", icon: Code, run: (e, r) => e.chain().focus().deleteRange(r).toggleCodeBlock().run() },
+  { label: "Table", hint: "Rows and columns", keywords: "table grid 表格", icon: TableIcon, run: (e, r) => e.chain().focus().deleteRange(r).insertTable({ rows: 3, cols: 3, withHeaderRow: true }).run() },
+  { label: "Image or file", hint: "Upload to this document", keywords: "image picture photo attachment upload file 图片 文件 附件 上传", icon: ImageIcon, run: (e, r) => {
     e.chain().focus().deleteRange(r).run();
     e.view.dom.dispatchEvent(new CustomEvent(PICK_FILE_EVENT));
   } },
-  { label: "Divider", hint: "Visual break", keywords: "hr line rule separator", icon: Minus, run: (e, r) => e.chain().focus().deleteRange(r).setHorizontalRule().run() },
+  { label: "Divider", hint: "Visual break", keywords: "hr line rule separator 分割线", icon: Minus, run: (e, r) => e.chain().focus().deleteRange(r).setHorizontalRule().run() },
 ];
 
 function matchCommands(query: string): SlashCommand[] {
@@ -78,7 +82,7 @@ type MenuState<T = SlashCommand> = { items: T[]; selected: number; x: number; y:
 
 // Arrow keys, Enter and Escape while a suggestion menu is open.
 function menuKey<T>(event: KeyboardEvent, open: MenuState<T> | null, set: (next: MenuState<T> | null) => void): boolean {
-  if (!open || open.items.length === 0) return false;
+  if (event.isComposing || event.keyCode===229 || !open || open.items.length === 0) return false;
   if (event.key === "ArrowDown" || event.key === "ArrowUp") {
     const step = event.key === "ArrowDown" ? 1 : open.items.length - 1;
     set({ ...open, selected: (open.selected + step) % open.items.length });
@@ -188,7 +192,7 @@ export function DocumentEditor({
   onAnchorClick?: (id: string) => void;
   onAnchorsLocated?: (ids: Set<string>) => void;
   // Sends a pasted, dropped or picked file and returns its address, or null when it failed.
-  onUpload?: (file: File) => Promise<string | null>;
+  onUpload?: (file: File,controls?:{signal?:AbortSignal;onProgress?:(progress:number)=>void}) => Promise<string | null>;
   // A shared document; its text comes from here and not from `value`. Fixed for the editor's life.
   collab?: Extract<DocCollab, { doc: unknown }>;
 }) {
@@ -209,6 +213,11 @@ export function DocumentEditor({
   const locatedRef = useRef(onAnchorsLocated);
   const anchorClickRef = useRef(onAnchorClick);
   const uploadRef = useRef(onUpload);
+  const [uploads,setUploads]=useState<UploadItem[]>([]);
+  const uploadsRef=useRef<UploadItem[]>([]);
+  const uploadRuns=useRef(new Map<string,AbortController>());
+  const runUpload=useRef<(item:UploadItem)=>Promise<void>>(async()=>{});
+  useEffect(()=>()=>{for(const item of uploadsRef.current)item.controller.abort();},[]);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -305,7 +314,7 @@ export function DocumentEditor({
     immediatelyRender: false,
     extensions: [
       ...documentExtensions({ sharedHistory: Boolean(collab), mention }),
-      Placeholder.configure({ placeholder: placeholder ?? "" }), slash, CommentAnchors.configure({ store: anchorStore }),
+      Placeholder.configure({ placeholder: placeholder ?? "" }), UploadMarkers, slash, CommentAnchors.configure({ store: anchorStore }),
       ...(collab
         ? [
             Collaboration.configure({ document: collab.doc }),
@@ -344,21 +353,36 @@ export function DocumentEditor({
 
   useEffect(() => {
     uploadRef.current = onUpload;
-    insertRef.current = (files, at) => {
-      if (!editor) return;
-      void (async () => {
-        let pos = at;
-        for (const file of files) {
-          const url = await onUpload?.(file);
-          if (!url) continue;
-          const chain = editor.chain().focus();
-          if (pos !== undefined) chain.setTextSelection(pos);
-          if (file.type.startsWith("image/")) chain.setImage({ src: url, alt: file.name });
-          else chain.insertContent({ type: "text", text: file.name, marks: [{ type: "link", attrs: { href: url } }] });
-          chain.run();
-          pos = undefined;
-        }
-      })();
+    const change=(id:string,patch:Partial<UploadItem>)=>{uploadsRef.current=uploadsRef.current.map(item=>item.id===id?{...item,...patch}:item);setUploads(uploadsRef.current);};
+    runUpload.current=async item=>{
+      if(!editor||editor.isDestroyed)return;
+      const previous=uploadRuns.current.get(item.id);previous?.abort();
+      const controller=new AbortController();uploadRuns.current.set(item.id,controller);
+      const update=(patch:Partial<UploadItem>)=>{if(uploadRuns.current.get(item.id)===controller)change(item.id,patch);};
+      update({controller,status:"uploading",progress:0,error:undefined});
+      try{
+        const url=await uploadRef.current?.(item.file,{signal:controller.signal,onProgress:progress=>update({progress})});
+        if(uploadRuns.current.get(item.id)!==controller)return;
+        if(controller.signal.aborted){update({status:"cancelled"});return;}
+        if(!url)throw new Error("Upload failed. Retry.");
+        if(editor.isDestroyed)return;
+        const marker=uploadMarkersKey.getState(editor.state)?.find(undefined,undefined,spec=>spec.id===item.id)[0];
+        if(!marker||!editor.isEditable)throw new Error("Insertion is unavailable. Keep this window open and retry when editing is available.");
+        const chain=editor.chain().focus().setTextSelection(marker.from);
+        if(item.file.type.startsWith("image/"))chain.setImage({src:url,alt:item.file.name});else chain.insertContent({type:"text",text:item.file.name,marks:[{type:"link",attrs:{href:url}}]});
+        if(!chain.run())throw new Error("Could not insert attachment. Retry.");
+        editor.view.dispatch(editor.state.tr.setMeta(uploadMarkersKey,{remove:item.id}));update({status:"done",progress:100});
+      }catch(error){update({status:controller.signal.aborted?"cancelled":"failed",error:error instanceof Error?error.message:"Upload failed. Retry."});}finally{if(uploadRuns.current.get(item.id)===controller)uploadRuns.current.delete(item.id);}
+    };
+    insertRef.current=(files,at)=>{
+      if(!editor?.isEditable)return;
+      const position=at??editor.state.selection.from;
+      const items=files.map(file=>({id:crypto.randomUUID(),file,progress:0,status:"queued" as const,controller:new AbortController()}));
+      let transaction=editor.state.tr;
+      // A separate marker for every file follows document mappings, including remote edits.
+      for(const item of items){transaction=editor.state.tr.setMeta(uploadMarkersKey,{add:{id:item.id,pos:position,name:item.file.name}});editor.view.dispatch(transaction);}
+      uploadsRef.current=[...uploadsRef.current,...items];setUploads(uploadsRef.current);
+      void (async()=>{for(const item of items){const current=uploadsRef.current.find(row=>row.id===item.id);if(current&&current.status==="queued")await runUpload.current(current);}})();
     };
   });
 
@@ -479,6 +503,10 @@ export function DocumentEditor({
           if (files.length) insertRef.current(files);
         }}
       />
+      {editable&&editor&&<div className="mb-2 flex flex-wrap gap-2 border-b border-border pb-1 text-small text-muted"><details><summary className="cursor-pointer">{t("Insert block")} · /</summary><div className="flex flex-wrap gap-1">{COMMANDS.map(command=><button key={command.label} type="button" onClick={()=>command.run(editor,{from:editor.state.selection.from,to:editor.state.selection.from})} className="rounded px-2 py-1 hover:bg-elevated">{t(command.label)}</button>)}</div></details>{editor.isActive("table")&&<div className="flex flex-wrap gap-1">{([
+        ["Add row",()=>editor.chain().focus().addRowAfter().run()], ["Delete row",()=>editor.chain().focus().deleteRow().run()], ["Add column",()=>editor.chain().focus().addColumnAfter().run()], ["Delete column",()=>editor.chain().focus().deleteColumn().run()], ["Toggle header",()=>editor.chain().focus().toggleHeaderRow().run()], ["Merge cells",()=>editor.chain().focus().mergeCells().run()], ["Split cell",()=>editor.chain().focus().splitCell().run()], ["Delete table",()=>editor.chain().focus().deleteTable().run()]
+      ] as const).map(([label,run])=><button key={label} type="button" onClick={()=>run()} className="rounded px-2 py-1 hover:bg-elevated">{t(label)}</button>)}</div>}</div>}
+      {uploads.length>0&&<div className="mb-2 space-y-1 text-small" aria-live="polite">{uploads.map(item=><div key={item.id} className="flex flex-wrap items-center gap-2"><span>{item.file.name}: {t(item.status)} {item.status==="uploading"?`${item.progress}%`:""}</span>{item.error&&<span role="alert" className="text-danger">{t(item.error)}</span>}{["queued","uploading"].includes(item.status)?<button type="button" onClick={()=>{item.controller.abort();uploadsRef.current=uploadsRef.current.map(row=>row.id===item.id?{...row,status:"cancelled"}:row);setUploads(uploadsRef.current);}}>{t("Cancel")}</button>:<><button type="button" onClick={()=>{if(editor&&!editor.isDestroyed)editor.view.dispatch(editor.state.tr.setMeta(uploadMarkersKey,{remove:item.id}));uploadsRef.current=uploadsRef.current.filter(row=>row.id!==item.id);setUploads(uploadsRef.current);}}>{t("Dismiss")}</button>{item.status!=="done"&&<button type="button" disabled={!editable} onClick={()=>void runUpload.current(item)}>{t("Retry")}</button>}</>}</div>)}</div>}
       <EditorContent editor={editor} />
       {editor && onComment && hovered && (
         <button

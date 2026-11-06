@@ -1,4 +1,5 @@
 "use client";
+import { MoveDocument } from "./move-document";
 import { useState, type ReactNode } from "react";
 import { useRouter, useParams } from "next/navigation";
 import * as Context from "@radix-ui/react-context-menu";
@@ -16,6 +17,7 @@ export function EntityRow({ kind, id, title, children }: { kind: EntityKind; id:
   const { workspaceId } = useParams<{workspaceId: string}>();
   const { pins, confirm, toast } = useUI();
   const router = useRouter(); const t = useT();
+  const [moveOpen,setMoveOpen]=useState(false);
   const [cap, setCap] = useState<EntityCapabilities | null>(null);
   const [editing, setEditing] = useState(false), [draft, setDraft] = useState(title), [expected, setExpected] = useState(title);
   const [busy, setBusy] = useState(false), [error, setError] = useState<string | null>(null);
@@ -60,11 +62,12 @@ export function EntityRow({ kind, id, title, children }: { kind: EntityKind; id:
     {label:t("Rename"), disabled:!cap?.rename || busy, run:rename},
     {label:t(pinned ? "Unpin" : "Pin"), disabled:busy, run:() => run(() => setPinAction(workspaceId,kind,id,!pinned))},
     ...(kind !== "task" ? [{label:t(cap?.isFavorite ? "Remove from favorites" : "Add to favorites"), disabled:!cap?.favorite || busy, run:() => run(() => kind === "document" ? togglePageFavoriteAction(workspaceId,id) : toggleProjectFavoriteAction(workspaceId,id))}] : []),
+    ...(kind === "document" ? [{label:t("Move document"),disabled:!cap?.rename||busy,run:async()=>setMoveOpen(true)}] : []),
     {label:t("Copy link"), disabled:busy, run:async () => { try { await navigator.clipboard.writeText(new URL(entityHref(workspaceId,{kind,id}),location.origin).href); toast(t("Copied")); } catch { setError(t("Could not copy. Retry.")); } }},
     ...(kind === "document" ? [{label:t("New subpage"),disabled:!cap?.rename || busy,run:() => run(async () => { const result=await createPageAction(workspaceId,{parentId:id}); if(result.ok) router.push(entityHref(workspaceId,{kind,id:result.data.id})); return result; })}] : []),
     {label:t("Move to Trash"),disabled:!cap?.remove || busy,run:remove,danger:true},
   ];
-  return <Context.Root onOpenChange={(open) => { if (open) void inspect(); }}>
+  return <>{moveOpen&&<MoveDocument workspaceId={workspaceId} id={id} onClose={()=>setMoveOpen(false)}/>}<Context.Root onOpenChange={(open) => { if (open) void inspect(); }}>
     <Context.Trigger asChild disabled={editing}><div className="group/entity relative min-w-0" onContextMenuCapture={(e) => { if ((e.target as HTMLElement).closest("input, textarea, [contenteditable=true]")) e.stopPropagation(); }} onKeyDown={(e) => { if (e.key === "F2" && !editing) { e.preventDefault(); e.stopPropagation(); void rename(); } }}>
       {editing ? <div className="flex min-h-8 items-center gap-2 p-1"><input aria-label={t("Name")} autoFocus value={draft} disabled={busy} onFocus={(e) => e.target.select()} onChange={(e) => setDraft(e.target.value)} onKeyDown={(e) => {
         e.stopPropagation(); if (e.nativeEvent.isComposing || e.nativeEvent.keyCode === 229) return;
@@ -83,7 +86,7 @@ export function EntityRow({ kind, id, title, children }: { kind: EntityKind; id:
       {!cap && <p className="p-2 text-small text-faint">{t("Loading…")}</p>}
       {actions.map((action) => <Context.Item key={action.label} disabled={action.disabled} onSelect={() => void action.run()} className={`cursor-default rounded px-2 py-1.5 text-body outline-none data-[highlighted]:bg-elevated data-[disabled]:text-faint ${action.danger ? "text-danger" : "text-text"}`}>{action.label}</Context.Item>)}
     </Context.Content></Context.Portal>
-  </Context.Root>;
+  </Context.Root></>;
 }
 
 export function usePinned<T extends {id: string}>(items: T[], kind: EntityKind): T[] {

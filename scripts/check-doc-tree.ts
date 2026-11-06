@@ -120,6 +120,16 @@ async function main() {
   assert((await lib.togglePageFavorite(ws, c.id, member)) === false, "unstar");
   assert((await status(() => lib.togglePageFavorite(ws, hidden.id, member))) === 404, "cannot star what you cannot see");
 
+  const batchA=await lib.createPage(ws,owner,{title:"Batch A",projectId:"p1"});
+  const batchChild=await lib.createPage(ws,owner,{title:"Batch child",parentId:batchA.id});
+  const batchB=await lib.createPage(ws,owner,{title:"Batch B",projectId:"p2"});
+  const selected=[batchA.id,batchChild.id,batchB.id];
+  const reviewed=Object.fromEntries(await Promise.all(selected.map(async id=>[id,(await lib.previewPageMove(ws,id,owner,{parentId:null})).token])));
+  await lib.movePages(ws,owner,selected,{parentId:null},reviewed);
+  assert((await lib.getPage(ws,batchChild.id,owner))?.parentId===batchA.id,"batch keeps selected descendants under their selected root");
+  assert((await lib.getPage(ws,batchA.id,owner))?.projectId==="p1"&&(await lib.getPage(ws,batchB.id,owner))?.projectId==="p2","top-level batch keeps each root project");
+  await lib.createPage(ws,owner,{title:"Changed after review"});
+  assert(await status(()=>lib.movePages(ws,owner,selected,{parentId:team.id},reviewed))===409,"batch rejects stale tokens");
   console.log("check-doc-tree: ok");
 }
 

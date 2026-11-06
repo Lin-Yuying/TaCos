@@ -112,3 +112,9 @@ Commands: npx tsc --noEmit; npm run lint; npm run i18n:check; npm run build; npm
 - Browser acceptance pending; items stay doing until their real flows are checked.
 
 Batch 1 final validation: production build, TypeScript, i18n and MCP smoke pass. Full harness: 61/62 pass; check-editor-roundtrip also fails unchanged origin/main on README.md block 2 (raw HTML paragraph differs), recorded as a pre-existing check failure. Lint baseline: 79 errors; no new errors in changed files after integration fixes. Fresh review found and fixed permission-revocation sockets and initial handshake timeout. Browser: registered isolated user/workspace, inline document rename preserved route and updated tree, task deep link opened, detail separator dragged. No Windows/Electron/native IME validation yet.
+
+## Batch 2 evidence
+
+Implemented task date/reminder confirmation, calendar scheduling tray, creation properties/continue, editable table columns with width/visibility/order/freeze, scoped filters, batch selection and document move targets. Document workflows include searchable paths, import results/retry, comment edit/reply/soft-delete/restore, resizable discussion/history, table commands and mapped attachment placeholders with progress/cancel/retry.
+
+TypeScript, production build, type scale, doc-comments, doc-access, doc-tree, task-database and search checks pass. Expanded checks cover comment author permissions and restoration, search index rebuild excluding deleted comments, atomic batch moves preserving selected subtrees and rejecting stale confirmation. Lint comparison found no additional errors over upstream. Fresh reviews found and fixed duplicate creation, pending edit protection, batch move confirmation, upload cancellation/order and comment draft target persistence. Native IME, Windows and Electron remain untested.

@@ -1,8 +1,9 @@
 "use client";
 
+import { BatchSelection } from "@/components/ui/batch-selection";
 import dynamic from "next/dynamic";
 import { useMemo } from "react";
-import { useRouter } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { CalendarDays, Columns3, List, Plus, Table2 } from "lucide-react";
 import { IssueBoard } from "@/components/issue-board";
 import { IssueTable } from "@/components/issue-table";
@@ -91,12 +92,14 @@ export function IssueLayout({
 }) {
   const t = useT();
   const router = useRouter();
-  const { layout } = useUI();
-  const [view, setView] = useStoredJson<TaskView>(`tacos.tasks.view.${workspaceId}`, EMPTY_VIEW);
+  const { layout, scope } = useUI();
+  const pathname=usePathname();
+  const [view, setView] = useStoredJson<TaskView>(`tacos.tasks.view.${scope}.${pathname}`, EMPTY_VIEW);
   const shown = useMemo(() => applyView(issues, view, fields, values), [issues, view, fields, values]);
   if (issues.length === 0) return <Empty />;
   return (
     <>
+      <div className="flex items-center gap-2 border-b border-border px-3 py-1"><BatchSelection workspaceId={workspaceId} kind="task" items={shown}/><span className="text-small text-faint">{shown.length} / {issues.length}</span></div>
       <TaskViewBar
         workspaceId={workspaceId}
         view={view}
@@ -113,7 +116,7 @@ export function IssueLayout({
       ) : layout === "board" ? (
         <IssueBoard issues={shown} workspaceId={workspaceId} currentUserId={currentUserId} manualOrder={view.sort.length===0} />
       ) : layout === "table" ? (
-        <TaskGrid
+        <TaskGrid currentUserId={currentUserId}
           workspaceId={workspaceId}
           issues={shown}
           fields={fields}

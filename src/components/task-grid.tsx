@@ -1,71 +1,36 @@
 "use client";
 
-import { useRouter } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { EntityRow } from "@/components/ui/entity-row";
-import { useMemo, useRef, useState } from "react";
-import { columnSizingFeature, createColumnHelper, tableFeatures, useTable } from "@tanstack/react-table";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { columnSizingFeature, columnResizingFeature, createColumnHelper, tableFeatures, useTable } from "@tanstack/react-table";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { ArrowDown, ArrowUp } from "lucide-react";
-import { setTaskFieldValueAction } from "@/app/actions";
+import { setTaskFieldValueAction, updateIssueAction, changeIssueCollectionAction } from "@/app/actions";
 import { AssigneeAvatar } from "@/components/issue-table";
 import { PriorityIcon, StatusIcon, STATUS_META } from "@/components/icons";
 import { useT } from "@/components/i18n-context";
 import { useUI } from "@/components/ui-context";
 import { issueRef } from "@/lib/format";
 import type { IssueWithLabels } from "@/lib/issues";
+import { Menu } from "@/components/menu";
+import { useDraft } from "@/lib/ui/draft-store";
+import { DuePicker } from "@/components/ui/due-picker";
+import { useStoredJson } from "@/lib/use-stored-json";
+import { readJson } from "@/lib/ui/request";
+import { STATUS_ORDER, PRIORITY_NAMES, type Status, type Priority } from "@/lib/constants";
+import type { Member, UpdateIssueInput } from "@/lib/issues";
 import { fieldKey, type FieldValues, type TaskField, type TaskView } from "@/lib/task-view";
 
-const FEATURES = tableFeatures({ columnSizingFeature });
+const FEATURES = tableFeatures({ columnSizingFeature, columnResizingFeature });
 const ROW_HEIGHT = 34;
 const CELL_INPUT = "w-full min-w-0 rounded border border-transparent bg-transparent px-1 py-0.5 text-small text-text hover:border-border focus:border-border focus:outline-none";
 
-function FieldCell({
-  field,
-  value,
-  onSave,
-}: {
-  field: TaskField;
-  value: string;
-  onSave: (next: string | null) => void;
-}) {
-  const stop = (event: React.SyntheticEvent) => event.stopPropagation();
-  if (field.type === "checkbox") {
-    return (
-      <input
-        type="checkbox"
-        checked={value === "1"}
-        onClick={stop}
-        onChange={(event) => onSave(event.target.checked ? "1" : null)}
-      />
-    );
-  }
-  if (field.type === "select") {
-    return (
-      <select value={value} onClick={stop} onChange={(event) => onSave(event.target.value || null)} className={CELL_INPUT}>
-        <option value="" />
-        {field.options.map((option) => (
-          <option key={option} value={option}>
-            {option}
-          </option>
-        ))}
-      </select>
-    );
-  }
-  return (
-    <input
-      key={value}
-      type={field.type === "date" ? "date" : field.type === "number" ? "number" : "text"}
-      defaultValue={value}
-      onClick={stop}
-      onBlur={(event) => {
-        if (event.target.value !== value) onSave(event.target.value || null);
-      }}
-      onKeyDown={(event) => {
-        if (event.key === "Enter" && !event.nativeEvent.isComposing) event.currentTarget.blur();
-      }}
-      className={CELL_INPUT}
-    />
-  );
+function FieldCell({id,field,value,onSave}:{id:string;field:TaskField;value:string;onSave:(next:string|null)=>Promise<boolean>}) {
+ const t=useT();const [savedDraft,setDraft]=useDraft<string|null>("grid-cell",id,null);const draft=savedDraft??value;const [busy,setBusy]=useState(false),[failed,setFailed]=useState(false);const running=useRef(false);
+ async function save(next:string){if(running.current)return;running.current=true;setBusy(true);try{const ok=await onSave(next||null);setFailed(!ok);if(ok)setDraft(old=>old===next?null:old);}finally{running.current=false;setBusy(false);}}
+ const props={disabled:busy,onClick:(event:React.SyntheticEvent)=>event.stopPropagation(),className:CELL_INPUT,"aria-label":field.name};
+ return <div className="min-w-0 flex-1">{field.type==="checkbox"?<input {...props} type="checkbox" checked={draft==="1"} onChange={e=>{const next=e.target.checked?"1":"";setDraft(next);void save(next);}}/>:field.type==="select"?<select {...props} value={draft} onChange={e=>{setDraft(e.target.value);void save(e.target.value);}}><option value=""/>{[...new Set([...field.options,...(draft?[draft]:[])])].map(option=><option key={option} value={option}>{option}</option>)}</select>:<input {...props} type={field.type==="date"?"date":field.type==="number"?"number":"text"} value={draft} onChange={e=>setDraft(e.target.value)} onBlur={()=>{if(draft!==value)void save(draft);}} onKeyDown={e=>{if(e.key==="Enter"&&!e.nativeEvent.isComposing)e.currentTarget.blur();}}/>}{failed&&<button className="text-caption text-danger" onClick={e=>{e.stopPropagation();void save(draft);}}>{t("Retry")}</button>}</div>;
 }
 
 const SORT_KEYS: Record<string, string> = {
@@ -80,6 +45,7 @@ const SORT_KEYS: Record<string, string> = {
 /** The table view: built-in columns plus the workspace's fields, which edit in place. */
 export function TaskGrid({
   workspaceId,
+  currentUserId,
   issues,
   fields,
   values,
@@ -87,6 +53,7 @@ export function TaskGrid({
   onViewChange,
 }: {
   workspaceId: string;
+  currentUserId:string;
   issues: IssueWithLabels[];
   fields: TaskField[];
   values: FieldValues;
@@ -94,8 +61,15 @@ export function TaskGrid({
   onViewChange: (next: TaskView) => void;
 }) {
   const t = useT();
-  const { openIssue } = useUI();
+  const { openIssue, scope } = useUI();
+  const pathname=usePathname();
+  const [settings,setSettings]=useStoredJson<{sizes:Record<string,number>;hidden:string[];order:string[];frozen:string[]}>(`tacos.grid.${scope}.${pathname}`,{sizes:{},hidden:[],order:[],frozen:[]});
+  const [members,setMembers]=useState<Member[]>([]);
+  useEffect(()=>{let live=true;readJson<Member[]>(`/api/internal/${workspaceId}/members`,(data):data is Member[]=>Array.isArray(data)).then(data=>{if(live)setMembers(data);}).catch(()=>{if(live)setError("Could not load members. Reopen this view to retry.");});return()=>{live=false;};},[workspaceId]);
+  async function update(id:string,patch:UpdateIssueInput){try{const result=await updateIssueAction(workspaceId,id,patch);if(!result.ok){setError(result.error);return false;}setError(null);router.refresh();return true;}catch{setError("Could not save. Retry.");return false;}}
   const router=useRouter();
+  const [memberBusy,setMemberBusy]=useState<string[]>([]);
+  const memberRunning=useRef(new Set<string>());
   const saving=useRef(new Set<string>());
   const [error, setError] = useState<string | null>(null);
   const scroller = useRef<HTMLDivElement>(null);
@@ -107,17 +81,17 @@ export function TaskGrid({
     };
     const save = async (issueId: string, fieldId: string, next: string | null) => {
       const key=`${issueId}:${fieldId}`;
-      if(saving.current.has(key))return;
+      if(saving.current.has(key))return false;
       saving.current.add(key);
       try {
       const result = await setTaskFieldValueAction(workspaceId, issueId, fieldId, next);
       if (result.ok) {
         setError(null);
-        router.refresh();
+        router.refresh();return true;
       } else {
-        setError(result.error);
+        setError(result.error);return false;
       }
-      }catch{setError("Could not save. Retry.");}finally{saving.current.delete(key);}
+      }catch{setError("Could not save. Retry.");return false;}finally{saving.current.delete(key);}
     };
     return column.columns([
       column.display({
@@ -130,42 +104,31 @@ export function TaskGrid({
         id: "title",
         header: t("Title"),
         size: 320,
-        cell: ({ row }) => <span className="truncate text-text">{row.original.title}</span>,
+        cell: ({ row }) => <EntityRow kind="task" id={row.original.id} title={row.original.title}><input aria-label={t("Title")} key={row.original.title} defaultValue={row.original.title} onClick={e=>e.stopPropagation()} onBlur={e=>{if(e.target.value!==row.original.title)void update(row.original.id,{title:e.target.value});}} onKeyDown={e=>{if(e.key==="Enter"&&!e.nativeEvent.isComposing)e.currentTarget.blur();}} className={CELL_INPUT}/></EntityRow>,
       }),
       column.accessor("status", {
         id: "status",
         header: t("Status"),
         size: 120,
-        cell: ({ row }) => (
-          <span className="flex items-center gap-1.5 truncate text-muted">
-            <StatusIcon status={row.original.status} size={13} />
-            {t(STATUS_META[row.original.status].label)}
-          </span>
-        ),
+        cell: ({ row }) => <select disabled={!row.original.assignees.some(person=>person.id===currentUserId)} title={row.original.assignees.some(person=>person.id===currentUserId)?undefined:t("Only assignees can change status")} aria-label={t("Status")} value={row.original.status} onClick={e=>e.stopPropagation()} onChange={e=>void update(row.original.id,{status:e.target.value as Status})} className={CELL_INPUT}>{STATUS_ORDER.map(status=><option key={status} value={status}>{t(STATUS_META[status].label)}</option>)}</select>,
       }),
       column.accessor("priority", {
         id: "priority",
         header: t("Priority"),
         size: 70,
-        cell: ({ row }) => <PriorityIcon priority={row.original.priority} />,
+        cell: ({ row }) => <select aria-label={t("Priority")} value={row.original.priority} onClick={e=>e.stopPropagation()} onChange={e=>void update(row.original.id,{priority:Number(e.target.value) as Priority})} className={CELL_INPUT}>{[0,1,2,3,4].map(priority=><option key={priority} value={priority}>{t(PRIORITY_NAMES[priority as Priority])}</option>)}</select>,
       }),
       column.display({
         id: "assignee",
         header: t("Assignee"),
         size: 100,
-        cell: ({ row }) => (
-          <span className="flex items-center -space-x-1">
-            {row.original.assignees.map((person) => (
-              <AssigneeAvatar key={person.id} displayName={person.displayName} avatar={person.avatar} size={18} />
-            ))}
-          </span>
-        ),
+        cell: ({ row }) => <div onClick={e=>e.stopPropagation()}><Menu trigger={row.original.assignees.map(person=>person.displayName).join(", ")||t("Assignee")}>{()=> <div className="max-h-64 overflow-auto p-2">{members.map(member=><label key={member.id} className="flex gap-2 py-1"><input type="checkbox" disabled={memberBusy.includes(`${row.original.id}:${member.id}`)} checked={row.original.assignees.some(person=>person.id===member.id)} onChange={async e=>{const key=`${row.original.id}:${member.id}`;if(memberRunning.current.has(key))return;memberRunning.current.add(key);setMemberBusy(old=>[...old,key]);try{const result=await changeIssueCollectionAction(workspaceId,row.original.id,{kind:"assignee",value:member.id,selected:e.target.checked});if(!result.ok)setError(result.error);else router.refresh();}catch{setError("Could not save. Retry.");}finally{memberRunning.current.delete(key);setMemberBusy(old=>old.filter(value=>value!==key));}}}/>{member.displayName}</label>)}</div>}</Menu></div>,
       }),
       column.accessor("dueDate", {
         id: "dueDate",
         header: t("Due date"),
         size: 110,
-        cell: ({ row }) => <span className="text-muted">{row.original.dueDate}</span>,
+        cell: ({ row }) => <div onClick={e=>e.stopPropagation()}><DuePicker value={row.original.dueDate} reminder={row.original.reminder} onSave={(dueDate,reminder)=>update(row.original.id,{dueDate,reminder})}/></div>,
       }),
       ...fields.map((field) =>
         column.display({
@@ -173,18 +136,22 @@ export function TaskGrid({
           header: field.name,
           size: field.type === "checkbox" ? 90 : 150,
           cell: ({ row }) => (
-            <FieldCell
+            <FieldCell id={`${row.original.id}:${field.id}`} key={`${row.original.id}:${field.id}:${valueOf(row.original.id,field.id)}`}
               field={field}
               value={valueOf(row.original.id, field.id)}
-              onSave={(next) => void save(row.original.id, field.id, next)}
+              onSave={(next) => save(row.original.id, field.id, next)}
             />
           ),
         })
       ),
     ]);
-  }, [fields, t, values, workspaceId,router]);
+  // Cells read current server values after every refresh.
+  }, [fields, t, values, workspaceId,router,members,memberBusy,currentUserId]);
 
-  const table = useTable({ features: FEATURES, data: issues, columns });
+  const ordered=[...columns].sort((a,b)=>{const ai=settings.order.indexOf(String(a.id)),bi=settings.order.indexOf(String(b.id));return (ai<0?999:ai)-(bi<0?999:bi);}).filter(column=>!settings.hidden.includes(String(column.id)));
+  const table = useTable({ features: FEATURES, data: issues, columns:ordered, columnResizeMode:"onChange",state:{columnSizing:settings.sizes},onColumnSizingChange:updater=>setSettings(old=>({...old,sizes:typeof updater==="function"?updater(old.sizes):updater})) });
+  const sticky=(id:string)=>settings.frozen.includes(id)?{position:"sticky" as const,left:table.getAllLeafColumns().filter(column=>settings.frozen.includes(column.id)).slice(0,table.getAllLeafColumns().filter(column=>settings.frozen.includes(column.id)).findIndex(column=>column.id===id)).reduce((sum,column)=>sum+column.getSize(),0),zIndex:2,background:"var(--color-bg)"}:{};
+  function reorder(id:string,delta:number){const ids=columns.map(column=>String(column.id)).sort((a,b)=>(settings.order.indexOf(a)<0?999:settings.order.indexOf(a))-(settings.order.indexOf(b)<0?999:settings.order.indexOf(b)));const at=ids.indexOf(id),next=at+delta;if(next<0||next>=ids.length)return;[ids[at],ids[next]]=[ids[next],ids[at]];setSettings(old=>({...old,order:ids}));}
   const rows = table.getRowModel().rows;
   const virtual = useVirtualizer({
     count: rows.length,
@@ -207,6 +174,7 @@ export function TaskGrid({
 
   return (
     <div data-task-grid ref={scroller} className="min-h-0 flex-1 overflow-auto text-small">
+      <div className="sticky left-0 flex border-b border-border bg-bg px-2 py-1"><Menu trigger={t("Columns")}>{()=> <div className="max-h-80 overflow-auto p-2 text-small">{columns.map(column=><div key={column.id} className="flex items-center gap-2 py-1"><label className="flex flex-1 gap-2"><input type="checkbox" checked={!settings.hidden.includes(String(column.id))} onChange={e=>setSettings(old=>({...old,hidden:e.target.checked?old.hidden.filter(id=>id!==column.id):[...old.hidden,String(column.id)]}))}/>{String(column.header)}</label><button aria-label={t("Move up")} onClick={()=>reorder(String(column.id),-1)}>↑</button><button aria-label={t("Move down")} onClick={()=>reorder(String(column.id),1)}>↓</button><button aria-pressed={settings.frozen.includes(String(column.id))} onClick={()=>setSettings(old=>({...old,frozen:old.frozen.includes(String(column.id))?old.frozen.filter(id=>id!==column.id):[...old.frozen,String(column.id)]}))}>{t("Freeze")}</button></div>)}<button onClick={()=>setSettings({sizes:{},hidden:[],order:[],frozen:[]})}>{t("Reset columns")}</button></div>}</Menu></div>
       {error && <div className="sticky left-0 px-4 py-1 text-small text-danger">{t(error)}</div>}
       <div style={{ width, minWidth: "100%" }}>
         {table.getHeaderGroups().map((group) => (
@@ -215,17 +183,17 @@ export function TaskGrid({
               const key = header.id.startsWith("field:") ? header.id : SORT_KEYS[header.id];
               const sort = view.sort.find((item) => item.key === key);
               return (
+                <div key={header.id} style={{width:header.getSize(),...sticky(header.id)}} className="relative flex shrink-0">
                 <button
-                  key={header.id}
                   type="button"
                   disabled={!key}
                   onClick={() => toggleSort(header.id)}
-                  style={{ width: header.getSize() }}
+                  style={{ width: "100%" }}
                   className="flex shrink-0 items-center gap-1 truncate px-2 py-1.5 text-left text-small font-medium text-muted enabled:hover:text-text"
                 >
                   <span className="truncate"><table.FlexRender header={header} /></span>
                   {sort && (sort.dir === "asc" ? <ArrowUp size={11} /> : <ArrowDown size={11} />)}
-                </button>
+                </button><div role="separator" aria-label={t("Resize column")} aria-orientation="vertical" aria-valuenow={header.getSize()} tabIndex={0} onMouseDown={header.getResizeHandler()} onTouchStart={header.getResizeHandler()} onDoubleClick={()=>setSettings(old=>({...old,sizes:{...old.sizes,[header.id]:columns.find(column=>column.id===header.id)?.size??150}}))} onKeyDown={e=>{if(["ArrowLeft","ArrowRight"].includes(e.key)){e.preventDefault();setSettings(old=>({...old,sizes:{...old.sizes,[header.id]:Math.max(50,header.getSize()+(e.key==="ArrowRight"?10:-10))}}));}}} className="absolute inset-y-0 right-0 w-1 cursor-col-resize touch-none hover:bg-accent"/></div>
               );
             })}
           </div>
@@ -244,7 +212,7 @@ export function TaskGrid({
                 {row.getAllCells().map((cell) => (
                   <div
                     key={cell.id}
-                    style={{ width: cell.column.getSize() }}
+                    style={{ width: cell.column.getSize(),...sticky(cell.column.id) }}
                     className="flex shrink-0 items-center overflow-hidden px-2"
                   >
                     <table.FlexRender cell={cell} />

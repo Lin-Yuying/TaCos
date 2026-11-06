@@ -323,6 +323,9 @@ export const pageComments = sqliteTable(
     suffix: text("suffix").notNull().default(""),
     via: text("via").notNull().default("you"),
     resolvedAt: text("resolved_at"),
+    parentId: text("parent_id"),
+    editedAt: text("edited_at"),
+    deletedAt: text("deleted_at"),
     createdAt: text("created_at").notNull(),
   },
   (t) => [index("page_comments_page_idx").on(t.pageId)]

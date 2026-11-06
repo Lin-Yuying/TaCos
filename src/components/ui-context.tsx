@@ -48,6 +48,7 @@ export type CreatedProject = {
 // The composer can be opened from a passage in a document; `onCreated` lets that page
 // put the new task's reference where the passage was.
 export type ComposerSeed = {
+  dueDate?: string;
   title?: string;
   description?: string;
   onCreated?: (issue: {

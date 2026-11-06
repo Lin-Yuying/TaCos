@@ -133,8 +133,10 @@ export function DocPageView({
   const [comments, setComments] = useState<PageComment[]>([]);
   const [members, setMembers] = useState<Member[]>([]);
   const [located, setLocated] = useState<Set<string>>(new Set());
-  const [draftAnchor, setDraftAnchor] = useState<DocAnchor | null>(null);
+  const [draftAnchor, setDraftAnchor] = useDraft<DocAnchor | null>("document-comment-anchor",page.id,null);
   const [activeComment, setActiveComment] = useState<string | null>(null);
+  const [commentsLoading,setCommentsLoading]=useState(true),[commentsError,setCommentsError]=useState<string|null>(null);
+  const commentRunning=useRef(false);
   const [commentBusy, setCommentBusy] = useState(false);
   const [conflict, setConflict] = useState<{ doc: string; revision: number; by: string | null } | null>(null);
   const collab = useDocCollab(workspaceId, page.id);
@@ -247,8 +249,9 @@ export function DocPageView({
     let live = true;
     void listPageCommentsAction(workspaceId, page.id).then((result) => {
       if (!live) return;
-      if (!result.ok) {setError(result.error);return;}
-      setComments(result.data.comments);
+      setCommentsLoading(false);
+      if (!result.ok) {setCommentsError(result.error);return;}
+      setCommentsError(null);setComments(result.data.comments);
       setMembers(result.data.members);
     });
     return () => {
@@ -259,39 +262,18 @@ export function DocPageView({
   const anchors = useMemo<EditorAnchor[]>(
     () =>
       comments.flatMap((comment) =>
-        comment.quote && !comment.resolvedAt
+        comment.quote && !comment.resolvedAt && !comment.deletedAt
           ? [{ id: comment.id, quote: comment.quote, prefix: comment.prefix, suffix: comment.suffix }]
           : []
       ),
     [comments]
   );
 
-  async function addComment(body: string): Promise<boolean> {
-    if (!body.trim() || commentBusy) return false;
-    setCommentBusy(true);
-    const result = await addPageCommentAction(workspaceId, page.id, { body, anchor: draftAnchor });
-    setCommentBusy(false);
-    if (!result.ok) {
-      setError(result.error);
-      return false;
-    }
-    setComments(result.data);
-    setDraftAnchor(null);
-    return true;
-  }
-
-  async function resolveComment(id: string, resolved: boolean) {
-    const result = await setPageCommentResolvedAction(workspaceId, page.id, id, resolved);
-    if (result.ok) setComments(result.data);
-    else setError(result.error);
-  }
-
-  async function removeComment(id: string) {
-    if (!(await confirm(t("Delete this comment?")))) return;
-    const result = await removePageCommentAction(workspaceId, page.id, id);
-    if (result.ok) setComments(result.data);
-    else setError(result.error);
-  }
+  async function reloadComments(){setCommentsLoading(true);try{const result=await listPageCommentsAction(workspaceId,page.id);if(result.ok){setComments(result.data.comments);setCommentsError(null);}else setCommentsError(result.error);}catch{setCommentsError("Could not load comments. Retry.");}finally{setCommentsLoading(false);}}
+  async function commentAction(work:()=>Promise<{ok:boolean;data?:PageComment[];error?:string}>):Promise<boolean>{if(commentRunning.current)return false;commentRunning.current=true;setCommentBusy(true);try{const result=await work();if(!result.ok){setCommentsError(result.error??"Could not save. Retry.");return false;}if(result.data)setComments(result.data);setCommentsError(null);return true;}catch{setCommentsError("Could not save. Retry.");return false;}finally{commentRunning.current=false;setCommentBusy(false);}}
+  async function addComment(body:string,parentId?:string){if(!body.trim())return false;const ok=await commentAction(()=>addPageCommentAction(workspaceId,page.id,{body,anchor:parentId?null:draftAnchor,parentId}));if(ok)setDraftAnchor(null);return ok;}
+  async function resolveComment(id:string,resolved:boolean){await commentAction(()=>setPageCommentResolvedAction(workspaceId,page.id,id,resolved));}
+  async function removeComment(id:string){if(!await confirm(t("Delete this comment? You can restore it here.")))return;await commentAction(()=>removePageCommentAction(workspaceId,page.id,id));}
 
   async function saveTitle() {
     const next = title.trim();
@@ -317,11 +299,11 @@ export function DocPageView({
     else router.refresh();
   }
 
-  async function uploadFile(file: File): Promise<string | null> {
+  async function uploadFile(file: File,controls?:{signal?:AbortSignal;onProgress?:(progress:number)=>void}): Promise<string | null> {
     setUploading((count) => count + 1);
     try {
       const { uploadPageFile } = await import("@/lib/upload-client");
-      return (await uploadPageFile(workspaceId, page.id, file)).url;
+      return (await uploadPageFile(workspaceId, page.id, file,controls)).url;
     } catch (err) {
       setError(err instanceof Error ? err.message : "Upload failed");
       return null;
@@ -421,7 +403,9 @@ export function DocPageView({
   const base = `/${workspaceId}/docs/`;
   // A pane is a narrow column: the header drops its labels and keeps the glyphs, or the
   // row wraps and the buttons lose their words.
-  const compact = Boolean(onClose);
+  const root=useRef<HTMLDivElement>(null);
+  const [compact,setCompact]=useState(Boolean(onClose));
+  useEffect(()=>{const observer=new ResizeObserver(([entry])=>setCompact(entry.contentRect.width<850));if(root.current)observer.observe(root.current);return()=>observer.disconnect();},[]);
   // References inside the pane open in the pane, so following one never loses the page
   // you were reading.
   const pageCtx = useMemo<PageContext>(
@@ -435,7 +419,7 @@ export function DocPageView({
   );
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col">
+    <div ref={root} className="flex min-h-0 flex-1 flex-col">
       <header className="flex h-11 shrink-0 items-center gap-2 border-b border-border px-4 text-small text-muted">
         <span
           className="flex shrink-0 items-center gap-1"
@@ -895,6 +879,7 @@ export function DocPageView({
       )}
       {side === "comments" && (
         <DocCommentsPanel
+          workspaceId={workspaceId} onChanged={setComments} onReload={()=>void reloadComments()} loading={commentsLoading} loadError={commentsError}
           pageId={page.id}
           comments={comments}
           members={members}
@@ -929,12 +914,16 @@ function PagePicker({
   onPick: (ref: PageRefEntry) => void;
 }) {
   const t = useT();
+  const [query,setQuery]=useState("");
+  const [limit,setLimit]=useState(40);
+  const matches=refs.filter(ref=>ref.title.toLowerCase().includes(query.toLowerCase())||ref.id.includes(query));
   if (refs.length === 0) {
     return <div className="px-2 py-1.5 text-small text-faint">{t("No pages yet.")}</div>;
   }
   return (
     <>
-      {refs.slice(0, 40).map((ref) => (
+      <input aria-label={t("Search documents")} placeholder={t("Search documents")} value={query} onChange={event=>{setQuery(event.target.value);setLimit(40);}} className="sticky top-0 w-full rounded border border-border bg-bg px-2 py-1 text-small"/>
+      {matches.slice(0, limit).map((ref) => (
         <MenuItem
           key={ref.id}
           onSelect={() => {
@@ -948,6 +937,7 @@ function PagePicker({
           </span>
         </MenuItem>
       ))}
+      {matches.length>limit&&<button onClick={()=>setLimit(n=>n+40)} className="p-2 text-small">{t("Load more")}</button>}
     </>
   );
 }
