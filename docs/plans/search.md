@@ -133,17 +133,35 @@ recent/suggested items, and permissions respected.
 - Full query language with boolean operators; start with simple qualifiers.
 - Search analytics.
 
-## Open decisions
+## Decisions (accepted 2026-11-06, with a UI design gate)
 
-1. Entry point: one unified palette vs palette + search page (recommended:
-   both).
-2. Keyboard: `/` for search and `Cmd/Ctrl K` for command palette
-   (recommended), or both open the same surface?
-3. Entity coverage for v1: all listed (recommended) or start with projects/
-   people beyond the current four?
-4. Saved searches: personal only (recommended) or shared views via U-09?
-5. Chinese search: FTS5 trigram + LIKE fallback (recommended) or a CJK
-   tokenizer now?
+1. Build **both** the command palette and a full search page.
+2. `/` opens the search page; `Cmd/Ctrl K` opens the command palette; both
+   return the same results for the same query.
+3. v1 covers all listed entities (projects, people, labels, agent threads and
+   messages, attachment names, automation rules).
+4. Saved searches are personal/recent only in this PR; shared saved searches
+   come from U-09's shared views.
+5. Chinese search uses FTS5 trigram + LIKE fallback; a CJK tokenizer is a
+   follow-up.
+6. Permissions reuse the existing project/page visibility rules (no guests).
+
+**UI gate (explicit requirement):** search is a daily-use surface, so the
+implementation must be design-reviewed before merge:
+
+- One obvious entry: `/` search page, `Cmd/Ctrl K` palette; no shortcut
+  conflicts; palette commands stay separate from results, and prefixes are
+  discoverable rather than required.
+- Search page layout: query bar, kind tabs, one compact filter row, grouped
+  results; empty state shows recent searches/items; loading keeps the previous
+  results visible with a subtle skeleton; error/empty states are explicit.
+- Palette: no kitchen-sink commands; results and commands visually separated;
+  recent queries/items; keyboard navigation and Escape behavior match the rest
+  of the app.
+- Narrow widths (1100 and 640 container) must remain usable; results and
+  filters must not overflow or hide the only entry point.
+- A wireframe/screenshot review with the owner is part of the UI commits before
+  final polish; acceptance includes screenshots at 1440/1100/640.
 
 ## Dependencies
 
