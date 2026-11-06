@@ -9,7 +9,7 @@ TaCos is a fast, local-first tracker where humans and agents share the same back
 - **Teams and workspaces** — multiple workspaces per install, invite codes, roles, avatars, per-workspace API keys.
 - **Projects** — markdown overviews, color-coded icons, favorites, task prefixes (`CORE-7`), and a 30-day recycle bin.
 - **Tasks** — list and board views, labels, priorities, multiple assignees, comments, and a combined activity timeline.
-- **Agent-first APIs** — Bearer-key REST at `/api/v1/*` plus a stdio MCP server for Claude Code / Claude Desktop / Codex.
+- **Agent-first APIs** — scoped Bearer-key REST at `/api/v1/*`, a stdio MCP server, and a stateless Streamable HTTP MCP endpoint at `/api/mcp` for Claude Code / Claude Desktop / Codex.
 - **Desktop builds** — a thin shell for an existing server, or a local build that bundles its own server and SQLite database.
 - **No migration CLI** — the SQLite schema is created and upgraded idempotently on first use.
 
@@ -43,7 +43,9 @@ Set `TACOS_ADMIN_PASSWORD` before the first start to give the built-in admin a d
 | `TACOS_DATA_DIR` | `data/` | Directory that holds `tacos.db` (and its WAL files). |
 | `TACOS_SEED_DEMO` | `1` | Set to `0` to skip the demo workspace, users, and tasks. |
 | `TACOS_ADMIN_PASSWORD` | `admin123` | Password for the built-in `admin` account, applied only when it is first created. |
-| `TACOS_WORKSPACE_KEY` | `HQ` | Workspace key used by the MCP server. |
+| `TACOS_WORKSPACE_KEY` | `HQ` | Workspace key used by the stdio MCP server. |
+| `TACOS_MCP_READ_ONLY` | off | `1` hides every write tool on the stdio MCP server. |
+| `TACOS_MCP_TOOLS` | all | Comma-separated tool names the stdio MCP server may register. |
 | `PORT` / `HOSTNAME` | `3000` / all interfaces | Standard Next.js server bindings. |
 
 Workspaces are created in the app. Joining an existing workspace uses a code such as `TACOS-1A2B3C4D`.
@@ -59,7 +61,20 @@ Put the app behind a reverse proxy with TLS. If it is reachable from the public 
 
 ## Agent REST API
 
-Create a key in **Settings → Agent access**, then:
+Create a key in **Settings → Advanced → Agent access**. A key belongs to the
+workspace and to the person who created it, and leaves with them. Pick:
+
+- **Scope** — `read` for GET requests, or `read` + `write` for create, update,
+  delete and comments. A write-only key is not offered; write implies read.
+- **Projects** — all projects (default), or an allowlist. A scoped key sees only
+  those projects in lists and gets `403` for any other project.
+- **Expiry** — 30, 90 (default) or 365 days. A workspace owner or admin may pick
+  "Never expires". Keys created before scopes existed keep full access and no
+  expiry.
+
+Rate limits are per key: 120 reads/minute and 60 writes/minute, burst 20. Over the
+limit the API returns `429` with `Retry-After`. Rotating a key shows the
+replacement once and revokes the old key immediately.
 
 ```bash
 # list active tasks
@@ -86,21 +101,40 @@ curl -X POST http://localhost:3000/api/v1/issues/CORE-7/comments \
 
 | Endpoint | Methods |
 | --- | --- |
-| `/api/v1/issues` | `GET` (filters: `status`, `priority`, `q`, `label`, `limit`), `POST` |
+| `/api/v1/issues` | `GET` (filters: `status`, `priority`, `q`, `label`, `project`, `cursor`, `limit`; page headers `X-Total-Count`, `X-Next-Cursor`), `POST` |
 | `/api/v1/issues/{id}` | `GET`, `PATCH`, `DELETE` — `{id}` accepts a UUID or identifier (`CORE-7`) |
 | `/api/v1/issues/{id}/comments` | `GET`, `POST` |
 | `/api/v1/labels` | `GET`, `POST` |
-| `/api/v1/me` | `GET` (key introspection) |
+| `/api/v1/me` | `GET` (key name, scopes, project count, expiry, last used time/IP) |
+| `/api/mcp` | `POST` (MCP Streamable HTTP, same Bearer key) |
 
 Statuses: `todo`, `in_progress`, `done`, `canceled` (aliases such as `in progress` and `completed` work too). Priorities: `none|low|medium|high|urgent` or `0–4`.
 
-## MCP server (Claude Code / Claude Desktop /Codex)
+## MCP server (Claude Code / Claude Desktop / Codex)
 
-The MCP server reads the same SQLite database directly, so it works even when the web server is not running.
+Two transports share one tool implementation:
 
-Tools: `list_projects`, `list_members`, `list_tasks`, `get_task`, `create_task`, `update_task`, `delete_task`, `add_comment`, `list_labels`, `create_label`.
+- **stdio** for a local checkout. It reads the same SQLite database directly, so
+  it works even when the web server is not running.
+- **Streamable HTTP** at `/api/mcp` for a deployed server. It is stateless: every
+  request carries `Authorization: Bearer tac_…`, and the key's scope, project
+  allowlist and rate limits apply to each tool call. Writes are attributed to
+  `api:<key name>` via `mcp`.
 
-Claude Code:
+Tools: `list_issues`, `get_issue`, `create_issue`, `update_issue`,
+`delete_issue`, `add_comment`, `list_labels`, `create_label`, `list_projects`,
+`list_members`. The list tools take `cursor`/`limit` and return `nextCursor`.
+Every tool declares MCP annotations; the list/get tools also declare
+`outputSchema` and return `structuredContent`.
+
+Remote (Claude Code):
+
+```bash
+claude mcp add --transport http tacos https://your-tacos-host/api/mcp \
+  --header "Authorization: Bearer tac_YOUR_KEY"
+```
+
+Local (Claude Code):
 
 ```bash
 claude mcp add tacos -- npx tsx /absolute/path/to/tacos/mcp/server.ts
@@ -120,7 +154,13 @@ Claude Desktop (`claude_desktop_config.json`):
 }
 ```
 
-Smoke-test the server end-to-end (create → update → comment → get → delete):
+`TACOS_MCP_READ_ONLY=1` hides every write tool on the stdio server, and
+`TACOS_MCP_TOOLS=list_issues,get_issue` registers only the named tools. A
+read-scoped API key does the same over HTTP; a write call returns a tool error
+naming the missing `write` scope.
+
+Smoke-test the stdio server end-to-end (create → update → comment → get →
+pagination → delete, then read-only and tool filters):
 
 ```bash
 npm run mcp:test
@@ -142,13 +182,14 @@ Desktop binaries are not code-signed. On Windows 11, Smart App Control blocks un
 ## How it fits together
 
 ```
-src/lib/tasks.ts      business logic and validation (shared by web UI, REST, MCP)
+src/lib/issues.ts     business logic and validation (shared by web UI, REST, MCP)
 src/lib/constants.ts   client-safe constants and types (no DB imports)
 src/db/                Drizzle schema, SQLite client (WAL, auto-migrate, demo seed)
-src/app/api/v1/        agent REST surface (Bearer keys, SHA-256 hashed at rest)
+src/app/api/v1/        agent REST surface (scoped Bearer keys, SHA-256 hashed at rest)
+src/app/api/mcp/       stateless Streamable HTTP MCP endpoint (same API keys)
 src/app/api/internal/  read-only helpers for the web UI
 src/app/actions.ts     server actions for the web UI (actor "you")
-mcp/server.ts          stdio MCP server → same library, actor "mcp"
+mcp/create-server.ts   MCP tools → same library; mcp/server.ts is the stdio wrapper
 electron/              thin desktop shell and bundled-server launcher
 ```
 

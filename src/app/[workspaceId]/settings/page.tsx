@@ -64,6 +64,7 @@ async function View({ params }: { params: Promise<{ workspaceId: string }> }) {
       projects={projects}
       labels={labels}
       keys={keys}
+      now={new Date().toISOString()}
       joinCode={joinCode}
       membersSeeAllTasks={seeAll}
       ai={ai}

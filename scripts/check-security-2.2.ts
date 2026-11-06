@@ -85,12 +85,12 @@ async function main() {
     const start = actions.indexOf(`export async function ${name}(`);
     assert(actions.slice(start, start + 400).includes("await assertSees"), `${name} checks visibility`);
   }
-  const outsiderKey = await createApiKey(ws, "outsider-key", outsider.id);
+  const outsiderKey = await createApiKey(ws, "outsider-key", ["read", "write"], null, 90, outsider.id);
   const verified = await verifyApiKey(outsiderKey.key);
   assert(verified?.createdBy === outsider.id, "a key carries the person it stands for");
   await revokeApiKey(ws, outsiderKey.record.id, outsider.id);
 
-  const { record } = await createApiKey(ws, "member-key", ownerId);
+  const { record } = await createApiKey(ws, "member-key", ["read", "write"], null, 90, ownerId);
   await throws("Only the key's owner or an admin can revoke it", () => revokeApiKey(ws, record.id, outsider.id));
   await revokeApiKey(ws, record.id, ownerId);
   const [revoked] = await db.select().from(apiKeys).where(eq(apiKeys.id, record.id));

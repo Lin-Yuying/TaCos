@@ -9,6 +9,7 @@ import {
   createApiKeyAction,
   createProjectAction,
   revokeApiKeyAction,
+  rotateApiKeyAction,
   saveWorkspaceIconAction,
   setMembersSeeAllTasksAction,
   trashProjectAction,
@@ -38,7 +39,7 @@ import { AssigneeAvatar } from "@/components/issue-table";
 import { ProjectIcon, WorkspaceMark } from "@/components/icons";
 import { WorkspaceTrashList } from "@/components/workspace-trash-list";
 import { LabelsManager } from "@/components/labels-manager";
-import type { ApiKeyRecord, DeletedWorkspace, Label, Member, Project } from "@/lib/issues";
+import type { ApiKeyRecord, ApiKeyScope, DeletedWorkspace, Label, Member, Project } from "@/lib/issues";
 import type { HarnessSettingsView } from "@/lib/harness/types";
 import { BUILTIN_AVATARS, BUILTIN_AVATAR_LABELS, builtinAvatarId } from "@/lib/avatars";
 import { formatDate, timeAgo } from "@/lib/format";
@@ -128,6 +129,7 @@ export function SettingsView({
   projects,
   labels,
   keys,
+  now,
   joinCode,
   membersSeeAllTasks,
   ai,
@@ -146,6 +148,7 @@ export function SettingsView({
   projects: Project[];
   labels: Array<Label & { issueCount: number }>;
   keys: ApiKeyRecord[];
+  now: string;
   joinCode: string | null;
   membersSeeAllTasks: boolean;
   ai: AiSettingsView;
@@ -166,10 +169,16 @@ export function SettingsView({
   const [memberBusy,setMemberBusy]=useState<string[]>([]),[memberErrors,setMemberErrors]=useState<Record<string,string>>({}),[visibilityError,setVisibilityError]=useState<string|null>(null),[visibilityBusy,setVisibilityBusy]=useState(false);
   async function memberChange(id:string,work:()=>Promise<{ok:boolean;error?:string}>){if(memberLocks.current.has(id))return;memberLocks.current.add(id);setMemberBusy([...memberLocks.current]);try{const result=await work();if(!result.ok)throw new Error(result.error);setMemberErrors(old=>{const next={...old};delete next[id];return next;});router.refresh();}catch(error){setMemberErrors(old=>({...old,[id]:error instanceof Error?error.message:"Could not save. Retry."}));}finally{memberLocks.current.delete(id);setMemberBusy([...memberLocks.current]);}}
   const isAdmin = role === "admin";
+  const canCreatePermanentKey = isAdmin || isOwner;
   const [code, setCode] = useState(joinCode);
   const [newKeyName, setNewKeyName] = useState("");
   const [newKey, setNewKey] = useState<string | null>(null);
   const [keyError, setKeyError] = useState<string | null>(null);
+  const [newKeyScopes, setNewKeyScopes] = useState({ read: true, write: true });
+  const [newKeyExpiry, setNewKeyExpiry] = useState("90");
+  const [newKeyProjectMode, setNewKeyProjectMode] = useState<"all" | "selected">("all");
+  const [newKeyProjectIds, setNewKeyProjectIds] = useState<string[]>([]);
+  const [rotatingKeyId, setRotatingKeyId] = useState<string | null>(null);
   const [projName, setProjName] = useState("");
   const [renaming, setRenaming] = useState<{ id: string; name: string } | null>(null);
   const [projError, setProjError] = useState<string | null>(null);
@@ -324,18 +333,51 @@ export function SettingsView({
   }
 
   async function createKey() {
-    if (!newKeyName.trim()) return;
+    if (!newKeyName.trim() || busy) return;
+    if (newKeyProjectMode === "selected" && newKeyProjectIds.length === 0) {
+      setKeyError(t("Pick at least one project."));
+      return;
+    }
+    const scopes: ApiKeyScope[] = [];
+    if (newKeyScopes.read) scopes.push("read");
+    if (newKeyScopes.write) scopes.push("write");
+    if (scopes.length === 0) {
+      setKeyError(t("Pick at least the read scope."));
+      return;
+    }
     setBusy(true);
-    const result = await safeAction(async()=>createApiKeyAction(workspace.id, newKeyName));
+    const result = await safeAction(async()=>createApiKeyAction(workspace.id, {
+      name: newKeyName,
+      scopes,
+      projectIds: newKeyProjectMode === "selected" ? newKeyProjectIds : null,
+      expiresInDays: newKeyExpiry === "never" ? null : Number(newKeyExpiry),
+    }));
     setBusy(false);
     if (result.ok) {
       setNewKey(result.data.key);
       setNewKeyName("");
+      setNewKeyProjectIds([]);
+      setNewKeyProjectMode("all");
       setKeyError(null);
       router.refresh();
     } else {
       setKeyError(result.error);
     }
+  }
+
+  async function rotateKey(key: ApiKeyRecord) {
+    if (rotatingKeyId) return;
+    if (!await confirm(t('Rotate key "{name}"? The old key stops working immediately.', { name: key.name }))) return;
+    setRotatingKeyId(key.id);
+    const result = await safeAction(async()=>rotateApiKeyAction(workspace.id, key.id));
+    setRotatingKeyId(null);
+    if (!result.ok) {
+      setKeyError(result.error);
+      return;
+    }
+    setNewKey(result.data.key);
+    setKeyError(null);
+    router.refresh();
   }
 
   async function revokeKey(key: ApiKeyRecord) {
@@ -1078,24 +1120,120 @@ export function SettingsView({
                 )}
               </p>
 
-              <div className="flex items-center gap-2">
-                <input
-                  value={newKeyName}
-                  onChange={(e) => setNewKeyName(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter") void createKey();
-                  }}
-                  placeholder={t("Key name (e.g. claude-code, triage-bot)")}
-                  className="w-full rounded-md border border-border bg-elevated/50 px-2.5 py-1.5 text-body placeholder:text-faint focus:border-border-strong"
-                />
-                <button
-                  type="button"
-                  onClick={() => void createKey()}
-                  disabled={!newKeyName.trim() || busy}
-                  className="shrink-0 rounded-md bg-accent px-3 py-1.5 text-body font-medium text-white hover:bg-accent-hover disabled:opacity-40"
-                >
-                  {t("Generate")}
-                </button>
+              <div className="space-y-3 rounded-lg border border-border p-3">
+                <div className="flex items-center gap-2">
+                  <input
+                    value={newKeyName}
+                    onChange={(e) => setNewKeyName(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") void createKey();
+                    }}
+                    placeholder={t("Key name (e.g. claude-code, triage-bot)")}
+                    aria-label={t("Key name")}
+                    className="w-full rounded-md border border-border bg-elevated/50 px-2.5 py-1.5 text-body placeholder:text-faint focus:border-border-strong"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => void createKey()}
+                    disabled={!newKeyName.trim() || busy}
+                    className="shrink-0 rounded-md bg-accent px-3 py-1.5 text-body font-medium text-white hover:bg-accent-hover disabled:opacity-40"
+                  >
+                    {busy ? t("Creating…") : t("Generate")}
+                  </button>
+                </div>
+
+                <div className="flex flex-wrap items-start gap-x-6 gap-y-3">
+                  <fieldset className="space-y-1">
+                    <legend className="text-small text-muted">{t("Scope")}</legend>
+                    <label className="flex items-center gap-1.5 text-small text-text">
+                      <input
+                        type="checkbox"
+                        checked={newKeyScopes.read}
+                        onChange={(e) =>
+                          setNewKeyScopes((old) =>
+                            e.target.checked ? { ...old, read: true } : { read: false, write: false }
+                          )
+                        }
+                      />
+                      {t("Read")}
+                    </label>
+                    <label className="flex items-center gap-1.5 text-small text-text">
+                      <input
+                        type="checkbox"
+                        checked={newKeyScopes.write}
+                        onChange={(e) =>
+                          setNewKeyScopes((old) =>
+                            e.target.checked ? { read: true, write: true } : { ...old, write: false }
+                          )
+                        }
+                      />
+                      {t("Read and write")}
+                    </label>
+                    <p className="max-w-[22rem] text-caption leading-relaxed text-faint">
+                      {t("Read includes every GET. Write adds create, update, delete and comments.")}
+                    </p>
+                  </fieldset>
+
+                  <label className="space-y-1 text-small text-muted">
+                    <span className="block">{t("Expiry")}</span>
+                    <select
+                      value={newKeyExpiry}
+                      onChange={(e) => setNewKeyExpiry(e.target.value)}
+                      className="rounded-md border border-border bg-elevated/50 px-2 py-1 text-small text-text focus:border-border-strong"
+                    >
+                      <option value="30">{t("30 days")}</option>
+                      <option value="90">{t("90 days")}</option>
+                      <option value="365">{t("365 days")}</option>
+                      {canCreatePermanentKey && <option value="never">{t("Never expires")}</option>}
+                    </select>
+                  </label>
+                </div>
+
+                <fieldset className="space-y-1">
+                  <legend className="text-small text-muted">{t("Projects")}</legend>
+                  <label className="flex items-center gap-1.5 text-small text-text">
+                    <input
+                      type="radio"
+                      name="new-key-projects"
+                      checked={newKeyProjectMode === "all"}
+                      onChange={() => setNewKeyProjectMode("all")}
+                    />
+                    {t("All projects")}
+                  </label>
+                  <label className="flex items-center gap-1.5 text-small text-text">
+                    <input
+                      type="radio"
+                      name="new-key-projects"
+                      checked={newKeyProjectMode === "selected"}
+                      onChange={() => setNewKeyProjectMode("selected")}
+                    />
+                    {t("Selected projects")}
+                  </label>
+                  {newKeyProjectMode === "selected" && (
+                    <div className="mt-1 flex flex-wrap gap-x-4 gap-y-1 rounded-md border border-border bg-bg p-2">
+                      {projects.length === 0 && (
+                        <span className="text-small text-faint">{t("No projects yet.")}</span>
+                      )}
+                      {projects.map((project) => (
+                        <label key={project.id} className="flex items-center gap-1.5 text-small text-text">
+                          <input
+                            type="checkbox"
+                            checked={newKeyProjectIds.includes(project.id)}
+                            onChange={(e) =>
+                              setNewKeyProjectIds((old) =>
+                                e.target.checked
+                                  ? [...old, project.id]
+                                  : old.filter((id) => id !== project.id)
+                              )
+                            }
+                          />
+                          <ProjectIcon color={project.color} icon={project.icon} size={12} />
+                          {project.name}
+                        </label>
+                      ))}
+                    </div>
+                  )}
+                </fieldset>
               </div>
               {keyError && <div className="text-small text-danger">{t(keyError)}</div>}
 
@@ -1117,31 +1255,84 @@ export function SettingsView({
                 {keys.length === 0 && (
                   <div className="p-4 text-body text-faint">{t("No keys yet.")}</div>
                 )}
-                {keys.map((key) => (
-                  <div key={key.id} className="flex items-center gap-3 px-4 py-2.5 text-body">
-                    <span className="font-mono text-small text-text">tac_…</span>
-                    <span>{key.name}</span>
-                    <span className="text-small text-faint">
-                      {t("created {date}", { date: formatDate(key.createdAt, locale) })}
-                    </span>
-                    <span suppressHydrationWarning className="text-small text-faint">
-                      {key.lastUsedAt ? t("last used {time} ago", { time: timeAgo(key.lastUsedAt, locale) }) : t("never used")}
-                    </span>
-                    {key.revokedAt ? (
-                      <span className="ml-auto rounded-full bg-elevated px-2 py-0.5 text-caption text-faint">
-                        {t("Revoked")}
-                      </span>
-                    ) : (
-                      <button
-                        type="button"
-                        onClick={() => void revokeKey(key)}
-                        className="ml-auto rounded-md border border-border px-2 py-0.5 text-small text-muted transition-colors hover:border-danger hover:text-danger"
-                      >
-                        {t("Revoke")}
-                      </button>
-                    )}
-                  </div>
-                ))}
+                {keys.map((key) => {
+                  const expired = key.expiresAt !== null && key.expiresAt <= now;
+                  const scopeLabel =
+                    key.scopes === null
+                      ? t("Full access (legacy)")
+                      : key.scopes.includes("write")
+                        ? t("Read and write")
+                        : t("Read only");
+                  return (
+                    <div key={key.id} className="space-y-1.5 px-4 py-3">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <code className="font-mono text-small text-text">
+                          {key.keyPrefix && key.last4 ? `${key.keyPrefix}…${key.last4}` : "tac_…"}
+                        </code>
+                        <span className="text-body font-medium">{key.name}</span>
+                        <span className="rounded-full bg-elevated px-2 py-0.5 text-caption text-muted">
+                          {scopeLabel}
+                        </span>
+                        {key.expiresAt === null ? (
+                          <span className="rounded-full bg-elevated px-2 py-0.5 text-caption text-muted">
+                            {t("Never expires")}
+                          </span>
+                        ) : expired ? (
+                          <span className="rounded-full bg-danger/10 px-2 py-0.5 text-caption text-danger">
+                            {t("Expired {date}", { date: formatDate(key.expiresAt, locale) })}
+                          </span>
+                        ) : (
+                          <span className="rounded-full bg-elevated px-2 py-0.5 text-caption text-muted">
+                            {t("Expires {date}", { date: formatDate(key.expiresAt, locale) })}
+                          </span>
+                        )}
+                        <span className="ml-auto flex items-center gap-2">
+                          {key.revokedAt ? (
+                            <span className="rounded-full bg-elevated px-2 py-0.5 text-caption text-faint">
+                              {t("Revoked")}
+                            </span>
+                          ) : (
+                            <>
+                              <button
+                                type="button"
+                                onClick={() => void rotateKey(key)}
+                                disabled={rotatingKeyId !== null}
+                                className="rounded-md border border-border px-2 py-0.5 text-small text-muted transition-colors hover:border-border-strong hover:text-text disabled:opacity-40"
+                              >
+                                {rotatingKeyId === key.id ? t("Rotating…") : t("Rotate")}
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => void revokeKey(key)}
+                                className="rounded-md border border-border px-2 py-0.5 text-small text-muted transition-colors hover:border-danger hover:text-danger"
+                              >
+                                {t("Revoke")}
+                              </button>
+                            </>
+                          )}
+                        </span>
+                      </div>
+                      <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-small text-faint">
+                        <span>
+                          {key.projectIds === null
+                            ? t("All projects")
+                            : key.projectIds.length === 1
+                              ? t("1 project")
+                              : t("{count} projects", { count: key.projectIds.length })}
+                        </span>
+                        <span>{t("created {date}", { date: formatDate(key.createdAt, locale) })}</span>
+                        <span suppressHydrationWarning>
+                          {key.lastUsedAt
+                            ? t("last used {time}", { time: timeAgo(key.lastUsedAt, locale) })
+                            : t("never used")}
+                          {key.lastUsedIp && (
+                            <span className="ml-1.5 font-mono text-faint">· {key.lastUsedIp}</span>
+                          )}
+                        </span>
+                      </div>
+                    </div>
+                  );
+                })}
               </div>
 
               <Snippet code={curlExample} />
@@ -1152,12 +1343,17 @@ export function SettingsView({
               <p className="text-body leading-relaxed text-muted">
                 {interpolate(
                   t(
-                    "For Claude Code / Claude Desktop. The MCP server reads and writes this same database directly, so it works even when the web app is closed. It exposes {tools} with project and assignee support."
+                    "Use the local MCP server beside the database, or the remote endpoint at {path} from any machine that can reach this workspace. Both expose {tools} and use the same API keys; a read-only key only gets the read tools."
                   ),
                   {
+                    path: (
+                      <code className="rounded bg-elevated px-1 font-mono text-small text-text">
+                        /api/mcp
+                      </code>
+                    ),
                     tools: (
                       <code className="font-mono text-small text-text">
-                        list/get/create/update/delete issue, add_comment, list/create label
+                        list/get/create/update/delete issue, add_comment, list/create label, list projects and members
                       </code>
                     ),
                   }
@@ -1165,7 +1361,7 @@ export function SettingsView({
               </p>
               {mcpCommand ? (
                 <>
-                  <div className="text-small font-medium text-muted">Claude Code</div>
+                  <div className="text-small font-medium text-muted">{t("Local server (stdio)")}</div>
                   <Snippet code={`claude mcp add tacos -- ${mcpCommand}`} />
                   <p className="text-small text-faint">
                     {interpolate(
@@ -1177,10 +1373,24 @@ export function SettingsView({
                       }
                     )}
                   </p>
+                  <p className="text-small text-faint">
+                    {interpolate(
+                      t("Set {readOnly} to hide write tools, or {tools} to register only the named tools. Both work on the stdio server."),
+                      {
+                        readOnly: <code className="font-mono">TACOS_MCP_READ_ONLY=1</code>,
+                        tools: <code className="font-mono">TACOS_MCP_TOOLS=list_issues,get_issue</code>,
+                      }
+                    )}
+                  </p>
                 </>
               ) : (
-                <p className="text-small text-faint">{t("This install does not include the MCP server. See README to run it from the source code.")}</p>
+                <p className="text-small text-faint">{t("This install does not include the local MCP server. See README to run it from the source code; the remote endpoint at /api/mcp still works.")}</p>
               )}
+              <div className="text-small font-medium text-muted">{t("Remote server (Streamable HTTP)")}</div>
+              <Snippet code={`claude mcp add --transport http tacos ${origin}/api/mcp --header "Authorization: Bearer tac_YOUR_KEY"`} />
+              <p className="text-small text-faint">
+                {t("The remote endpoint is stateless: every request carries the Bearer key, and the key's scopes and project allowlist apply to every tool call.")}
+              </p>
             </section>
           </div>
         </details>

@@ -37,6 +37,7 @@ import {
   restoreOverviewDocEdit,
   restoreProject,
   revokeApiKey,
+  rotateApiKey,
   setMembersSeeAllTasks,
   setOverviewGrant,
   setWorkspaceIcon,
@@ -47,6 +48,7 @@ import {
   updateProject,
   type CreateIssueInput,
   type ReviewDecision,
+  type ApiKeyScope,
   type IssueDetail,
   type IssueWithLabels,
   type Label,
@@ -481,10 +483,34 @@ export async function deleteLabelAction(workspaceId: string, id: string) {
   });
 }
 
-export async function createApiKeyAction(workspaceId: string, name: string) {
+export async function createApiKeyAction(
+  workspaceId: string,
+  input: {
+    name: string;
+    scopes: ApiKeyScope[];
+    projectIds: string[] | null;
+    expiresInDays: number | null;
+  }
+) {
   return run<{ key: string }>(async () => {
     const { user } = await requireWorkspace(workspaceId);
-    const { key } = await createApiKey(workspaceId, name, user.id);
+    const { key } = await createApiKey(
+      workspaceId,
+      input.name,
+      input.scopes,
+      input.projectIds,
+      input.expiresInDays,
+      user.id
+    );
+    refresh(workspaceId,"settings");
+    return { key };
+  });
+}
+
+export async function rotateApiKeyAction(workspaceId: string, id: string) {
+  return run<{ key: string }>(async () => {
+    const { user } = await requireWorkspace(workspaceId);
+    const { key } = await rotateApiKey(workspaceId, id, user.id);
     refresh(workspaceId,"settings");
     return { key };
   });

@@ -47,7 +47,6 @@ const zh: Record<string, string> = {
   "Delete this comment? You can restore it here.": "删除这条评论？删除后可以在此恢复。",
   "Search documents": "搜索文档",
   "Load more": "加载更多",
-  "Read only": "只读",
   "Search versions": "搜索历史版本",
   "Recently updated": "最近更新",
   "Path": "路径",
@@ -605,7 +604,6 @@ const zh: Record<string, string> = {
   "Document deleted": "文档已删除",
   "Couldn’t load this document.": "无法加载这份文档。",
   Retry: "重试",
-  Projects: "项目",
   Documents: "文档",
   Owner: "所有者",
   Admin: "管理员",
@@ -756,7 +754,7 @@ const zh: Record<string, string> = {
   "Your picture shows as a circle next to your name in issue rows, timelines and the member list. Uploaded images are cropped to a square and resized to 128×128 in the browser before being saved.":
     "头像以圆形显示在任务行、时间线和成员列表里你的名字旁边。上传的图片会先在浏览器里裁成正方形、缩放到 128×128，再保存。",
   "(you)": "（你）",
-  Rotate: "换一个",
+  Rotate: "轮换",
   "Task visibility": "任务可见范围",
   Save: "保存",
   "No projects yet.": "还没有项目。",
@@ -827,6 +825,7 @@ const zh: Record<string, string> = {
     "把项目「{name}」和其中的任务移到回收站？之后可以在回收站里恢复。",
   "{label} CLI": "{label} CLI",
   "last used {time} ago": "上次使用：{time}",
+  "last used {time}": "上次使用：{time}",
   "created {date}": "创建于 {date}",
   "AI agents and scripts read and write issues at {path} with a Bearer token scoped to this workspace ({key}). Agent activity is attributed in every issue timeline.":
     "AI Agent 和脚本通过 {path} 读写任务，使用只对这个工作区（{key}）有效的 Bearer token。Agent 的每次操作都会记录在任务时间线里。",
@@ -1349,6 +1348,48 @@ const zh: Record<string, string> = {
   "Go to My Tasks": "前往我的任务",
   "Delete document": "删除文档",
   "Could not load permissions. Retry.": "无法加载权限，请重试。",
+  "Key name": "key 名称",
+  Scope: "权限",
+  Read: "只读",
+  "Read and write": "读写",
+  "Read includes every GET. Write adds create, update, delete and comments.":
+    "只读包含所有 GET。读写还会允许创建、修改、删除和评论。",
+  Expiry: "有效期",
+  "30 days": "30 天",
+  "90 days": "90 天",
+  "365 days": "365 天",
+  Projects: "项目",
+  "All projects": "全部项目",
+  "Selected projects": "指定项目",
+  "Pick at least one project.": "请至少选择一个项目。",
+  "Pick at least the read scope.": "请至少选择只读权限。",
+  "Rotating…": "轮换中…",
+  'Rotate key "{name}"? The old key stops working immediately.':
+    "轮换 key「{name}」？旧 key 会立即失效。",
+  "Full access (legacy)": "完整权限（旧 key）",
+  "Read only": "只读",
+  "Never expires": "永不过期",
+  "Expired {date}": "已于 {date} 过期",
+  "Expires {date}": "{date} 过期",
+  "{count} projects": "{count} 个项目",
+  "1 project": "1 个项目",
+  "API key name is required": "请填写 API key 名称",
+  "Pick at least the read scope": "请至少选择只读权限",
+  "Expiry must be 30, 90 or 365 days": "有效期只能是 30、90 或 365 天",
+  "Only a workspace admin can create a key that never expires":
+    "只有工作区管理员可以创建永不过期的 key",
+  "Only the key's owner or an admin can rotate it": "只有密钥的所有者或管理员可以轮换它",
+  "API key not found": "找不到这个 API key",
+  "Use the local MCP server beside the database, or the remote endpoint at {path} from any machine that can reach this workspace. Both expose {tools} and use the same API keys; a read-only key only gets the read tools.":
+    "可以在数据库所在机器上运行本地 MCP 服务，也可以从任何能访问这个工作区的机器连接 {path} 远程端点。两者都提供 {tools}，并使用同一套 API key；只读 key 只能看到只读工具。",
+  "Local server (stdio)": "本地服务（stdio）",
+  "Set {readOnly} to hide write tools, or {tools} to register only the named tools. Both work on the stdio server.":
+    "设置 {readOnly} 可以隐藏写入工具，设置 {tools} 可以只注册列出的工具。两者都只对本地 stdio 服务生效。",
+  "This install does not include the local MCP server. See README to run it from the source code; the remote endpoint at /api/mcp still works.":
+    "这个安装版不包含本地 MCP 服务。按 README 从源代码启动即可使用；/api/mcp 远程端点仍然可用。",
+  "Remote server (Streamable HTTP)": "远程服务（Streamable HTTP）",
+  "The remote endpoint is stateless: every request carries the Bearer key, and the key's scopes and project allowlist apply to every tool call.":
+    "远程端点是无状态的：每个请求都带 Bearer key，key 的权限和项目白名单对每次工具调用生效。",
 };
 
 export default zh;

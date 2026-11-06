@@ -12,6 +12,7 @@ import {
   type ReminderPreset,
   type Status,
 } from "@/lib/issues";
+import { assertKeyProject } from "@/lib/api-auth";
 
 export async function GET(req: Request) {
   try {
@@ -35,6 +36,8 @@ export async function GET(req: Request) {
     }
     const limitParam = params.get("limit");
     const limit = limitParam ? Math.min(Math.max(parseInt(limitParam, 10) || 100, 1), 200) : 100;
+    const projectParam = params.get("project");
+    const project = projectParam ? await assertKeyProject(key, projectParam) : undefined;
 
     const page = await listIssuesPage(key.workspaceId, {
       viewerId: key.createdBy,
@@ -42,7 +45,8 @@ export async function GET(req: Request) {
       priority,
       q: params.get("q") ?? undefined,
       label: params.get("label") ?? undefined,
-      projectId: params.get("project") ?? undefined,
+      projectId: project?.id,
+      projectIds: key.projectIds ?? undefined,
       assigneeId,
       limit,
       cursor: params.get("cursor") ?? undefined,
@@ -67,16 +71,20 @@ export async function POST(req: Request) {
       );
     }
     const projects = await listProjects(key.workspaceId);
+    const allowlist = key.projectIds;
+    const allowedProjects =
+      allowlist === null ? projects : projects.filter((project) => allowlist.includes(project.id));
     const projectParam =
       typeof body.project === "string" && body.project.trim()
         ? body.project.trim()
-        : projects[0]?.key;
+        : allowedProjects[0]?.key;
     if (!projectParam) {
       return Response.json(
         { error: "No project specified and workspace has no projects", hint: "Create a project first (web UI → Settings → Projects) or pass \"project\": \"KEY\"" },
         { status: 400 }
       );
     }
+    const project = await assertKeyProject(key, projectParam);
 
     // "assignees" takes several names; the old singular field still works.
     const assigneeValues = Array.isArray(body.assignees)
@@ -100,7 +108,7 @@ export async function POST(req: Request) {
         dueDate: typeof body.dueDate === "string" ? body.dueDate : null,
         reminder:
           typeof body.reminder === "string" ? (body.reminder as ReminderPreset) : null,
-        project: projectParam,
+        project: project.key,
         parent: typeof body.parent === "string" ? body.parent : null,
       },
       { kind: "agent", label: `api:${key.name}`, via: "api" }

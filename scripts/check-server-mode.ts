@@ -120,7 +120,7 @@ net.createServer((socket) => socket.end("ok")).listen(port, "127.0.0.1");
   const member = await createSiteMember({ username: "member", displayName: "Member", password: "password-1" });
   const workspace = await createWorkspace({ name: "Team", key: "TEAM", adminUserId: owner.id });
   await inviteMember(workspace.id, "member");
-  const { key } = await createApiKey(workspace.id, "script", member.id);
+  const { key } = await createApiKey(workspace.id, "script", ["read", "write"], null, 90, member.id);
   assert(await verifyApiKey(key), "a member's key works");
   await removeMember(workspace.id, member.id);
   assert(!(await verifyApiKey(key)), "a removed member's key must stop working");
