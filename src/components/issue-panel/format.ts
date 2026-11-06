@@ -15,7 +15,8 @@ export function actorName(
   if (entry.actor) return entry.actor.displayName;
   if (entry.agentActor === "mcp") return t("MCP agent");
   if (entry.agentActor?.startsWith("api:")) return `API · ${entry.agentActor.slice(4)}`;
-  return entry.agentActor ? t("Agent") : t("Deleted user");
+  // Named agents (delegation) keep their name; older rows only say "codex"/"pi".
+  return entry.agentActor ? entry.agentActor : t("Deleted user");
 }
 
 export function commentAuthorName(comment: Comment, t: Translate): string {
@@ -64,6 +65,20 @@ export function eventText(event: ActivityEvent, t: Translate, locale: Locale): s
       return t("approved the task");
     case "review_rejected":
       return t("rejected the task");
+    case "agent_delegated":
+      return t("started working on this task");
+    case "agent_retried":
+      return t("started working on this task again");
+    case "agent_review_requested":
+      return t("finished and asked for review");
+    case "agent_failed":
+      return t("could not finish this task");
+    case "agent_approved":
+      return t("approved the agent’s result");
+    case "agent_changes_requested":
+      return t("asked the agent for changes");
+    case "agent_undelegated":
+      return t("removed the agent from this task");
     case "claimed":
       return t("claimed the task");
     case "released":

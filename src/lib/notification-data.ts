@@ -57,6 +57,10 @@ export function parseLegacyNotificationBody(type: string, body: string): Notific
     case "handoff_done":
     case "handoff_failed":
     case "handoff_waiting":
+    case "delegation_started":
+    case "delegation_review":
+    case "delegation_failed":
+    case "delegation_changes_requested":
       return body ? { task: body } : null;
     default:
       return null;

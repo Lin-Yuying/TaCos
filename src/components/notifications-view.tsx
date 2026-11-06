@@ -111,6 +111,17 @@ function sentence(item: NotificationRow, t: ReturnType<typeof useT>): string {
       return t("Your Agent could not finish {task}", { task: data.task ?? item.body });
     case "handoff_waiting":
       return t("Your Agent needs your approval on {task}", { task: data.task ?? item.body });
+    case "delegation_started":
+      return t("{name} started on {task}", { name: name || t("An agent"), task: data.task ?? item.body });
+    case "delegation_review":
+      return t("{name} finished {task} and needs your review", {
+        name: name || t("An agent"),
+        task: data.task ?? item.body,
+      });
+    case "delegation_failed":
+      return t("{name} could not finish {task}", { name: name || t("An agent"), task: data.task ?? item.body });
+    case "delegation_changes_requested":
+      return t("Changes requested on {task}", { task: data.task ?? item.body });
     case "workspace_deleted":
       return t("{name} deleted the workspace “{workspace}”", {
         name: data.ownerName ?? t("The owner"),

@@ -171,4 +171,4 @@ blocker (host, command, expected credential) and do not fake success.
 | U-09 views/task UX | merged | #87 | 117/117 checks, browser E2E (views/display/bulk/template/estimate), screenshots 1440/1100 |
 | U-04 documents | merged | #88 | 120/120 checks, browser E2E (backlinks/template/outline), screenshots 1440/1100 |
 | U-13b pages API | merged | #89 | 122/122 checks, HTTP + MCP network E2E |
-| #79 Agent runtime | next | — | (dependency restored before search/automation work) |
+| #79 Agent runtime | implemented, verification pending | — | branch `feat/agent-runtime`; delegation/review, API loop, usage/subscription, notifications, harness v2 + ACP; focused checks added |

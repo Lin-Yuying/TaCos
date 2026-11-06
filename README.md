@@ -9,6 +9,8 @@ TaCos is a fast, local-first tracker where humans and agents share the same back
 - **Teams and workspaces** — multiple workspaces per install, invite codes, roles, avatars, per-workspace API keys.
 - **Projects** — markdown overviews, color-coded icons, favorites, task prefixes (`CORE-7`), and a 30-day recycle bin.
 - **Tasks** — list and board views, labels, priorities, multiple assignees, comments, and a combined activity timeline.
+- **Agents as teammates** — named workspace agents and a personal agent, task delegation that keeps the human assignee, review (approve / request changes / retry), Inbox notices and filters.
+- **Agent runtime** — local harnesses (Codex, Pi, OpenCode, WorkBuddy, dsh), the built-in API agent with no desktop runner, ACP agents, native session resume, token usage, and plan usage where a harness reports it.
 - **Agent-first APIs** — scoped Bearer-key REST at `/api/v1/*`, a stdio MCP server, and a stateless Streamable HTTP MCP endpoint at `/api/mcp` for Claude Code / Claude Desktop / Codex.
 - **Desktop builds** — a thin shell for an existing server, or a local build that bundles its own server and SQLite database.
 - **No migration CLI** — the SQLite schema is created and upgraded idempotently on first use.
@@ -47,6 +49,10 @@ Set `TACOS_ADMIN_PASSWORD` before the first start to give the built-in admin a d
 | `TACOS_MCP_READ_ONLY` | off | `1` hides every write tool on the stdio MCP server. |
 | `TACOS_MCP_TOOLS` | all | Comma-separated tool names the stdio MCP server may register. |
 | `PORT` / `HOSTNAME` | `3000` / all interfaces | Standard Next.js server bindings. |
+| `TACOS_API_AGENT_BASE_URL` / `TACOS_API_AGENT_KEY` / `TACOS_API_AGENT_MODEL` | unset | Server-side model endpoint for the built-in API agent when member keys live on their computers. |
+| `TACOS_API_AGENT_MAX_ITERATIONS` | `20` | Internal safety guard for the built-in loop. Not a budget. |
+| `TACOS_ACP_BIN` | unset | An ACP-compatible agent command (JSON-RPC over stdio); adds it to the Agent composer. |
+| `TACOS_CODEX_SUBSCRIPTION_JSON` | unset | Test/headless Codex plan snapshot; otherwise TaCos reads app-server rate limits. |
 
 Workspaces are created in the app. Joining an existing workspace uses a code such as `TACOS-1A2B3C4D`.
 
@@ -58,6 +64,22 @@ npm run start
 ```
 
 Put the app behind a reverse proxy with TLS. If it is reachable from the public internet, restrict access with something like Cloudflare Access or a VPN, change the built-in admin password, and set `TACOS_SEED_DEMO=0`. The SQLite file contains password hashes, session tokens, and hashed API keys; never serve `data/` or commit it.
+
+## Agent tab and delegation
+
+Open **Agent** to chat with a harness, the built-in API agent, or an ACP agent. The
+composer picks engine, model and approval (Ask / Auto / Full). Every TaCos write
+still goes through the MCP tool path and waits for Allow on Ask; Delete always asks.
+
+A task can be delegated to a named workspace agent or a personal agent from the task
+panel. The assignees stay; the run comes back as a comment with a review state
+(Approve / Request changes / Retry), a timeline event and an Inbox notice. The run
+panel shows whether it ran on the desktop runner or the built-in API agent, the
+model, and reported tokens. Usage is observe-only: there is no budget and no USD.
+
+Settings → Agents creates and scopes agents; Settings → Agent usage shows tokens per
+agent, model and run. Settings → Harness shows plan usage only where the harness
+reports it; the rest say "Not reported".
 
 ## Agent REST API
 
