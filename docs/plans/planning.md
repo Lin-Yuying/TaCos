@@ -159,20 +159,28 @@ milestones/initiatives follow in a second PR; ask before splitting.
 - Teams/sub-teams (TaCos has projects only; revisit if a team model is added).
 - Drag-and-drop scheduling of the roadmap beyond target dates.
 
-## Open decisions
+## Decisions (accepted per recommendation, 2026-11-06)
 
-1. Cycle scope: workspace-wide (recommended for one-team workspaces) or
-   per-project? Linear uses teams; TaCos has no team level.
-2. Milestones: project-only (recommended) or also workspace-level releases?
-3. Initiatives naming/semantics: initiatives (recommended, matches Linear) vs
-   goals/OKRs.
-4. One PR with all four commits (recommended, same pattern as the other plans)
-   or split cycles vs milestones/initiatives?
-5. Capacity: simple issue/effort velocity from the last three cycles
-   (recommended) or leave capacity out of v1?
-6. Roadmap view: list/timeline only (recommended) or calendar integration too?
-7. Auto-add active issues: on by default or opt-in? Recommendation: opt-in to
-   avoid surprising plan changes.
+1. Cycles are **workspace-level** (TaCos has no team layer yet); projects stay
+   the grouping level.
+2. Milestones are **project-level only**; workspace releases are out of scope.
+3. The name is **Initiative** (not goals/OKR).
+4. One PR with the four commits; commit boundaries are the review points.
+5. Capacity uses the **average issue/effort of the last three completed
+   cycles**; no advanced forecasting. It relies on U-09's estimate field and
+   falls back to issue count if estimates are absent.
+6. The roadmap view is **list/timeline only**; calendar integration is a
+   follow-up.
+7. Auto-add of active issues is **opt-in**; the default never silently changes
+   a plan.
+8. Rollover moves unfinished **todo / in_progress** issues only; done and
+   canceled issues never roll. There is no backlog/triage status in TaCos, so no
+   backlog exception is modeled.
+9. U-03 builds cycle/milestone/initiative data first; U-02 insights consume it
+   later and do not block this PR.
+10. **UI gate:** planning is a new top-level surface, so a wireframe/screenshot
+    review comes before final polish; the sidebar must not be overloaded and
+    1440/1100 screenshots are required.
 
 ## Dependencies
 
