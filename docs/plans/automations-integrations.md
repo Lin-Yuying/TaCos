@@ -1,15 +1,15 @@
 # Automations (internal only)
 
-Status: **deferred for now** and trimmed on 2026-11-06 for a 5-person internal
-team. Internal rules only: **no Slack, GitHub, inbound/outbound webhooks or any
-other integration**. No implementation started.
+Status: **planned, internal-only scope** (trimmed 2026-11-06 for a 5-person
+internal team). Internal rules only: **no Slack, GitHub, inbound/outbound
+webhooks or any other integration**. No implementation started.
 
 ## Why
 
-The repository has no internal automation/workflow code. For a 5-person team
-this is a convenience, not a must-have; the plan is kept only for rules that act
-inside TaCos ("when X happens, do Y", including delegating to an agent). Revisit
-when manual coordination is actually a bottleneck.
+The repository has no internal automation/workflow code. The five-person
+constraint does not remove the feature; it limits the implementation to rules
+that act inside TaCos ("when X happens, do Y", including delegating to an
+agent). No external integration layer is built.
 
 Existing pieces to build on:
 
@@ -81,7 +81,7 @@ internal plan.
 
 ## Decisions
 
-1. Deferred until the team needs it; if implemented, one PR with three commits.
+1. One PR with three commits; internal actions only.
 2. Internal actions only; no external integration surface.
 3. Owner/admin create/edit rules; members read; agents/API/MCP cannot create.
 4. Scheduler is a single in-process interval (no external cron or daemon).
