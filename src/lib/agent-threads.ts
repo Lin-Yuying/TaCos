@@ -2,7 +2,7 @@ import crypto from "node:crypto";
 import { getTableColumns, sql, and, asc, desc, eq, inArray, isNotNull, isNull, lt, or } from "drizzle-orm";
 import { getDb } from "@/db/client";
 import { issueRef } from "@/lib/format";
-import { agentMessages, agentSteps, agentThreadFlags, agentThreads, issues, projects, users } from "@/db/schema";
+import { agentHarnessSessions, agentMessages, agentSteps, agentThreadFlags, agentThreads, issues, projects, users } from "@/db/schema";
 import { claimIssue, listIssues, TacosError, type Status } from "./issues";
 
 // Agent conversations are TaCos records, not browser state: a thread is bound to a
@@ -32,6 +32,8 @@ export type AgentThread = {
   createdAt: string;
   updatedAt: string;
   messageCount: number;
+  // #79: total characters in the thread, for the context meter. Not a limit.
+  contextChars: number;
   // Per viewer: a shared thread can be pinned by one member and not by another.
   pinnedAt: string | null;
   unread: boolean;
@@ -196,7 +198,11 @@ export async function listAgentThreads(
     }
   }
   const counts = await db
-    .select({ threadId: agentMessages.threadId, count: sql<number>`count(*)` })
+    .select({
+      threadId: agentMessages.threadId,
+      count: sql<number>`count(*)`,
+      chars: sql<number>`coalesce(sum(length(${agentMessages.content})),0)`,
+    })
     .from(agentMessages)
     .where(
       inArray(
@@ -205,8 +211,10 @@ export async function listAgentThreads(
       )
     ).groupBy(agentMessages.threadId);
   const countByThread = new Map<string, number>();
+  const charsByThread = new Map<string, number>();
   for (const row of counts) {
     countByThread.set(row.threadId, Number(row.count));
+    charsByThread.set(row.threadId, Number(row.chars));
   }
   return rows.map(({ thread, ...rest }) =>
     threadRow(
@@ -215,6 +223,7 @@ export async function listAgentThreads(
         ...rest,
         turnUserId: thread.turnUserId ?? null,
         turnUserName: thread.turnUserId ? (turnNames.get(thread.turnUserId) ?? null) : null,
+        contextChars: charsByThread.get(thread.id) ?? 0,
       },
       userId,
       countByThread.get(thread.id) ?? 0
@@ -239,6 +248,7 @@ function threadRow(
     unread: number | null;
     turnUserId: string | null;
     turnUserName: string | null;
+    contextChars: number;
   },
   userId: string,
   messageCount: number
@@ -262,6 +272,7 @@ function threadRow(
     createdAt: thread.createdAt,
     updatedAt: thread.updatedAt,
     messageCount,
+    contextChars: meta.contextChars,
     pinnedAt: meta.pinnedAt ?? null,
     unread: Boolean(meta.unread),
     turnUserId: meta.turnUserId ?? null,
@@ -317,7 +328,13 @@ async function requireThreadRow(
     turnUserName = turnUser?.name ?? null;
   }
 
-  const [total]=await db.select({count:sql<number>`count(*)`}).from(agentMessages).where(eq(agentMessages.threadId,threadId));
+  const [total]=await db
+    .select({
+      count: sql<number>`count(*)`,
+      chars: sql<number>`coalesce(sum(length(${agentMessages.content})),0)`,
+    })
+    .from(agentMessages)
+    .where(eq(agentMessages.threadId,threadId));
   const messages = history === "none" ? [] : await db.select().from(agentMessages)
     .where(and(eq(agentMessages.threadId,threadId), typeof history === "number" && !includeEmpty ? sql`length(trim(${agentMessages.content}, char(9)||char(10)||char(11)||char(12)||char(13)||char(32)||char(160)||char(5760)||char(8192)||char(8193)||char(8194)||char(8195)||char(8196)||char(8197)||char(8198)||char(8199)||char(8200)||char(8201)||char(8202)||char(8232)||char(8233)||char(8239)||char(8287)||char(12288)||char(65279)))>0` : undefined,
       before?or(lt(agentMessages.createdAt,before.createdAt),and(eq(agentMessages.createdAt,before.createdAt),lt(agentMessages.id,before.id))):undefined))
@@ -364,6 +381,7 @@ async function requireThreadRow(
         unread: row.unread,
         turnUserId: row.turnUserId ?? null,
         turnUserName,
+        contextChars: Number(total.chars),
       },
       userId,
       Number(total.count)
@@ -982,6 +1000,51 @@ export async function startTaskChat(
   const opened = await getAgentThread(workspaceId, userId, thread.id);
   if (!opened) throw new TacosError("Could not open the conversation", 500);
   return { thread: opened, openingMessage: taskChatOpeningMessage(task.identifier) };
+}
+
+// #79: a harness's own session id for this thread. Each harness only resumes its own, and a
+// missing row means "replay the history" (Pi always does that).
+export async function getHarnessSession(threadId: string, engine: string): Promise<string | null> {
+  const [row] = await getDb()
+    .select({ sessionId: agentHarnessSessions.sessionId })
+    .from(agentHarnessSessions)
+    .where(and(eq(agentHarnessSessions.threadId, threadId), eq(agentHarnessSessions.engine, engine)))
+    .limit(1);
+  return row?.sessionId ?? null;
+}
+
+export async function saveHarnessSession(threadId: string, engine: string, sessionId: string): Promise<void> {
+  const id = sessionId.trim();
+  if (!id || id.length > 500) return;
+  await getDb()
+    .insert(agentHarnessSessions)
+    .values({ threadId, engine, sessionId: id, updatedAt: new Date().toISOString() })
+    .onConflictDoUpdate({
+      target: [agentHarnessSessions.threadId, agentHarnessSessions.engine],
+      set: { sessionId: id, updatedAt: new Date().toISOString() },
+    });
+}
+
+export async function getContextState(
+  threadId: string
+): Promise<{ summary: string; through: string | null }> {
+  const [row] = await getDb()
+    .select({ summary: agentThreads.contextSummary, through: agentThreads.contextSummaryThrough })
+    .from(agentThreads)
+    .where(eq(agentThreads.id, threadId))
+    .limit(1);
+  return { summary: row?.summary ?? "", through: row?.through ?? null };
+}
+
+export async function saveContextSummary(
+  threadId: string,
+  summary: string,
+  through: string
+): Promise<void> {
+  await getDb()
+    .update(agentThreads)
+    .set({ contextSummary: summary, contextSummaryThrough: through, updatedAt: new Date().toISOString() })
+    .where(eq(agentThreads.id, threadId));
 }
 
 export async function searchAgentThreads(workspaceId:string,userId:string,query:string,offset=0){

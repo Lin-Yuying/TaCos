@@ -15,6 +15,7 @@ import {
 import { listCliStatuses, normalizeProxy } from "./cli-agents";
 import { readyWithKeys } from "./harness/gate";
 import { harnessViewFor, resolveEditConfig } from "./model-keys";
+import { resolveAgentApiEndpoints } from "./agent-api-config";
 import { requireRunnerOnline, runnerViewFor, startRun } from "./runner/hub";
 import { turnEventsToSse } from "./harness/sse";
 import { isServerMode } from "./server-mode";
@@ -110,17 +111,48 @@ export async function agentCliEngineOptions(workspaceId: string, userId: string)
   return all.filter((option) => option.id === "codex" || option.id === "pi");
 }
 
-/** Enabled+ready harness options for the Agent composer (H-P3-17). */
+/**
+ * Enabled+ready harness options for the Agent composer (H-P3-17), plus the built-in API
+ * agent when this viewer has a model API (#79). The API agent needs no desktop runner.
+ */
 export async function listAgentHarnessOptions(workspaceId: string, userId: string): Promise<AgentHarnessOption[]> {
   const { getWorkspaceHarnessGate } = await import("@/lib/harness");
   const gate = await getWorkspaceHarnessGate(workspaceId, ...(await harnessViewFor(userId)));
-  return gate.enabledReady.map((row) => ({
+  const options: AgentHarnessOption[] = gate.enabledReady.map((row) => ({
     id: row.id,
     label: row.label,
     detail: row.version,
     available: true,
     hint: null,
   }));
+  // #79: the generic ACP adapter is opt-in through TACOS_ACP_BIN, so it never appears
+  // on a machine that has not configured an ACP agent.
+  if ((process.env.TACOS_ACP_BIN ?? "").trim()) {
+    const { getHarnessAdapter } = await import("@/lib/harness");
+    const acp = getHarnessAdapter("acp");
+    const detect = acp?.detect();
+    if (acp && detect?.ready) {
+      options.push({
+        id: "acp",
+        label: acp.label,
+        detail: detect.version,
+        available: true,
+        hint: null,
+      });
+    }
+  }
+  const endpoints = await resolveAgentApiEndpoints(userId);
+  if (endpoints.length > 0) {
+    options.push({
+      id: "api",
+      label: "API agent",
+      detail: endpoints[0].editModel || endpoints[0].label,
+      available: true,
+      hint: null,
+      source: "api",
+    });
+  }
+  return options;
 }
 
 // Cheap check used by pages that only need to know whether the sparkle buttons
