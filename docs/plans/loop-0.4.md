@@ -164,4 +164,6 @@ blocker (host, command, expected credential) and do not fake success.
 | Item | State | PR | Evidence |
 | --- | --- | --- | --- |
 | #82 Inbox | merged | #82 | E2E passed; clean dev DB |
-| Loop setup | in progress | — | goal + this contract |
+| #77 Agent access | merged | #84 | 110/110 checks, build, mcp:test, browser E2E + 1440/1100 shots |
+| Loop setup | done | #83 | goal + this contract |
+| U-13a projects/task API | next | — | — |
