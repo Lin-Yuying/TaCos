@@ -1,4 +1,6 @@
-const { execFileSync, spawn } = require("node:child_process");
+const { execFile, spawn } = require("node:child_process");
+const { promisify } = require("node:util");
+const execFileAsync=promisify(execFile);
 const crypto = require("node:crypto");
 const fs = require("node:fs");
 const path = require("node:path");
@@ -72,11 +74,11 @@ async function sha512Of(file) {
   return hash.digest("base64");
 }
 
-async function fetchZip({ net, url, dest, total, onProgress }) {
+async function fetchZip({ net, url, dest, total, onProgress, signal }) {
   const abort = new AbortController();
   let stall = setTimeout(() => abort.abort(), STALL_MS);
   try {
-    const response = await net.fetch(url, { signal: abort.signal });
+    const response = await net.fetch(url, { signal: signal ? AbortSignal.any([signal,abort.signal]):abort.signal });
     if (!response.ok || !response.body) throw new Error(`Download failed with HTTP ${response.status}`);
     let got = 0;
     const counted = Readable.fromWeb(response.body);
@@ -92,21 +94,24 @@ async function fetchZip({ net, url, dest, total, onProgress }) {
   }
 }
 
-function plistValue(appPath, key) {
-  return execFileSync("/usr/libexec/PlistBuddy", ["-c", `Print :${key}`, path.join(appPath, "Contents/Info.plist")], {
-    encoding: "utf8",
-  }).trim();
+async function plistValue(appPath, key, signal) {
+  return (await execFileAsync("/usr/libexec/PlistBuddy", ["-c", `Print :${key}`, path.join(appPath, "Contents/Info.plist")], {
+    encoding: "utf8", signal, timeout: 30000,
+  })).stdout.trim();
 }
 
 /** Downloads and checks version `info.version`. Returns where the checked app and its folder are. */
-async function prepare({ net, userData, info, arch, log, onProgress }) {
+async function prepare({ net, userData, info, arch, log, onProgress, signal }) {
   const file = zipFor(info.files, arch);
   if (!file || !file.sha512) throw new Error(`The release has no zip for ${arch}`);
+  if(!/^[0-9A-Za-z][0-9A-Za-z.+-]*$/.test(info.version))throw new Error("Invalid release version");
   const pending = path.join(userData, "pending-update");
   const dir = path.join(pending, info.version);
-  fs.mkdirSync(dir, { recursive: true });
-  for (const name of fs.readdirSync(pending)) {
-    if (name !== info.version) fs.rmSync(path.join(pending, name), { recursive: true, force: true });
+  await fs.promises.mkdir(dir, { recursive: true });
+  const disk=await fs.promises.statfs(dir);const required=(Number(file.size)||0)*6;
+  if(disk.bavail*disk.bsize<required)throw new Error("Free disk space before downloading this update");
+  for (const name of await fs.promises.readdir(pending)) {
+    if (name !== info.version) await fs.promises.rm(path.join(pending, name), { recursive: true, force: true });
   }
 
   const zip = path.join(dir, path.basename(file.url));
@@ -114,28 +119,32 @@ async function prepare({ net, userData, info, arch, log, onProgress }) {
   if (!have) {
     const url = `${RELEASE_BASE}/v${info.version}/${file.url}`;
     log(`app update fetch ${url}`);
-    await fetchZip({ net, url, dest: zip, total: file.size, onProgress });
+    await fetchZip({ net, url, dest: zip, total: file.size, onProgress, signal });
     if ((await sha512Of(zip)) !== file.sha512) {
-      fs.rmSync(zip, { force: true });
+      await fs.promises.rm(zip, { force: true });
       throw new Error("The downloaded file does not match the hash the release lists");
     }
   }
 
   const unpacked = path.join(dir, "unpacked");
-  fs.rmSync(unpacked, { recursive: true, force: true });
-  fs.mkdirSync(unpacked);
-  execFileSync("/usr/bin/ditto", ["-xk", zip, unpacked]);
-  const name = fs.readdirSync(unpacked).find((entry) => entry.endsWith(".app"));
+  await fs.promises.rm(unpacked, { recursive: true, force: true });
+  await fs.promises.mkdir(unpacked);
+  log("app update: unpacking");
+  try {
+  await execFileAsync("/usr/bin/ditto", ["-xk", zip, unpacked],{signal,timeout:300000});
+  const name = (await fs.promises.readdir(unpacked)).find((entry) => entry.endsWith(".app"));
   if (!name) throw new Error("The downloaded zip holds no app");
   const appPath = path.join(unpacked, name);
-  const id = plistValue(appPath, "CFBundleIdentifier");
-  const version = plistValue(appPath, "CFBundleShortVersionString");
+  const id = await plistValue(appPath, "CFBundleIdentifier",signal);
+  const version = await plistValue(appPath, "CFBundleShortVersionString",signal);
   if (id !== APP_ID || version !== info.version) {
     throw new Error(`The downloaded app is ${id} ${version}, not ${APP_ID} ${info.version}`);
   }
-  execFileSync("/usr/bin/codesign", ["--verify", "--deep", "--strict", appPath], { stdio: "pipe" });
+  log("app update: checking signature");
+  await execFileAsync("/usr/bin/codesign", ["--verify", "--deep", "--strict", appPath], { signal,timeout:120000 });
   log(`app update ${info.version} checked and ready`);
   return { appPath, dir };
+  }catch(error){await fs.promises.rm(unpacked,{recursive:true,force:true});throw error;}
 }
 
 /** Starts the swap. The caller then quits; the swap waits for that. */

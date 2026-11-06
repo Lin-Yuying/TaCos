@@ -1,5 +1,6 @@
 "use client";
 
+import { VirtualStack } from "@/components/ui/virtual-stack";
 import FullCalendar from "@fullcalendar/react";
 import dayGridPlugin from "@fullcalendar/react/daygrid";
 import interactionPlugin, {Draggable} from "@fullcalendar/react/interaction";
@@ -43,13 +44,14 @@ export default function TaskCalendar({
           {error ? <span className="text-danger">{t(error)}</span> : t("{count} tasks have no due date", { count: undated })}
         </div>
       )}
-      <div ref={tray} className="mb-3 flex max-h-40 flex-wrap gap-2 overflow-auto">{undatedItems.map(issue=><button key={issue.id} data-unscheduled-task data-id={issue.id} data-title={issue.title} onClick={()=>openIssue(issue.id)} className="cursor-grab rounded border border-border bg-surface px-2 py-1 text-small">{issue.title}</button>)}</div>
+      <div ref={tray} className="mb-3"><VirtualStack items={undatedItems} keyFor={issue=>issue.id} estimate={34} style={{height:Math.min(160,undatedItems.length*34),overflow:"auto"}} render={issue=><button key={issue.id} data-unscheduled-task data-id={issue.id} data-title={issue.title} onClick={()=>openIssue(issue.id)} className="cursor-grab rounded border border-border bg-surface px-2 py-1 text-small">{issue.title}</button>}/></div>
       <FullCalendar
         plugins={[dayGridPlugin, interactionPlugin, classicTheme]}
         initialView="dayGridMonth"
         locales={[zhLocale]}
         locale={locale === "zh" ? "zh-cn" : "en"}
         height="auto"
+        dayMaxEvents={3}
         droppable
         dateClick={({dateStr})=>setComposerOpen(true,null,{dueDate:dateStr.slice(0,10)})}
         eventReceive={({event,revert})=>void schedule(event.id,event.startStr,revert,()=>event.remove())}

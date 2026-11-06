@@ -1,4 +1,5 @@
 "use client";
+import { VirtualStack, type VirtualStackHandle } from "@/components/ui/virtual-stack";
 
 import { EntityRow } from "@/components/ui/entity-row";
 
@@ -155,6 +156,10 @@ export function IssueTable({ issues }: { issues: IssueWithLabels[] }) {
     [issues,pinnedIds]
   );
 
+  const entries=useMemo(()=>groups.flatMap(group=>[{header:group},...group.items.map(issue=>({issue}))] as ({header:typeof group}|{issue:IssueWithLabels})[]),[groups]);
+  const stickyIndexes=useMemo(()=>entries.flatMap((entry,index)=>"header" in entry?[index]:[]),[entries]);
+  const entryIndex=useMemo(()=>new Map(entries.flatMap((entry,index)=>"issue" in entry?[[entry.issue.id,index] as const]:[])),[entries]);
+  const windowHandle=useRef<VirtualStackHandle>(null),keyboardFocus=useRef(false);
   const visibleIssues = useMemo(() => groups.flatMap((group) => group.items), [groups]);
   const indexes=useMemo(()=>new Map(visibleIssues.map((issue,index)=>[issue.id,index])),[visibleIssues]);
   const [focusId, setFocusId] = useState<string | null>(null);
@@ -189,17 +194,20 @@ export function IssueTable({ issues }: { issues: IssueWithLabels[] }) {
 
 
   useEffect(() => {
-    rowRefs.current[focusIndex ?? -1]?.scrollIntoView({ block: "nearest" });
-  }, [focusIndex]);
+    if(focusId){const index=entryIndex.get(focusId);if(index!==undefined)windowHandle.current?.scrollToIndex(index);}
+    if(keyboardFocus.current){const frame=requestAnimationFrame(()=>{rowRefs.current[focusIndex??-1]?.focus({preventScroll:true});keyboardFocus.current=false;});return()=>cancelAnimationFrame(frame);}
+  }, [focusIndex,focusId,entryIndex]);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.defaultPrevented || !rowRefs.current.some((row) => row?.contains(document.activeElement)) || document.querySelector('[role="dialog"], [role="menu"][data-state="open"]') || isTyping(e) || e.metaKey || e.ctrlKey || e.altKey) return;
+      if (e.defaultPrevented || !scroller.current?.contains(document.activeElement) || document.querySelector('[role="dialog"], [role="menu"][data-state="open"]') || isTyping(e) || e.metaKey || e.ctrlKey || e.altKey) return;
       if (e.key === "ArrowDown" || e.key === "j") {
         e.preventDefault();
+        keyboardFocus.current=true;
         setFocusIndex((i) => Math.min((i ?? -1) + 1, visibleIssues.length - 1));
       } else if (e.key === "ArrowUp" || e.key === "k") {
         e.preventDefault();
+        keyboardFocus.current=true;
         setFocusIndex((i) => Math.max((i ?? 1) - 1, 0));
       } else if (e.key === "Enter") {
         const issue = focusIndex != null ? visibleIssues[focusIndex] : undefined;
@@ -216,18 +224,16 @@ export function IssueTable({ issues }: { issues: IssueWithLabels[] }) {
 
 
   return (
-    <div ref={scroller} className="@container flex-1 overflow-y-auto">
-      {groups.map((group) => (
-        <div key={group.status}>
-          <div className={`sticky top-0 z-10 flex items-center gap-2 border-b border-border bg-bg/95 py-1.5 backdrop-blur ${PAGE_INSET}`}>
+    <VirtualStack scrollRef={scroller} handle={windowHandle} className="@container min-h-0 flex-1 overflow-y-auto" items={entries} estimate={38} stickyIndexes={stickyIndexes} keyFor={entry=>"header" in entry?`group:${entry.header.status}`:entry.issue.id} render={entry=>{
+      if("header" in entry){const group=entry.header;return (<div className={`sticky top-0 z-10 flex items-center gap-2 border-b border-border bg-bg/95 py-1.5 backdrop-blur ${PAGE_INSET}`}>
             {group.status!=="pinned"&&<StatusIcon status={group.status} size={13} />}
             <span className="text-small font-medium text-muted">
               {group.status==="pinned"?t("Pinned"):t(STATUS_META[group.status].label)}
             </span>
             <span className="text-small text-faint">{group.items.length}</span>
             {group.status!=="pinned"&&<AddIssueButton status={group.status} />}
-          </div>
-          {group.items.map((issue) => {
+          </div>);}
+      const issue=entry.issue;
             const index = indexes.get(issue.id) ?? -1;
             const focused = focusIndex === index;
             const opened = openIssueId === issue.id;
@@ -323,9 +329,6 @@ export function IssueTable({ issues }: { issues: IssueWithLabels[] }) {
               </div>
               </EntityRow>
             );
-          })}
-        </div>
-      ))}
-    </div>
+    }}/>
   );
 }

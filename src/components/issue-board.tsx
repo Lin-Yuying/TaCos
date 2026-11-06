@@ -1,8 +1,9 @@
 "use client";
 
+import { VirtualStack } from "@/components/ui/virtual-stack";
 import { EntityRow } from "@/components/ui/entity-row";
 
-import { Fragment, useMemo, useState, useTransition, type DragEvent } from "react";
+import { useEffect, useRef, useMemo, useState, useTransition, type DragEvent } from "react";
 import { useRouter } from "next/navigation";
 import { moveIssueAction } from "@/app/actions";
 import { AddIssueButton } from "@/components/add-issue-button";
@@ -110,6 +111,8 @@ export function IssueBoard({
   const [moving,setMoving]=useState(false);
   const [, startTransition] = useTransition();
   const [drag, setDrag] = useState<IssueWithLabels | null>(null);
+  const overFrame=useRef(0),overPending=useRef<{status:Status;index:number}|null>(null);
+  useEffect(()=>()=>cancelAnimationFrame(overFrame.current),[]);
   const [over, setOver] = useState<{ status: Status; index: number } | null>(null);
 
   const columns = useMemo(
@@ -121,40 +124,32 @@ export function IssueBoard({
     [issues],
   );
 
+  const ranks=useMemo(()=>new Map(columns.flatMap(column=>column.items.map((issue,index)=>[issue.id,index] as const))),[columns]);
+
   // Cross-column drags change status, which is reserved to assignees; everyone else
   // can still drag cards up and down inside their current column.
   function canChangeStatus(issue: IssueWithLabels) {
     return issue.assignees.some((assignee) => assignee.id === currentUserId);
   }
 
-  function handleDragOver(event: DragEvent<HTMLDivElement>, status: Status) {
+  function handleDragOver(event: DragEvent<HTMLDivElement>, status: Status, rawIndex:number) {
     if (!drag || moving) return;
     if (drag.status === status && !manualOrder) return;
     if (drag.status !== status && !canChangeStatus(drag)) return;
     event.preventDefault();
     event.dataTransfer.dropEffect = "move";
-    // Measure against the cards that would remain: the dragged card is left out so
-    // the slot does not depend on where it currently sits.
-    const cards = [
-      ...event.currentTarget.querySelectorAll<HTMLElement>("[data-issue-id]"),
-    ].filter((card) => card.dataset.issueId !== drag.id);
-    let index = cards.length;
-    for (let i = 0; i < cards.length; i += 1) {
-      const rect = cards[i].getBoundingClientRect();
-      if (event.clientY < rect.top + rect.height / 2) {
-        index = i;
-        break;
-      }
-    }
-    setOver((prev) =>
-      prev && prev.status === status && prev.index === index ? prev : { status, index }
-    );
+    const source=drag.status===status?(ranks.get(drag.id)??-1):-1;
+    const index=rawIndex-(source>=0&&source<rawIndex?1:0);
+    overPending.current={status,index};
+    if(!overFrame.current)overFrame.current=requestAnimationFrame(()=>{overFrame.current=0;const next=overPending.current;setOver(previous=>previous?.status===next?.status&&previous?.index===next?.index?previous:next);});
   }
 
-  async function handleDrop(event: DragEvent<HTMLDivElement>, status: Status) {
+  async function handleDrop(event: DragEvent<HTMLDivElement>, status: Status, rawIndex:number) {
     event.preventDefault();
     const issue = drag;
-    const target = over;
+    const source=drag?.status===status?(ranks.get(drag.id)??-1):-1;
+    const target = {status,index:rawIndex-(source>=0&&source<rawIndex?1:0)};
+    cancelAnimationFrame(overFrame.current);overFrame.current=0;overPending.current=null;
     setDrag(null);
     setOver(null);
     if (!issue || !target || target.status !== status || moving) return;
@@ -188,7 +183,6 @@ export function IssueBoard({
     // wins over the flex budget and the last cards get clipped by the card's overflow.
     <div className={`@container flex min-h-0 flex-1 gap-1.5 overflow-x-auto ${PAGE_BOARD}`}>
       {columns.map(({ status, items }) => {
-        let slot = 0;
         return (
           <section key={status} className="flex min-h-0 min-w-[260px] flex-1 flex-col">
             <header className="flex shrink-0 items-center gap-2 px-1 pb-2">
@@ -199,38 +193,21 @@ export function IssueBoard({
               <span className="text-small text-faint">{items.length}</span>
               <AddIssueButton status={status} />
             </header>
-            <div
-              onDragOver={(event) => handleDragOver(event, status)}
-              onDrop={(event) => void handleDrop(event, status)}
-              className="flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto pb-3"
-            >
-              {items.map((issue) => {
-                const isDragging = drag?.id === issue.id;
-                const showLine =
-                  over?.status === status && over.index === slot && !isDragging && !!drag;
-                if (!isDragging) slot += 1;
-                return (
-                  <Fragment key={issue.id}>
-                    {showLine && <DropLine />}
-                    <BoardCard
-                      issue={issue}
-                      dragging={isDragging}
-                      onDragStart={(issue)=>{setDrag(issue);if(!canChangeStatus(issue))toast(t("Only assignees can change status"));else if(!manualOrder)toast(t("Field sorting is active. Clear sorting to reorder cards."));}}
-                      onDragEnd={() => {
-                        setDrag(null);
-                        setOver(null);
-                      }}
-                    />
-                  </Fragment>
-                );
-              })}
-              {over?.status === status && over.index === slot && !!drag && <DropLine />}
-              {items.length === 0 && (
-                <div className="rounded-lg border border-dashed border-border px-3 py-4 text-center text-small text-faint">
-                  {t("No {status} tasks", { status: t(STATUS_META[status].label) })}
-                </div>
-              )}
-            </div>
+            <VirtualStack items={items} keyFor={issue=>issue.id} estimate={126} keepIndex={drag?.status===status?ranks.get(drag.id):undefined}
+              onDragOverIndex={(event,index)=>handleDragOver(event,status,index)} onDropIndex={(event,index)=>void handleDrop(event,status,index)}
+              render={(issue,index)=>{
+                const source=drag?.status===status?(ranks.get(drag.id)??-1):-1;
+                const slot=index-(source>=0&&source<index?1:0);
+                const showLine=!!drag&&drag.id!==issue.id&&over?.status===status&&over.index===slot;
+                return <div className="relative pb-2">{showLine&&<div className="absolute inset-x-0 top-0 z-10"><DropLine/></div>}
+                  <BoardCard issue={issue} dragging={drag?.id===issue.id}
+                    onDragStart={issue=>{setDrag(issue);if(!canChangeStatus(issue))toast(t("Only assignees can change status"));else if(!manualOrder)toast(t("Field sorting is active. Clear sorting to reorder cards."));}}
+                    onDragEnd={()=>{cancelAnimationFrame(overFrame.current);overFrame.current=0;setDrag(null);setOver(null);}}/>
+                  {!!drag&&over?.status===status&&index===items.length-1&&over.index===items.length-(source>=0?1:0)&&<DropLine/>}
+                </div>;
+              }}/>
+            {items.length===0&&<div onDragOver={event=>handleDragOver(event,status,0)} onDrop={event=>void handleDrop(event,status,0)} className="min-h-24 rounded-lg border border-dashed border-border px-3 py-4 text-center text-small text-faint">{t("No {status} tasks",{status:t(STATUS_META[status].label)})}</div>}
+
           </section>
         );
       })}

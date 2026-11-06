@@ -61,7 +61,7 @@ type SlashCommand = {
 
 const uploadMarkersKey=new PluginKey<DecorationSet>("uploadMarkers");
 const UploadMarkers=Extension.create({name:"uploadMarkers",addProseMirrorPlugins(){return [new Plugin<DecorationSet>({key:uploadMarkersKey,state:{init:()=>DecorationSet.empty,apply(tr,old){let next=old.map(tr.mapping,tr.doc);const meta=tr.getMeta(uploadMarkersKey) as {add?:{id:string;pos:number;name:string};remove?:string}|undefined;if(meta?.remove)next=next.remove(next.find(undefined,undefined,spec=>spec.id===meta.remove));if(meta?.add){const {id,pos,name}=meta.add;next=next.add(tr.doc,[Decoration.widget(pos,()=>{const span=document.createElement("span");span.className="rounded bg-elevated px-1 text-small text-muted";span.textContent=`[${name}]`;return span;},{id,side:1})]);}return next;}},props:{decorations:state=>uploadMarkersKey.getState(state)}})];}});
-type UploadItem={id:string;file:File;progress:number;status:"queued"|"uploading"|"failed"|"done"|"cancelled";controller:AbortController;error?:string};
+type UploadItem={id:string;file:File;progress:number;status:"queued"|"uploading"|"failed"|"done"|"cancelled";controller:AbortController;error?:string;url?:string};
 
 const PICK_FILE_EVENT = "tacos:pick-file";
 
@@ -596,10 +596,11 @@ export function DocumentEditor({
       const update=(patch:Partial<UploadItem>)=>{if(uploadRuns.current.get(item.id)===controller)change(item.id,patch);};
       update({controller,status:"uploading",progress:0,error:undefined});
       try{
-        const url=await uploadRef.current?.(item.file,{signal:controller.signal,onProgress:progress=>update({progress})});
+        const url=item.url??await uploadRef.current?.(item.file,{signal:controller.signal,onProgress:progress=>update({progress})});
         if(uploadRuns.current.get(item.id)!==controller)return;
         if(controller.signal.aborted){update({status:"cancelled"});return;}
         if(!url)throw new Error("Upload failed. Retry.");
+        item.url=url;update({url});
         if(editor.isDestroyed)return;
         const marker=uploadMarkersKey.getState(editor.state)?.find(undefined,undefined,spec=>spec.id===item.id)[0];
         if(!marker||!editor.isEditable)throw new Error("Insertion is unavailable. Keep this window open and retry when editing is available.");
@@ -671,12 +672,14 @@ export function DocumentEditor({
           }))
         : [],
     );
-    const active = ranges.find((range) => range.anchor.id === activeAnchor);
-    if (active) {
-      const { node } = editor.view.domAtPos(active.from);
-      (node instanceof Element ? node : node.parentElement)?.scrollIntoView({ block: "center", behavior: "smooth" });
-    }
   }, [editor, anchorStore, anchors, activeAnchor, value]);
+
+  // Explicit selection scrolls once. Typing only repaints the anchor positions.
+  useEffect(()=>{
+    if(!editor||!activeAnchor)return;
+    const active=anchorRanges(editor.state.doc,anchorStore.anchors).find(range=>range.anchor.id===activeAnchor);
+    if(active){const {node}=editor.view.domAtPos(active.from);(node instanceof Element?node:node.parentElement)?.scrollIntoView({block:"center",behavior:"smooth"});}
+  },[editor,activeAnchor,anchorStore]);
 
   const marks = [
     { label: "Bold", icon: Bold, name: "bold", run: (e: Editor) => e.chain().focus().toggleBold().run() },

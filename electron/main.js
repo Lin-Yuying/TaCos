@@ -211,12 +211,9 @@ async function startLocalServer(dir) {
   const log = fs.createWriteStream(logFile, { flags: "a" });
   child.stdout.pipe(log);
   child.stderr.pipe(log);
-  const relay = (chunk) => {
-    const text = chunk.toString().trimEnd();
-    if (text) logLine(`[server] ${text}`);
-  };
-  child.stdout.on("data", relay);
-  child.stderr.on("data", relay);
+  // Server output has one sink; desktop.log records lifecycle messages only.
+  log.on("error",error=>console.error("Server log:",error));
+  child.once("exit",()=>log.end());
   child.on("exit", (code) => {
     logLine(`local server exited code=${code}`);
     if (localServer === child) localServer = null;

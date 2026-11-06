@@ -948,7 +948,9 @@ export function ProjectOverview({
     if (!highlights || !HighlightCtor) return;
     let frame = 0;
 
+    let contentDirty=true;
     const paint = () => {
+      if(contentDirty){contentDirty=false;
       const { text, chars } = normalizeWithMap(root);
       const unique = new Map<string, { anchor: CommentAnchor; range: Range }>();
       const nextMissing = new Set<string>();
@@ -972,6 +974,7 @@ export function ProjectOverview({
       }
       anchorRanges.current = [...unique.values()];
       setMissing((prev) => (setsEqual(prev, nextMissing) ? prev : nextMissing));
+      }
       const wrapRect = wrap.getBoundingClientRect();
       const width = wrap.clientWidth;
       setEditorWidth((prev) => (Math.abs(prev - width) < 1 ? prev : width));
@@ -1000,7 +1003,7 @@ export function ProjectOverview({
       frame = requestAnimationFrame(paint);
     };
     paint();
-    const observer = new MutationObserver(schedule);
+    const observer = new MutationObserver(()=>{contentDirty=true;schedule();});
     observer.observe(root, { subtree: true, childList: true, characterData: true });
     // Widening the column (history drawer, window resize) reflows every line; the
     // markers have to follow or they float over the wrong passage.
