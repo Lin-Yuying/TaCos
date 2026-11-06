@@ -100,26 +100,30 @@ async function plistValue(appPath, key, signal) {
   })).stdout.trim();
 }
 
+async function directoryBytes(root,signal){let total=0;const stack=[root];while(stack.length){signal?.throwIfAborted();const dir=stack.pop();for(const entry of await fs.promises.readdir(dir,{withFileTypes:true})){const file=path.join(dir,entry.name);if(entry.isDirectory())stack.push(file);else if(entry.isFile())total+=(await fs.promises.stat(file)).size;}}return total;}
 /** Downloads and checks version `info.version`. Returns where the checked app and its folder are. */
-async function prepare({ net, userData, info, arch, log, onProgress, signal }) {
+async function prepare({ net, userData, info, arch, log, onProgress, signal, onStage=()=>{},bundle }) {
   const file = zipFor(info.files, arch);
   if (!file || !file.sha512) throw new Error(`The release has no zip for ${arch}`);
   if(!/^[0-9A-Za-z][0-9A-Za-z.+-]*$/.test(info.version))throw new Error("Invalid release version");
   const pending = path.join(userData, "pending-update");
   const dir = path.join(pending, info.version);
   await fs.promises.mkdir(dir, { recursive: true });
-  const disk=await fs.promises.statfs(dir);const required=(Number(file.size)||0)*6;
+  const disk=await fs.promises.statfs(dir);const appBytes=bundle?await directoryBytes(bundle,signal):0;const required=(Number(file.size)||0)*6+appBytes*2;
   if(disk.bavail*disk.bsize<required)throw new Error("Free disk space before downloading this update");
   for (const name of await fs.promises.readdir(pending)) {
     if (name !== info.version) await fs.promises.rm(path.join(pending, name), { recursive: true, force: true });
   }
 
+  if(bundle){const targetDisk=await fs.promises.statfs(path.dirname(bundle));if(targetDisk.bavail*targetDisk.bsize<appBytes*2)throw new Error("Free disk space before installing this update");}
+  signal?.throwIfAborted();
   const zip = path.join(dir, path.basename(file.url));
   const have = fs.existsSync(zip) && (await sha512Of(zip)) === file.sha512;
   if (!have) {
     const url = `${RELEASE_BASE}/v${info.version}/${file.url}`;
     log(`app update fetch ${url}`);
-    await fetchZip({ net, url, dest: zip, total: file.size, onProgress, signal });
+    onStage("downloading");
+    try{await fetchZip({ net, url, dest: zip, total: file.size, onProgress, signal });}catch(error){await fs.promises.rm(zip,{force:true});throw error;}
     if ((await sha512Of(zip)) !== file.sha512) {
       await fs.promises.rm(zip, { force: true });
       throw new Error("The downloaded file does not match the hash the release lists");
@@ -129,7 +133,7 @@ async function prepare({ net, userData, info, arch, log, onProgress, signal }) {
   const unpacked = path.join(dir, "unpacked");
   await fs.promises.rm(unpacked, { recursive: true, force: true });
   await fs.promises.mkdir(unpacked);
-  log("app update: unpacking");
+  log("app update: unpacking");onStage("unpacking");
   try {
   await execFileAsync("/usr/bin/ditto", ["-xk", zip, unpacked],{signal,timeout:300000});
   const name = (await fs.promises.readdir(unpacked)).find((entry) => entry.endsWith(".app"));
@@ -140,7 +144,7 @@ async function prepare({ net, userData, info, arch, log, onProgress, signal }) {
   if (id !== APP_ID || version !== info.version) {
     throw new Error(`The downloaded app is ${id} ${version}, not ${APP_ID} ${info.version}`);
   }
-  log("app update: checking signature");
+  log("app update: checking signature");onStage("verifying");
   await execFileAsync("/usr/bin/codesign", ["--verify", "--deep", "--strict", appPath], { signal,timeout:120000 });
   log(`app update ${info.version} checked and ready`);
   return { appPath, dir };

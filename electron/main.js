@@ -10,6 +10,7 @@ const {
   utilityProcess,
 } = require("electron");
 const path = require("node:path");
+const { createLogStream } = require("./log-stream.mjs");
 const fs = require("node:fs");
 const nodeNet = require("node:net");
 const { spawn, spawnSync } = require("node:child_process");
@@ -33,16 +34,14 @@ const logFilePath = () => path.join(app.getPath("logs"), "desktop.log");
 
 // Startup problems on a remote machine are hard to report, so every step lands in a log
 // the user can open from the error screen.
+let desktopLog=null;
 function logLine(message) {
-  const line = `[${new Date().toISOString()}] ${message}\n`;
-  try {
-    fs.mkdirSync(path.dirname(logFilePath()), { recursive: true });
-    fs.appendFileSync(logFilePath(), line);
-  } catch {
-    // never let logging break startup
-  }
-  console.log("[tacos]", message);
+  if(!desktopLog){desktopLog=createLogStream(logFilePath());desktopLog.on("error",error=>console.error("Desktop log:",error.message));}
+  if(!desktopLog.destroyed)desktopLog.write(`[${new Date().toISOString()}] ${message}\n`);
+  console.log("[tacos]",message);
 }
+let logQuitReady=false;
+app.on("before-quit",event=>{if(logQuitReady||!desktopLog||desktopLog.writableFinished||desktopLog.destroyed)return;event.preventDefault();const finish=()=>{if(logQuitReady)return;logQuitReady=true;app.quit();};desktopLog.once("finish",finish);desktopLog.once("error",finish);desktopLog.end();setTimeout(finish,2000).unref();});
 
 function readSettings() {
   try {
@@ -208,7 +207,7 @@ async function startLocalServer(dir) {
     serviceName: "TaCos Server",
   });
 
-  const log = fs.createWriteStream(logFile, { flags: "a" });
+  const log = createLogStream(logFile);
   child.stdout.pipe(log);
   child.stderr.pipe(log);
   // Server output has one sink; desktop.log records lifecycle messages only.
@@ -344,7 +343,7 @@ async function startDevServer(root, port) {
     env,
     windowsHide: true,
   });
-  const log = fs.createWriteStream(logFile, { flags: "a" });
+  const log = createLogStream(logFile);
   child.stdout.pipe(log);
   child.stderr.pipe(log);
   child.on("exit", (code) => {

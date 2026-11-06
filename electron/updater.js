@@ -29,6 +29,7 @@ let firstCheckTimer = null;
 let intervalTimer = null;
 let checkInFlight = false;
 let downloadInFlight = false;
+let preparationAbort=null;
 let installPromptInFlight = false;
 let promptedInstallVersion = null;
 // The person clicked update before the download finished; ask them when it does.
@@ -160,7 +161,7 @@ async function maybeDownload() {
   } catch (err) {
     const message = err && err.message ? err.message : String(err);
     installRequested = false;
-    setStatus({ state: "error", error: message });
+    setStatus(err?.name==="AbortError"?{state:"available",progress:null,stage:null,error:null}:{state:"error",stage:null,error:message});
     log(`app update download failed: ${message}`);
   } finally {
     downloadInFlight = false;
@@ -170,7 +171,11 @@ async function maybeDownload() {
 async function downloadForSelfInstall() {
   if (!availableInfo) throw new Error("No update information to download from.");
   setStatus({ state: "downloading", progress: 0, error: null });
+  preparationAbort=new AbortController();
   selfInstall = await macUpdate.prepare({
+    signal:preparationAbort.signal,
+    bundle:currentBundle(),
+    onStage:stage=>setStatus({stage}),
     net,
     userData: app.getPath("userData"),
     info: availableInfo,
@@ -178,12 +183,14 @@ async function downloadForSelfInstall() {
     log,
     onProgress: (percent) => setStatus({ state: "downloading", progress: percent }),
   });
+  preparationAbort=null;
   downloadFinished(availableInfo.version);
 }
 
 function downloadFinished(version) {
   setStatus({
     state: "downloaded",
+    stage:null,
     availableVersion: version || status.availableVersion,
     progress: 100,
     error: null,
@@ -551,6 +558,8 @@ function registerIpc() {
   ipcReady = true;
 
   ipcMain.handle("tacos:app-update:status", () => snapshot());
+  ipcMain.handle("tacos:app-update:cancel",()=>{installRequested=false;preparationAbort?.abort();return {ok:true};});
+  app.on?.("before-quit",()=>preparationAbort?.abort());
 
   ipcMain.handle("tacos:app-update:check", async () => {
     if (!status.enabled || !autoUpdater) {

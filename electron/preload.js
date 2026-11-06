@@ -50,6 +50,7 @@ contextBridge.exposeInMainWorld("tacosDesktop", {
     check: () => ipcRenderer.invoke("tacos:app-update:check"),
     download: () => ipcRenderer.invoke("tacos:app-update:download"),
     install: () => ipcRenderer.invoke("tacos:app-update:install"),
+    cancel: () => ipcRenderer.invoke("tacos:app-update:cancel"),
     onStatus: (handler) => {
       const listener = (_event, status) => handler(status);
       ipcRenderer.on("tacos:app-update:status-changed", listener);
