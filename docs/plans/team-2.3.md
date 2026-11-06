@@ -53,6 +53,11 @@ Item-level checks stay cheap (types, check scripts). End-to-end tests and screen
 | 26 | Batch E2E and screenshots with real models and new data dirs; fresh-context review; fix findings | done | Report lists tested and untested |
 | 27 | Version 2.3.0, PR for the user to merge; after the merge, tag and publish | done | PR merged as #62; tag `v2.3.0` on `ed52d45`; release published |
 | 28 | Fix the four must-fix findings from the fresh-context review | done | Four fixes, three new check scripts, smoke and `npm run check:harness` 87/87 pass |
+| 29 | Fix the 2.3.0 upgrade path (server boot failed on a 2.2 database) | done | PR #69 merged; `node --import tsx scripts/check-upgrade-old-db.ts`; released in v2.3.1 |
+| 30 | Claimed tasks appear in My Tasks | done | PR #71; `node --import tsx scripts/check-collab-claim-my-tasks.ts`; released in v2.3.1 |
+| 31 | Desktop update pill: version tooltip, in-app restart confirmation, preparing state | done | PR #72; `check-desktop-updater-entry.ts`, `check-desktop-updater-restart.ts`; released in v2.3.1 |
+| 32 | Task navigation: four queues, quick filters, queue badges, saveable views | done | PR #73; `check-task-quick-views.ts`, `check-task-view-filters.ts`; released in v2.3.1 |
+| 33 | Fix the seven findings from the post-release fresh-context review | done | PR #75; updater and restart checks extended; `npm run check:harness` 105/105 |
 
 ### Item 26: batch E2E and review
 
@@ -113,3 +118,13 @@ The v2.3.0 server tarball was deployed to the team's Tencent Cloud host on 2026-
 - Regression check: `scripts/check-upgrade-old-db.ts` builds the 2.2 shape of `issues` (no `parent_id`, one row), points `TACOS_DATA_DIR` at it and calls `getDb()`. It asserts the column appears, both indexes exist and the old row survives. Checked against unfixed code: stashing the `client.ts` change makes the check throw `SQLITE_ERROR: no such column: parent_id`, and the fix was restored with `git stash pop`. Picked up by `scripts/check-all.ts`.
 - Live host recovered before the fix: service stopped, `tacos.db` copied to `/var/lib/tacos/data/tacos.db.bak-pre-2.3.0`, `ALTER TABLE issues ADD COLUMN parent_id TEXT` applied by hand, service started. `/login` answers 200 and the journal is clean since the restart. That host now matches what this item makes bootstrap do on its own.
 - Verification: `npx tsc --noEmit` exits 0; `npm run check:harness` passes 88/88 with `check-upgrade-old-db.ts` listed as `ok`. Not verified: a real 2.2-to-2.3 upgrade through the installer, which needs a second host and stays with the user.
+- Released in v2.3.1 (see Release 2.3.1). Deploying the new server tarball stays with the user.
+
+### Release 2.3.1
+
+- Version 2.3.1 in `package.json` and `package-lock.json` (PR #74, merge `9f3f022`). Tag `v2.3.1` on `9f3f022`; the tag build published the release with the same seven assets as v2.3.0.
+- Merged before the release: PR #67 (2.3.0 release record and item 27 done), #69 (boot fix), #71 (claimed tasks in My Tasks), #72 (top-bar update pill and in-app restart), #73 (four task queues and quick filters).
+- Published as `TaCos v2.3.1` with seven assets: Windows installer and `latest.yml`, macOS arm64 dmg and `*-mac.zip` with `latest-mac.yml`, Linux AppImage, and the Linux server tarball. The release notes carry a "Fixes in 2.3.1" section.
+- Verified on the merged main before tagging: `npx tsc --noEmit` passes; `npm run -s i18n:check` passes (863 strings in code, 1198 in zh.ts, 0 missing); `npx tsx scripts/check-agents-md.ts` passes; `npm run check:harness` passes 105/105; `npm run build` passes.
+- The fresh-context review of `v2.3.0..main` found no release blocker. Its seven medium/low findings are fixed on main after the release (PR #75, item 33): main-process Agent guard on restart, real cancelability in the status, preparation stage forwarded to the pill, an overflow view menu for narrow list columns, search clear clearing `q`, no double prompt on older shells, and the person-page label. After those fixes `npm run -s i18n:check` reports 1199 strings in zh.ts and `npm run check:harness` passes 105/105.
+- Not verified: a real 2.2-to-2.3 upgrade through `deploy/install.sh` (needs a second host and stays with the user), a real packaged desktop auto-update (needs a signed build), and the unsigned/degraded update route. Deploying the server tarball stays with the user.
