@@ -146,7 +146,7 @@ Common pattern: **visible system health + verified backups + safe upgrade/rollba
 
 ## Dependencies
 
-- U-06 for admin console/roles; U-05 for export/import; U-01 for access model.
+- U-06 for admin console/roles; U-05 for export/import.
 - The desktop updater and deploy scripts already exist; this builds on them.
 
 ## Files likely touched

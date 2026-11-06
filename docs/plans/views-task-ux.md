@@ -89,7 +89,7 @@ Default one PR; if shared views + subscriptions grow, split UX polish.
   scope (workspace/project), name, definition JSON, shared flag, owner, position,
   default-for-scope, created/updated.
 - Migrate personal views; keep personal views private unless shared; workspace
-  views visible to members (guests per U-01); view pages in sidebar and project
+  views visible to members; view pages in sidebar and project
   pages; duplicate/rename/favorite.
 
 ### Commit 2 — Display options
@@ -107,7 +107,7 @@ Default one PR; if shared views + subscriptions grow, split UX polish.
 - Subscribe to a view: notify on issue added, completed/canceled, or both
   (Linear model); delivery via Inbox (#78) and Slack/webhooks (#80); personal
   and channel-level subscriptions; mute.
-- View-specific settings on the view menu; permissions follow U-01.
+- View-specific settings on the view menu; permissions follow the existing workspace rules.
 
 ### Commit 4 — Bulk edit, templates, estimates, checks
 
@@ -125,7 +125,7 @@ Default one PR; if shared views + subscriptions grow, split UX polish.
 ## Acceptance criteria
 
 1. A member can create a shared workspace/project view; owners can set it as
-   default; guests see only views they may access (U-01).
+   default.
 2. Grouping/ordering/layout/property settings persist per view; personal
    overrides do not change others; drag between groups updates the property.
 3. Subscribing to a view delivers notifications on added/completed items via
@@ -158,7 +158,6 @@ Default one PR; if shared views + subscriptions grow, split UX polish.
 ## Dependencies
 
 - #78 for Inbox subscriptions; #80 for Slack/webhook delivery.
-- U-01 for view sharing permissions/guests.
 - U-03 for cycle/milestone grouping fields.
 - U-10 for search/command palette polish.
 

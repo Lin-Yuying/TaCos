@@ -1,7 +1,7 @@
 # U-04: Documents and knowledge depth
 
 Status: plan for a future PR. No implementation started. Written 2026-11-06
-(loop round 3). Complements #78 (Inbox) and U-01 (sharing).
+(loop round 3). Complements #78 (Inbox).
 
 ## Why
 
@@ -15,7 +15,7 @@ Notion/Confluence-style team knowledge.
 ## Current implementation
 
 - Page tree with parent/children, project association, private/shared pages
-  (U-01 extends sharing to guests/links), page favorites, recent documents,
+  page favorites, recent documents,
   document index.
 - Editor: markdown, Yjs live collaboration with peer presence
   (`src/lib/collab`, `use-doc-collab.ts`), attachments, cover, icons, AI inline
@@ -141,7 +141,7 @@ is the knowledge graph and reuse.
 - Block-based editor, databases, synced blocks (Notion database model).
 - Suggestion mode and formal review/approval for docs.
 - Export/import and print/PDF (U-05).
-- Public web publishing (U-01 covers external sharing; publishing is later).
+- Public web publishing and external sharing (not planned: internal company use only).
 - AI Q&A/summarization over the doc corpus (possible follow-up after U-02).
 
 ## Open decisions
@@ -155,7 +155,6 @@ is the knowledge graph and reuse.
 
 ## Dependencies
 
-- U-01 for guest/permission-aware links and backlinks.
 - U-05 for export/print.
 - U-10 for unified search integration (links/templates appear in results).
 

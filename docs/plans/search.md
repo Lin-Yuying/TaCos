@@ -114,7 +114,7 @@ recent/suggested items, and permissions respected.
 ## Acceptance criteria
 
 1. Searching returns hits from all supported entity types, with permissions
-   applied (guests/private projects per U-01).
+   applied (existing project/page visibility rules).
 2. A full search page supports kind/project/assignee/date filters, sorting and
    pagination; results match the palette for the same query.
 3. Keyboard prefixes narrow results; recent searches/items persist per user;
@@ -147,7 +147,6 @@ recent/suggested items, and permissions respected.
 
 ## Dependencies
 
-- U-01 for guest/private-project permission filtering.
 - U-04 for page links/backlinks and templates as searchable entities.
 - U-09 for shared saved searches (optional).
 

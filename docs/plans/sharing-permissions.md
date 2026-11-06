@@ -1,8 +1,9 @@
 # U-01: Sharing and permissions
 
-Status: deep dive for the next planned PR after #77-#80. No implementation
-started. Written 2026-11-06 after reading the current code and comparing with
-Notion, Linear, Google Drive, Confluence, GitHub and Figma.
+Status: **not planned** (decision 2026-11-06: TaCos is used by internal company
+members only; external guests/public links/private projects are not needed).
+Kept as a benchmark and design record; no implementation is scheduled. The rest
+of this document describes the scope that was considered before the decision.
 
 ## Why this is needed
 

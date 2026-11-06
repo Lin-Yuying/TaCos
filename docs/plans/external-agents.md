@@ -117,7 +117,7 @@ stays small — otherwise a follow-up PR.
 - Stretch: expose TaCos as an A2A server (Agent Card + `SendMessage`/
   `SendStreamingMessage`) so an orchestrator can delegate tasks into a
   project-scoped TaCos agent; auth via a workspace API key (#77), read/write
-  scoped by the access model (U-01) and approval rules. If this grows, split
+  scoped by the existing project visibility and approval rules. If this grows, split
   into a follow-up PR.
 
 ### Commit 4 — UI, docs and checks
@@ -153,7 +153,7 @@ stays small — otherwise a follow-up PR.
 - A public agent marketplace/directory with billing.
 - Full enterprise identity federation between TaCos workspaces.
 - OAuth 2.1 authorization-server implementation for external agents (start with
-  bearer keys; reuse U-01/U-06 later).
+  bearer keys; reuse U-06 later).
 - Bidirectional agent-to-agent conversations beyond task delegation.
 - Replacing local harness adapters.
 
@@ -173,7 +173,6 @@ stays small — otherwise a follow-up PR.
 - #79 for delegation/review/run model.
 - #77 for API keys and MCP (server exposure).
 - #80 for automation action targets.
-- U-01 for permissions/scoping and guest access.
 
 ## Files likely touched
 

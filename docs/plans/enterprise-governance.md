@@ -5,7 +5,7 @@ Status: plan for a future PR. No implementation started. Written 2026-11-06
 
 ## Why
 
-TaCos is used by a small team today, but the roadmap (guests/sharing U-01,
+TaCos is used by a small team today, but the roadmap (#77 agent access,
 external agents U-07, self-host U-12, import/export U-05) turns it into a tool
 others may rely on. Enterprises and larger teams need SSO, provisioning, an
 audit trail, retention and a permission model they can reason about. The current
@@ -15,7 +15,7 @@ roles are owner/admin/member with no SSO, audit UI or retention policy.
 
 - Roles: workspace owner (`workspaces.createdBy`), `admin`/`member`
   (`workspace_members.role`); join-code invites; site super-admin at `/admin`.
-- Guest/private-project model is planned in U-01.
+- Guest/private-project model is **not planned** (internal company use only).
 - Audit: `events` per issue, activity streams; no security audit log
   (logins, role changes, exports, API key changes, sharing changes), no UI/API.
 - No SSO/OIDC/SAML, no SCIM, no retention policy, no session management UI.
@@ -52,7 +52,7 @@ retention/export**, with owner-only sensitive operations.
 | SSO (SAML/OIDC) | No | Yes | Yes | Yes |
 | SCIM / auto-provisioning | No | Yes | Yes | Yes |
 | Role matrix / configurable permissions | No (owner/admin/member) | Yes | Yes | Yes |
-| Guest accounts | Planned U-01 | Yes | Yes | Yes (guests) |
+| Guest accounts | Not planned (internal only) | Yes | Yes | Yes (guests) |
 | Security audit log + UI | No (issue events only) | Yes (90 days, API, SIEM) | Yes | Yes (streaming) |
 | Audit retention policy | No | 90 days | Configurable | Configurable |
 | Session/device management | No | Limited | Yes | Yes |
@@ -68,8 +68,8 @@ retention/export**, with owner-only sensitive operations.
    automation changes are not centrally visible with actor/IP.
 4. **No retention policy.** Workspace data, trash, audit logs and agent logs
    have ad-hoc retention.
-5. **No permission matrix.** Team/project/admin actions are hard-coded; U-01
-   adds sharing but not configurable policies.
+5. **No permission matrix.** Team/project/admin actions are hard-coded; the deferred
+   sharing work would not add configurable policies.
 6. **No session security controls.** No forced logout, session list, or IP/
    domain restrictions.
 
@@ -96,7 +96,7 @@ Default one PR; SSO alone is large, so it may split after commit 1.
 
 ### Commit 3 — Audit log and retention
 
-- Append-only audit events covering auth, membership/roles, sharing (U-01),
+- Append-only audit events covering auth, membership/roles, sharing,
   API keys (#77), external agents (U-07), exports (U-05), settings, automation
   rules (#80), admin actions.
 - Owner/admin audit page with filters (event type, actor, date, IP) and CSV
@@ -107,7 +107,7 @@ Default one PR; SSO alone is large, so it may split after commit 1.
 
 ### Commit 4 — Governance UI, checks and docs
 
-- Permission matrix for workspace/team/project actions (read from U-01 model),
+- Permission matrix for workspace/team/project actions (read from the existing sharing model),
   admin console (members, roles, sessions, SSO, audit, retention, exports).
 - `check-sso-oidc.ts` (fake provider login, group mapping, session rules),
   `check-scim.ts` (provision/deprovision, role map), `check-audit-log.ts`
@@ -125,7 +125,7 @@ Default one PR; SSO alone is large, so it may split after commit 1.
    secret appears in events.
 4. Audit retention defaults to 90 days and is configurable by the owner; trash/
    retention policies are documented and enforced.
-5. Permission matrix controls team/project admin actions; guests (U-01) cannot
+5. Permission matrix controls team/project admin actions; no guest role exists,
    access enterprise settings.
 6. Existing login/password, API keys, MCP, agents and sharing keep working,
    with SSO optional; tsc, i18n, agents-md, `check:harness` and build pass.
@@ -150,7 +150,6 @@ Default one PR; SSO alone is large, so it may split after commit 1.
 
 ## Dependencies
 
-- U-01 for guest/private-project permission model.
 - U-05 for exports; U-07 for external agent audit; #77/#80 for key/rule audit.
 - U-12 for admin ops pages.
 

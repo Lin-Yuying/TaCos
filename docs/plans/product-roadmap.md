@@ -3,8 +3,8 @@
 Status: living plan, round 1 (2026-11-06). Plans first, implementation later,
 one PR at a time. Existing plans are #77 (Agent access), #78 (Inbox), #79
 (Agent) and #80 (automations/integrations). This document tracks everything
-after them as **U-01, U-02, …** (upcoming PRs); real GitHub PR numbers are
-assigned when a plan/implementation PR is opened.
+after them as **U-02, U-03, …** (upcoming PRs; U-01 is deferred, see below).
+Real GitHub PR numbers are assigned when a plan/implementation PR is opened.
 
 The loop this plan runs in: each round deep-dives one or two product areas,
 writes or updates a plan document, opens a draft plan PR, and reports back. No
@@ -15,7 +15,7 @@ production code is written until the owner approves a plan and says to start.
 | Area | What exists today | Notes / gaps |
 | --- | --- | --- |
 | Workspaces & identity | Multi-workspace, join-code invite link (`/join/<code>`), owner/admin/member roles, leave, 30-day recycle bin, site super-admin at `/admin` | No guest role, no email invite, no SSO |
-| Sharing & permissions | Private pages shared to the workspace with view/comment/edit and per-member overrides (subtree-wide); project membership drives task visibility when `membersSeeAllTasks=0`; project overview grants (comment/edit); agent threads private/shared | No external guests, no public/expiring links, no per-task sharing, no share audit UI; see `docs/plans/sharing-permissions.md` (U-01) |
+| Sharing & permissions | Private pages shared to the workspace with view/comment/edit and per-member overrides (subtree-wide); project membership drives task visibility when `membersSeeAllTasks=0`; project overview grants (comment/edit); agent threads private/shared | **Not planned (U-01): company-internal use only.** Current workspace-internal sharing stays as-is; no guests/public links/private projects |
 | Projects | Markdown overview, resources, icons/colors, favorites, 30-day trash | No project visibility toggle beyond membership; no project-level admin |
 | Tasks | List/board/table/calendar, subtasks, dependencies, recurrence, claims, review status, blockers, labels, priorities, multiple assignees, custom task fields, comments, activity | No per-task sharing, no saved shared views, no cycles/milestones |
 | Documents | Page tree, private/shared, version history (200/page), comments, Yjs live collaboration, attachments, cover/icon, AI inline edit, project documents | No version-diff review UI, no backlinks, no templates, no global document search UI |
@@ -34,7 +34,7 @@ production code is written until the owner approves a plan and says to start.
 
 ## 2. Benchmark references
 
-Sharing and permissions (U-01, deep-dived in round 1):
+Sharing and permissions (benchmarked in round 1; U-01 is deferred — the company uses TaCos internally only):
 
 - Notion: share with one person inside/outside the workspace (guests), everyone
   at the workspace, or anyone on the web with a link and expiry;
@@ -56,7 +56,7 @@ Areas deep-dived by rounds, with their reference products:
 
 | Round | Areas | Benchmark products | Status |
 | --- | --- | --- | --- |
-| 1 | Product surface + sharing/permissions | Notion, Linear, Google Drive, Confluence, GitHub, Figma | done → `sharing-permissions.md` |
+| 1 | Product surface + sharing/permissions | Notion, Linear, Google Drive, Confluence, GitHub, Figma | done → `sharing-permissions.md` (deferred) |
 | 2 | Tasks/views/planning/insights | Linear, Asana, ClickUp | done for planning/insights → `planning.md`, `insights.md`; the views/task-UX slice is U-09 |
 | 3 | Docs/search/collaboration/notifications | Notion, Linear, GitHub, Google Docs, Slack | done → `docs-knowledge.md`, `search.md`, `collaboration.md`; notifications covered by #78 (in-app), U-11 (collab) and U-08 (channels) |
 | 4 | Agent/automations/platform, views/task UX, self-host ops | A2A, MCP, Claude/Codex, Linear, GitHub, desktop/self-host best practice | done → `external-agents.md`, `views-task-ux.md`, `self-host-ops.md` |
@@ -69,7 +69,6 @@ value; P2 later / depends on other work.
 
 | Area | Main gap | Priority | Proposed PR |
 | --- | --- | --- | --- |
-| Sharing & permissions | External guests/public links, private projects/tasks, access audit, invite flow | P0 | U-01 |
 | Insights & analytics | No reporting on flow, delegation, agent usage | P1 (after #79/#80 data) | U-02 |
 | Planning | No cycles/milestones/roadmap/goals | P1 | U-03 |
 | Docs & knowledge | Backlinks/templates/outline missing (version diff, comments, presence exist) | P1 | U-04 |
@@ -80,7 +79,7 @@ value; P2 later / depends on other work.
 | Enterprise & governance | No SSO/OIDC, audit UI, retention, admin console | P2 (when team grows or TaCos is shared externally) | U-06 |
 | External agent platform | No A2A/registry/external agents | P2 (after #80) | U-07 |
 | Channels & mobile | No email/push/PWA/mobile | P2/P3 | U-08 |
-| External API/MCP coverage | Tasks/comments/labels only; no projects CRUD, pages, task extensions | P1 (after #77/U-01) | U-13a/U-13b |
+| External API/MCP coverage | Tasks/comments/labels only; no projects CRUD, pages, task extensions | P1 (after #77) | U-13a/U-13b |
 | Views & task UX | Personal saved views only; no shared views/subscriptions/display options | P2 (can pull forward) | U-09 |
 
 ## 4. Upcoming PR sequence
@@ -89,12 +88,14 @@ Each PR is planned before it is implemented: a plan document under
 `docs/plans/`, a draft plan PR, then a separate implementation PR after owner
 approval. One PR per item unless the owner asks to split.
 
-### U-01 — Sharing and permissions (next after #77-#80)
+### U-01 — Sharing and permissions (deferred, not planned)
 
-Deep dive: `docs/plans/sharing-permissions.md`. Adds external guests, share
-links with expiry, first-class private projects/tasks, a unified share dialog,
-"shared with me", and share audit. Foundational for external collaboration and
-for scoping agents/API access.
+Decision 2026-11-06: TaCos is used by internal company members only, so
+external guests, public/expiring links, first-class private projects/tasks and
+share audit are **not planned**. The deep dive stays at
+`docs/plans/sharing-permissions.md` as a benchmark record. Revisit only if
+external collaborators become a real requirement; until then the existing
+workspace-internal page/project sharing is unchanged.
 
 ### U-02 — Insights and analytics
 
@@ -146,7 +147,7 @@ Plan: `docs/plans/external-agents.md`.
 Scope: external agent registry (Agent Card discovery, auth, project scope),
 A2A client for delegation with streaming/push, optional minimal A2A server to
 expose TaCos tasks to an orchestrator, permissions and audit. Depends on #79,
-#77, #80 and U-01; OAuth/enterprise federation later.
+#77 and #80; OAuth/enterprise federation later.
 
 ### U-08 — Channels and mobile
 
@@ -205,7 +206,7 @@ Benchmarks: Linear GraphQL API, Notion API, GitHub REST, Asana API.
 Scope (two implementation PRs): **U-13a** projects CRUD + project membership +
 task extensions (custom fields, dependencies, recurrence, claims, review,
 blockers, trash restore); **U-13b** pages/documents list/read/create/edit +
-page comments (sharing changes stay in the web UI/U-01). All new surface reuses #77 scopes and
+page comments; page sharing changes stay out of scope (existing web UI only). All new surface reuses #77 scopes and
 project allowlists, with MCP annotations/pagination/output schemas. Attachments,
 Inbox, search and API webhooks are recorded as later follow-ups.
 
@@ -255,8 +256,8 @@ only after the owner approves the plans.
 The plans are written; the owner still chooses the order. Recommended waves
 respect dependencies and put value early:
 
-1. **Foundation (small, independent)**: #78 Inbox → #77 Agent access → U-01
-   sharing/permissions → U-13a external projects/task surface.
+1. **Foundation (small, independent)**: #78 Inbox → #77 Agent access →
+   U-13a external projects/task surface.
 2. **Agent and automation value**: #79 Agent → #80 automations/integrations →
    U-09 views/task UX.
 3. **Knowledge and flow**: U-04 documents → U-13b external pages API → U-10
@@ -278,13 +279,10 @@ plan's status is updated when its implementation PR starts.
 All areas now have a plan; these are the choices before implementation starts.
 
 1. Approve the recommended implementation waves above, or reorder them.
-2. U-01 (sharing/permissions) scope: internal-only sharing first, or external
-   guests + public links in the same PR?
-3. U-01: should private projects be part of it or a separate smaller PR?
-4. U-03 cycles scope: workspace-wide or per-project?
-5. U-08 channels: email first or PWA/web push first?
-6. U-06 SSO: OIDC only first or SAML too?
-7. U-07 external agents: client + registry only, or also the A2A server?
-8. U-12: are code-signing/notarization certificates available (owner action)?
+2. U-03 cycles scope: workspace-wide or per-project?
+3. U-08 channels: email first or PWA/web push first?
+4. U-06 SSO: OIDC only first or SAML too?
+5. U-07 external agents: client + registry only, or also the A2A server?
+6. U-12: are code-signing/notarization certificates available (owner action)?
 
 Plan PRs are draft #77-#81; no code has been written.

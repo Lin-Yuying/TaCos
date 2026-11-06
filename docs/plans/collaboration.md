@@ -1,7 +1,7 @@
 # U-11: Collaboration depth
 
 Status: plan for a future PR. No implementation started. Written 2026-11-06
-(loop round 3). Complements #78 (Inbox), U-01 (sharing) and #80 (integrations).
+(loop round 3). Complements #78 (Inbox) and #80 (integrations).
 
 ## Why
 
@@ -124,7 +124,7 @@ edit/delete history + a place (activity/inbox) that surfaces changes.
 2. Members can follow/unfollow a task, project or page; watchers see comment
    notifications and non-watchers do not (except explicit mentions).
 3. A workspace activity feed shows recent changes with filters and obeys
-   project/page permissions (U-01).
+   the existing project/page visibility rules.
 4. Review request/approve/request-changes comments attach to the task review
    state and appear in the Inbox and review queue.
 5. Existing notifications, Inbox, agent handoff and doc comments do not
@@ -134,7 +134,7 @@ edit/delete history + a place (activity/inbox) that surfaces changes.
 
 - Real-time co-editing outside documents (docs already have Yjs).
 - Voice/video, chat channels/DMs (Slack integration is #80/U-08).
-- External guest commenting beyond U-01 levels.
+- External guest commenting (not planned: internal company use only).
 - Presence/cursors on tasks/projects (optional follow-up).
 - Comment moderation/anti-abuse tooling.
 
@@ -153,7 +153,6 @@ edit/delete history + a place (activity/inbox) that surfaces changes.
 
 - #78 for notification preferences/Inbox behaviors.
 - #79 for agent review/handoff integration.
-- U-01 for guest/private visibility in activity.
 - U-08 for email/push channels of the same events.
 
 ## Files likely touched

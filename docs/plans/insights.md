@@ -1,7 +1,7 @@
 # U-02: Insights and analytics
 
-Status: plan for a future PR (after the current #77-#80 and the U-01 sharing
-plan). No implementation started. Written 2026-11-06.
+Status: plan for a future PR (after the current #77-#80). No implementation
+started. Written 2026-11-06.
 
 ## Why
 
@@ -17,7 +17,7 @@ The data for the first version already exists:
   `issue_assignees`, `comments`, `events` (created / status_changed /
   priority_changed / assignee_changed / labels_changed / reordered / blocker),
   `blockers`, `agent_runs` / `agent_steps` / `agent_threads`.
-- U-01 adds token usage from the Agent PR (#79) and automation runs from #80.
+- #79 adds token usage and #80 adds automation runs.
 - No analytics tables, queries, dashboards or export exist today. Task views
   are personal saved filters (`personal_task_views`), not shared reports.
 
@@ -31,8 +31,8 @@ The data for the first version already exists:
   status_changed, priority_changed, assignee_changed, labels_changed,
   reordered, blocker), `blockers`, `agent_runs` / `agent_steps` /
   `agent_threads`.
-- Data added by the plans: token usage (#79), automation runs (#80), sharing/
-  access events (U-01), cycles/milestones (U-03).
+- Data added by the plans: token usage (#79), automation runs (#80),
+  cycles/milestones (U-03).
 - Search/views exist but are filtering surfaces, not analytics; no time-in-
   status history beyond `events`.
 
@@ -119,7 +119,7 @@ lists, not a separate query language.
 - Save an insight/report as a workspace view (reuse the views work; personal
   first, shared when U-09 lands).
 - Copy link for workspace members; CSV export of the current table.
-- Read-only report pages; permission checks reuse U-01's access model.
+- Read-only report pages; permission checks reuse the existing project/page visibility rules.
 
 ### Commit 4 — Checks and docs
 
@@ -166,7 +166,7 @@ lists, not a separate query language.
 4. Dashboard set for v1: task flow first, agent/automation panels second
    (recommended), or all at once?
 5. Report sharing: workspace members only (recommended) or also guests per
-   U-01 levels?
+   sharing? (external sharing is not planned.)
 6. Export: CSV only (recommended) or CSV + JSON?
 
 ## Dependencies
@@ -174,7 +174,7 @@ lists, not a separate query language.
 - Core task metrics: none (available now).
 - Token usage panel: #79 (Agent usage ledger).
 - Automation panel: #80 (automation runs).
-- Shared reports and guest visibility: U-01 (access model) and U-09 (views).
+- Shared reports and guest visibility: not planned (internal company use only); U-09 for shared views.
 
 ## Files likely touched
 

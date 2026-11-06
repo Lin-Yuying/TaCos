@@ -179,7 +179,6 @@ milestones/initiatives follow in a second PR; ask before splitting.
 - U-02 Insights for cycle/milestone/initiative panels.
 - #80 for automation triggers (cycles work standalone first).
 - U-09 views for shared planning views (optional).
-- U-01 sharing for private initiatives/private projects if that lands first.
 
 ## Files likely touched
 

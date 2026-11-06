@@ -124,13 +124,13 @@ the same plan.
 ### U-13b — Documents and pages (second PR)
 
 - REST: `GET/POST /pages`, `GET/PATCH/DELETE /pages/{id}`, page tree, page
-  comments list/add. Page sharing/access **changes stay in the web UI / U-01**
-  for this PR; the API reads the sharing state but does not change it.
+  comments list/add. Page sharing/access changes stay out of scope; the API
+  reads the existing workspace-internal sharing state but does not change it.
 - MCP tools mirroring the in-app Agent: `list_pages`, `get_page`,
   `create_page`, `update_page`, `list_page_comments`, `add_page_comment`,
   optionally `search_pages`.
 - Permissions: read-only keys cannot create/edit; guests/private-page rules
-  follow U-01. Sharing changes are out of scope.
+  follow the existing workspace-internal page visibility rules. Sharing changes are out of scope.
 - Drafting/publishing or block-level editing stays out; markdown content only.
 
 ### Later (recorded, not planned as PRs yet)
@@ -174,8 +174,8 @@ the same plan.
 1. Split implementation into **U-13a (projects + task completeness)** and
    **U-13b (pages/documents)**, both under this plan.
 2. U-13b v1 exposes page list/read/create/edit and page comments. Page
-   sharing/access changes stay in the web UI and U-01; the API does not change
-   sharing.
+   sharing/access changes stay in the web UI; the API does not change sharing
+   (external sharing is not planned at all).
 3. Custom task fields use **raw key/value** for v1 (no typed schema).
 4. Dependencies and relations are included in **U-13a**.
 5. External MCP keeps a **curated external tool set**, sharing validation and
@@ -188,7 +188,6 @@ the same plan.
 ## Dependencies
 
 - #77 for scopes/project allowlist/remote MCP auth.
-- U-01 for page/project sharing and guest rules.
 - #80 for webhook infrastructure if API webhooks are added later.
 - #79 for Agent tool parity/in-app delegation (conceptually).
 

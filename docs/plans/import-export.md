@@ -144,7 +144,6 @@ export path. Import also unlocks migration from Notion/Linear/Markdown.
 
 - U-06 for owner/admin permissions and audit.
 - U-12 for backup/restore UX (shares the zip/manifest work).
-- U-01 for guest/permission filtering of exported data (guests excluded).
 
 ## Files likely touched
 
