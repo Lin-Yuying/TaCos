@@ -153,7 +153,7 @@ stays small — otherwise a follow-up PR.
 - A public agent marketplace/directory with billing.
 - Full enterprise identity federation between TaCos workspaces.
 - OAuth 2.1 authorization-server implementation for external agents (start with
-  bearer keys; reuse U-06 later).
+  bearer keys; no IdP/enterprise auth integration is planned).
 - Bidirectional agent-to-agent conversations beyond task delegation.
 - Replacing local harness adapters.
 

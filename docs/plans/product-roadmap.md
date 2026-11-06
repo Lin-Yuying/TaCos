@@ -76,7 +76,6 @@ value; P2 later / depends on other work.
 | Collaboration depth | Task comments flat; no follow/watchers; no workspace activity feed | P2 | U-11 |
 | Import/export & portability | No workspace export/import | P2 (anti-lock-in, pairs with enterprise) | U-05 |
 | Desktop & self-host ops | No health/diagnostics, backup restore UX, update channels | P2 (operational trust) | U-12 |
-| Enterprise & governance | No SSO/OIDC, audit UI, retention, admin console | P2 (when team grows or TaCos is shared externally) | U-06 |
 | External agent platform | No A2A/registry/external agents | P2 (after #80) | U-07 |
 | Channels & mobile | No email/push/PWA/mobile | P2/P3 | U-08 |
 | External API/MCP coverage | Tasks/comments/labels only; no projects CRUD, pages, task extensions | P1 (after #77) | U-13a/U-13b |
@@ -131,7 +130,7 @@ Plan: `docs/plans/import-export.md`.
 Scope: canonical workspace export (JSON + markdown docs + task CSV +
 attachments zip), import from Notion/Markdown/Linear CSV with dry-run mapping,
 owner/admin-only API/CLI export, audit and no secrets in output. Pairs with U-12
-backup UX and U-06 governance; prevents lock-in.
+backup UX; prevents lock-in.
 
 ### U-06 — Enterprise and governance
 
@@ -264,8 +263,8 @@ respect dependencies and put value early:
    search → U-11 collaboration → U-03 planning.
 4. **Insight and operations**: U-02 insights → U-05 import/export → U-12
    desktop/self-host ops.
-5. **Enterprise and platform**: U-06 enterprise/governance → U-07 external
-   agents → U-08 channels/mobile.
+5. **Platform**: U-07 external agents → U-08 channels/mobile. Enterprise
+   governance is not planned (5-person internal team).
 
 Each implementation PR references its plan document, updates the plan status,
 ships one item per commit, and must pass the smoke test, `check:harness`, build
@@ -281,8 +280,7 @@ All areas now have a plan; these are the choices before implementation starts.
 1. Approve the recommended implementation waves above, or reorder them.
 2. U-03 cycles scope: workspace-wide or per-project?
 3. U-08 channels: email first or PWA/web push first?
-4. U-06 SSO: OIDC only first or SAML too?
-5. U-07 external agents: client + registry only, or also the A2A server?
-6. U-12: are code-signing/notarization certificates available (owner action)?
+4. U-07 external agents: client + registry only, or also the A2A server?
+5. U-12: are code-signing/notarization certificates available (owner action)?
 
 Plan PRs are draft #77-#81; no code has been written.

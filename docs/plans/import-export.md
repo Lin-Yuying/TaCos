@@ -8,8 +8,8 @@ Status: plan for a future PR. No implementation started. Written 2026-11-06
 There is no product-level export or import today: a workspace's data lives in
 SQLite plus uploads, so leaving TaCos (or moving between instances) means
 copying a database file. For an internal tool that is acceptable; as soon as the
-team grows, the data matters, and enterprise/governance work (U-06) assumes an
-export path. Import also unlocks migration from Notion/Linear/Markdown.
+the data matters, so a portable export is still valuable for backups and
+moves. Import also unlocks migration from Notion/Linear/Markdown.
 
 ## Current implementation
 
@@ -60,7 +60,7 @@ export path. Import also unlocks migration from Notion/Linear/Markdown.
 4. **No mapping/dry-run UI.** Importers must preview what will be created.
 5. **No API/CLI export.** Server operators cannot script export for ops.
 6. **No export audit/permission model.** Export must be owner/admin-only and
-   audited (U-06).
+   audited with the existing events stream.
 
 ## Candidate scope (one PR, four commits)
 
@@ -94,7 +94,7 @@ export path. Import also unlocks migration from Notion/Linear/Markdown.
 - Owner/admin-only export/import; per-export access check and audit; guest and
   member cannot export (unless explicitly allowed later).
 - Export endpoint documented; signed download URL/TTL; no secrets in any file.
-- Import API for automation (owner/admin token, U-06 permissions).
+- Import API for automation (owner/admin token; not planned for v1).
 
 ### Commit 4 — Checks and docs
 
@@ -150,7 +150,6 @@ export path. Import also unlocks migration from Notion/Linear/Markdown.
 
 ## Dependencies
 
-- U-06 for owner/admin permissions and audit.
 - U-12 for backup/restore UX (shares the zip/manifest work).
 
 ## Files likely touched

@@ -1,9 +1,10 @@
 # U-06: Enterprise and governance
 
-Status: plan for a future PR. No implementation started. Written 2026-11-06
-(loop round 4).
+Status: **not planned** (decision 2026-11-06: TaCos is used by a 5-person
+internal team; SSO/SCIM/audit-log/retention/admin-console work is unnecessary
+for now). Kept as a benchmark and design record; no implementation is scheduled.
 
-## Why
+## Why (recorded before the decision)
 
 TaCos is used by a small team today, but the roadmap (#77 agent access,
 external agents U-07, self-host U-12, import/export U-05) turns it into a tool

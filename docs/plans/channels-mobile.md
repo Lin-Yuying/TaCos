@@ -73,7 +73,7 @@ quiet hours/digests, reliable delivery with retries, and read-state sync.
   extensible), per event type; quiet hours and digest cadence (instant/daily/
   weekly).
 - Settings → Notifications UI: matrix, quiet hours, digest time, per-workspace
-  overrides (personal prefs by default, workspace policy from U-06 later).
+  overrides (personal prefs first; a workspace policy is not planned).
 - Server-side decision function: event → channels, respecting prefs, mutes
   (#78), quiet hours and digest batching.
 
@@ -141,7 +141,6 @@ quiet hours/digests, reliable delivery with retries, and read-state sync.
 
 - #78 for notification preferences/mutes/Inbox.
 - #80 for Slack/webhook delivery and reuse of the automation channel.
-- U-06 for SMTP admin permissions and audit.
 - U-12 for self-host configuration UX.
 
 ## Files likely touched

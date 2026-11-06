@@ -163,7 +163,7 @@ the same plan.
 
 ## Out of scope
 
-- Workspace/member administration, invites, roles and settings (U-06).
+- Workspace/member administration, invites, roles and settings (not planned: internal-only team).
 - Agent thread/conversation APIs.
 - Attachments, notifications, search and API webhooks (follow-ups above).
 - Block-based page editing, publishing, databases.

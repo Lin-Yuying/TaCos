@@ -129,9 +129,9 @@ Common pattern: **visible system health + verified backups + safe upgrade/rollba
 
 - Hosted/SaaS offering, multi-node clustering, Kubernetes operator.
 - Implement signing/notarization itself (owner handles certificates/CI signing).
-- Full observability stack (metrics/tracing backend; U-06/enterprise can add).
+- Full observability stack (metrics/tracing backend).
 - Automatic remote runner control.
-- SSO/admin console (U-06).
+- SSO/admin console (not planned: internal-only team).
 
 ## Decisions (accepted per recommendation, 2026-11-06)
 
@@ -155,7 +155,7 @@ Common pattern: **visible system health + verified backups + safe upgrade/rollba
 
 ## Dependencies
 
-- U-06 for admin console/roles; U-05 for export/import.
+- U-05 for export/import.
 - The desktop updater and deploy scripts already exist; this builds on them.
 
 ## Files likely touched
