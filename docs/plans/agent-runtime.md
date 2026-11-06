@@ -8,6 +8,31 @@ because it is a control plane over agents, not another coding agent.
 Not the Settings → Advanced → Agent access work (API keys and MCP server), which
 is `docs/plans/agent-access.md` and draft PR #77.
 
+## Decisions recorded (2026-11-06)
+
+- One PR covers all five commits below.
+- Delegation: the human assignee keeps ownership; an agent is delegated to the
+  task (Linear-style).
+- Agent identity: workspace-level named agents plus a personal "my agent".
+- Review: agent completion sets a review state with approve / request changes /
+  retry actions and notifications.
+- Trigger scope for this PR: delegation starts a run; finish/failure sends
+  notifications. A schedule/status-trigger builder is a follow-up.
+- Runtime: the built-in API agent is selectable and used as the fallback when the
+  desktop runner is offline.
+- ACP adapter is part of commit 5; A2A stays a follow-up.
+- **Usage shows tokens only** (input/output/cached/reasoning), never USD, and
+  there is no model price table.
+- **Budget means a usage cap, not money.** A per-run cap (turns and tokens) plus
+  a monthly token allowance per agent/workspace. A run stops with a budget stop
+  reason when it reaches the cap. The monthly allowance is unset (unlimited)
+  until an owner sets it; the default per-run cap is 30 turns / 200,000 tokens.
+- **Subscription display:** for harnesses that report plan usage, show the used
+  or remaining percentage and reset window in Settings → Harness, the Agent
+  composer chip and the run snapshot. Codex is the first implementation (app-
+  server rate limits, CLI `/status` fallback). Harnesses that report nothing show
+  "not reported" plus where to check; nothing is guessed.
+
 ## Where TaCos sits
 
 TaCos is a **higher-level shell**, not an agent runtime. Its product is the team
@@ -85,7 +110,8 @@ Agent tab (`src/app/[workspaceId]/agent/`, `src/components/agent-chat.tsx`):
 - Context: the thread history is replayed into each new turn's prompt. No
   compaction, no summary, no context meter.
 - Usage/cost: `codex-gateway.ts` parses token usage from the Responses/Chat
-  Completions stream, but nothing persists or displays it; no budget.
+  Completions stream, but nothing persists or displays it. There is no token
+  budget and no display of a harness subscription's remaining quota.
 - Observability: per-turn timing (`turn-timing.ts`) and stderr/event logs
   (`turn-log.ts`, `~/.tacos/logs/harness/`), plus the issue timeline. No metrics,
   traces or eval harness.
@@ -161,6 +187,21 @@ LLM API / model layer:
   fixed/exponential backoff, rpm/tpm and budget limits, cost-based routing.
   https://docs.litellm.ai/docs/routing
 
+Subscription / plan usage (for the "remaining quota" surface):
+
+- Claude Code's status-line JSON exposes `rate_limits.five_hour.used_percentage`,
+  `rate_limits.seven_day.used_percentage` and `resets_at` for Pro/Max/Ultra
+  subscribers (plus a gateway spend limit). This is the clearest published shape
+  for "remaining subscription".
+  https://code.claude.com/docs/en/statusline
+- Codex shows usage limits in the CLI `/status` and the ChatGPT usage dashboard;
+  the app-server exposes account rate-limit reads that a client can display.
+  https://help.openai.com/en/articles/11369540-using-codex-with-your-chatgpt-plan
+  Confirm the exact app-server method while wiring the Codex adapter; keep the
+  `/status` text as the fallback.
+- Pi, opencode, CodeBuddy and dsh do not publish a standard quota API. Show "not
+  reported" and point at the CLI's own status command instead of estimating.
+
 ## Comparison: work-management shells with agents
 
 | Capability | TaCos today | Linear | Notion Custom Agents | GitHub Copilot agent | Asana / Rovo |
@@ -172,7 +213,7 @@ LLM API / model layer:
 | Scope/permissions | Project-bound thread + approval cards | Admin-managed team access | Explicit page/database grants | Repository permissions | Project/workspace permissions |
 | Review/approval | Approval cards; result as comment | Comments/status; human reviews | Activity, version history, reversible runs | Draft PR + review request | Approvals and activity |
 | Audit | Issue events + notifications | Activity feed | Agent activity + audit log (Enterprise) | PR/commit trail | Activity |
-| Usage/budget | None | Insights on delegation | Credits | Premium request billing | Usage |
+| Usage/budget | Tokens parsed then dropped; no plan quota | Insights on delegation | Credits | Premium request billing | Usage |
 | Runtime | Local CLI + desktop runner; no API loop | Hosted agents + coding-tool integration | Hosted | GitHub-hosted cloud | Hosted |
 | Collaboration | Shared threads and comments | Inbox/comments/filters | Shared workflows | PR collaboration | Team workspace |
 
@@ -185,7 +226,7 @@ not identity, delegation field, review flow, governance or automation.
 
 | Runtime | Loop owner | Tools | Sandbox | Sessions | Context | Subagents/skills/hooks | Approvals | Usage/telemetry | Extensibility |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| TaCos Agent today | Harness | TaCos MCP tools | CLI sandbox | Fresh CLI each turn, history replayed | None | Codex skills only | TaCos cards | Timing/logs | Five adapters |
+| TaCos Agent today | Harness | TaCos MCP tools | CLI sandbox | Fresh CLI each turn, history replayed | None | Codex skills only | TaCos cards | Tokens parsed then dropped; no plan quota | Five adapters |
 | Claude Code / Agent SDK | Built-in | Read/Edit/Bash/Web + MCP | Local/sandboxed | Resume/fork/store | Auto compaction | Subagents, skills, hooks, plugins | Permission modes/rules | Tokens + cost | SDK/library |
 | Codex app-server | Built-in | Shell/patch/plan/MCP/apps | Sandbox + network policy | Thread resume/fork/archive | Memory summary | Review/guardian workers, plugins | Approval requests, checkpoints | Telemetry | App-server protocol |
 | Cursor Agent | Built-in | Files/shell/search/web/browser/image | Local + cloud | Sessions + checkpoints | Context management | Subagents, skills, hooks, MCP | Approval/review | Usage | ACP, CLI, SDK |
@@ -199,13 +240,13 @@ native sessions, retries, context management and a standard extensibility seam.
 
 ## Comparison: LLM API and framework layer
 
-| Layer | Protocol | Loop | Tools | Sessions | Usage/cost | Retries/fallbacks/routing | Context |
+| Layer | Protocol | Loop | Tools | Sessions | Usage (tokens) | Retries/fallbacks/routing | Context |
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | TaCos today | Chat Completions for inline edit; Codex gateway translates Responses ↔ Chat | Harness-owned | Harness-side only | History replayed | Parsed then dropped | None | None |
 | OpenAI Responses + Agents SDK | Responses API; SDK runtime | SDK | Function/hosted/MCP tools | SDK sessions | SDK usage/tracing | SDK-level retries, model providers | SDK context management |
 | Claude API + Agent SDK | Messages API; SDK loop | SDK | Built-in + MCP + custom | Resume/fork/store | Usage + cost per result | Provider retries + SDK | Auto compaction |
 | LiteLLM router | OpenAI-compatible proxy | Caller | Caller | Caller | Spend logs, budgets | Load balance, fallbacks, timeouts, retries, rpm/tpm | Caller |
-| TaCos target | Chat Completions/Responses-compatible | Built-in loop | TaCos tools via MCP | Thread + native session ids | Ledger + budgets | Bounded retries + fallback endpoints | Compaction + meter |
+| TaCos target | Chat Completions/Responses-compatible | Built-in loop | TaCos tools via MCP | Thread + native session ids | Token ledger + token budget | Bounded retries + fallback endpoints | Compaction + meter |
 
 ## Comparison: integration protocols
 
@@ -228,8 +269,9 @@ Shell level (higher priority now that TaCos is a shell):
    request/queue, no approve/reject/redo actions tied to the run.
 3. **No workspace governance.** Project scope, harness permissions, approval
    defaults, budgets and audit for agents are not settable by an owner/admin.
-4. **No usage/cost visibility.** No per-agent, per-task or per-workspace spend;
-   no budget cap; runs cannot be stopped on cost.
+4. **No token usage or plan visibility.** No per-agent, per-task or per-workspace
+   token ledger, no token budget, and no display of a harness subscription's
+   remaining quota; runs cannot be stopped on usage.
 5. **No automation.** Delegation/status/mention triggers and scheduled agent
    runs do not exist; every run is manual.
 6. **Runtime availability is hidden.** Users cannot see which agents are ready,
@@ -291,23 +333,38 @@ to the shell plus the runtime seams, not to coding-agent features.
 - Selectable as an agent source: per-user API key (Settings → Model API),
   no desktop runner required; server mode can run it headless.
 - Reliability: bounded retries with exponential backoff on 429/5xx, timeout,
-  cancellation; fallback endpoint/model order; max turns and max estimated cost
-  per run (from commit 3's budget); structured stop reasons and a Retry action.
+  cancellation; fallback endpoint/model order; max turns and max tokens per run
+  (from commit 3's budget); structured stop reasons and a Retry action.
 - Context: stable system/tool prefix for prompt caching; compact older thread
   history into a summary when the token budget is reached; persist a
   `context_summary` and a compaction boundary step.
 
-### Commit 3 — Usage, governance and audit
+### Commit 3 — Token usage, subscription remaining, governance and audit
 
-- Usage ledger (tokens input/output/cached/reasoning, model, duration,
-  estimated cost) per turn/run, attributed to agent, task, thread, requester and
-  workspace. Codex gateway already parses usage; the API loop reports it;
-  adapters emit what their protocol provides.
+- Token ledger (input/output/cached/reasoning tokens, model, duration) per
+  turn/run, attributed to agent, task, thread, requester and workspace. Codex
+  gateway already parses usage; the API loop reports it; adapters emit what
+  their protocol provides. No USD and no price table.
+- Budget: (a) per-run caps — max turns and max tokens, default 30 turns /
+  200,000 tokens, applied to every runtime; (b) monthly token allowance per
+  agent and per workspace, unset until an owner sets one. A run that reaches a
+  cap stops with a `budget` stop reason, keeps what it produced, and notifies
+  the requester. Tokens are the unit because TaCos shows tokens, not money, and
+  subscription harnesses are not billed per token.
+- Subscription remaining: optional adapter method `subscription()` returning
+  plan label, windows (used/remaining percentage, reset time) and a source
+  (`app-server` | `cli` | `none`). Codex first via app-server rate limits, with
+  CLI `/status` as fallback; other harnesses return `none` and render "not
+  reported". Display in Settings → Harness (per row, with a refresh action), the
+  Agent composer (compact chip for the selected harness), and the run panel
+  (snapshot captured at run start; for server mode the snapshot comes from the
+  desktop runner's capabilities). Cache with a short TTL; never guess.
 - Workspace governance (owner/admin): which agent sources are enabled, allowed
-  projects, approval defaults (Ask/Auto/Full per agent), monthly budget and
-  per-run caps, and whether members may create personal agents.
-- Settings → Agents: agent list, edit/create, enable/disable, budget, usage,
-  last runs; Settings → Agent usage: per-day/per-agent/per-task spend.
+  projects, approval defaults (Ask/Auto/Full per agent), monthly token allowance
+  and per-run caps, and whether members may create personal agents.
+- Settings → Agents: agent list, edit/create, enable/disable, token budget,
+  token usage, subscription state, last runs; Settings → Agent usage:
+  per-day/per-agent/per-task token totals.
 - Audit: agent configuration changes, delegations, approvals/denials, budget
   stops and run results go into the existing events/activity stream; an admin
   audit view lists them.
@@ -342,11 +399,13 @@ to the shell plus the runtime seams, not to coding-agent features.
 - Docs: README, `docs/harness-contracts.md`, `docs/plans/agent-runtime.md`;
   plan status table.
 - Checks: `check-agent-delegation.ts` (delegate, ownership, filters, review,
-  notifications), `check-agent-usage.ts` (ledger, budget stop, attribution),
-  `check-agent-api-loop.ts` (fake OpenAI-compatible server: streaming, tool
-  call with approval, retry/backoff, budget stop, compaction), `check-agent-
-  session.ts` (native resume wiring, ACP basic handshake), plus updates to the
-  existing harness/agent checks. Smoke, `check:harness`, build, screenshots at
+  notifications), `check-agent-usage.ts` (token ledger, token budget stop,
+  attribution), `check-agent-subscription.ts` (adapter mapping for Codex rate
+  limits, "not reported" fallback, composer/Settings rendering), `check-agent-
+  api-loop.ts` (fake OpenAI-compatible server: streaming, tool call with
+  approval, retry/backoff, budget stop, compaction), `check-agent-session.ts`
+  (native resume wiring, ACP basic handshake), plus updates to the existing
+  harness/agent checks. Smoke, `check:harness`, build, screenshots at
   1440/1100.
 - Manual: one real desktop handoff run and one API-engine run.
 
@@ -369,47 +428,45 @@ to the shell plus the runtime seams, not to coding-agent features.
    appears in the task panel and in the run timeline.
 3. An owner/admin can enable/disable agent sources, limit projects, set approval
    defaults and budgets, and see the audit list of agent actions.
-4. Every completed/failed run records tokens, model, duration and estimated cost
-   against the agent/task/workspace; the usage pages agree with the ledger.
-5. A run stops at max turns/budget with a clear reason; retry works; transient
+4. Every completed/failed run records input/output/cached/reasoning tokens, model
+   and duration against the agent/task/workspace; the usage pages agree with the
+   ledger, and no USD or price estimate appears anywhere.
+5. A run stops at the turn/token cap with a clear reason; retry works; transient
    429/5xx and CLI crashes are retried with backoff and bounded.
-6. The built-in API agent runs a turn in server mode with only the viewer's API
+6. Settings → Harness, the Agent composer and the run panel show the harness
+   subscription's used/remaining percentage and reset window when the harness
+   reports it (Codex), and "not reported" with the CLI status command when it
+   does not.
+7. The built-in API agent runs a turn in server mode with only the viewer's API
    key (no desktop runner), with streaming, tools, approvals and persistence
    behaving like a harness turn.
-7. Harnesses with native sessions resume instead of replaying; the ACP adapter
+8. Harnesses with native sessions resume instead of replaying; the ACP adapter
    can run at least one ACP-compatible agent and maps permission requests to
    approval cards.
-8. Long API-loop threads compact and still answer follow-ups; the context meter
+9. Long API-loop threads compact and still answer follow-ups; the context meter
    warns before the cap.
-9. Existing harness turns, handoff runs, shared threads, forks, approvals and
-   runner behavior do not regress; `npm run check:harness`, `npx tsc --noEmit`,
-   i18n, agents-md and `npm run build` pass.
-10. README/docs describe agents, delegation, review, usage/budgets, API engine
-    and harness integration.
+10. Existing harness turns, handoff runs, shared threads, forks, approvals and
+    runner behavior do not regress; `npm run check:harness`, `npx tsc --noEmit`,
+    i18n, agents-md and `npm run build` pass.
+11. README/docs describe agents, delegation, review, token usage/budgets, the
+    subscription display, the API engine and harness integration.
 
-## Open decisions to confirm before coding
+## Remaining confirmations
 
-Even with one PR, these product choices shape the schema; the recommendations
-are the default unless the owner says otherwise.
+The decisions above follow the owner's "other items as recommended". Only the
+numbers and the subscription surfaces are worth a final look:
 
-1. **Delegation model**: human assignee keeps ownership and an agent is
-   delegated (recommended, Linear-style), or the agent becomes the assignee
-   (Copilot-style). Recommendation: Linear-style; it fits the existing
-   claim/status ownership rules.
-2. **Agent identity**: workspace-level named agents plus a personal "my agent"
-   (recommended), or only the current per-person handoff?
-3. **Review flow**: agent completion sets the task to review with explicit
-   approve/request-changes actions and notifications (recommended), or only a
-   comment?
-4. **Budgets**: monthly workspace budget plus per-run cap; recommend defaults
-   of $0 (unlimited until set) and a per-run cap of 30 turns / $1 for API runs.
-5. **Automation scope**: delegation and finish/failure triggers now (recommended)
-   vs a full schedule/status trigger builder in this PR.
-6. **ACP adapter** in commit 5 (recommended) — A2A stays a follow-up.
-7. **Cost table**: ship a small built-in per-model price table plus a custom
-   price override per endpoint (recommended), or tokens only until later.
-8. **API engine role**: selectable per run, and automatic fallback when the
-   runner is offline (recommended), or manual only?
+1. Per-run cap defaults: 30 turns and 200,000 tokens; the monthly token
+   allowance stays unset (unlimited) until an owner sets one. Adjust the
+   numbers if they are wrong for the team's subscriptions.
+2. Subscription surfaces: Settings → Harness row (detail + refresh), Agent
+   composer chip (compact), and the run panel snapshot. If one place is enough,
+   drop the run snapshot; if a fourth place is wanted (Agent page header), say
+   so.
+3. Codex is the only harness with a published quota source today. If another
+   harness gains one (for example a Claude Code harness later, using the
+   status-line `rate_limits` shape), wiring it is a small adapter addition, not
+   a new UI.
 
 ## Files likely touched
 
@@ -422,11 +479,12 @@ are the default unless the owner says otherwise.
 - New `src/lib/agent-api-loop.ts`, `src/lib/agent-usage.ts`,
   `src/lib/agent-context.ts`, `src/lib/agent-acp.ts`.
 - `src/lib/harness/types.ts`, adapters, `codex-gateway.ts` — usage/session/
-  error contract, native resume, retry.
+  error/subscription contract, native resume, retry, Codex rate-limit mapping.
 - `src/app/api/ai/chat/route.ts`, `/api/agent/*`, new review/delegation actions.
 - `src/components/agent-chat.tsx`, `agent-chat` subcomponents,
   `issue-panel/handoff-row.tsx` → delegation/review controls; settings pages.
 - `src/components/notifications-view.tsx` (if new notification types need copy
   or filters; no Inbox redesign here).
 - `src/lib/i18n/zh.ts`, README, `docs/harness-contracts.md`.
-- New checks listed above; existing harness/agent checks updated.
+- New checks listed above (including `check-agent-subscription.ts`); existing
+  harness/agent checks updated.
