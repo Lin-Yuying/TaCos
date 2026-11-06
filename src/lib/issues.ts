@@ -1941,8 +1941,10 @@ async function issueConditions(workspaceId: string, filters: ListFilters) {
       sql`NOT EXISTS (SELECT 1 FROM issue_assignees WHERE issue_assignees.issue_id = ${issues.id})`
     );
   } else if (filters.assigneeId) {
+    // A person's tasks are the ones assigned to them and the ones they claimed.
+    // Claiming leaves assignees as they are, so match claimed_by as well.
     conditions.push(
-      sql`EXISTS (SELECT 1 FROM issue_assignees WHERE issue_assignees.issue_id = ${issues.id} AND issue_assignees.user_id = ${filters.assigneeId})`
+      sql`(${issues.claimedBy} = ${filters.assigneeId} OR EXISTS (SELECT 1 FROM issue_assignees WHERE issue_assignees.issue_id = ${issues.id} AND issue_assignees.user_id = ${filters.assigneeId}))`
     );
   }
   if (filters.q) {
