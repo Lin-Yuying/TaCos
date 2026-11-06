@@ -1,6 +1,9 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { useSearchParams } from "next/navigation";
+import { DetailNavigation } from "@/components/detail-navigation";
+import { useScrollMemory } from "@/lib/ui/scroll-memory";
 import { useLiveTick } from "@/components/live-refresh";
 import { ISSUE_DELETED, useUI, type DeletedIssue } from "@/components/ui-context";
 import { addCommentAction, deleteIssueAction, restoreIssueAction, changeIssueCollectionAction, updateIssueDetailAction } from "@/app/actions";
@@ -75,6 +78,10 @@ function IssuePanel({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const scrollRef = useRef<HTMLDivElement | null>(null);
+  const requestedComment=useSearchParams().get("comment");
+  useScrollMemory(scrollRef,`task.${id}`,undefined,!!detail&&!requestedComment);
+  const locatedComment=useRef<string|null>(null);
+  useEffect(()=>{if(!detail||!requestedComment||locatedComment.current===requestedComment)return;const target=scrollRef.current?.querySelector<HTMLElement>(`[data-comment-id="${CSS.escape(requestedComment)}"]`);if(target){locatedComment.current=requestedComment;target.scrollIntoView({block:"center"});target.focus();}},[requestedComment,detail]);
   // A handed-off task just ended, and its result is a new comment.
   const [finished, setFinished] = useState(0);
   const { toast, confirm } = useUI();
@@ -124,8 +131,8 @@ function IssuePanel({
   async function submitComment() {
     if (!detail || !comment.trim() || busy) return;
     setBusy(true);
+    try {
     const result = await addCommentAction(workspaceId, detail.id, comment);
-    setBusy(false);
     if (result.ok) {
       setComment("");
       setDetail({ ...result.data.issue, comments: result.data.comments, events: result.data.events });
@@ -133,6 +140,7 @@ function IssuePanel({
     } else {
       setError(result.error);
     }
+    }catch{setError("Could not save. Retry.");}finally{setBusy(false);}
   }
 
   async function remove() {
@@ -170,6 +178,7 @@ function IssuePanel({
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
+      <div className="border-b border-border px-3 py-1"><DetailNavigation kind="task" id={id} workspaceId={workspaceId} panel/></div>
       <PanelHeader
         detail={detail}
         canChangeStatus={canChangeStatus}

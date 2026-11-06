@@ -4,6 +4,8 @@ import { EntityRow } from "@/components/ui/entity-row";
 
 import Link from "next/link";
 import { useParams } from "next/navigation";
+import { useScrollMemory } from "@/lib/ui/scroll-memory";
+import { usePathname } from "next/navigation";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useUI, isTyping } from "@/components/ui-context";
 import { AddIssueButton } from "@/components/add-issue-button";
@@ -140,15 +142,15 @@ export function AssigneeStack({
 export function IssueTable({ issues }: { issues: IssueWithLabels[] }) {
   const t = useT();
   const locale = useLocale();
-  const { openIssue, openIssueId, setFocused } = useUI();
+  const { openIssue, openIssueId, setFocused, pins } = useUI();
   const assigneeHref = useAssigneeHref();
   const groups = useMemo(
     () =>
-      STATUS_ORDER.map((status) => ({
+      [{status:"pinned" as const,items:issues.filter(issue=>pins.some(pin=>pin.kind==="task"&&pin.id===issue.id))},...STATUS_ORDER.map((status) => ({
         status,
-        items: issues.filter((issue) => issue.status === status),
-      })).filter((group) => group.items.length > 0),
-    [issues]
+        items: issues.filter((issue) => issue.status === status&&!pins.some(pin=>pin.kind==="task"&&pin.id===issue.id)),
+      }))].filter((group) => group.items.length > 0),
+    [issues,pins]
   );
 
   const visibleIssues = useMemo(() => groups.flatMap((group) => group.items), [groups]);
@@ -160,6 +162,7 @@ export function IssueTable({ issues }: { issues: IssueWithLabels[] }) {
     const index = typeof next === "function" ? next(found < 0 ? null : found) : next;
     return index === null ? null : visibleIssues[index]?.id ?? null;
   });
+  const scroller=useRef<HTMLDivElement>(null);const path=usePathname();useScrollMemory(scroller,`task-list.${path}`);
   const rowRefs = useRef<(HTMLDivElement | null)[]>([]);
 
   useEffect(() => {
@@ -210,16 +213,16 @@ export function IssueTable({ issues }: { issues: IssueWithLabels[] }) {
 
 
   return (
-    <div className="@container flex-1 overflow-y-auto">
+    <div ref={scroller} className="@container flex-1 overflow-y-auto">
       {groups.map((group) => (
         <div key={group.status}>
           <div className="sticky top-0 z-10 flex items-center gap-2 border-b border-border bg-bg/95 px-4 py-1.5 backdrop-blur @2xl:px-10 @4xl:px-20 @6xl:px-32">
-            <StatusIcon status={group.status} size={13} />
+            {group.status!=="pinned"&&<StatusIcon status={group.status} size={13} />}
             <span className="text-small font-medium text-muted">
-              {t(STATUS_META[group.status].label)}
+              {group.status==="pinned"?t("Pinned"):t(STATUS_META[group.status].label)}
             </span>
             <span className="text-small text-faint">{group.items.length}</span>
-            <AddIssueButton status={group.status} />
+            {group.status!=="pinned"&&<AddIssueButton status={group.status} />}
           </div>
           {group.items.map((issue) => {
             const index = visibleIssues.findIndex(item=>item.id===issue.id);

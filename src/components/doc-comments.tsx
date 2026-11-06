@@ -74,9 +74,11 @@ export function DocCommentsPanel({
   const setEditBody=(body:string)=>setEditDraft(old=>({...old,body}));
   const [actionError,setActionError]=useState<string|null>(null),[pending,setPending]=useState(false);
   const list=useRef<HTMLDivElement>(null);
-  useEffect(()=>{if(active)list.current?.querySelector(`[data-comment-id="${CSS.escape(active)}"]`)?.scrollIntoView({block:"nearest"});},[active,comments]);
+
   async function change(work:()=>Promise<{ok:boolean;data?:PageComment[];error?:string}>){if(pending)return;setPending(true);try{const result=await work();if(!result.ok){setActionError(result.error??"Could not save. Retry.");return;}if(result.data)onChanged(result.data);setEditId(null);setActionError(null);}catch{setActionError("Could not save. Retry.");}finally{setPending(false);}}
   const [showResolved, setShowResolved] = useState(false);
+  const resolvedVisible=showResolved||comments.some(comment=>comment.id===active&&comment.resolvedAt);
+  useEffect(()=>{if(active)list.current?.querySelector(`[data-comment-id="${CSS.escape(active)}"]`)?.scrollIntoView({block:"nearest"});},[active,resolvedVisible]);
   const open = comments.filter((comment) => !comment.resolvedAt);
   const resolved = comments.filter((comment) => comment.resolvedAt);
 
@@ -187,7 +189,7 @@ export function DocCommentsPanel({
             {t(showResolved ? "Hide {count} resolved" : "Show {count} resolved", { count: resolved.length })}
           </button>
         )}
-        {showResolved && resolved.map(row)}
+        {resolvedVisible && resolved.map(row)}
       </div>
       {canComment && <div className="shrink-0 border-t border-border p-2">
         {draftAnchor && (

@@ -175,8 +175,10 @@ export function DocumentEditor({
   onUpload,
   collab,
   editorRef,
+  onEditorReady,
 }: {
   editorRef?: { current: Editor | null };
+  onEditorReady?:(editor:Editor|null)=>void;
   value: string;
   onChange: (next: string) => void;
   placeholder?: string;
@@ -349,7 +351,7 @@ export function DocumentEditor({
     },
   });
 
-  useEffect(() => { if (editorRef) editorRef.current = editor; return () => { if (editorRef) editorRef.current = null; }; }, [editor, editorRef]);
+  useEffect(() => { if (editorRef) editorRef.current = editor;onEditorReady?.(editor); return () => { if (editorRef) editorRef.current = null;onEditorReady?.(null); }; }, [editor, editorRef,onEditorReady]);
 
   useEffect(() => {
     uploadRef.current = onUpload;
