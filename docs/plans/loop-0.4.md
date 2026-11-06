@@ -171,4 +171,5 @@ blocker (host, command, expected credential) and do not fake success.
 | U-09 views/task UX | merged | #87 | 117/117 checks, browser E2E (views/display/bulk/template/estimate), screenshots 1440/1100 |
 | U-04 documents | merged | #88 | 120/120 checks, browser E2E (backlinks/template/outline), screenshots 1440/1100 |
 | U-13b pages API | merged | #89 | 122/122 checks, HTTP + MCP network E2E |
-| #79 Agent runtime | implemented, checks green; review + browser E2E pending | — | branch `feat/agent-runtime`; 128/128 checks, tsc, i18n, build; delegation/review, API loop, usage/subscription, notifications, harness v2 + ACP |
+| #79 Agent runtime | merged | #90 | 128/128 checks; browser E2E: API agent delegation, review/approve, usage; 1440/1100 shots |
+| #80 internal automations | next | — | — |
