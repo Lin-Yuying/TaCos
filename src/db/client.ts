@@ -389,7 +389,14 @@ CREATE TABLE IF NOT EXISTS api_keys (
   created_by TEXT NOT NULL,
   created_at TEXT NOT NULL,
   last_used_at TEXT,
-  revoked_at TEXT
+  last_used_ip TEXT,
+  revoked_at TEXT,
+  scopes TEXT,
+  project_ids TEXT,
+  expires_at TEXT,
+  rotated_from TEXT,
+  key_prefix TEXT,
+  last4 TEXT
 );
 CREATE INDEX IF NOT EXISTS api_keys_workspace_idx ON api_keys (workspace_id);
 
@@ -875,6 +882,15 @@ function bootstrap(sqlite: Database.Database) {
   addColumnIfMissing(sqlite, "users", "role", "TEXT NOT NULL DEFAULT 'member'");
   addColumnIfMissing(sqlite, "users", "last_workspace_id", "TEXT");
   addColumnIfMissing(sqlite, "users", "locale", "TEXT");
+  // Scoped API keys. A database from before scopes keeps working: every new column is
+  // nullable, and null scopes/project_ids/expires_at mean full workspace access forever.
+  addColumnIfMissing(sqlite, "api_keys", "scopes", "TEXT");
+  addColumnIfMissing(sqlite, "api_keys", "project_ids", "TEXT");
+  addColumnIfMissing(sqlite, "api_keys", "expires_at", "TEXT");
+  addColumnIfMissing(sqlite, "api_keys", "rotated_from", "TEXT");
+  addColumnIfMissing(sqlite, "api_keys", "key_prefix", "TEXT");
+  addColumnIfMissing(sqlite, "api_keys", "last4", "TEXT");
+  addColumnIfMissing(sqlite, "api_keys", "last_used_ip", "TEXT");
   addColumnIfMissing(sqlite, "workspaces", "icon", "TEXT");
   addColumnIfMissing(sqlite, "workspaces", "created_by", "TEXT");
   addColumnIfMissing(sqlite, "workspaces", "deleted_at", "TEXT");

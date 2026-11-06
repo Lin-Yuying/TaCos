@@ -603,7 +603,18 @@ export const apiKeys = sqliteTable(
     createdBy: text("created_by").notNull(),
     createdAt: text("created_at").notNull(),
     lastUsedAt: text("last_used_at"),
+    lastUsedIp: text("last_used_ip"),
     revokedAt: text("revoked_at"),
+    // JSON arrays. null on both keeps a key created before scopes and project
+    // allowlists existed at its original full-workspace access.
+    scopes: text("scopes"),
+    projectIds: text("project_ids"),
+    expiresAt: text("expires_at"),
+    // The key this one replaced, so a rotation keeps its history.
+    rotatedFrom: text("rotated_from"),
+    // Shown in Settings after the plaintext key is gone.
+    keyPrefix: text("key_prefix"),
+    last4: text("last4"),
   },
   (t) => [index("api_keys_workspace_idx").on(t.workspaceId)]
 );

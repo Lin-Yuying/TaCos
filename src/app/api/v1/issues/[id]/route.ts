@@ -1,4 +1,4 @@
-import { errorResponse, readJsonBody, requireApiKey } from "@/lib/api-auth";
+import { assertKeyIssueProject, assertKeyProjectId, errorResponse, readJsonBody, requireApiKey } from "@/lib/api-auth";
 import { parseLabelNames, parsePriority, parseStatus } from "@/lib/api-input";
 import {
   assertSeesIssue,
@@ -32,6 +32,7 @@ export async function GET(req: Request, ctx: Ctx) {
     const { id } = await ctx.params;
     const detail = await getIssueDetail(key.workspaceId, id, key.createdBy);
     if (!detail) throw new TacosError(`Issue "${id}" not found`, 404);
+    assertKeyProjectId(key, detail.issue.projectId, detail.issue.projectKey);
     return Response.json(flatDetail(detail));
   } catch (err) {
     return errorResponse(err);
@@ -58,6 +59,7 @@ export async function PATCH(req: Request, ctx: Ctx) {
           : [];
     }
     await assertSeesIssue(key.workspaceId, id, key.createdBy);
+    await assertKeyIssueProject(key, id);
     const detail = await updateIssue(
       key.workspaceId,
       id,
@@ -100,6 +102,7 @@ export async function DELETE(req: Request, ctx: Ctx) {
     const key = await requireApiKey(req);
     const { id } = await ctx.params;
     await assertSeesIssue(key.workspaceId, id, key.createdBy);
+    await assertKeyIssueProject(key, id);
     const deleted = await deleteIssue(key.workspaceId, id);
     return Response.json({
       deleted: { id: deleted.id, identifier: deleted.identifier, title: deleted.title },

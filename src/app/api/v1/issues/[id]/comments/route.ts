@@ -1,4 +1,4 @@
-import { errorResponse, readJsonBody, requireApiKey } from "@/lib/api-auth";
+import { assertKeyIssueProject, assertKeyProjectId, errorResponse, readJsonBody, requireApiKey } from "@/lib/api-auth";
 import { addComment, assertSeesIssue, getIssueDetail, PRIORITY_NAMES, TacosError } from "@/lib/issues";
 
 type Ctx = { params: Promise<{ id: string }> };
@@ -9,6 +9,7 @@ export async function GET(req: Request, ctx: Ctx) {
     const { id } = await ctx.params;
     const detail = await getIssueDetail(key.workspaceId, id, key.createdBy);
     if (!detail) throw new TacosError(`Issue "${id}" not found`, 404);
+    assertKeyProjectId(key, detail.issue.projectId, detail.issue.projectKey);
     return Response.json(detail.comments);
   } catch (err) {
     return errorResponse(err);
@@ -24,6 +25,7 @@ export async function POST(req: Request, ctx: Ctx) {
       return Response.json({ error: "body is required" }, { status: 400 });
     }
     await assertSeesIssue(key.workspaceId, id, key.createdBy);
+    await assertKeyIssueProject(key, id);
     const detail = await addComment(key.workspaceId, id, body.body, {
       kind: "agent",
       label: `api:${key.name}`,

@@ -1864,6 +1864,9 @@ export type ListFilters = {
   status?: Status | "active" | "open" | "all";
   priority?: Priority;
   projectId?: string;
+  // A project-scoped API key passes its allowlist here so lists never include another
+  // project. An empty list matches nothing.
+  projectIds?: string[];
   assigneeId?: string | null; // null = unassigned
   createdByUserId?: string; // "My tasks" (assigned or created) handled by caller
   q?: string;
@@ -1943,6 +1946,10 @@ async function issueConditions(workspaceId: string, filters: ListFilters) {
   }
   if (filters.projectId) {
     conditions.push(eq(issues.projectId, filters.projectId));
+  }
+  if (filters.projectIds) {
+    if (filters.projectIds.length === 0) return null;
+    conditions.push(inArray(issues.projectId, filters.projectIds));
   }
   if (filters.assigneeId === null) {
     conditions.push(
@@ -3832,6 +3839,7 @@ export async function saveNotificationPrefs(
 
 // --- API keys ---
 
+export type ApiKeyScope = "read" | "write";
 export type ApiKeyRecord = {
   id: string;
   workspaceId: string;
@@ -3839,8 +3847,19 @@ export type ApiKeyRecord = {
   createdBy: string;
   createdAt: string;
   lastUsedAt: string | null;
+  lastUsedIp: string | null;
   revokedAt: string | null;
+  // null = a key from before scopes existed: full workspace read and write access.
+  scopes: ApiKeyScope[] | null;
+  // null = every project in the workspace.
+  projectIds: string[] | null;
+  expiresAt: string | null;
+  rotatedFrom: string | null;
+  keyPrefix: string | null;
+  last4: string | null;
 };
+
+export const API_KEY_EXPIRY_DAYS = [30, 90, 365] as const;
 
 function sha256(value: string) {
   return crypto.createHash("sha256").update(value).digest("hex");
@@ -3850,28 +3869,152 @@ export function generateApiKey() {
   return `tac_${crypto.randomBytes(24).toString("hex")}`;
 }
 
+function decodeList(raw: string | null): string[] | null {
+  if (raw == null) return null;
+  try {
+    const value = JSON.parse(raw) as unknown;
+    if (!Array.isArray(value)) return null;
+    return value.filter((entry): entry is string => typeof entry === "string");
+  } catch {
+    // Only this module writes these columns; a bad value keeps the legacy meaning
+    // instead of silently locking a working key out.
+    return null;
+  }
+}
+
+function decodeScopes(raw: string | null): ApiKeyScope[] | null {
+  const list = decodeList(raw);
+  if (list === null) return null;
+  const scopes = list.filter((entry): entry is ApiKeyScope => entry === "read" || entry === "write");
+  if (scopes.includes("write") && !scopes.includes("read")) scopes.unshift("read");
+  return scopes;
+}
+
+function mapApiKeyRow(row: typeof apiKeys.$inferSelect): ApiKeyRecord {
+  return {
+    id: row.id,
+    workspaceId: row.workspaceId,
+    name: row.name,
+    createdBy: row.createdBy,
+    createdAt: row.createdAt,
+    lastUsedAt: row.lastUsedAt ?? null,
+    lastUsedIp: row.lastUsedIp ?? null,
+    revokedAt: row.revokedAt ?? null,
+    scopes: decodeScopes(row.scopes),
+    projectIds: decodeList(row.projectIds),
+    expiresAt: row.expiresAt ?? null,
+    rotatedFrom: row.rotatedFrom ?? null,
+    keyPrefix: row.keyPrefix ?? null,
+    last4: row.last4 ?? null,
+  };
+}
+
+export function apiKeyHasScope(record: ApiKeyRecord, scope: ApiKeyScope): boolean {
+  if (record.scopes === null) return true;
+  if (scope === "read") return record.scopes.includes("read") || record.scopes.includes("write");
+  return record.scopes.includes("write");
+}
+
+export function apiKeyAllowsProject(record: ApiKeyRecord, projectId: string): boolean {
+  return record.projectIds === null || record.projectIds.includes(projectId);
+}
+
+export function isApiKeyExpired(record: ApiKeyRecord, now: string = nowIso()): boolean {
+  return record.expiresAt !== null && record.expiresAt <= now;
+}
+
+function normalizeApiKeyScopes(scopes: ApiKeyScope[]): ApiKeyScope[] {
+  const normalized = new Set<ApiKeyScope>();
+  for (const scope of scopes) {
+    if (scope !== "read" && scope !== "write") {
+      throw new TacosError(`Unknown API key scope "${String(scope)}"`);
+    }
+    normalized.add(scope);
+  }
+  if (normalized.has("write")) normalized.add("read");
+  if (normalized.size === 0) throw new TacosError("Pick at least the read scope");
+  return ["read", "write"].filter((scope): scope is ApiKeyScope => normalized.has(scope as ApiKeyScope));
+}
+
+async function normalizeApiKeyProjects(
+  workspaceId: string,
+  projectIds: string[] | null
+): Promise<string[] | null> {
+  if (projectIds === null || projectIds.length === 0) return null;
+  const live = await listProjects(workspaceId);
+  const allowed = new Map(live.map((project) => [project.id, project.key]));
+  const unique = [...new Set(projectIds)];
+  for (const id of unique) {
+    if (!allowed.has(id)) {
+      throw new TacosError(`Project "${id}" is not in this workspace`, 400, "Pick projects from the workspace list");
+    }
+  }
+  return unique;
+}
+
 export async function createApiKey(
   workspaceId: string,
   name: string,
+  scopes: ApiKeyScope[],
+  projectIds: string[] | null,
+  expiresInDays: number | null,
   createdBy: string
 ): Promise<{ key: string; record: ApiKeyRecord }> {
   const trimmed = name.trim();
   if (!trimmed) throw new TacosError("API key name is required");
+  const normalizedScopes = normalizeApiKeyScopes(scopes);
+  const normalizedProjects = await normalizeApiKeyProjects(workspaceId, projectIds);
+  if (expiresInDays !== null && !API_KEY_EXPIRY_DAYS.includes(expiresInDays as (typeof API_KEY_EXPIRY_DAYS)[number])) {
+    throw new TacosError("Expiry must be 30, 90 or 365 days");
+  }
+  if (expiresInDays === null) {
+    const facts = await workspaceFacts(workspaceId, createdBy);
+    if (facts.ownerId !== createdBy && facts.role !== "admin") {
+      throw new TacosError("Only a workspace admin can create a key that never expires", 403);
+    }
+  }
   const key = generateApiKey();
-  const record = {
+  const now = nowIso();
+  const record: ApiKeyRecord = {
     id: crypto.randomUUID(),
     workspaceId,
     name: trimmed,
     createdBy,
-    createdAt: nowIso(),
+    createdAt: now,
     lastUsedAt: null,
+    lastUsedIp: null,
     revokedAt: null,
+    scopes: normalizedScopes,
+    projectIds: normalizedProjects,
+    expiresAt: expiresInDays === null ? null : new Date(Date.now() + expiresInDays * 86_400_000).toISOString(),
+    rotatedFrom: null,
+    keyPrefix: key.slice(0, 8),
+    last4: key.slice(-4),
   };
-  await getDb().insert(apiKeys).values({ ...record, keyHash: sha256(key) });
+  await getDb().insert(apiKeys).values({
+    id: record.id,
+    workspaceId,
+    name: record.name,
+    keyHash: sha256(key),
+    createdBy,
+    createdAt: now,
+    lastUsedAt: null,
+    lastUsedIp: null,
+    revokedAt: null,
+    scopes: JSON.stringify(record.scopes),
+    projectIds: record.projectIds ? JSON.stringify(record.projectIds) : null,
+    expiresAt: record.expiresAt,
+    rotatedFrom: null,
+    keyPrefix: record.keyPrefix,
+    last4: record.last4,
+  });
   return { key, record };
 }
 
-export async function verifyApiKey(rawKey: string, options: { recordUse?: boolean } = {}): Promise<ApiKeyRecord | null> {
+export async function verifyApiKey(
+  rawKey: string,
+  options: { recordUse?: boolean; ip?: string | null } = {}
+): Promise<ApiKeyRecord | null> {
   const db = getDb();
   const [row] = await db
     .select({ key: apiKeys, deletedAt: workspaces.deletedAt })
@@ -3882,7 +4025,8 @@ export async function verifyApiKey(rawKey: string, options: { recordUse?: boolea
   // A workspace in the recycle bin is closed to agents too, unlike a merely trashed
   // project where the rest of the team keeps working.
   if (!row || row.key.revokedAt || row.deletedAt) return null;
-  const record = row.key;
+  const record = mapApiKeyRow(row.key);
+  if (isApiKeyExpired(record)) return null;
   // A key stands for the person who made it, so it leaves the workspace with them.
   const [creator] = await db
     .select({ userId: workspaceMembers.userId })
@@ -3890,34 +4034,31 @@ export async function verifyApiKey(rawKey: string, options: { recordUse?: boolea
     .where(and(eq(workspaceMembers.workspaceId, record.workspaceId), eq(workspaceMembers.userId, record.createdBy)))
     .limit(1);
   if (!creator) return null;
-  if (options.recordUse !== false) {const at=nowIso();await recordApiKeyUsage(record.id,at);record.lastUsedAt=at;}
-  return {
-    id: record.id,
-    workspaceId: record.workspaceId,
-    name: record.name,
-    createdBy: record.createdBy,
-    createdAt: record.createdAt,
-    lastUsedAt: record.lastUsedAt,
-    revokedAt: record.revokedAt,
-  };
+  if (options.recordUse !== false) {
+    const at = nowIso();
+    await recordApiKeyUsage(record.id, at, options.ip ?? null);
+    record.lastUsedAt = at;
+    if (options.ip) record.lastUsedIp = options.ip;
+  }
+  return record;
 }
 
 export async function listApiKeys(workspaceId: string): Promise<ApiKeyRecord[]> {
-  const pending=await pendingApiKeyUsage();
-  const rows=await getDb()
-    .select({
-      createdBy: apiKeys.createdBy,
-      id: apiKeys.id,
-      workspaceId: apiKeys.workspaceId,
-      name: apiKeys.name,
-      createdAt: apiKeys.createdAt,
-      lastUsedAt: apiKeys.lastUsedAt,
-      revokedAt: apiKeys.revokedAt,
-    })
+  const pending = await pendingApiKeyUsage();
+  const rows = await getDb()
+    .select()
     .from(apiKeys)
     .where(eq(apiKeys.workspaceId, workspaceId))
     .orderBy(apiKeys.createdAt);
-  return rows.map(row=>({...row,lastUsedAt:row.lastUsedAt && row.lastUsedAt>(pending.get(row.id)??"")?row.lastUsedAt:pending.get(row.id)??row.lastUsedAt}));
+  return rows.map((row) => {
+    const record = mapApiKeyRow(row);
+    const use = pending.get(row.id);
+    if (use && (!record.lastUsedAt || use.at >= record.lastUsedAt)) {
+      record.lastUsedAt = use.at;
+      record.lastUsedIp = use.ip ?? record.lastUsedIp;
+    }
+    return record;
+  });
 }
 
 export async function revokeApiKey(workspaceId: string, id: string, actorId: string) {
@@ -3935,6 +4076,73 @@ export async function revokeApiKey(workspaceId: string, id: string, actorId: str
     .update(apiKeys)
     .set({ revokedAt: nowIso() })
     .where(and(eq(apiKeys.id, id), eq(apiKeys.workspaceId, workspaceId)));
+}
+
+// Rotation keeps the key's name, scopes, projects and remaining lifetime, revokes the old
+// row in the same transaction and shows the replacement exactly once. The old key stops
+// working immediately; a grace window is a follow-up, not part of this PR.
+export async function rotateApiKey(
+  workspaceId: string,
+  id: string,
+  actorId: string
+): Promise<{ key: string; record: ApiKeyRecord }> {
+  const db = getDb();
+  const [row] = await db
+    .select()
+    .from(apiKeys)
+    .where(and(eq(apiKeys.id, id), eq(apiKeys.workspaceId, workspaceId)))
+    .limit(1);
+  if (!row || row.revokedAt) throw new TacosError("API key not found", 404);
+  const facts = await workspaceFacts(workspaceId, actorId);
+  const allowed = row.createdBy === actorId || facts.ownerId === actorId || facts.role === "admin";
+  if (!allowed) throw new TacosError("Only the key's owner or an admin can rotate it", 403);
+  const old = mapApiKeyRow(row);
+  const key = generateApiKey();
+  const now = nowIso();
+  const lifetimeMs =
+    old.expiresAt === null ? null : Math.max(0, Date.parse(old.expiresAt) - Date.parse(old.createdAt));
+  const record: ApiKeyRecord = {
+    id: crypto.randomUUID(),
+    workspaceId,
+    name: old.name,
+    createdBy: old.createdBy,
+    createdAt: now,
+    lastUsedAt: null,
+    lastUsedIp: null,
+    revokedAt: null,
+    scopes: old.scopes,
+    projectIds: old.projectIds,
+    expiresAt: lifetimeMs === null ? null : new Date(Date.now() + lifetimeMs).toISOString(),
+    rotatedFrom: old.id,
+    keyPrefix: key.slice(0, 8),
+    last4: key.slice(-4),
+  };
+  db.transaction((tx) => {
+    tx.update(apiKeys)
+      .set({ revokedAt: now })
+      .where(and(eq(apiKeys.id, id), eq(apiKeys.workspaceId, workspaceId)))
+      .run();
+    tx.insert(apiKeys)
+      .values({
+        id: record.id,
+        workspaceId,
+        name: record.name,
+        keyHash: sha256(key),
+        createdBy: record.createdBy,
+        createdAt: now,
+        lastUsedAt: null,
+        lastUsedIp: null,
+        revokedAt: null,
+        scopes: record.scopes ? JSON.stringify(record.scopes) : null,
+        projectIds: record.projectIds ? JSON.stringify(record.projectIds) : null,
+        expiresAt: record.expiresAt,
+        rotatedFrom: record.rotatedFrom,
+        keyPrefix: record.keyPrefix,
+        last4: record.last4,
+      })
+      .run();
+  });
+  return { key, record };
 }
 
 // H-COLLAB-11: the due moment is the end of the due day in server local time.

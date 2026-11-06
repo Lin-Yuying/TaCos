@@ -60,7 +60,7 @@ async function main() {
   }
   assert(self, "a task cannot be a subtask of itself");
 
-  const { key } = await createApiKey(ws, "subtasks", user.id);
+  const { key } = await createApiKey(ws, "subtasks", ["read", "write"], null, 90, user.id);
   const { POST } = await import("../src/app/api/v1/issues/route");
   const created = await POST(
     new Request("http://localhost/api/v1/issues", {
