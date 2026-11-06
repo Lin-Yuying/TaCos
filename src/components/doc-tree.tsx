@@ -5,7 +5,7 @@ import { EntityRow } from "@/components/ui/entity-row";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { ChevronRight, FileText, Loader2, Lock, Plus, Users } from "lucide-react";
+import { ChevronRight, FileText, Lock, Users } from "lucide-react";
 import {
   draggable,
   dropTargetForElements,
@@ -17,7 +17,8 @@ import {
   type Instruction,
 } from "@atlaskit/pragmatic-drag-and-drop-hitbox/tree-item";
 import { useUI } from "@/components/ui-context";
-import { createPageAction, movePageAction, previewPageMoveAction, setPageSharedAction } from "@/app/pages-actions";
+import { movePageAction, previewPageMoveAction } from "@/app/pages-actions";
+import { NewPageMenu } from "@/components/new-page-menu";
 import { useT } from "@/components/i18n-context";
 import type { PageSummary } from "@/lib/pages";
 import { useStoredJson } from "@/lib/use-stored-json";
@@ -151,9 +152,6 @@ function DocSection({
   label,
   icon,
   roots,
-  creating,
-  createBusy,
-  onCreate,
   rowProps,
 }: {
   workspaceId: string;
@@ -161,9 +159,6 @@ function DocSection({
   label: string;
   icon: React.ReactNode;
   roots: PageSummary[];
-  creating: boolean;
-  createBusy: boolean;
-  onCreate: () => void;
   rowProps: Pick<
     React.ComponentProps<typeof DocRow>,
     "byParent" | "isOpen" | "onToggle" | "active" | "blocked"
@@ -195,17 +190,12 @@ function DocSection({
           <span className="flex shrink-0 items-center justify-center">{icon}</span>
           {label}
         </span>
-        <button
-          type="button"
-          title={t("New document")}
-          aria-label={t("New document")}
-          aria-busy={creating}
-          disabled={createBusy}
-          onClick={onCreate}
+        <NewPageMenu
+          workspaceId={workspaceId}
+          shared={sectionShared}
+          variant="icon"
           className="rounded p-1 text-faint transition-colors hover:bg-elevated hover:text-text disabled:opacity-50"
-        >
-          {creating ? <Loader2 size={13} className="animate-spin" /> : <Plus size={13} />}
-        </button>
+        />
       </div>
       {roots.length === 0 ? (
         <div className="px-2 py-1 text-small text-faint">{t("No documents yet")}</div>
@@ -240,8 +230,6 @@ export function DocTree({ workspaceId, pages }: { workspaceId: string; pages: Pa
   const [error, setError] = useState<string | null>(null);
   const root=useRef<HTMLDivElement>(null);
   const routeActive = pathname.match(new RegExp(`^/${workspaceId}/docs/([^/]+)$`))?.[1] ?? null;
-  const [creating, setCreating] = useState<"shared" | "private" | null>(null);
-
   const active=openPageId??routeActive;
   useEffect(()=>{if(active)root.current?.querySelector(`[data-doc-row="${CSS.escape(active)}"]`)?.scrollIntoView({block:"nearest"});},[active,pages]);
   const { byId, byParent } = useMemo(() => {
@@ -340,20 +328,6 @@ export function DocTree({ workspaceId, pages }: { workspaceId: string; pages: Pa
     [byId, byParent]
   );
 
-  async function create(shared: boolean) {
-    setCreating(shared ? "shared" : "private");
-    const result = await createPageAction(workspaceId);
-    if (!result.ok) {
-      setCreating(null);
-      setError(result.error);
-      return;
-    }
-    if (shared) await setPageSharedAction(workspaceId, result.data.id, true);
-    router.push(`/${workspaceId}/docs/${result.data.id}`);
-    router.refresh();
-    setCreating(null);
-  }
-
   const roots = byParent.get(null) ?? [];
   const rowProps = { byParent, isOpen, onToggle: toggle, active, blocked };
 
@@ -365,9 +339,6 @@ export function DocTree({ workspaceId, pages }: { workspaceId: string; pages: Pa
         label={t("Shared")}
         icon={<Users size={11} />}
         roots={roots.filter((page) => page.shared)}
-        creating={creating === "shared"}
-        createBusy={creating !== null}
-        onCreate={() => void create(true)}
         rowProps={rowProps}
       />
       <DocSection
@@ -376,9 +347,6 @@ export function DocTree({ workspaceId, pages }: { workspaceId: string; pages: Pa
         label={t("Private")}
         icon={<Lock size={11} />}
         roots={roots.filter((page) => !page.shared)}
-        creating={creating === "private"}
-        createBusy={creating !== null}
-        onCreate={() => void create(false)}
         rowProps={rowProps}
       />
       {error && <div className="px-2 py-1 text-small text-danger">{t(error)}</div>}

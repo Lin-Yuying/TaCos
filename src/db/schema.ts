@@ -256,6 +256,10 @@ export const pages = sqliteTable(
     // so a restore brings back exactly that subtree.
     deletedAt: text("deleted_at"),
     trashRoot: text("trash_root"),
+    // Where this page started: a template, kept by name so deleting the template does not
+    // change the page's history or header.
+    templateId: text("template_id"),
+    templateName: text("template_name"),
     createdAt: text("created_at").notNull(),
     updatedAt: text("updated_at").notNull(),
   },
@@ -264,6 +268,23 @@ export const pages = sqliteTable(
     index("pages_parent_idx").on(t.parentId),
     index("pages_project_idx").on(t.projectId),
   ]
+);
+
+// A reusable document body and title. Workspace-level; the owner or an admin curates it.
+export const pageTemplates = sqliteTable(
+  "page_templates",
+  {
+    id: text("id").primaryKey(),
+    workspaceId: text("workspace_id").notNull(),
+    name: text("name").notNull(),
+    title: text("title").notNull(),
+    doc: text("doc").notNull().default(""),
+    icon: text("icon"),
+    createdBy: text("created_by").notNull(),
+    createdAt: text("created_at").notNull(),
+    updatedAt: text("updated_at").notNull(),
+  },
+  (t) => [index("page_templates_workspace_idx").on(t.workspaceId)]
 );
 
 // One row per page-to-page reference. v1 is page → page only (source_kind is 'page');
@@ -300,9 +321,12 @@ export const pageVersions = sqliteTable(
     actorId: text("actor_id").notNull(),
     // you | mcp
     via: text("via").notNull(),
-    // edit | restore | earlier (the text before history started) | unsaved (refused text
-    // kept when its writer left the page; never the page's current text)
+    // edit | template (the page's first text, filled from a template) | restore |
+    // earlier (the text before history started) | unsaved (refused text kept when its
+    // writer left the page; never the page's current text)
     reason: text("reason").notNull(),
+    // The template this version started from, kept as a name; null for ordinary edits.
+    templateName: text("template_name"),
     restoredFrom: integer("restored_from"),
     createdAt: text("created_at").notNull(),
     updatedAt: text("updated_at").notNull(),

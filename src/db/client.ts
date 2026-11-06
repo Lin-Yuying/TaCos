@@ -326,10 +326,27 @@ CREATE TABLE IF NOT EXISTS page_collab (
   via TEXT NOT NULL,
   reason TEXT NOT NULL,
   restored_from INTEGER,
+  template_name TEXT,
   created_at TEXT NOT NULL,
   updated_at TEXT NOT NULL
 );
 CREATE UNIQUE INDEX IF NOT EXISTS page_versions_page_seq_idx ON page_versions (page_id, seq);
+
+-- A reusable starting point for a new document; owned by the workspace, curated by its
+-- owner or an admin. Existing pages keep a snapshot of the source, so deleting a template
+-- changes nothing for them.
+CREATE TABLE IF NOT EXISTS page_templates (
+  id TEXT PRIMARY KEY,
+  workspace_id TEXT NOT NULL,
+  name TEXT NOT NULL,
+  title TEXT NOT NULL,
+  doc TEXT NOT NULL DEFAULT '',
+  icon TEXT,
+  created_by TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS page_templates_workspace_idx ON page_templates (workspace_id);
 
 -- One row per page-to-page reference. v1 is page → page only; source_kind keeps the
 -- column ready for task and comment sources without a second table. Target titles are
@@ -1164,6 +1181,9 @@ function bootstrap(sqlite: Database.Database) {
   addColumnIfMissing(sqlite, "pages", "share_level", "TEXT NOT NULL DEFAULT 'edit'");
   addColumnIfMissing(sqlite, "pages", "deleted_at", "TEXT");
   addColumnIfMissing(sqlite, "pages", "trash_root", "TEXT");
+  addColumnIfMissing(sqlite, "pages", "template_id", "TEXT");
+  addColumnIfMissing(sqlite, "pages", "template_name", "TEXT");
+  addColumnIfMissing(sqlite, "page_versions", "template_name", "TEXT");
   addColumnIfMissing(sqlite, "issues", "reminder_sent_for", "TEXT");
   const reminderScheduleFresh=!sqlite.prepare("PRAGMA table_info(issues)").all().some((row)=> (row as {name:string}).name==="reminder_next_fire");
   addColumnIfMissing(sqlite,"issues","reminder_next_fire","INTEGER");

@@ -9,9 +9,10 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useScrollMemory } from "@/lib/ui/scroll-memory";
 import { useMemo, useRef, useState } from "react";
-import { FileText, FolderOpen, Lock, Plus, Upload, Users } from "lucide-react";
-import { createPageAction, importMarkdownAction } from "@/app/pages-actions";
+import { FileText, FolderOpen, Lock, Upload, Users } from "lucide-react";
+import { importMarkdownAction } from "@/app/pages-actions";
 import { Menu, MenuItem } from "@/components/menu";
+import { NewPageMenu } from "@/components/new-page-menu";
 import { documentIndex } from "@/lib/ui/document-index";
 import { useStoredJson } from "@/lib/use-stored-json";
 import { useUI } from "@/components/ui-context";
@@ -45,8 +46,6 @@ export function DocsIndex({
   const filesRef = useRef<HTMLInputElement>(null);
   const folderRef = useRef<HTMLInputElement>(null);
   const importing = useRef(false);
-  const creatingRef=useRef(false);
-  const [creating,setCreating]=useState(false);
   const {scope,pins}=useUI();
   const scroller=useRef<HTMLDivElement>(null);useScrollMemory(scroller,"documents-index");
   const [query,setQuery]=useState("");
@@ -58,19 +57,6 @@ export function DocsIndex({
     ((ranks.get(a.id)??Infinity)-(ranks.get(b.id)??Infinity))||(sort==="title"?a.title.localeCompare(b.title):sort==="path"?(index.paths.get(a.id)??"").localeCompare(index.paths.get(b.id)??""):b.updatedAt.localeCompare(a.updatedAt))),[pages,index,query,sort,ranks]);
   const sharedPages = shown.filter((page) => page.shared);
   const privatePages = shown.filter((page) => !page.shared);
-
-  async function createPage() {
-    if(creatingRef.current)return;
-    creatingRef.current=true;setCreating(true);
-    try {
-    const result = await createPageAction(workspaceId);
-    if (!result.ok) {
-      setError(result.error);
-      return;
-    }
-    router.push(`/${workspaceId}/docs/${result.data.id}`);
-    }catch{setError("Could not save. Retry.");}finally{creatingRef.current=false;setCreating(false);}
-  }
 
   async function importFiles(picked: File[], stripRoot: boolean) {
     if (importing.current) return;
@@ -171,13 +157,7 @@ export function DocsIndex({
                 </>
               )}
             </Menu>
-            <button
-              type="button"
-              disabled={creating} onClick={() => void createPage()}
-              className="flex shrink-0 items-center gap-1 rounded-md border border-border px-2.5 py-1.5 text-small font-medium text-muted transition-colors hover:border-border-strong hover:text-text"
-            >
-              <Plus size={13} /> {t("New document")}
-            </button>
+            <NewPageMenu workspaceId={workspaceId} />
           </div>
         </div>
         {/* Folder structure becomes the page tree, so subfolders arrive as subpages. */}

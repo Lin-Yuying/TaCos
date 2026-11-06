@@ -27,6 +27,8 @@ function versionLabel(version: PageVersion, t: ReturnType<typeof useT>): string 
   if (version.reason === "unsaved") return t("Unsaved text from {name}", { name });
   if (version.reason === "undo") return `${name} · ${t("Undid version {n}", { n: version.restoredFrom ?? 0 })}`;
   if (version.reason === "restore") return `${name} · ${t("Restored version {n}", { n: version.restoredFrom ?? 0 })}`;
+  if (version.reason === "template")
+    return t("Created from template “{template}”", { template: version.templateName ?? t("Template") });
   return name;
 }
 
