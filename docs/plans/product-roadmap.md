@@ -1,10 +1,10 @@
 # Product roadmap: future PR pipeline
 
-Status: living plan, round 1 (2026-11-06). Plans first, implementation later,
-one PR at a time. Existing plans are #77 (Agent access), #78 (Inbox), #79
-(Agent) and #80 (automations/integrations). This document tracks everything
-after them as **U-02, U-03, …** (upcoming PRs; U-01 is deferred, see below).
-Real GitHub PR numbers are assigned when a plan/implementation PR is opened.
+Status: **historical planning record**, superseded for sequencing on
+2026-11-06 by `docs/plans/roadmap-5p.md` (five-person internal, desktop-only
+team). The individual plan documents remain the detailed reference; U-01, U-06,
+U-07 and U-08 are not planned. This file keeps the earlier proposals for
+context. Real GitHub PR numbers are assigned when a PR is opened.
 
 The loop this plan runs in: each round deep-dives one or two product areas,
 writes or updates a plan document, opens a draft plan PR, and reports back. No
@@ -24,7 +24,7 @@ production code is written until the owner approves a plan and says to start.
 | Notifications | In-app Inbox + unread badge; #78 overhauls it | No email/push |
 | Agent | Chat threads, 5 CLI harnesses, approvals, handoff runs, shared threads, skills; #79 upgrades identity/delegation/review/usage | No built-in API loop yet, no native sessions/compaction (in #79) |
 | Agent access | REST API keys + stdio MCP server; #77 adds scopes/expiry/remote MCP | — |
-| Automations & integrations | None; #80 plans rules + webhooks + Slack/GitHub | No code exists |
+| Automations | None; #80 is an internal-rules-only plan, deferred, no integrations | No code exists |
 | Insights & analytics | None | No dashboards, cycle time or usage reporting |
 | Planning | None | No cycles, milestones, roadmap, goals |
 | Desktop & self-host | Thin/standalone Electron builds, auto-update, server mode + SSH tunnel + desktop runner, storage/recovery settings | No mobile/PWA, no hosted option |
@@ -244,10 +244,10 @@ Round 6 (next): consolidate the PR sequence and implementation waves below,
 verify every area has a plan, then mark the loop complete. Implementation starts
 only after the owner approves the plans.
 
-## 6. Implementation order (recommended waves)
+## 6. Implementation order (historical proposal; use roadmap-5p.md)
 
-The plans are written; the owner still chooses the order. Recommended waves
-respect dependencies and put value early:
+The waves below were the pre-reset proposal. The active five-person sequence is
+in `docs/plans/roadmap-5p.md`.
 
 1. **Foundation (small, independent)**: #78 Inbox → #77 Agent access →
    U-13a external projects/task surface.
