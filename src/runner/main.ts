@@ -12,6 +12,7 @@ import { codexDefaults, listCodexSkills, openCliStream, skillsInText } from "@/l
 import { clearHarnessDetectCache, warmHarnessDetectCache } from "@/lib/harness/detect-bin";
 import { readyWithKeys, signedInHarnesses } from "@/lib/harness/gate";
 import { listComposerModels, resolveTurnModel, type ModelAccess } from "@/lib/harness/models";
+import { codexSubscription } from "@/lib/harness/adapters/codex-subscription";
 import { FIRST_CLASS_HARNESS_IDS, getHarnessAdapter, listHarnessDetect } from "@/lib/harness/registry";
 import { attachTurnFiles, fileName, type TurnFile } from "@/lib/harness/turn-files";
 import { turnTimer, writeTurnTiming, type TurnTimer } from "@/lib/harness/turn-timing";
@@ -62,6 +63,13 @@ async function capabilities(): Promise<RunnerCapabilities> {
     skills: await listCodexSkills(),
     editModel: config.editProvider ? config.editModel : null,
     codexDefaults: codexDefaults(),
+    subscriptions: { codex: await codexSubscription().catch(() => ({
+      source: "none" as const,
+      plan: null,
+      windows: [],
+      hint: "Run codex, then /status.",
+      checkedAt: new Date().toISOString(),
+    })) },
   };
   cached = { at: Date.now(), value };
   return value;
@@ -205,6 +213,7 @@ async function* turnEvents(
     proxy: config.proxy || payload.proxy,
     keys,
     timeoutMs: payload.timeoutMs,
+    nativeSessionId: payload.nativeSessionId ?? null,
     mcp: run.toolToken ? mcpShim(run.toolToken, timingFile) : null,
   });
   } finally {
@@ -287,7 +296,15 @@ async function execute(run: ClaimedRun): Promise<void> {
   const stopWatching = watchCancel(run.id, abort);
   log(`run ${run.id}: ${run.payload.kind} started`);
   try {
-    const events = run.payload.kind === "turn" ? turnEvents(run, run.payload, abort, timingFile) : editEvents(run.payload, abort);
+    const events =
+      run.payload.kind === "turn"
+        ? turnEvents(run, run.payload, abort, timingFile)
+        : run.payload.kind === "edit"
+          ? editEvents(run.payload, abort)
+          : (async function* () {
+              // A delegation payload is replaced by beginDelegation before it reaches a runner.
+              yield { type: "error" as const, message: "This delegated run was not prepared on the server." };
+            })();
     for await (const event of events) {
       timer.event(event);
       await sender.push(event);

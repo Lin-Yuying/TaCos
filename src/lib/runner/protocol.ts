@@ -1,5 +1,5 @@
 import type { AgentSkill, CodexModel } from "@/lib/ai-constants";
-import type { DetectResult, HarnessId, TurnEvent } from "@/lib/harness/types";
+import type { DetectResult, HarnessId, SubscriptionInfo, TurnEvent } from "@/lib/harness/types";
 
 // What travels between the server and a member's computer. Nothing here holds a model key.
 
@@ -12,6 +12,8 @@ export type RunnerCapabilities = {
   // The model that answers inline edits, when this computer has an API for them.
   editModel: string | null;
   codexDefaults?: { model: string; effort: string };
+  // #79: plan usage as this computer last read it. Only harnesses that report it appear.
+  subscriptions?: Partial<Record<HarnessId, SubscriptionInfo>>;
 };
 
 export type TurnPayload = {
@@ -32,6 +34,29 @@ export type TurnPayload = {
   approvalWaitMs?: number;
   /** File bytes for the member runner to write into the turn folder before `openTurn`. */
   attachments?: { id: string; name: string }[];
+  /** #79: the harness's own session for this thread, when one can be resumed. */
+  nativeSessionId?: string | null;
+};
+
+/**
+ * #79: a queued delegation. The server swaps it for a TurnPayload in `beginDelegation`
+ * right before the computer runs it, so this only needs enough to find the task and agent.
+ */
+export type DelegationPayload = {
+  kind: "delegation";
+  harness: HarnessId;
+  agentId: string;
+  agentName: string;
+  message: string;
+};
+
+/** A delegation that runs the built-in API loop on the server; never claimed by a runner. */
+export type ApiDelegationPayload = {
+  kind: "api-delegation";
+  agentId: string;
+  agentName: string;
+  message: string;
+  fallbackFrom?: string;
 };
 
 export type EditPayload = {
@@ -46,7 +71,7 @@ export type EditPayload = {
   json?: boolean;
 };
 
-export type RunPayload = TurnPayload | EditPayload;
+export type RunPayload = TurnPayload | EditPayload | DelegationPayload | ApiDelegationPayload;
 
 export type ClaimedRun = {
   id: string;
