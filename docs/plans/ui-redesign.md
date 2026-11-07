@@ -20,7 +20,7 @@ State per item: `todo`, `pass` (commit plus cheap checks: `npx tsc --noEmit`, `n
 | 10 | New task dialog | NewTask, NewTaskDraft, NewTaskNoProject, AiTasks | pass |
 | 11 | Review queue | Review, ReviewThread | pass |
 | 12 | Start screen | Start | pass |
-| 13 | Inbox | Inbox, InboxRowMenu, InboxMuted | todo |
+| 13 | Inbox | Inbox, InboxRowMenu, InboxMuted | pass |
 | 14 | Activity | Activity | todo |
 | 15 | Search page and palette | Search, SearchLanding, SearchNoResult, CommandPalette, CommandPaletteEmpty | todo |
 | 16 | Agent page | Agent, AgentSetup, AgentPermission, AgentModel, AgentSkills, ThreadMenu | todo |

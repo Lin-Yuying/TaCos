@@ -3,9 +3,10 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { BellOff, Check, ChevronDown, ChevronRight, Clock, Search, Settings2 } from "lucide-react";
+import { BellOff, Check, ChevronDown, ChevronRight, Clock, Search, Settings2, X } from "lucide-react";
 import { useUI, NOTIFICATIONS_READ } from "@/components/ui-context";
 import { Menu, MenuItem } from "@/components/menu";
+import { Modal } from "@/components/ui/modal";
 import {
   clearNotificationsAction,
   deleteNotificationAction,
@@ -187,6 +188,7 @@ export function NotificationsView({
   const [selected, setSelected] = useState(-1);
   const [snoozing, setSnoozing] = useState<string | null>(null);
   const [prefsOpen, setPrefsOpen] = useState(false);
+  const [mutedOpen, setMutedOpen] = useState(false);
   const [busy, setBusy] = useState<string[]>([]);
   const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -415,16 +417,16 @@ export function NotificationsView({
   }, [groups, expanded]);
 
   // Read the latest values inside the window listener without re-registering it.
-  const latest = useRef({ visibleRows, selected, prefsOpen });
+  const latest = useRef({ visibleRows, selected, prefsOpen, mutedOpen });
   useEffect(() => {
-    latest.current = { visibleRows, selected, prefsOpen };
+    latest.current = { visibleRows, selected, prefsOpen, mutedOpen };
   });
 
   useEffect(() => {
     function onKey(event: KeyboardEvent) {
       const target = event.target as HTMLElement | null;
       if (target && (target.tagName === "INPUT" || target.tagName === "TEXTAREA" || target.isContentEditable)) return;
-      if (latest.current.prefsOpen) return;
+      if (latest.current.prefsOpen || latest.current.mutedOpen) return;
       const rows = latest.current.visibleRows;
       const item = latest.current.selected >= 0 ? rows[latest.current.selected] : null;
       if (event.key === "j" || event.key === "ArrowDown") {
@@ -474,15 +476,6 @@ export function NotificationsView({
           {t("{count} unread", { count: counts.unread })}
         </span>
         <div className="ml-auto flex items-center gap-2">
-          <form onSubmit={submitSearch} className="relative flex items-center">
-            <Search size={13} className="pointer-events-none absolute left-2 text-faint" />
-            <input
-              value={query}
-              onChange={(event) => setQuery(event.target.value)}
-              placeholder={t("Search notifications…")}
-              className="h-8 w-48 rounded-md border border-border bg-elevated/40 pl-7 pr-2 text-small text-text placeholder:text-faint focus:border-border-strong"
-            />
-          </form>
           <button
             type="button"
             onClick={() => void markAll()}
@@ -509,17 +502,26 @@ export function NotificationsView({
           >
             <Settings2 size={14} />
           </button>
+          <button
+            type="button"
+            onClick={() => setMutedOpen(true)}
+            aria-label={t("Muted tasks and documents")}
+            data-inbox-muted-open
+            className="rounded-md border border-border px-2 py-1 text-small text-muted transition-colors hover:text-text"
+          >
+            <BellOff size={14} />
+          </button>
         </div>
       </header>
 
-      <div className={`flex items-center gap-1 border-b border-border pb-2 pt-2 ${PAGE_INSET}`} data-inbox-tabs>
+      <div className={`flex flex-wrap items-center gap-1 border-b border-border py-2 ${PAGE_INSET}`} data-inbox-tabs>
         {TABS.map((entry) => (
           <button
             key={entry.id}
             type="button"
             onClick={() => goTab(entry.id)}
             data-testid={`inbox-tab-${entry.id}`}
-            className={`flex items-center gap-1.5 rounded-full px-2.5 py-1 text-small transition-colors ${
+            className={`flex items-center gap-1.5 rounded-md px-2.5 py-1 text-small transition-colors ${
               tab === entry.id ? "bg-elevated font-medium text-text" : "text-muted hover:text-text"
             }`}
           >
@@ -527,17 +529,17 @@ export function NotificationsView({
             <span className="text-caption text-faint">{counts[entry.key]}</span>
           </button>
         ))}
-        {tab === "reviews" ? (
-          <Link
-            href={`/${workspaceId}/review`}
-            data-testid="inbox-review-queue-link"
-            className="ml-auto text-caption text-muted underline decoration-border underline-offset-2 hover:text-text"
-          >
-            {t("Open the review queue")}
-          </Link>
-        ) : (
-          <span className="ml-auto text-caption text-faint">{t("Notifications are kept for 90 days.")}</span>
-        )}
+        <div className="ml-auto">
+          <form onSubmit={submitSearch} className="relative flex items-center">
+            <Search size={13} className="pointer-events-none absolute left-2 text-faint" />
+            <input
+              value={query}
+              onChange={(event) => setQuery(event.target.value)}
+              placeholder={t("Search notifications…")}
+              className="h-8 w-48 rounded-md border border-border bg-elevated/40 pl-7 pr-2 text-small text-text placeholder:text-faint focus:border-border-strong"
+            />
+          </form>
+        </div>
       </div>
 
       {error && <p role="alert" className={`py-2 text-small text-danger ${PAGE_INSET}`}>{error}</p>}
@@ -559,20 +561,6 @@ export function NotificationsView({
                 {t(group.label)}
               </label>
             ))}
-          </div>
-          <div className="space-y-1">
-            <span className="font-medium">{t("Muted tasks and documents")}</span>
-            {mutes.length === 0 ? (
-              <p className="text-faint">{t("Nothing muted.")}</p>
-            ) : (
-              mutes.map((muteRow) => (
-                <div key={`${muteRow.scopeType}:${muteRow.scopeId}`} className="flex items-center gap-2">
-                  <BellOff size={12} className="text-faint" />
-                  <span className="min-w-0 flex-1 truncate text-muted">{muteRow.label || muteRow.scopeId}</span>
-                  <button type="button" onClick={() => void unmute(muteRow)} className="text-caption text-faint hover:text-text">{t("Unmute")}</button>
-                </div>
-              ))
-            )}
           </div>
         </div>
       )}
@@ -639,6 +627,38 @@ export function NotificationsView({
         )}
       </div>
 
+      <div className={`flex flex-wrap items-center gap-2 border-t border-border py-3 text-small text-faint ${PAGE_INSET}`}>
+        <span>{t("Notifications are kept for 90 days.")}</span>
+        <Link
+          href={`/${workspaceId}/review`}
+          data-testid="inbox-review-queue-link"
+          className="ml-auto rounded-md px-2 py-1 text-muted transition-colors hover:bg-elevated hover:text-text"
+        >
+          {t("Open the review queue")}
+        </Link>
+      </div>
+
+      <Modal open={mutedOpen} onClose={() => setMutedOpen(false)} title={t("Muted tasks and documents")} className="max-w-[440px]">
+        <div className="rounded-xl border border-border bg-overlay shadow-2xl shadow-black/15" data-inbox-muted>
+          <div className="flex items-center justify-between border-b border-border px-4 py-3">
+            <h2 className="text-lead font-semibold text-text">{t("Muted tasks and documents")}</h2>
+            <button type="button" aria-label={t("Close")} onClick={() => setMutedOpen(false)} className="rounded p-1 text-faint transition-colors hover:bg-elevated hover:text-text"><X size={14} /></button>
+          </div>
+          <div className="max-h-[60dvh] divide-y divide-border overflow-y-auto">
+            {mutes.length === 0 ? (
+              <p className="px-4 py-3 text-body text-faint">{t("Nothing muted.")}</p>
+            ) : (
+              mutes.map((muteRow) => (
+                <div key={`${muteRow.scopeType}:${muteRow.scopeId}`} className="flex items-center gap-2 px-4 py-2">
+                  <span className="min-w-0 flex-1 truncate text-body text-text">{muteRow.label || muteRow.scopeId}</span>
+                  <button type="button" onClick={() => void unmute(muteRow)} className="shrink-0 rounded-md border border-border px-2 py-1 text-small text-muted transition-colors hover:text-text">{t("Unmute")}</button>
+                </div>
+              ))
+            )}
+          </div>
+        </div>
+      </Modal>
+
       {undo && (
         <div className="fixed bottom-6 left-1/2 z-50 flex -translate-x-1/2 items-center gap-3 rounded-lg border border-border bg-overlay px-3 py-2 text-small text-text shadow-xl" data-inbox-undo>
           <span>{undo.message}</span>
@@ -692,10 +712,11 @@ export function NotificationsView({
             {sentence(item, t)}
           </span>
           <span className="block truncate text-caption text-faint">
-            {groupTitle(item, t)} · <span suppressHydrationWarning>{timeAgo(item.createdAt, locale)}</span>
+            {groupTitle(item, t)}
             {muted ? ` · ${t("Muted")}` : ""}
           </span>
         </button>
+        <span className="mt-0.5 shrink-0 text-small tabular-nums text-faint" suppressHydrationWarning>{timeAgo(item.createdAt, locale)}</span>
         {item.state === "done" && <span className="mt-1 rounded-full bg-elevated px-1.5 py-0.5 text-caption text-muted">{t("Done")}</span>}
         <Menu
           width={200}
@@ -708,7 +729,6 @@ export function NotificationsView({
               <MenuItem onSelect={() => { close(); void toggleRead(item); }}>
                 {unread ? t("Mark read") : t("Mark unread")}
               </MenuItem>
-              <MenuItem onSelect={() => { close(); void markDone(item); }}>{t("Done")}</MenuItem>
               <MenuItem onSelect={() => { close(); setSnoozing(item.id); }}>{t("Snooze…")}</MenuItem>
               {item.pageId && (
                 <MenuItem onSelect={() => { close(); void mute(item, "page", item.pageId!, item.pageTitle ?? t("Document")); }}>
@@ -725,6 +745,7 @@ export function NotificationsView({
                   {t("Mute this project")}
                 </MenuItem>
               )}
+              <MenuItem onSelect={() => { close(); void markDone(item); }}>{t("Done")}</MenuItem>
               <MenuItem danger onSelect={() => { close(); void remove(item); }}>{t("Delete")}</MenuItem>
             </>
           )}
