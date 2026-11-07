@@ -43,7 +43,12 @@ export function AiEditPanel({
   onClose,
   onAccept,
   onTasks,
+  inline = false,
+  placeholder,
 }: {
+  // Sits in the page's flow instead of floating over it.
+  inline?: boolean;
+  placeholder?: string;
   workspaceId: string;
   x: number;
   y: number;
@@ -144,8 +149,8 @@ export function AiEditPanel({
     <div
       data-overview-pop
       data-ai-panel
-      style={target.mode === "document" ? { left: "50%", top: 120, transform: "translateX(-50%)" } : { left, top }}
-      className={`fixed z-50 max-h-[85dvh] max-w-[calc(100vw-24px)] overflow-y-auto rounded-xl border border-border bg-bg p-3 shadow-[0_12px_40px_rgba(0,0,0,0.18)] ${target.mode === "document" ? "w-[520px]" : "w-[400px]"}`}
+      style={inline ? undefined : target.mode === "document" ? { left: "50%", top: 120, transform: "translateX(-50%)" } : { left, top }}
+      className={inline ? "mt-4 w-full rounded-xl border border-border bg-bg p-3" : `fixed z-50 max-h-[85dvh] max-w-[calc(100vw-24px)] overflow-y-auto rounded-xl border border-border bg-bg p-3 shadow-[0_12px_40px_rgba(0,0,0,0.18)] ${target.mode === "document" ? "w-[520px]" : "w-[400px]"}`}
     >
       <div className="mb-2 flex items-center gap-1.5">
         <Sparkles size={13} className="text-accent" />
@@ -236,7 +241,7 @@ export function AiEditPanel({
             }
           }}
           aria-label={t("Tell the AI what to change…")}
-          placeholder={t("Tell the AI what to change…")}
+          placeholder={placeholder ?? t("Tell the AI what to change…")}
           className="min-w-0 flex-1 rounded-md border border-border bg-elevated/40 px-2 py-1.5 text-small text-text placeholder:text-faint focus:border-border-strong"
         />
         <button
@@ -292,7 +297,7 @@ export function AiEditPanel({
 
       {error && <div className="mt-2 text-small text-danger">{t(error)}</div>}
 
-      {(busy || result) && (
+      {(inline || busy || result) && (
         <div className="mt-2">
           <textarea
             value={result}
@@ -312,7 +317,7 @@ export function AiEditPanel({
         </>
       )}
 
-      {(busy || result) && (
+      {(inline || busy || result) && (
       <div className="mt-2.5 flex items-center gap-2">
         <div className="ml-auto flex items-center gap-1.5">
           <button

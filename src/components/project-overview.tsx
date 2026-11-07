@@ -8,8 +8,8 @@ import {
   useRef,
   useState,
   type ComponentType,
-  type MouseEvent,
 } from "react";
+import { createPortal } from "react-dom";
 import { FloatingPanel } from "./ui/suggestion-menu";
 import { useRouter } from "next/navigation";
 import {
@@ -22,7 +22,6 @@ import {
   Sparkles,
   SquareArrowOutUpRight,
   Strikethrough,
-  Trash2,
   X,
 } from "lucide-react";
 import {
@@ -88,6 +87,8 @@ const FORMAT_BUTTONS: FormatButton[] = [
 // Comments are pinned to a passage the way Google Docs pins them: the quote plus which
 // occurrence of it. Offsets would drift on the next edit; text that no longer exists
 // simply stops being highlighted.
+const HEADER_TOOL = "flex h-7 min-w-7 items-center justify-center gap-1 rounded-md px-1 text-muted transition-colors hover:bg-elevated hover:text-text";
+
 function normalizeWithMap(root: HTMLElement): {
   text: string;
   chars: TextChar[];
@@ -270,6 +271,7 @@ export function ProjectOverview({
   edits,
   unseenDocEdits,
   currentUserId,
+  onPanelChange,
   trashedTitles,
 }: {
   workspaceId: string;
@@ -281,6 +283,8 @@ export function ProjectOverview({
   edits: OverviewDocEdit[];
   unseenDocEdits: number;
   currentUserId: string;
+  // A comments or history panel takes the place of the properties column.
+  onPanelChange?: (open: boolean) => void;
   trashedTitles: Record<string, string>;
 }) {
   const t = useT();
@@ -341,8 +345,8 @@ export function ProjectOverview({
   const [replyKey, setReplyKey] = useState<string | null>(null);
   // Anthropic-style fallback: threads whose quoted text was edited away have no marker
   // on the page, so the count next to t("Description") opens them.
-  const [orphansOpen, setOrphansOpen] = useState(false);
-  const [orphanPos, setOrphanPos] = useState({ x: 0, y: 0 });
+  const [commentsOpen, setCommentsOpen] = useState(false);
+  const [toolsHost, setToolsHost] = useState<HTMLElement | null>(null);
   const [pins, setPins] = useState<CommentPin[]>([]);
   // Editing column width, measured during the paint pass so the popover can stay inside it.
   const [editorWidth, setEditorWidth] = useState(0);
@@ -555,7 +559,6 @@ export function ProjectOverview({
   function closePopovers() {
     setOpenKey(null);
     setReplyKey(null);
-    setOrphansOpen(false);
     setComposer(null);
   }
 
@@ -1023,13 +1026,8 @@ export function ProjectOverview({
   // Dismiss the floating cards on an outside click or Escape, the way the rest of the
   // app's menus behave.
   useEffect(() => {
-    if (!openKey && !orphansOpen && !composer) return;
-    const dismiss = () => {
-      setOpenKey(null);
-      setReplyKey(null);
-      setOrphansOpen(false);
-      setComposer(null);
-    };
+    if (!composer) return;
+    const dismiss = () => setComposer(null);
     const onDown = (event: PointerEvent) => {
       const target = event.target as Element | null;
       if (target?.closest("[data-overview-pop], [data-overview-pin]")) return;
@@ -1044,7 +1042,21 @@ export function ProjectOverview({
       document.removeEventListener("pointerdown", onDown);
       document.removeEventListener("keydown", onKey);
     };
-  }, [openKey, orphansOpen, composer]);
+  }, [composer]);
+
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setToolsHost(document.getElementById("project-header-tools"));
+  }, []);
+
+  useEffect(() => {
+    onPanelChange?.(commentsOpen || historyOpen);
+  }, [commentsOpen, historyOpen, onPanelChange]);
+
+  useEffect(() => {
+    if (!commentsOpen || !openKey) return;
+    document.querySelector(`[data-comment-thread="${CSS.escape(openKey)}"]`)?.scrollIntoView({ block: "nearest" });
+  }, [commentsOpen, openKey]);
 
   async function postComment(anchor: CommentAnchor, mode: "new" | "reply") {
     const body = draft.trim();
@@ -1063,6 +1075,8 @@ export function ProjectOverview({
     if (mode === "new") {
       setComposer(null);
       setOpenKey(anchorKey(anchor));
+      setCommentsOpen(true);
+      setHistoryOpen(false);
     }
     setSelection(null);
     window.getSelection()?.removeAllRanges();
@@ -1077,6 +1091,7 @@ export function ProjectOverview({
 
   function toggleHistory() {
     const next = !historyOpen;
+    setCommentsOpen(false);
     setHistoryOpen(next);
     closePopovers();
     // Opening the log is reading it: clear the badge and remember the moment, so edits
@@ -1087,16 +1102,26 @@ export function ProjectOverview({
     }
   }
 
-  function openOrphans(event: MouseEvent<HTMLButtonElement>) {
-    const rect = event.currentTarget.getBoundingClientRect();
-    setOrphansOpen((prev) => !prev);
-    setOrphanPos({
-      x: Math.max(8, Math.min(rect.left, Math.max(8, window.innerWidth - 356))),
-      y: rect.bottom + 6,
-    });
-    setOpenKey(null);
-    setComposer(null);
+  function toggleComments() {
+    setHistoryOpen(false);
+    setCommentsOpen((open) => !open);
     setReplyKey(null);
+    setComposer(null);
+  }
+
+  async function postGeneralComment() {
+    const body = draft.trim();
+    if (!body || posting) return;
+    setPosting(true);
+    setError(null);
+    const result = await addOverviewCommentAction(workspaceId, project.id, body);
+    setPosting(false);
+    if (!result.ok) {
+      setError(result.error);
+      return;
+    }
+    setThread(result.data);
+    setDraft("");
   }
 
   async function restoreEdit(edit: OverviewDocEdit) {
@@ -1143,26 +1168,20 @@ export function ProjectOverview({
       ),
     [threads, missing]
   );
-  const orphanComments = orphanThreads.reduce((n, group) => n + group.comments.length, 0);
-  const openThread = openKey
-    ? threads.find((group) => anchorKey(group.anchor) === openKey) ?? null
-    : null;
-  const openPin = openKey ? pins.find((pin) => pin.key === openKey) ?? null : null;
-  const wrapWidth = editorWidth || 680;
 
   function threadBody(group: CommentThread) {
     const key = anchorKey(group.anchor);
     const editedAway = Boolean(group.anchor.quote) && missing.has(key);
     return (
       <div>
-        <p className="text-small font-medium leading-snug text-text">
-          {group.anchor.quote ? `“${group.anchor.quote}”` : t("General comment")}
-        </p>
+        {group.anchor.quote && (
+          <p className="text-small leading-snug text-muted">“{group.anchor.quote}”</p>
+        )}
         {editedAway && (
           <p className="mt-0.5 text-caption text-faint">{t("The highlighted text has changed.")}</p>
         )}
-        <ul className="mt-2 max-h-[260px] space-y-2.5 overflow-y-auto pr-0.5">
-          {group.comments.map((comment) => (
+        <ul className={`${group.anchor.quote ? "mt-2 " : ""}space-y-2.5`}>
+          {group.comments.map((comment, index) => (
             <li key={comment.id} className="flex items-start gap-2">
               <AssigneeAvatar
                 displayName={comment.author?.displayName ?? t("Unknown")}
@@ -1177,37 +1196,37 @@ export function ProjectOverview({
                   <span className="shrink-0 text-caption text-faint">
                     {timeAgo(comment.createdAt, locale)}
                   </span>
-                  {(access.manage || comment.author?.id === currentUserId) && (
-                    <button
-                      type="button"
-                      aria-label={t("Delete comment")}
-                      title={t("Delete comment")}
-                      onClick={() => void deleteComment(comment.id)}
-                      className="ml-auto text-faint transition-colors hover:text-danger"
-                    >
-                      <Trash2 size={11} />
-                    </button>
-                  )}
                 </div>
                 <p className="whitespace-pre-wrap text-small leading-relaxed text-text">
                   {comment.body}
                 </p>
+                <div className="-ml-1.5 mt-0.5 flex items-center gap-1">
+                  {index === group.comments.length - 1 && access.canComment && replyKey !== key && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setReplyKey(key);
+                        setDraft("");
+                      }}
+                      className="rounded px-1.5 py-0.5 text-caption text-muted transition-colors hover:bg-elevated hover:text-text"
+                    >
+                      {t("Reply")}
+                    </button>
+                  )}
+                  {(access.manage || comment.author?.id === currentUserId) && (
+                    <button
+                      type="button"
+                      onClick={() => void deleteComment(comment.id)}
+                      className="rounded px-1.5 py-0.5 text-caption text-muted transition-colors hover:bg-elevated hover:text-text"
+                    >
+                      {t("Delete comment")}
+                    </button>
+                  )}
+                </div>
               </div>
             </li>
           ))}
         </ul>
-        {access.canComment && replyKey !== key && (
-          <button
-            type="button"
-            onClick={() => {
-              setReplyKey(key);
-              setDraft("");
-            }}
-            className="mt-2 ml-7 rounded px-1.5 py-0.5 text-caption text-muted transition-colors hover:bg-elevated hover:text-text"
-          >
-            {t("Reply")}
-          </button>
-        )}
         {replyKey === key && access.canComment && (
           <div className="mt-2">
             <CommentComposer
@@ -1227,25 +1246,12 @@ export function ProjectOverview({
     // The scroll box and the floating History/AI dock are siblings, so the dock stays in
     // the corner instead of scrolling away with the document (Linear's arrangement).
     <div className="@container relative min-h-0 min-w-0 flex-1">
-      <div ref={scrollRef} className="h-full overflow-y-auto">
+      <div ref={scrollRef} className={`h-full overflow-y-auto ${commentsOpen || historyOpen ? "@min-[800px]:pr-[320px]" : ""}`}>
         {/* Properties and Resources live in the header now, so the document starts right
             under it. */}
         <div className={`w-full pb-8 pt-3 ${PAGE_INSET}`}>
           {error && <div className="mb-2 text-small text-danger">{t(error)}</div>}
           <div>
-            {orphanComments > 0 && (
-              <div className="mb-2 flex min-w-0 items-center gap-2">
-                <button
-                  type="button"
-                  onClick={openOrphans}
-                  title={t("Comments on text that has changed or is no longer there")}
-                  className="flex h-[22px] items-center gap-1 rounded-full border border-[#ecd28a] bg-[#fdf3c7] px-2 text-caption font-medium text-[#8a6d1a] transition-colors hover:border-[#d9b64e]"
-                >
-                  <MessageSquare size={11} />
-                  {orphanComments}
-                </button>
-              </div>
-            )}
             <div className="relative flex items-start gap-6">
               <div ref={wrapRef} className="relative min-w-0 flex-1">
                 <div
@@ -1293,11 +1299,12 @@ export function ProjectOverview({
                       aria-label={t("Open comments")}
                       title={t(count === 1 ? "{count} comment" : "{count} comments", { count })}
                       onClick={() => {
-                        setOpenKey((prev) => (prev === pin.key ? null : pin.key));
+                        setOpenKey(pin.key);
+                        setCommentsOpen(true);
+                        setHistoryOpen(false);
                         setReplyKey(null);
                         setDraft("");
                         setComposer(null);
-                        setOrphansOpen(false);
                       }}
                       style={{ top: pin.top, left: pin.left }}
                       className="absolute z-20 flex h-[22px] min-w-[22px] items-center justify-center gap-0.5 rounded-full border border-[#ecd28a] bg-[#fdf3c7] px-1 text-caption font-medium text-[#8a6d1a] shadow-[0_1px_2px_rgba(0,0,0,0.08)] transition-colors hover:border-[#d9b64e] hover:bg-[#fbeaa9]"
@@ -1308,166 +1315,28 @@ export function ProjectOverview({
                   );
                 })}
 
-                {openThread && openPin && (
-                  <FloatingPanel
-                    context={()=>wrapRef.current}
-                    rect={()=>{const wrap=wrapRef.current?.getBoundingClientRect();return wrap?new DOMRect(wrap.left+openPin.left,wrap.top+openPin.top,22,22):null;}}
-                    className="absolute z-30 w-[320px] max-w-[min(100%,calc(100vw-24px))] max-h-[min(70vh,560px)] overflow-auto rounded-xl border border-border bg-bg p-3 shadow-[0_10px_36px_rgba(0,0,0,0.16)]"
-                  >
-                    <div className="mb-2 flex items-center justify-between gap-2">
-                      <span className="text-caption font-semibold uppercase tracking-wider text-faint">
-                        {t(openThread.comments.length === 1 ? "{count} comment" : "{count} comments", {
-                          count: openThread.comments.length,
-                        })}
-                      </span>
-                      <button
-                        type="button"
-                        aria-label={t("Close comments")}
-                        onClick={() => setOpenKey(null)}
-                        className="rounded p-0.5 text-faint transition-colors hover:bg-elevated hover:text-text"
-                      >
-                        <X size={13} />
-                      </button>
-                    </div>
-                    {threadBody(openThread)}
-                  </FloatingPanel>
-                )}
               </div>
 
-              {historyOpen && (
-                <aside className="absolute right-0 top-0 z-30 flex max-h-[min(80vh,800px)] w-[min(100%,460px)] @min-[800px]:sticky @min-[800px]:w-[min(50%,460px)] shrink-0 flex-col self-start overflow-hidden rounded-xl border border-border bg-bg shadow-[0_1px_2px_rgba(0,0,0,0.05)]">
-                  <header className="flex h-11 shrink-0 items-center gap-2 border-b border-border px-3">
-                    <History size={14} className="text-muted" />
-                    <span className="text-small font-semibold text-text">{t("History")}</span>
-                    <span className="text-caption text-faint">
-                      {t(edits.length === 1 ? "{count} change" : "{count} changes", { count: edits.length })}
-                    </span>
-                    <button
-                      type="button"
-                      aria-label={t("Close history")}
-                      onClick={() => setHistoryOpen(false)}
-                      className="ml-auto rounded p-1 text-faint transition-colors hover:bg-elevated hover:text-text"
-                    >
-                      <X size={14} />
-                    </button>
-                  </header>
-                  <div className="min-h-0 flex-1 overflow-y-auto p-3">
-                    {edits.length === 0 ? (
-                      <p className="text-small text-faint">
-                        {t("No changes yet. Edits to this document will show up here.")}
-                      </p>
-                    ) : (
-                      <ul className="space-y-3">
-                        {edits.map((edit) => (
-                          <li key={edit.id} className="rounded-lg border border-border px-2.5 py-2">
-                            <div className="flex items-start gap-2">
-                              <AssigneeAvatar
-                                displayName={edit.author?.displayName ?? t("Unknown")}
-                                avatar={edit.author?.avatar ?? null}
-                                size={20}
-                              />
-                              <div className="min-w-0 flex-1">
-                                <div className="flex items-center gap-1.5">
-                                  <span className="truncate text-small font-medium text-text">
-                                    {edit.author?.displayName ?? t("Unknown")}
-                                  </span>
-                                  <span className="shrink-0 text-caption text-faint">
-                                    {timeAgo(edit.createdAt, locale)}
-                                  </span>
-                                  <span className="ml-auto shrink-0 text-caption">
-                                    {edit.added > 0 && (
-                                      <span className="text-[#2da44e]">+{edit.added} </span>
-                                    )}
-                                    {edit.removed > 0 && (
-                                      <span className="text-danger">−{edit.removed}</span>
-                                    )}
-                                    {edit.added === 0 && edit.removed === 0 && (
-                                      <span className="text-faint">no text change</span>
-                                    )}
-                                  </span>
-                                </div>
-
-                                {(edit.removedLines.length > 0 || edit.addedLines.length > 0) && (
-                                  <div className="mt-1.5 space-y-0.5 rounded-md border border-border/70 bg-surface/60 px-1.5 py-1 font-mono text-caption leading-relaxed">
-                                    {edit.removedLines.map((line, i) => (
-                                      <div key={`r${i}`} className="flex gap-1.5 text-danger">
-                                        <span className="select-none opacity-70">−</span>
-                                        <span
-                                          className="min-w-0 flex-1 truncate"
-                                          title={line}
-                                        >
-                                          {line.trim() === "" ? "⏎" : line}
-                                        </span>
-                                      </div>
-                                    ))}
-                                    {edit.addedLines.map((line, i) => (
-                                      <div
-                                        key={`a${i}`}
-                                        className="flex gap-1.5 text-[#2da44e]"
-                                      >
-                                        <span className="select-none opacity-70">+</span>
-                                        <span
-                                          className="min-w-0 flex-1 truncate"
-                                          title={line}
-                                        >
-                                          {line.trim() === "" ? "⏎" : line}
-                                        </span>
-                                      </div>
-                                    ))}
-                                    {(edit.added > edit.addedLines.length ||
-                                      edit.removed > edit.removedLines.length) && (
-                                      <div className="pt-0.5 text-caption text-faint">
-                                        …and more
-                                      </div>
-                                    )}
-                                  </div>
-                                )}
-
-                                {access.canEdit && (
-                                  <div className="mt-1.5 flex flex-wrap items-center gap-2">
-                                    {confirmRestore === edit.id ? (
-                                      <>
-                                        <button
-                                          type="button"
-                                          disabled={restoring === edit.id}
-                                          onClick={() => void restoreEdit(edit)}
-                                          className="rounded-md bg-accent px-2 py-0.5 text-caption font-medium text-white transition-opacity hover:opacity-90 disabled:opacity-50"
-                                        >
-                                          {restoring === edit.id ? t("Restoring…") : t("Confirm restore")}
-                                        </button>
-                                        <button
-                                          type="button"
-                                          onClick={() => setConfirmRestore(null)}
-                                          className="rounded px-1.5 py-0.5 text-caption text-muted transition-colors hover:bg-elevated hover:text-text"
-                                        >
-                                          {t("Cancel")}
-                                        </button>
-                                        <span className="text-caption text-faint">
-                                          {t("Replaces the current document")}
-                                        </span>
-                                      </>
-                                    ) : (
-                                      <button
-                                        type="button"
-                                        onClick={() => setConfirmRestore(edit.id)}
-                                        title={t("Restore the document to how it was before this change")}
-                                        className="flex items-center gap-1 rounded-md border border-border px-1.5 py-0.5 text-caption text-muted transition-colors hover:border-border-strong hover:text-text"
-                                      >
-                                        <RotateCcw size={11} /> {t("Restore")}
-                                      </button>
-                                    )}
-                                  </div>
-                                )}
-                              </div>
-                            </div>
-                          </li>
-                        ))}
-                      </ul>
-                    )}
-                  </div>
-                </aside>
-              )}
             </div>
+            {aiPanel && aiPanel.kind === "document" && (
+              <AiEditPanel
+                inline
+                placeholder={t("Edit this document with AI")}
+                workspaceId={workspaceId}
+                x={aiPanel.x}
+                y={aiPanel.y}
+                target={{
+                  mode: "document",
+                  text: aiPanel.text,
+                  context: aiPanel.context,
+                  allowTasks: false,
+                  allowContinue: true,
+                  acceptLabel: t("Replace document"),
+                }}
+                onClose={() => setAiPanel(null)}
+                onAccept={acceptAi}
+              />
+            )}
           </div>
 
           {(selection || draftSelection || rangeSelection) && (
@@ -1477,7 +1346,7 @@ export function ProjectOverview({
                 left: selection?.x ?? draftSelection?.x ?? rangeSelection?.x ?? 0,
                 top: selection?.y ?? draftSelection?.y ?? rangeSelection?.y ?? 0,
               }}
-              className="fixed z-40 flex items-center gap-0.5 rounded-md bg-text p-0.5 text-bg shadow-[0_4px_14px_rgba(0,0,0,0.2)]"
+              className="fixed z-40 flex items-center gap-0.5 whitespace-nowrap rounded-md border border-border bg-overlay p-0.5 text-text shadow-[0_4px_14px_rgba(0,0,0,0.2)]"
             >
               {access.canEdit && (
                 <>
@@ -1495,8 +1364,8 @@ export function ProjectOverview({
                           event.preventDefault();
                           applyFormat(style);
                         }}
-                        className={`flex h-6 w-6 items-center justify-center rounded transition-colors hover:bg-white/15 ${
-                          active ? "bg-white/25 text-white" : ""
+                        className={`flex h-6 w-6 items-center justify-center rounded transition-colors hover:bg-elevated ${
+                          active ? "bg-elevated text-text" : ""
                         }`}
                       >
                         <Icon size={12} />
@@ -1512,13 +1381,13 @@ export function ProjectOverview({
                         event.preventDefault();
                         openAiForSelection();
                       }}
-                      className="flex h-6 w-6 items-center justify-center rounded transition-colors hover:bg-white/15"
+                      className="flex h-6 items-center gap-1 rounded px-1.5 text-small transition-colors hover:bg-elevated"
                     >
-                      <Sparkles size={12} />
+                      <Sparkles size={12} /> {t("Edit with AI")}
                     </button>
                   )}
                   {!(selection?.multiLine || rangeSelection) && (
-                    <span className="mx-0.5 h-3.5 w-px bg-white/25" aria-hidden />
+                    <span className="mx-0.5 h-3.5 w-px bg-border" aria-hidden />
                   )}
                 </>
               )}
@@ -1532,9 +1401,9 @@ export function ProjectOverview({
                     if (selection) taskFromSelection(selection.anchor, doc, selection.refId);
                     else taskFromDraft();
                   }}
-                  className="flex h-6 w-6 items-center justify-center rounded transition-colors hover:bg-white/15"
+                  className="flex h-6 items-center gap-1 rounded px-1.5 text-small transition-colors hover:bg-elevated"
                 >
-                  <SquareArrowOutUpRight size={13} />
+                  <SquareArrowOutUpRight size={13} /> {t("Create task from selection")}
                 </button>
               )}
               {access.canComment && !(selection?.multiLine || rangeSelection) && (
@@ -1549,30 +1418,30 @@ export function ProjectOverview({
                     if (selection) openComposer(selection.anchor, selection.x, selection.y);
                     else commentOnDraft();
                   }}
-                  className="flex h-6 w-6 items-center justify-center rounded transition-colors hover:bg-white/15"
+                  className="flex h-6 items-center gap-1 rounded px-1.5 text-small transition-colors hover:bg-elevated"
                 >
-                  <MessageSquare size={12} />
+                  <MessageSquare size={12} /> {t("Comment on selection")}
                 </button>
               )}
             </div>
           )}
 
-          {aiPanel && (
+          {aiPanel && aiPanel.kind === "selection" && (
             <AiEditPanel
               workspaceId={workspaceId}
               x={aiPanel.x}
               y={aiPanel.y}
               target={{
-                mode: aiPanel.kind,
+                mode: "selection",
                 text: aiPanel.text,
                 context: aiPanel.context,
-                allowTasks: aiPanel.kind === "selection",
-                allowContinue: aiPanel.kind === "document",
-                acceptLabel: aiPanel.kind === "selection" ? t("Replace") : t("Replace document"),
+                allowTasks: true,
+                allowContinue: false,
+                acceptLabel: t("Replace"),
               }}
               onClose={() => setAiPanel(null)}
               onAccept={acceptAi}
-              onTasks={aiPanel.kind === "selection" ? openAiTasks : undefined}
+              onTasks={openAiTasks}
             />
           )}
 
@@ -1603,67 +1472,230 @@ export function ProjectOverview({
             </FloatingPanel>
           )}
 
-          {orphansOpen && orphanThreads.length > 0 && (
-            <div
-              data-overview-pop
-              style={{ left: Math.max(12,Math.min(orphanPos.x,window.innerWidth-332)), top: Math.max(12,Math.min(orphanPos.y,window.innerHeight-460)),maxWidth:"calc(100vw - 24px)",maxHeight:"calc(100dvh - 24px)",overflow:"auto" }}
-              className="fixed z-40 w-[340px] rounded-xl border border-border bg-bg p-3 shadow-[0_10px_36px_rgba(0,0,0,0.16)]"
-            >
-              <div className="mb-2 flex items-center justify-between gap-2">
-                <span className="text-caption font-semibold uppercase tracking-wider text-faint">
-                  {t("Comments on changed text")}
-                </span>
-                <button
-                  type="button"
-                  aria-label={t("Close comments")}
-                  onClick={() => setOrphansOpen(false)}
-                  className="rounded p-0.5 text-faint transition-colors hover:bg-elevated hover:text-text"
-                >
-                  <X size={13} />
-                </button>
-              </div>
-              <div className="max-h-[420px] space-y-3 overflow-y-auto pr-0.5">
-                {orphanThreads.map((group) => (
-                  <div
-                    key={anchorKey(group.anchor)}
-                    className="border-t border-border pt-3 first:border-t-0 first:pt-0"
-                  >
-                    {threadBody(group)}
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
         </div>
       </div>
-      {!historyOpen && (
-        <div className="pointer-events-none absolute bottom-5 right-5 z-30 flex items-center gap-2">
-          <div className="pointer-events-auto relative">
+      {historyOpen && (
+        <aside data-overview-history className="absolute inset-y-0 right-0 z-30 flex w-full flex-col border-l border-border bg-bg @min-[800px]:w-[320px]">
+          <header className="flex h-11 shrink-0 items-center gap-2 border-b border-border px-3">
+            <h2 className="text-body font-semibold text-text">{t("Document history")}</h2>
+            <span className="text-caption text-faint">
+              {t(edits.length === 1 ? "{count} change" : "{count} changes", { count: edits.length })}
+            </span>
             <button
               type="button"
-              onClick={toggleHistory}
-              title={t("Document history")}
-              className="flex items-center gap-1.5 rounded-full border border-border bg-overlay px-3 py-1.5 text-small font-medium text-muted shadow-[0_2px_10px_rgba(0,0,0,0.08)] transition-colors hover:border-border-strong hover:text-text"
+              aria-label={t("Close history")}
+              onClick={() => setHistoryOpen(false)}
+              className="ml-auto rounded p-1 text-faint transition-colors hover:bg-elevated hover:text-text"
             >
-              <History size={13} /> {t("History")}
+              <X size={14} />
             </button>
+          </header>
+          <div className="min-h-0 flex-1 overflow-y-auto p-3">
+            {edits.length === 0 ? (
+              <p className="text-small text-faint">
+                {t("No changes yet. Edits to this document will show up here.")}
+              </p>
+            ) : (
+              <ul className="space-y-3">
+                {edits.map((edit) => (
+                  <li key={edit.id} className={`rounded-lg border border-border px-2.5 py-2 ${confirmRestore === edit.id ? "bg-elevated" : ""}`}>
+                    <div className="flex items-start gap-2">
+                      <AssigneeAvatar
+                        displayName={edit.author?.displayName ?? t("Unknown")}
+                        avatar={edit.author?.avatar ?? null}
+                        size={20}
+                      />
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center gap-1.5">
+                          <span className="truncate text-small font-medium text-text">
+                            {edit.author?.displayName ?? t("Unknown")}
+                          </span>
+                          <span className="shrink-0 text-caption text-faint">
+                            {timeAgo(edit.createdAt, locale)}
+                          </span>
+                          <span className="ml-auto shrink-0 text-caption">
+                            {edit.added > 0 && (
+                              <span className="text-[#2da44e]">+{edit.added} </span>
+                            )}
+                            {edit.removed > 0 && (
+                              <span className="text-danger">−{edit.removed}</span>
+                            )}
+                            {edit.added === 0 && edit.removed === 0 && (
+                              <span className="text-faint">no text change</span>
+                            )}
+                          </span>
+                        </div>
+
+                        {(edit.removedLines.length > 0 || edit.addedLines.length > 0) && (
+                          <div className="mt-1.5 space-y-0.5 rounded-md border border-border/70 bg-surface/60 px-1.5 py-1 font-mono text-caption leading-relaxed">
+                            {edit.removedLines.map((line, i) => (
+                              <div key={`r${i}`} className="flex gap-1.5 text-danger">
+                                <span className="select-none opacity-70">−</span>
+                                <span
+                                  className="min-w-0 flex-1 truncate"
+                                  title={line}
+                                >
+                                  {line.trim() === "" ? "⏎" : line}
+                                </span>
+                              </div>
+                            ))}
+                            {edit.addedLines.map((line, i) => (
+                              <div
+                                key={`a${i}`}
+                                className="flex gap-1.5 text-[#2da44e]"
+                              >
+                                <span className="select-none opacity-70">+</span>
+                                <span
+                                  className="min-w-0 flex-1 truncate"
+                                  title={line}
+                                >
+                                  {line.trim() === "" ? "⏎" : line}
+                                </span>
+                              </div>
+                            ))}
+                            {(edit.added > edit.addedLines.length ||
+                              edit.removed > edit.removedLines.length) && (
+                              <div className="pt-0.5 text-caption text-faint">
+                                …and more
+                              </div>
+                            )}
+                          </div>
+                        )}
+
+                        {access.canEdit && (
+                          <div className="mt-1.5 flex flex-wrap items-center gap-2">
+                            {confirmRestore === edit.id ? (
+                              <>
+                                <button
+                                  type="button"
+                                  disabled={restoring === edit.id}
+                                  onClick={() => void restoreEdit(edit)}
+                                  className="rounded-md bg-accent px-2 py-0.5 text-caption font-medium text-white transition-opacity hover:opacity-90 disabled:opacity-50"
+                                >
+                                  {restoring === edit.id ? t("Restoring…") : t("Confirm restore")}
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => setConfirmRestore(null)}
+                                  className="rounded px-1.5 py-0.5 text-caption text-muted transition-colors hover:bg-elevated hover:text-text"
+                                >
+                                  {t("Cancel")}
+                                </button>
+                                <span className="text-caption text-faint">
+                                  {t("Replaces the current document")}
+                                </span>
+                              </>
+                            ) : (
+                              <button
+                                type="button"
+                                onClick={() => setConfirmRestore(edit.id)}
+                                title={t("Restore the document to how it was before this change")}
+                                className="flex items-center gap-1 rounded-md border border-border px-1.5 py-0.5 text-caption text-muted transition-colors hover:border-border-strong hover:text-text"
+                              >
+                                <RotateCcw size={11} /> {t("Restore")}
+                              </button>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        </aside>
+      )}
+      {commentsOpen && (
+        <aside data-overview-comments className="absolute inset-y-0 right-0 z-30 flex w-full flex-col border-l border-border bg-bg @min-[800px]:w-[320px]">
+          <header className="flex h-11 shrink-0 items-center gap-2 border-b border-border px-3">
+            <h2 className="text-body font-semibold text-text">{t("Comments")}</h2>
+            <button
+              type="button"
+              aria-label={t("Close comments")}
+              onClick={() => setCommentsOpen(false)}
+              className="ml-auto rounded p-1 text-faint transition-colors hover:bg-elevated hover:text-text"
+            >
+              <X size={14} />
+            </button>
+          </header>
+          <div className="min-h-0 flex-1 space-y-2 overflow-y-auto p-3">
+            {threads.length === 0 && <p className="text-small text-faint">{t("No comments yet.")}</p>}
+            {threads.filter((group) => !orphanThreads.includes(group)).map((group) => (
+              <div
+                key={anchorKey(group.anchor)}
+                data-comment-thread={anchorKey(group.anchor)}
+                className={`rounded-lg border p-2.5 ${openKey === anchorKey(group.anchor) ? "border-border-strong" : "border-border"}`}
+              >
+                {threadBody(group)}
+              </div>
+            ))}
+            {orphanThreads.length > 0 && <p className="pt-2 text-small text-faint">{t("Comments on changed text")}</p>}
+            {orphanThreads.map((group) => (
+              <div
+                key={anchorKey(group.anchor)}
+                data-comment-thread={anchorKey(group.anchor)}
+                className={`rounded-lg border p-2.5 ${openKey === anchorKey(group.anchor) ? "border-border-strong" : "border-border"}`}
+              >
+                {threadBody(group)}
+              </div>
+            ))}
+          </div>
+          {access.canComment && !replyKey && !composer && (
+            <div className="shrink-0 border-t border-border p-3">
+              <CommentComposer
+                draft={draft}
+                posting={posting}
+                placeholder={t("Leave a comment…")}
+                onDraft={setDraft}
+                onPost={() => void postGeneralComment()}
+              />
+            </div>
+          )}
+        </aside>
+      )}
+      {toolsHost && createPortal(
+        <>
+          <button
+            type="button"
+            onClick={toggleComments}
+            aria-label={t("Open comments")}
+            aria-pressed={commentsOpen}
+            title={t("Open comments")}
+            data-overview-pin
+            className={`${HEADER_TOOL} ${commentsOpen ? "bg-elevated text-text" : ""}`}
+          >
+            <MessageSquare size={15} />
+            {thread.length > 0 && <span className="text-caption tabular-nums">{thread.length}</span>}
+          </button>
+          <button
+            type="button"
+            onClick={toggleHistory}
+            aria-label={t("Document history")}
+            aria-pressed={historyOpen}
+            title={t("Document history")}
+            className={`relative ${HEADER_TOOL} ${historyOpen ? "bg-elevated text-text" : ""}`}
+          >
+            <History size={15} />
             {unseen > 0 && (
-              <span className="pointer-events-none absolute -right-1 -top-1 flex h-[15px] min-w-[15px] items-center justify-center rounded-full bg-danger px-1 text-caption font-semibold leading-none text-white">
+              <span className="absolute -right-0.5 -top-0.5 flex h-[15px] min-w-[15px] items-center justify-center rounded-full bg-accent px-0.5 text-caption text-white tabular-nums">
                 {unseen > 9 ? "9+" : unseen}
               </span>
             )}
-          </div>
+          </button>
           {aiReady && access.canEdit && (
             <button
               type="button"
               onClick={(event) => openAiForDocument(event.currentTarget)}
+              aria-label={t("Edit with AI")}
               title={t("Edit this document with AI")}
-              className="pointer-events-auto flex items-center gap-1.5 rounded-full border border-border bg-overlay px-3 py-1.5 text-small font-medium text-muted shadow-[0_2px_10px_rgba(0,0,0,0.08)] transition-colors hover:border-border-strong hover:text-text"
+              className={HEADER_TOOL}
             >
-              <Sparkles size={13} /> AI
+              <Sparkles size={15} />
             </button>
           )}
-        </div>
+        </>,
+        toolsHost,
       )}
     </div>
   );

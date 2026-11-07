@@ -174,6 +174,7 @@ export function ProjectMeta({
   const [resourceBusy, setResourceBusy] = useState(false);
   const [resourceError, setResourceError] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [personQuery, setPersonQuery] = useState("");
 
   const showProperties = !rows.hidden.includes("properties");
   const showResources = !rows.hidden.includes("resources");
@@ -402,7 +403,18 @@ export function ProjectMeta({
               >
                 {(close) => (
                   <>
-                    {candidates.map((member) => (
+                    <div className="px-2 pb-1 pt-1 text-caption text-faint">{t("Add person")}</div>
+                    <div className="px-1 pb-1">
+                      <input
+                        autoFocus
+                        value={personQuery}
+                        onChange={(event) => setPersonQuery(event.target.value)}
+                        aria-label={t("Search members")}
+                        placeholder={t("Search members")}
+                        className="w-full rounded-md border border-border bg-transparent px-2 py-1 text-small outline-none placeholder:text-faint focus:border-border-strong"
+                      />
+                    </div>
+                    {candidates.filter((member) => member.displayName.toLowerCase().includes(personQuery.trim().toLowerCase())).map((member) => (
                       <div
                         key={member.id}
                         className="flex items-center gap-2 rounded-md px-2 py-1.5 text-body hover:bg-elevated"

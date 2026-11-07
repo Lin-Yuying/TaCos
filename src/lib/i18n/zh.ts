@@ -2,6 +2,7 @@
 // `{name}` placeholders must survive translation unchanged. Grouped by the file that
 // first uses a string; `npm run i18n:check` lists keys used in code but missing here.
 const zh: Record<string, string> = {
+  "Search members": "搜索成员",
   "Shared conversations": "共享",
   "Private conversations": "仅自己可见",
   "Open a copy": "另开一份",
@@ -528,7 +529,7 @@ const zh: Record<string, string> = {
   Changelog: "变更记录",
   "{count} update": "{count} 次更新",
   "{count} updates": "{count} 次更新",
-  "Leave a comment…": "写评论…",
+  "Leave a comment…": "留下评论…",
   "Click to edit the description": "点击编辑描述",
   "Add a description…": "添加描述…",
   "Write a description, type / for commands…": "写描述，输入 / 调出命令…",
@@ -787,9 +788,9 @@ const zh: Record<string, string> = {
   "Create task from selection": "用选中的文字创建任务",
   "Comment on selection": "评论选中的文字",
   Replace: "替换",
-  "Comments on changed text": "针对已修改文字的评论",
+  "Comments on changed text": "原文已变化的评论",
   "Document history": "文档历史",
-  "Edit this document with AI": "用 AI 修改这份文档",
+  "Edit this document with AI": "用 AI 修改这篇文档",
   "{count} comment": "{count} 条评论",
   "{count} comments": "{count} 条评论",
   "{count} change": "{count} 处改动",

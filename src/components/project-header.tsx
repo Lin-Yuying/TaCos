@@ -62,13 +62,14 @@ export function ProjectHeader({
       <div className="flex min-w-0 items-center gap-2.5">
         {canPickIcon ? (
           <Menu
-            width={232}
+            width={252}
             triggerClassName="shrink-0 rounded-md p-0.5 transition-colors hover:bg-elevated"
             trigger={<span title={t("Change icon")}>{mark}</span>}
           >
             {(close) => (
               <div className="p-1">
-                <div className="grid grid-cols-6 gap-1">
+                <div className="px-1 pb-1 text-caption text-faint">{t("Change icon")}</div>
+                <div className="grid grid-cols-7 gap-0.5">
                   {ICONS.map((emoji) => (
                     <button
                       key={emoji}
@@ -90,7 +91,7 @@ export function ProjectHeader({
                       close();
                       onPickIcon(null);
                     }}
-                    className="mt-1 w-full rounded px-2 py-1.5 text-left text-small text-muted transition-colors hover:bg-elevated hover:text-text"
+                    className="mt-1 w-full border-t border-border rounded px-2 py-1.5 text-left text-small text-muted transition-colors hover:bg-elevated hover:text-text"
                   >
                     {t("Use the cube instead")}
                   </button>
@@ -142,8 +143,11 @@ export function ProjectHeader({
           );
         })}
       </nav>
-      {/* A folded properties row costs no height, so its way back lives here. */}
-      {metaMenu && <div className="ml-auto">{metaMenu}</div>}
+      {/* The overview's panels and the way back for a folded properties row. */}
+      <div className="ml-auto flex items-center gap-0.5">
+        <span id="project-header-tools" className="contents" />
+        {metaMenu}
+      </div>
     </header>
   );
 }

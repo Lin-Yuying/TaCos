@@ -96,6 +96,7 @@ export function ProjectWorkspace({
   function setStatus(status:Status|null){setQueryValue("status",status);}
   function setQ(query:string){setQueryValue("q",query);}
   const [favorite, setFavorite] = useState(initialFavorite);
+  const [sidePanel, setSidePanel] = useState(false);
   const [icon, setIcon] = useState<string | null>(project.icon);
   const metaRows = useMetaRows();
 
@@ -170,8 +171,9 @@ export function ProjectWorkspace({
               edits={edits}
               unseenDocEdits={unseenDocEdits}
               currentUserId={currentUserId}
+              onPanelChange={setSidePanel}
             />
-            {access.canView && metaRows.hidden.length < 2 && (
+            {access.canView && !sidePanel && metaRows.hidden.length < 2 && (
               <aside data-testid="project-properties" className="order-first max-h-[40%] shrink-0 overflow-y-auto border-b border-border p-4 @min-[800px]:order-none @min-[800px]:max-h-none @min-[800px]:w-[280px] @min-[800px]:border-b-0 @min-[800px]:border-l">
                 <ProjectMeta
                   workspaceId={workspaceId}
