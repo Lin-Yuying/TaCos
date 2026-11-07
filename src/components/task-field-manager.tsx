@@ -12,12 +12,11 @@ import {
   taskFieldImpactAction,
 } from "@/app/actions";
 import type { TaskField } from "@/lib/task-view";
-export function TaskFieldManager({ workspaceId }: { workspaceId: string }) {
+export function TaskFieldManager({ workspaceId, open, onOpenChange: setOpen }: { workspaceId: string; open: boolean; onOpenChange: (open: boolean) => void }) {
   const t = useT(),
     router = useRouter(),
     { confirm } = useUI();
-  const [open, setOpen] = useState(false),
-    [fields, setFields] = useState<TaskField[]>([]),
+  const [fields, setFields] = useState<TaskField[]>([]),
     [edit, setEdit] = useState<{
       id: string;
       name: string;
@@ -93,12 +92,6 @@ export function TaskFieldManager({ workspaceId }: { workspaceId: string }) {
   }
   return (
     <>
-      <button
-        onClick={() => setOpen(true)}
-        className="rounded px-2 py-1 text-small text-muted hover:bg-elevated"
-      >
-        {t("Manage fields")}
-      </button>
       <Modal
         open={open}
         title={t("Manage fields")}

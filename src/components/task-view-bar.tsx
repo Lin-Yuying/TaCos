@@ -1,12 +1,13 @@
 "use client";
 
+import type { ReactNode } from "react";
 import { DebouncedInput } from "./ui/debounced-input";
 import { TaskFieldManager } from "@/components/task-field-manager";
 import { useState } from "react";
-import { ArrowDownUp, Filter, ListPlus, Plus, Trash2, X } from "lucide-react";
+import { ArrowDownUp, Filter, MoreHorizontal, Plus, Trash2, X } from "lucide-react";
 import { createTaskFieldAction, deleteTaskFieldAction, taskFieldImpactAction, restoreTaskFieldAction } from "@/app/actions";
 import { useUI } from "@/components/ui-context";
-import { Menu } from "@/components/menu";
+import { Menu, MenuItem } from "@/components/menu";
 import { useT } from "@/components/i18n-context";
 import { STATUS_META } from "@/components/icons";
 import { PRIORITY_NAMES, STATUS_ORDER } from "@/lib/constants";
@@ -105,6 +106,10 @@ export function TaskViewBar({
   issues,
   manageFields,
   onFieldsChanged,choices:filterChoices,
+  leading,
+  trailing,
+  onExport,
+  exportDisabled,
 }: {
   workspaceId: string;
   view: TaskView;
@@ -114,6 +119,10 @@ export function TaskViewBar({
   manageFields: boolean;
   onFieldsChanged: () => void;
   choices?:{projects:string[];members:{id:string;displayName:string}[]};
+  leading?: ReactNode;
+  trailing?: ReactNode;
+  onExport?: () => void;
+  exportDisabled?: boolean;
 }) {
   const t = useT();
   const {confirm, toast} = useUI();
@@ -121,6 +130,7 @@ export function TaskViewBar({
   const [type, setType] = useState<FieldType>("text");
   const [options, setOptions] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const [fieldManagerOpen, setFieldManagerOpen] = useState(false);
 
   const keys = [
     ...BUILTIN_KEYS.map((key) => ({ key: key as string, label: t(BUILTIN_LABEL[key]) })),
@@ -168,7 +178,8 @@ export function TaskViewBar({
   }
 
   return (
-    <div data-task-view-bar className={`flex shrink-0 flex-wrap items-center gap-1 border-b border-border py-1 ${PAGE_INSET}`}>
+    <div data-task-view-bar className={`flex min-h-10 shrink-0 flex-wrap items-center gap-1 border-b border-border py-1 ${PAGE_INSET}`}>
+      {leading}
       <Menu
         width={420}
         triggerClassName={triggerClass}
@@ -298,20 +309,20 @@ export function TaskViewBar({
           </div>
         )}
       </Menu>
-      {manageFields&&<TaskFieldManager workspaceId={workspaceId}/>}
-      {manageFields && (
+      <span className="flex-1" />
+      {trailing}
+      {manageFields&&<TaskFieldManager workspaceId={workspaceId} open={fieldManagerOpen} onOpenChange={setFieldManagerOpen}/>}
+      {(manageFields || onExport) && (
         <Menu
           width={300}
+          align="right"
           triggerClassName={triggerClass}
-          trigger={
-            <>
-              <ListPlus size={12} /> {t("Fields")}
-              {fields.length > 0 && <span className="text-faint">{fields.length}</span>}
-            </>
-          }
+          trigger={<MoreHorizontal size={14} aria-label={t("More actions")} />}
         >
-          {() => (
-            <div data-task-fields className="space-y-1.5 p-2 text-small">
+          {(close) => (<>
+            {onExport && <MenuItem disabled={exportDisabled} onSelect={() => { close(); onExport(); }}>{t("Export all filtered tasks")}</MenuItem>}
+            {manageFields && <MenuItem onSelect={() => { close(); setFieldManagerOpen(true); }}>{t("Manage fields")}</MenuItem>}
+            {manageFields && <div data-task-fields className="mt-1 space-y-1.5 border-t border-border p-2 text-small">
               {fields.map((field) => (
                 <div key={field.id} className="flex items-center gap-2">
                   <span className="min-w-0 flex-1 truncate text-text">{field.name}</span>
@@ -365,8 +376,8 @@ export function TaskViewBar({
                 <Plus size={12} /> {t("Add field")}
               </button>
               {error && <div className="text-danger">{t(error)}</div>}
-            </div>
-          )}
+            </div>}
+          </>)}
         </Menu>
       )}
     </div>

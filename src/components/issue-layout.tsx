@@ -3,6 +3,7 @@
 import { useDetailSource } from "@/components/detail-navigation";
 import { TaskViews } from "@/components/task-views";
 import { TaskBulkBar } from "@/components/task-bulk-bar";
+import { PAGE_INSET } from "@/lib/page-chrome";
 import { DisplayMenu } from "@/components/display-menu";
 import { BatchSelection } from "@/components/ui/batch-selection";
 import dynamic from "next/dynamic";
@@ -310,7 +311,29 @@ export function IssueLayout({
   if (!serverQuery&&issues.length === 0) return <Empty />;
   return (
     <>
-      <div className="flex flex-wrap items-center gap-2 border-b border-border px-3 py-1">
+      {selecting ? (
+        <TaskBulkBar
+          workspaceId={workspaceId}
+          selected={selectedShown}
+          clear={() => {
+            setSelected([]);
+            setSelecting(false);
+          }}
+          onResults={(results) =>
+            setSelected(results.filter((row) => !row.ok).map((row) => row.id))
+          }
+        />
+      ) : null}
+      <TaskViewBar
+        workspaceId={workspaceId}
+        view={view}
+        onChange={setView}
+        fields={fields}
+        choices={choices}
+        issues={pageIssues}
+        manageFields={manageFields}
+        onFieldsChanged={() => router.refresh()}
+        leading={<>
         <TaskViews
           workspaceId={workspaceId}
           scope={scope}
@@ -334,6 +357,10 @@ export function IssueLayout({
           saving={savingDisplay}
           error={displayError}
         />
+        </>}
+        trailing={<>
+          {!serverQuery && shown.length !== issues.length && <span className="text-small tabular-nums text-faint">{`${shown.length} / ${issues.length}`}</span>}
+          {selecting && <BatchSelection key={queryKey+viewKey} workspaceId={workspaceId} kind="task" items={shown} loadItems={serverQuery?()=>taskViewCandidatesAction(workspaceId,serverQuery,effectiveView):undefined}/>}
         <button
           type="button"
           data-bulk-select
@@ -348,32 +375,9 @@ export function IssueLayout({
         >
           <CheckSquare size={12} /> {t("Select tasks")}
         </button>
-        <BatchSelection key={queryKey+viewKey} workspaceId={workspaceId} kind="task" items={shown} loadItems={serverQuery?()=>taskViewCandidatesAction(workspaceId,serverQuery,effectiveView):undefined}/>
-        <span className="text-small text-faint">{serverQuery?`${(remote?.page??0)*100+ (shown.length?1:0)}–${(remote?.page??0)*100+shown.length} / ${remote?.total??0}`:`${shown.length} / ${issues.length}`}</span>
-      </div>
-      {selecting ? (
-        <TaskBulkBar
-          workspaceId={workspaceId}
-          selected={selectedShown}
-          clear={() => {
-            setSelected([]);
-            setSelecting(false);
-          }}
-          onResults={(results) =>
-            setSelected(results.filter((row) => !row.ok).map((row) => row.id))
-          }
-        />
-      ) : null}
-      {serverQuery&&<div className="flex shrink-0 flex-wrap items-center gap-3 px-3 py-1 text-small"><button disabled={pending||!remote?.page} onClick={()=>void changePage((remote?.page??0)-1)}>{t("Previous")}</button><button disabled={pending||!remote||((remote.page+1)*100>=remote.total)} onClick={()=>void changePage((remote?.page??0)+1)}>{t("Next")}</button><button disabled={pending} onClick={()=>void exportView()}>{t("Export all filtered tasks")}</button>{pending&&<span>{t("Loading…")}</span>}{failure&&<span role="alert" className="text-danger">{t(failure)} <button onClick={()=>void changePage(0,true)}>{t("Refresh")}</button></span>}</div>}
-      <TaskViewBar
-        workspaceId={workspaceId}
-        view={view}
-        onChange={setView}
-        fields={fields}
-        choices={choices}
-        issues={pageIssues}
-        manageFields={manageFields}
-        onFieldsChanged={() => router.refresh()}
+        </>}
+        onExport={serverQuery ? () => void exportView() : undefined}
+        exportDisabled={pending}
       />
       {shown.length === 0 ? (
         <div className="flex flex-1 items-center justify-center text-body text-faint">
@@ -396,6 +400,17 @@ export function IssueLayout({
         <TaskCalendar workspaceId={workspaceId} issues={shown} />
       ) : (
         <IssueTable issues={shown} groups={groups} properties={display.properties} selection={selection} />
+      )}
+      {serverQuery && (pending || failure || (remote?.total ?? 0) > 100) && (
+        <div className={`flex min-h-10 shrink-0 flex-wrap items-center gap-2 border-t border-border py-1 text-small text-muted ${PAGE_INSET}`}>
+          {(remote?.total ?? 0) > 100 && <>
+            <span className="tabular-nums text-faint">{`${(remote?.page ?? 0) * 100 + (shown.length ? 1 : 0)}–${(remote?.page ?? 0) * 100 + shown.length} / ${remote?.total ?? 0}`}</span>
+            <button type="button" className="rounded-md px-2 py-1 hover:bg-elevated hover:text-text disabled:opacity-50" disabled={pending || !remote?.page} onClick={() => void changePage((remote?.page ?? 0) - 1)}>{t("Previous page")}</button>
+            <button type="button" className="rounded-md px-2 py-1 hover:bg-elevated hover:text-text disabled:opacity-50" disabled={pending || !remote || (remote.page + 1) * 100 >= remote.total} onClick={() => void changePage((remote?.page ?? 0) + 1)}>{t("Next page")}</button>
+          </>}
+          {pending && <span>{t("Loading…")}</span>}
+          {failure && <span role="alert" className="text-danger">{t(failure)} <button type="button" className="underline" onClick={() => void changePage(0, true)}>{t("Refresh")}</button></span>}
+        </div>
       )}
     </>
   );
