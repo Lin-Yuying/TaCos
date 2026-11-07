@@ -4,6 +4,7 @@ import { useState } from "react";
 import Link from "next/link";
 import { joinWorkspaceAction, logoutAction } from "@/app/auth-actions";
 import { OtterMark } from "@/components/icons";
+import { desktopRunner } from "@/components/runner-bridge";
 import { useT } from "@/components/i18n-context";
 import { GATE, GATE_CARD } from "@/lib/page-chrome";
 
@@ -37,6 +38,7 @@ export function JoinInvite({
   async function switchAccount() {
     if (busy) return;
     setBusy(true);
+    await desktopRunner()?.stop();
     await logoutAction();
     window.location.href = `/login?invite=${encodeURIComponent(code)}`;
   }

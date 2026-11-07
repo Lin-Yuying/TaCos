@@ -2,6 +2,8 @@
 // `{name}` placeholders must survive translation unchanged. Grouped by the file that
 // first uses a string; `npm run i18n:check` lists keys used in code but missing here.
 const zh: Record<string, string> = {
+  "Workspace admin": "工作区管理",
+  "Change join code": "更换邀请码",
   "Use a different account": "换一个账户",
   "2-10 letters or digits. Projects get their own prefixes; this reserves the workspace default.": "2-10 位字母或数字。项目有各自的前缀，这里保留工作区默认前缀。",
   "Type": "类型",

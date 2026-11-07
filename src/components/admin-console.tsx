@@ -5,7 +5,7 @@ import { useConfirmation } from "@/components/ui/confirmation";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
-import { ArrowLeft, KeyRound, LogIn, Pencil, ShieldCheck, Trash2, UserPlus } from "lucide-react";
+import { ArrowLeft, ShieldCheck, Trash2 } from "lucide-react";
 import {
   adminCreateMemberAction,
   adminDeleteMemberAction,
@@ -21,7 +21,7 @@ import { formatDate } from "@/lib/format";
 import { useLocale, useT } from "@/components/i18n-context";
 
 const inputClass =
-  "w-full rounded-md border border-border bg-bg px-2 py-1 text-body text-text outline-none transition-colors focus:border-border-strong";
+  "w-full rounded-md border border-border bg-bg px-2.5 py-1.5 text-body text-text outline-none transition-colors focus:border-border-strong";
 const buttonClass =
   "inline-flex items-center gap-1 rounded-md border border-border px-2 py-1 text-small text-muted transition-colors hover:border-border-strong hover:text-text";
 
@@ -117,7 +117,7 @@ export function AdminConsole({
     <div className="flex h-full flex-col bg-bg">{dialog}
       <header className="app-titlebar flex h-12 shrink-0 items-center gap-2 border-b border-border px-4">
         <OtterMark className="h-6 w-6" />
-        <h1 className="text-body font-semibold">{t("Admin console")}</h1>
+        <h1 className="text-lead font-semibold">{t("Admin console")}</h1>
         <span className="inline-flex items-center gap-1 rounded-full bg-elevated px-2 py-0.5 text-caption text-muted">
           <ShieldCheck size={11} /> {t("site admin")}
         </span>
@@ -130,8 +130,8 @@ export function AdminConsole({
         </Link>
       </header>
 
-      <main className="flex-1 overflow-y-auto px-10 pb-10 pt-6 lg:px-20 xl:px-32">
-        <div className="space-y-8">
+      <main className="flex-1 overflow-y-auto">
+        <div className="max-w-[880px] space-y-6 px-5 pb-10 pt-6">
           {(notice || error) && (
             <div className={`text-small ${error ? "text-danger" : "text-muted"}`}>
               {error ? t(error) : notice}
@@ -146,8 +146,8 @@ export function AdminConsole({
                 const isBuiltIn = member.username === builtInAdminUsername;
                 const rowEditing = editing?.id === member.id ? editing : null;
                 return (
-                  <div key={member.id} className="px-4 py-2.5">
-                    <div className="flex items-center gap-3">
+                  <div key={member.id} className="px-5 py-2">
+                    <div className="flex flex-wrap items-center gap-3">
                       <AssigneeAvatar
                         displayName={member.displayName}
                         avatar={member.avatar}
@@ -168,7 +168,7 @@ export function AdminConsole({
                           )}
                         </div>
                       </div>
-                      <div className="ml-auto flex shrink-0 items-center gap-1.5">
+                      <div className="ml-auto flex flex-wrap items-center justify-end gap-1.5">
                         <select
                           value={member.siteRole}
                           disabled={isBuiltIn || isSelf}
@@ -199,7 +199,7 @@ export function AdminConsole({
                           className={buttonClass}
                           title={t("Rename this member")}
                         >
-                          <Pencil size={12} /> {t("Name")}
+                          {t("Rename")}
                         </button>
                         <button
                           type="button"
@@ -207,7 +207,7 @@ export function AdminConsole({
                           className={buttonClass}
                           title={t("Set a new password")}
                         >
-                          <KeyRound size={12} /> {t("Password")}
+                          {t("Set a new password")}
                         </button>
                         <button
                           type="button"
@@ -215,13 +215,13 @@ export function AdminConsole({
                           className={buttonClass}
                           title={t("Start a session as this member")}
                         >
-                          <LogIn size={12} /> {t("Open as")}
+                          {t("Open as")}
                         </button>
                         {!isSelf && !isBuiltIn && (
                           <button
                             type="button"
                             onClick={() => void remove(member)}
-                            className="rounded-md p-1.5 text-faint transition-colors hover:bg-elevated hover:text-danger"
+                            className="rounded-md p-1.5 text-danger transition-colors hover:bg-elevated"
                             title={t("Delete {name}", { name: member.displayName })}
                             aria-label={t("Delete {name}", { name: member.displayName })}
                           >
@@ -235,7 +235,7 @@ export function AdminConsole({
                       <div className="mt-2 flex items-center gap-2 pl-9">
                         <input
                           autoFocus
-                          type="text"
+                          type={rowEditing.field === "password" ? "password" : "text"}
                           value={draft}
                           onChange={(e) => setDraft(e.target.value)}
                           placeholder={
@@ -275,7 +275,7 @@ export function AdminConsole({
 
           <section className="space-y-3">
             <h2 className="text-body font-semibold">{t("Add a member")}</h2>
-            <div className="flex flex-wrap items-end gap-2 rounded-lg border border-border bg-surface/60 p-4">
+            <div className="flex flex-wrap items-end gap-2">
               <label className="min-w-[150px] flex-1 space-y-1">
                 <span className="text-caption text-faint">{t("Username")}</span>
                 <input
@@ -297,6 +297,7 @@ export function AdminConsole({
               <label className="min-w-[170px] flex-1 space-y-1">
                 <span className="text-caption text-faint">{t("Password")}</span>
                 <input
+                  type="password"
                   value={form.password}
                   onChange={(e) => setForm({ ...form, password: e.target.value })}
                   placeholder={t("at least 8 characters")}
@@ -307,9 +308,9 @@ export function AdminConsole({
                 type="button"
                 disabled={busy || !form.username.trim() || form.password.length < 8}
                 onClick={() => void createMember()}
-                className={`${buttonClass} shrink-0 font-medium text-text disabled:opacity-50`}
+                className="shrink-0 rounded-md bg-accent px-3 py-1.5 text-small font-medium text-white transition-colors hover:bg-accent-hover disabled:opacity-50"
               >
-                <UserPlus size={12} /> {t("Create")}
+                {t("Create")}
               </button>
             </div>
             <p className="text-small leading-relaxed text-faint">
