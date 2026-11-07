@@ -2,6 +2,19 @@
 // `{name}` placeholders must survive translation unchanged. Grouped by the file that
 // first uses a string; `npm run i18n:check` lists keys used in code but missing here.
 const zh: Record<string, string> = {
+  "Roadmap": "路线图",
+  "Initiatives": "倡议",
+  "Monday": "周一",
+  "Tuesday": "周二",
+  "Wednesday": "周三",
+  "Thursday": "周四",
+  "Friday": "周五",
+  "Saturday": "周六",
+  "Sunday": "周日",
+  "Upcoming": "即将开始",
+  "Proposed": "提议中",
+  "Planned": "计划中",
+  "Agent handoffs and delegation": "Agent 转交和委派",
   "Watch": "关注",
   "Preparing to restart": "正在准备重启",
   "New version available": "有新版本",
