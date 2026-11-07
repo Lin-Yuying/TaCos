@@ -22,7 +22,7 @@ State per item: `todo`, `pass` (commit plus cheap checks: `npx tsc --noEmit`, `n
 | 12 | Start screen | Start | pass |
 | 13 | Inbox | Inbox, InboxRowMenu, InboxMuted | pass |
 | 14 | Activity | Activity | pass |
-| 15 | Search page and palette | Search, SearchLanding, SearchNoResult, CommandPalette, CommandPaletteEmpty | partial |
+| 15 | Search page and palette | Search, SearchLanding, SearchNoResult, CommandPalette, CommandPaletteEmpty | pass |
 | 16 | Agent page | Agent, AgentSetup, AgentPermission, AgentModel, AgentSkills, ThreadMenu | partial |
 | 17 | Project overview and meta | Project, ProjectSelection, ProjectComments, ProjectHistory, ProjectAi, ProjectMenus, ProjectResource, NewProject | partial |
 | 18 | Project tasks and timeline | ProjectTasks, ProjectTimeline, MilestoneEdit | pass |
@@ -50,7 +50,6 @@ State per item: `todo`, `pass` (commit plus cheap checks: `npx tsc --noEmit`, `n
 
 `pass` above means every listed board was compared and done. `partial` items still have these boards open:
 
-- 15: CommandPalette, CommandPaletteEmpty
 - 16: Agent, AgentSetup, AgentModel, AgentSkills, ThreadMenu
 - 17: ProjectSelection, ProjectComments, ProjectHistory, ProjectAi, ProjectMenus
 - 19: DocsImport, DocsImportResult (not compared board by board)
