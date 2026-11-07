@@ -1,5 +1,5 @@
 import { queryTaskView } from "@/lib/task-query";
-import { EMPTY_VIEW } from "@/lib/task-view";
+import { EMPTY_VIEW, type FieldValues } from "@/lib/task-view";
 import { connection } from "next/server";
 import { redirect } from "next/navigation";
 import { getSessionUser, requireWorkspace } from "@/lib/auth";
@@ -34,6 +34,7 @@ import { listProjectResources, type ProjectResource } from "@/lib/resources";
 import { listFieldValues, listTaskFields } from "@/lib/task-fields";
 import type { ProjectTab } from "@/components/project-header";
 import { defaultTaskView, getTaskView, type TaskViewSummary } from "@/lib/task-views";
+import { listProjectMilestones, type Milestone } from "@/lib/planning/milestones";
 
 // Both the project route and its legacy /issues sub-route render this, so the
 // Overview/Tasks pills can switch in place instead of navigating.
@@ -50,7 +51,7 @@ export async function ProjectPage({
   const { workspaceId, projectId } = await params;
   const sp=await searchParams;
   const selected=sp?.tab;
-  if(selected==="overview"||selected==="issues"||selected==="documents")initialTab=selected;
+  if(selected==="overview"||selected==="issues"||selected==="documents"||selected==="timeline")initialTab=selected;
   const user = await getSessionUser();
   if (!user) redirect("/login");
   await requireWorkspace(workspaceId);
@@ -92,7 +93,7 @@ export async function ProjectPage({
       countIssuesByStatus(workspaceId, project.id, user.id),
       listMembers(workspaceId),
       listProjectMembers(workspaceId, project.id),
-      initialTab==="overview" ? listIssues(workspaceId, { projectId: project.id, viewerId: user.id,summary:true }) : Promise.resolve(taskPage?.items??[]),
+      initialTab==="overview" ? listIssues(workspaceId, { projectId: project.id, viewerId: user.id,summary:true }) : initialTab==="timeline" ? listIssues(workspaceId, { projectId: project.id, viewerId: user.id, status: "all", summary: true, limit: 500 }) : Promise.resolve(taskPage?.items??[]),
       isFavoriteProject(workspaceId, user.id, project.id),
       listProjectPageTree(workspaceId, project.id, user.id),
     ]);
@@ -100,9 +101,10 @@ export async function ProjectPage({
     redirect(`/${workspaceId}`);
   }
 
-  const [fields, fieldValues] = await Promise.all([
+  const [fields, fieldValues, milestones]: [Awaited<ReturnType<typeof listTaskFields>>, FieldValues, Milestone[]] = await Promise.all([
     initialTab==="issues" ? listTaskFields(workspaceId) : Promise.resolve([]),
     Promise.resolve(taskPage?.values??{}),
+    initialTab==="timeline" ? listProjectMilestones(workspaceId, project.id) : Promise.resolve([]),
   ]);
 
   const [grants, comments, edits, unseenDocEdits, resources, trashedTitles, pageRefs, embeds]: [
@@ -162,6 +164,7 @@ export async function ProjectPage({
       unseenDocEdits={unseenDocEdits}
       resources={resources}
       trashedTitles={trashedTitles}
+      milestones={milestones}
     />
   );
 }

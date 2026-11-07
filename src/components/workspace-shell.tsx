@@ -22,6 +22,7 @@ import {
 import { createPortal } from "react-dom";
 import {
   Activity,
+  CalendarRange,
   Hand,
   Bot,
   Boxes,
@@ -95,6 +96,7 @@ function NavItem({
   tag,
   disabled,
   title,
+  testId,
   children,
 }: {
   href: string;
@@ -104,12 +106,14 @@ function NavItem({
   tag?: ReactNode;
   disabled?: boolean;
   title?: string;
+  testId?: string;
   children: ReactNode;
 }) {
   return (
     <Link
       href={href}
       title={title}
+      data-testid={testId}
       aria-disabled={disabled || undefined}
       className={`flex items-center gap-2 rounded-md px-2 py-1 transition-colors ${
         disabled
@@ -290,6 +294,16 @@ function SidebarNav({
           icon={<Activity size={14} />}
         >
           {t("Activity")}
+        </NavItem>
+      </div>
+      <div className="pb-1">
+        <NavItem
+          href={`/${workspaceId}/planning`}
+          active={pathname.startsWith(`/${workspaceId}/planning`)}
+          icon={<CalendarRange size={14} />}
+          testId="nav-planning"
+        >
+          {t("Planning")}
         </NavItem>
       </div>
       <div className="pb-1">
@@ -710,6 +724,7 @@ function RailLink({
   dot,
   labeled,
   disabled,
+  testId,
 }: {
   href: string;
   active: boolean;
@@ -718,6 +733,7 @@ function RailLink({
   dot?: boolean;
   labeled?: boolean;
   disabled?: boolean;
+  testId?: string;
 }) {
   const activeLook = disabled
     ? "cursor-not-allowed text-faint opacity-60"
@@ -736,6 +752,7 @@ function RailLink({
         title={title}
         aria-label={label}
         aria-disabled={disabled || undefined}
+        data-testid={testId}
         className={`relative flex h-8 items-center gap-2 rounded-md px-2 text-body font-medium transition-colors ${activeLook}`}
       >
         <span className="flex w-4 shrink-0 items-center justify-center">{icon}</span>
@@ -750,6 +767,7 @@ function RailLink({
       title={title}
       aria-label={label}
       aria-disabled={disabled || undefined}
+      data-testid={testId}
       className={`relative flex h-8 w-8 items-center justify-center rounded-md transition-colors ${activeLook}`}
     >
       {icon}
@@ -1018,6 +1036,14 @@ function SidebarRail({
           label={t("Activity")}
           icon={<Activity size={16} />}
           labeled={labeled}
+        />
+        <RailLink
+          href={`/${workspaceId}/planning`}
+          active={pathname.startsWith(`/${workspaceId}/planning`)}
+          label={t("Planning")}
+          icon={<CalendarRange size={16} />}
+          labeled={labeled}
+          testId="nav-planning"
         />
         <RailLink
           href={`/${workspaceId}/search`}

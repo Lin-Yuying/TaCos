@@ -12,6 +12,8 @@ import { ProjectHeader, type ProjectTab } from "@/components/project-header";
 import { ProjectMeta, MetaRowsMenu, useMetaRows } from "@/components/project-meta";
 import { ProjectOverview } from "@/components/project-overview";
 import { ProjectDocuments } from "@/components/project-documents";
+import { ProjectTimeline } from "@/components/project-timeline";
+import type { Milestone } from "@/lib/planning/milestones";
 import { STATUS_META, type Status } from "@/lib/constants";
 import { issueRef } from "@/lib/format";
 import type { PageContext } from "@/components/markdown";
@@ -56,11 +58,13 @@ export function ProjectWorkspace({
   trashedTitles,
   fields,
   fieldValues,taskQuery,taskPage,initialView,
+  milestones,
 }: {
   fields: TaskField[];
   taskQuery?:TaskQuery;taskPage?:Awaited<ReturnType<typeof queryTaskView>>;
   initialView?: TaskViewSummary | null;
   fieldValues: FieldValues;
+  milestones: Milestone[];
   workspaceId: string;
   project: ProjectDetail;
   counts: Counts;
@@ -84,7 +88,7 @@ export function ProjectWorkspace({
   const params = useSearchParams();
   const router=useRouter();
   const selectedTab = params.get("tab");
-  const tab: ProjectTab = !access.canView?"issues":selectedTab === "documents" || selectedTab === "issues" || selectedTab === "overview" ? selectedTab : initialTab;
+  const tab: ProjectTab = !access.canView?"issues":selectedTab === "documents" || selectedTab === "issues" || selectedTab === "overview" || selectedTab === "timeline" ? selectedTab : initialTab;
   const selectedStatus=params.get("status");
   const status:Status|null=selectedStatus&&selectedStatus in STATUS_META?selectedStatus as Status:null;
   const q=params.get("q")??"";
@@ -180,6 +184,14 @@ export function ProjectWorkspace({
           edits={edits}
           unseenDocEdits={unseenDocEdits}
           currentUserId={currentUserId}
+        />
+      ) : tab === "timeline" ? (
+        <ProjectTimeline
+          workspaceId={workspaceId}
+          projectId={project.id}
+          project={{ name: project.name, color: project.color, icon }}
+          milestones={milestones}
+          issues={issues}
         />
       ) : tab === "documents" ? (
         <ProjectDocuments

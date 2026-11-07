@@ -131,6 +131,14 @@ export function eventText(event: ActivityEvent, t: Translate, locale: Locale): s
         ? t("cleared the estimate")
         : t("set the estimate to {points}", { points: String(to) });
     }
+    case "cycle_changed": {
+      const to = event.data.toName as string | null;
+      return to ? t("planned into {cycle}", { cycle: to }) : t("removed from the cycle");
+    }
+    case "milestone_changed": {
+      const to = event.data.toName as string | null;
+      return to ? t("set milestone to {milestone}", { milestone: to }) : t("cleared the milestone");
+    }
     case "project_changed":
       return t("moved the task to {project}", { project: String(event.data.to ?? "") });
     case "field_changed": {
