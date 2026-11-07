@@ -8,7 +8,7 @@ State per item: `todo`, `pass` (commit plus cheap checks: `npx tsc --noEmit`, `n
 
 | # | Item | Canvas boards | State |
 | --- | --- | --- | --- |
-| 1 | Sidebar grouping | Sidebar, CustomizeSidebar, UserMenu, WorkspaceMenu, RailCollapsed | todo |
+| 1 | Sidebar grouping | Sidebar, CustomizeSidebar, UserMenu, WorkspaceMenu, RailCollapsed | pass |
 | 2 | Tabs: sidebar replaces the current tab, tabs shrink, +N overflow | Tabs, TabMenu | todo |
 | 3 | Shared page frame: 52px header, 20px gutter, one primary action | every page | todo |
 | 4 | Task toolbar: at most two rows, one Select entry, export under More, pagination only when needed, Previous/Next copy | Main, TasksList, TasksTable, TasksCalendar, DisplayMenu, FilterSort, SaveView, FieldManager, PersonalOrder | todo |

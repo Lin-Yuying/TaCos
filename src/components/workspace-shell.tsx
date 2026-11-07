@@ -280,45 +280,6 @@ function SidebarNav({
     <nav data-sidebar-nav className="flex-1 overflow-y-auto px-2 py-2 text-body">
       <div className="pb-1">
         <NavItem
-          href={`/${workspaceId}/notifications`}
-          active={pathname.endsWith("/notifications")}
-          icon={<Inbox size={14} />}
-          badge={unread}
-        >
-          {t("Inbox")}
-        </NavItem>
-      </div>
-      <div className="pb-1">
-        <NavItem
-          href={`/${workspaceId}/activity`}
-          active={pathname.endsWith("/activity")}
-          icon={<Activity size={14} />}
-        >
-          {t("Activity")}
-        </NavItem>
-      </div>
-      <div className="pb-1">
-        <NavItem
-          href={`/${workspaceId}/planning`}
-          active={pathname.startsWith(`/${workspaceId}/planning`)}
-          icon={<CalendarRange size={14} />}
-          testId="nav-planning"
-        >
-          {t("Planning")}
-        </NavItem>
-      </div>
-      <div className="pb-1">
-        <NavItem
-          href={`/${workspaceId}/insights`}
-          active={pathname.startsWith(`/${workspaceId}/insights`)}
-          icon={<ChartNoAxesColumn size={14} />}
-          testId="nav-insights"
-        >
-          {t("Insights")}
-        </NavItem>
-      </div>
-      <div className="pb-1">
-        <NavItem
           href={`/${workspaceId}/search`}
           active={pathname.endsWith("/search")}
           icon={<Search size={14} />}
@@ -329,6 +290,25 @@ function SidebarNav({
           }
         >
           {t("Search")}
+        </NavItem>
+      </div>
+      <div className="pb-1">
+        <NavItem
+          href={`/${workspaceId}/notifications`}
+          active={pathname.endsWith("/notifications")}
+          icon={<Inbox size={14} />}
+          badge={unread}
+        >
+          {t("Inbox")}
+        </NavItem>
+      </div>
+      <div className="pb-1">
+        <NavItem
+          href={link({ view: "all", assignee: "me" })}
+          active={active({ view: "all", assignee: "me" })}
+          icon={<User size={14} />}
+        >
+          {t("My Tasks")}
         </NavItem>
       </div>
       <div className="pb-1">
@@ -353,12 +333,8 @@ function SidebarNav({
         />
         {open("tasks") && (
           <div className="space-y-0.5">
-            <NavItem
-              href={link({ view: "all", assignee: "me" })}
-              active={active({ view: "all", assignee: "me" })}
-              icon={<User size={14} />}
-            >
-              {t("My Tasks")}
+            <NavItem href={link({ view: "all" })} active={allTasksActive} icon={<List size={14} />}>
+              {t("All Tasks")}
             </NavItem>
             <NavItem
               href={link({ view: "open" })}
@@ -367,9 +343,6 @@ function SidebarNav({
               badge={openTasks || null}
             >
               {t("Open Tasks")}
-            </NavItem>
-            <NavItem href={link({ view: "all" })} active={allTasksActive} icon={<List size={14} />}>
-              {t("All Tasks")}
             </NavItem>
             <WorkspaceViews workspaceId={workspaceId} />
             <NavItem
@@ -519,6 +492,32 @@ function SidebarNav({
             ))}
           </div>
         )}
+      </div>
+
+      <div className="mt-2 space-y-0.5 border-t border-border pt-2">
+        <NavItem
+          href={`/${workspaceId}/planning`}
+          active={pathname.startsWith(`/${workspaceId}/planning`)}
+          icon={<CalendarRange size={14} />}
+          testId="nav-planning"
+        >
+          {t("Planning")}
+        </NavItem>
+        <NavItem
+          href={`/${workspaceId}/activity`}
+          active={pathname.endsWith("/activity")}
+          icon={<Activity size={14} />}
+        >
+          {t("Activity")}
+        </NavItem>
+        <NavItem
+          href={`/${workspaceId}/insights`}
+          active={pathname.startsWith(`/${workspaceId}/insights`)}
+          icon={<ChartNoAxesColumn size={14} />}
+          testId="nav-insights"
+        >
+          {t("Insights")}
+        </NavItem>
       </div>
 
       {/* Same idea as Notion's t("Customize sidebar"): sections that are useful to some
@@ -1034,6 +1033,13 @@ function SidebarRail({
         }
       >
         <RailLink
+          href={`/${workspaceId}/search`}
+          active={pathname.endsWith("/search")}
+          label={t("Search")}
+          icon={<Search size={16} />}
+          labeled={labeled}
+        />
+        <RailLink
           href={`/${workspaceId}/notifications`}
           active={pathname.endsWith("/notifications")}
           label={t("Inbox")}
@@ -1042,33 +1048,10 @@ function SidebarRail({
           labeled={labeled}
         />
         <RailLink
-          href={`/${workspaceId}/activity`}
-          active={pathname.endsWith("/activity")}
-          label={t("Activity")}
-          icon={<Activity size={16} />}
-          labeled={labeled}
-        />
-        <RailLink
-          href={`/${workspaceId}/planning`}
-          active={pathname.startsWith(`/${workspaceId}/planning`)}
-          label={t("Planning")}
-          icon={<CalendarRange size={16} />}
-          labeled={labeled}
-          testId="nav-planning"
-        />
-        <RailLink
-          href={`/${workspaceId}/insights`}
-          active={pathname.startsWith(`/${workspaceId}/insights`)}
-          label={t("Insights")}
-          icon={<ChartNoAxesColumn size={16} />}
-          labeled={labeled}
-          testId="nav-insights"
-        />
-        <RailLink
-          href={`/${workspaceId}/search`}
-          active={pathname.endsWith("/search")}
-          label={t("Search")}
-          icon={<Search size={16} />}
+          href={`/${workspaceId}/?view=all&assignee=me`}
+          active={taskActive({ view: "all", assignee: "me" })}
+          label={t("My Tasks")}
+          icon={<User size={16} />}
           labeled={labeled}
         />
         <RailLink
@@ -1081,15 +1064,6 @@ function SidebarRail({
         />
         <RailFlyout label={t("Tasks")} icon={<LayoutList size={15} />} labeled={labeled}>
           {(close) => [
-            <RailFlyoutLink
-              key="mine"
-              href={`/${workspaceId}/?view=all&assignee=me`}
-              active={taskActive({ view: "all", assignee: "me" })}
-              icon={<User size={14} />}
-              onSelect={close}
-            >
-              {t("My Tasks")}
-            </RailFlyoutLink>,
             <RailFlyoutLink
               key="open"
               href={`/${workspaceId}/?view=open`}
@@ -1243,6 +1217,29 @@ function SidebarRail({
             }
           </RailFlyout>
         )}
+        <RailLink
+          href={`/${workspaceId}/planning`}
+          active={pathname.startsWith(`/${workspaceId}/planning`)}
+          label={t("Planning")}
+          icon={<CalendarRange size={16} />}
+          labeled={labeled}
+          testId="nav-planning"
+        />
+        <RailLink
+          href={`/${workspaceId}/activity`}
+          active={pathname.endsWith("/activity")}
+          label={t("Activity")}
+          icon={<Activity size={16} />}
+          labeled={labeled}
+        />
+        <RailLink
+          href={`/${workspaceId}/insights`}
+          active={pathname.startsWith(`/${workspaceId}/insights`)}
+          label={t("Insights")}
+          icon={<ChartNoAxesColumn size={16} />}
+          labeled={labeled}
+          testId="nav-insights"
+        />
       </nav>
       <div
         className={
