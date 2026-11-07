@@ -84,7 +84,10 @@ function sentence(item: WorkspaceActivityItem, t: Translate, locale: Locale): st
 }
 
 function dayKey(iso: string): string {
-  return iso.slice(0, 10);
+  // Group by the viewer's local calendar day, not the UTC date prefix: an evening
+  // event in UTC+ offsets must not start a second "Today" group.
+  const date = new Date(iso);
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
 }
 
 function dayLabel(iso: string, locale: Locale, t: Translate): string {
