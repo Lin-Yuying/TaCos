@@ -2,6 +2,14 @@
 // `{name}` placeholders must survive translation unchanged. Grouped by the file that
 // first uses a string; `npm run i18n:check` lists keys used in code but missing here.
 const zh: Record<string, string> = {
+  "The import always creates a new workspace; nothing in the current workspace changes.": "导入总是创建新工作区，不会改动现有内容。",
+  "Choose a source": "选择来源",
+  "Import preview": "导入预览",
+  "Conflict": "冲突",
+  "Unmapped field": "未映射字段",
+  "Warning": "警告",
+  "“{field}” won't be imported": "“{field}”不会导入",
+  "Anyone with the code can join. Admins can rotate it in Settings → Members.": "拿到邀请码的人都能加入。管理员可以在 设置 → 成员 更换邀请码。",
   "No target date": "未填目标日期",
   "Owner {name}": "负责人 {name}",
   "Finish": "完成",
@@ -488,7 +496,7 @@ const zh: Record<string, string> = {
   Fish: "鱼",
   Custom: "自定义",
   // invite-dialog
-  "Invite teammates": "邀请成员",
+  "Invite teammates": "邀请同事",
   Close: "关闭",
   "Share this join code. Teammates register at {url}, then pick “Join an existing workspace” and enter the code.":
     "把邀请码分享给同事。同事在 {url} 注册后，选「用邀请码加入」，输入邀请码。",
@@ -1976,16 +1984,16 @@ const zh: Record<string, string> = {
   "Only the workspace owner or an admin can import workspace data.": "只有工作区所有者或管理员可以导入工作区数据。",
   "Download every task, document, comment and attachment in {name} as one ZIP. The archive is portable: an owner can import it into a new workspace on another TaCos server.":
     "将 {name} 中的所有任务、文档、评论和附件下载为一个 ZIP。该归档可移植：所有者可以在另一台 TaCos 服务器的新工作区中导入它。",
-  "Include attachments (up to {size})": "包含附件（最多 {size}）",
+  "Include attachments (up to {size})": "包含附件（上限 {size}）",
   "Files over the cap are listed in the archive manifest and skipped. No passwords, API key hashes or model keys are ever included.":
-    "超过上限的文件会记录在归档清单中并跳过。任何密码、API 密钥哈希或模型密钥都不会包含在内。",
+    "超过上限的文件只列在清单里。密码、API Key 和模型密钥不会导出。",
   "Exporting…": "正在导出…",
   "Start export": "开始导出",
   "You can leave this page; the export keeps running.": "可以离开此页面，导出会继续运行。",
   "Export progress": "导出进度",
   "Download export": "下载导出文件",
   "{tasks} tasks · {documents} documents · {attachments} attachments": "{tasks} 个任务 · {documents} 篇文档 · {attachments} 个附件",
-  "The download link works for 15 minutes. Start another export to get a fresh one.": "下载链接有效期为 15 分钟。再次导出可获得新链接。",
+  "The download link works for 15 minutes. Start another export to get a fresh one.": "下载链接 15 分钟内有效，过期后重新导出。",
   "{count} attachments were left out of the archive.": "{count} 个附件未包含在归档中。",
   "Recent exports": "最近的导出",
   "No exports yet.": "还没有导出。",
@@ -2142,7 +2150,7 @@ const zh: Record<string, string> = {
   "System": "系统",
   "Instance health, backups, updates and runners.": "实例健康、备份、更新与运行器。",
   "Healthy": "正常",
-  "Needs attention": "需要留意",
+  "Needs attention": "需要注意",
   "Action needed": "需要处理",
   "Service": "服务",
   "Up {uptime}": "已运行 {uptime}",

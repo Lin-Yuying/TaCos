@@ -5,7 +5,7 @@ import { SETTINGS_PAGE, SETTINGS_SCROLL, SETTINGS_TITLE } from "@/lib/page-chrom
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useT } from "./i18n-context";
-import { timeAgo } from "@/lib/format";
+import { fileSizeLabel, timeAgo } from "@/lib/format";
 
 type ImportCounts = {
   members: number;
@@ -48,6 +48,8 @@ type Job = {
 };
 
 const RUNNING = new Set(["queued", "running"]);
+const ATTENTION_ROW = "flex items-start gap-2 px-3 py-2";
+const ATTENTION_BADGE = "shrink-0 rounded-full border border-border px-1.5 text-caption text-muted";
 
 function mb(bytes: number): string {
   return `${(bytes / 1024 / 1024).toFixed(2)} MB`;
@@ -189,14 +191,14 @@ export function ImportView({
   return (
     <div className={SETTINGS_SCROLL} data-testid="import-page">
       <div className={`max-w-[640px] ${SETTINGS_PAGE}`}>
-        <h1 className={SETTINGS_TITLE}>{t("Import workspace")}</h1>
-
-        <section className="space-y-3 rounded-lg border border-border p-4">
-          <p className="text-body text-muted">
-            {t(
-              "Bring in a Notion or Markdown folder, a task CSV, or a TaCos export. The import always creates a new workspace; nothing in the current workspace changes."
-            )}
-          </p>
+        {!preview && (
+          <>
+            <h1 className={SETTINGS_TITLE}>{t("Import workspace")}</h1>
+            <p className="text-small text-faint">
+              {t("The import always creates a new workspace; nothing in the current workspace changes.")}
+            </p>
+            <section className="space-y-2">
+              <h2 className="text-body font-semibold">{t("Choose a source")}</h2>
           <div className="flex flex-wrap items-center gap-3">
             <label className="inline-flex cursor-pointer items-center gap-2 rounded-md border border-border px-3 py-1.5 text-body">
               {t("Choose ZIP or CSV")}
@@ -242,6 +244,8 @@ export function ImportView({
                 ? `${file.name} (${mb(file.size)})`
                 : t("No file selected.")}
           </p>
+            </section>
+            <section className="space-y-3">
           <label className="block text-body">
             <span className="mb-1 block text-small font-medium text-muted">{t("New workspace name")}</span>
             <input
@@ -253,7 +257,7 @@ export function ImportView({
               className="w-full rounded border border-border bg-bg px-2.5 py-1.5 text-body"
             />
           </label>
-          <label className="flex items-start gap-2 text-body">
+          <label className="flex items-center gap-2 text-body">
             <input
               type="checkbox"
               checked={includeAttachments}
@@ -263,21 +267,18 @@ export function ImportView({
                 if (preview) setPreview(null);
               }}
               data-testid="import-attachments"
-              className="mt-1"
             />
-            <span>
-              {t("Include attachments (up to {size})", { size: mb(capBytes) })}
-              <span className="block text-small text-faint">
-                {t("Files above the cap stay linked to their original path and are counted as skipped.")}
-              </span>
-            </span>
+            {t("Include attachments (up to {size})", { size: fileSizeLabel(capBytes) })}
           </label>
+          <p className="text-small text-faint">
+            {t("Files above the cap stay linked to their original path and are counted as skipped.")}
+          </p>
           <button
             type="button"
             onClick={() => void previewImport()}
             disabled={busy || (!file && folderFiles.length === 0)}
             data-testid="import-preview-button"
-            className="rounded-md bg-accent px-3 py-1.5 text-body font-medium text-white disabled:opacity-40"
+            className="block rounded-md border border-border px-3 py-1.5 text-body text-text transition-colors hover:bg-elevated disabled:opacity-40"
           >
             {busy && !job ? t("Reading…") : t("Preview import")}
           </button>
@@ -286,39 +287,35 @@ export function ImportView({
               {error}
             </p>
           )}
-        </section>
+            </section>
+          </>
+        )}
 
         {preview && (
-          <section className="space-y-4 rounded-lg border border-border p-4" data-testid="import-preview">
-            <div className="flex flex-wrap items-baseline gap-2">
-              <h2 className="text-title font-semibold">{t("Preview")}</h2>
-              <span className="text-small text-muted">
-                {preview.fileName} · {mb(preview.bytes)} · {t(preview.kind === "tacos-export" ? "TaCos export" : preview.kind === "csv" ? "Task CSV" : "Markdown")}
-              </span>
-            </div>
-            <p className="text-small text-muted">
+          <section className="space-y-4" data-testid="import-preview">
+            <h1 className={SETTINGS_TITLE}>{t("Import preview")}</h1>
+            <p className="text-small text-faint">
               {t("Nothing is written until you confirm. The new workspace stays hidden while it is built.")}
             </p>
-            <dl className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-5">
+            <p className="text-small text-muted">
+              {preview.fileName} · {mb(preview.bytes)} · {t(preview.kind === "tacos-export" ? "TaCos export" : preview.kind === "csv" ? "Task CSV" : "Markdown")}
+            </p>
+            <dl className="grid grid-cols-2 gap-2 sm:grid-cols-4">
               {[
-                ["projects", t("Projects")],
-                ["tasks", t("Tasks")],
-                ["documents", t("Documents")],
-                ["comments", t("Comments")],
-                ["attachments", t("Attachments")],
-                ["labels", t("Labels")],
-                ["taskFields", t("Task fields")],
-                ["members", t("Members")],
-                ["matchedMembers", t("Matched members")],
-              ].map(([key, label]) => (
-                <div key={key} className="rounded-md border border-border px-2 py-1.5">
-                  <dt className="text-caption text-faint">{label}</dt>
-                  <dd
-                    className="tabular-nums text-body font-medium"
-                    data-testid={`import-count-${key === "taskFields" ? "fields" : key === "matchedMembers" ? "members-matched" : key}`}
-                  >
-                    {counts ? (counts[key as keyof ImportCounts] as number) : 0}
+                ["projects", t("Projects"), counts?.projects ?? 0],
+                ["tasks", t("Tasks"), counts?.tasks ?? 0],
+                ["documents", t("Documents"), counts?.documents ?? 0],
+                ["comments", t("Comments"), counts?.comments ?? 0],
+                ["attachments", t("Attachments"), counts?.attachments ?? 0],
+                ["labels", t("Labels"), counts?.labels ?? 0],
+                ["fields", t("Task fields"), counts?.taskFields ?? 0],
+                ["members-matched", t("Matched members"), `${counts?.matchedMembers ?? 0} / ${counts?.members ?? 0}`],
+              ].map(([key, label, value]) => (
+                <div key={String(key)} className="rounded-lg border border-border px-3 py-2">
+                  <dd className="text-lead font-semibold tabular-nums" data-testid={`import-count-${key}`}>
+                    {value}
                   </dd>
+                  <dt className="text-small text-faint">{label}</dt>
                 </div>
               ))}
             </dl>
@@ -330,51 +327,42 @@ export function ImportView({
                 </Link>
               </div>
             )}
-            {preview.conflicts.length > 0 && (
-              <div data-testid="import-conflicts">
-                <h3 className="text-body font-semibold">{t("Conflicts")}</h3>
-                <ul className="mt-1 space-y-1">
+            {(preview.conflicts.length > 0 || preview.unmapped.length > 0 || preview.warnings.length > 0 || preview.ignored.length > 0) && (
+              <div className="space-y-2">
+                <h2 className="text-body font-semibold">{t("Needs attention")}</h2>
+                <ul className="divide-y divide-border rounded-lg border border-border text-small">
                   {preview.conflicts.map((conflict, index) => (
-                    <li key={`${conflict.kind}-${index}`} className="rounded-md border border-border px-2 py-1.5 text-small">
-                      <span className="tabular-nums text-muted">{conflict.count}×</span> {conflict.message}
-                      {conflict.samples.length > 0 && (
-                        <span className="block truncate text-faint">{conflict.samples.join(", ")}</span>
-                      )}
+                    <li key={`${conflict.kind}-${index}`} data-testid="import-conflicts" className={ATTENTION_ROW}>
+                      <span className={ATTENTION_BADGE}>{t("Conflict")}</span>
+                      <span className="min-w-0 flex-1">
+                        {conflict.message} <span className="tabular-nums text-muted">× {conflict.count}</span>
+                        {conflict.samples.length > 0 && (
+                          <span className="block truncate text-faint">{conflict.samples.join(", ")}</span>
+                        )}
+                      </span>
                     </li>
                   ))}
-                </ul>
-              </div>
-            )}
-            {preview.unmapped.length > 0 && (
-              <div data-testid="import-unmapped">
-                <h3 className="text-body font-semibold">{t("Unmapped fields")}</h3>
-                <ul className="mt-1 space-y-1">
                   {preview.unmapped.map((field, index) => (
-                    <li key={`${field.source}-${field.field}-${index}`} className="text-small">
-                      <span className="tabular-nums text-muted">{field.count}×</span> {field.field}
-                      <span className="text-faint"> · {field.source}</span>
+                    <li key={`${field.source}-${field.field}-${index}`} data-testid="import-unmapped" className={ATTENTION_ROW}>
+                      <span className={ATTENTION_BADGE}>{t("Unmapped field")}</span>
+                      <span className="min-w-0 flex-1">
+                        {t("“{field}” won't be imported", { field: field.field })}
+                        <span className="text-faint"> · {field.source} · <span className="tabular-nums">{field.count}</span></span>
+                      </span>
                     </li>
                   ))}
-                </ul>
-              </div>
-            )}
-            {preview.warnings.length > 0 && (
-              <div data-testid="import-warnings">
-                <h3 className="text-body font-semibold">{t("Warnings")}</h3>
-                <ul className="mt-1 list-disc space-y-1 pl-5 text-small text-muted">
                   {preview.warnings.map((warning, index) => (
-                    <li key={index}>{warning}</li>
+                    <li key={index} data-testid="import-warnings" className={ATTENTION_ROW}>
+                      <span className={ATTENTION_BADGE}>{t("Warning")}</span>
+                      <span className="min-w-0 flex-1">{warning}</span>
+                    </li>
                   ))}
-                </ul>
-              </div>
-            )}
-            {preview.ignored.length > 0 && (
-              <div data-testid="import-ignored">
-                <h3 className="text-body font-semibold">{t("Not imported")}</h3>
-                <ul className="mt-1 space-y-1 text-small text-muted">
                   {preview.ignored.map((entry) => (
-                    <li key={entry.section}>
-                      {entry.section}: <span className="tabular-nums">{entry.count}</span>
+                    <li key={entry.section} data-testid="import-ignored" className={ATTENTION_ROW}>
+                      <span className={ATTENTION_BADGE}>{t("Not imported")}</span>
+                      <span className="min-w-0 flex-1">
+                        {entry.section}: <span className="tabular-nums">{entry.count}</span>
+                      </span>
                     </li>
                   ))}
                 </ul>
@@ -406,7 +394,7 @@ export function ImportView({
         )}
 
         {job && (
-          <section className="space-y-2 rounded-lg border border-border p-4" data-testid="import-progress">
+          <section className="space-y-2 rounded-lg border border-border p-3" data-testid="import-progress">
             <div className="flex items-baseline justify-between gap-3 text-small">
               <span data-testid="import-phase">{t(job.phase || "Queued")}</span>
               <span className="font-variant-numeric tabular-nums text-muted">{job.progress}%</span>
@@ -446,7 +434,7 @@ export function ImportView({
 
         {initialJobs.length > 0 && (
           <section className="space-y-2" data-testid="import-history">
-            <h2 className="text-title font-semibold">{t("Recent imports")}</h2>
+            <h2 className="text-body font-semibold">{t("Recent imports")}</h2>
             <ul className="divide-y divide-border rounded-lg border border-border">
               {initialJobs.map((entry) => (
                 <li key={entry.id} className="flex flex-wrap items-center gap-3 px-3 py-2 text-small">

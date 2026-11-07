@@ -42,3 +42,8 @@ export function actorLabel(actor: string): string {
   if (actor.startsWith("api:")) return `API · ${actor.slice(4)}`;
   return actor;
 }
+
+export function fileSizeLabel(bytes: number): string {
+  const mb = bytes / 1024 / 1024;
+  return mb >= 1024 ? `${Number((mb / 1024).toFixed(1))} GB` : `${Math.max(1, Math.round(mb))} MB`;
+}
