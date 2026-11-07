@@ -34,7 +34,7 @@ State per item: `todo`, `pass` (commit plus cheap checks: `npx tsc --noEmit`, `n
 | 24 | Insights: four stats, one filter row, chart/table toggle | Insights | pass |
 | 25 | Settings shell: grouped left navigation, Storage, Export, Import and System inside it | SettingsNav, Storage, ExportPage, ImportPage, ImportPreview, System | pass |
 | 26 | Settings: profile, general, members, visibility, projects | SettingsProfile, SettingsGeneral, SettingsMembers, Invite, SettingsVisibility, SettingsProjects | pass |
-| 27 | Settings: templates, cycles, automation, labels | SettingsTemplates, SettingsCycles, SettingsAutomation, RuleEdit, SettingsLabels | partial |
+| 27 | Settings: templates, cycles, automation, labels | SettingsTemplates, SettingsCycles, SettingsAutomation, RuleEdit, SettingsLabels | pass |
 | 28 | Settings: Agent, usage, access, danger | SettingsAgent, AgentEdit, SettingsUsage, SettingsAccess, SettingsDanger | partial |
 | 29 | Trash and Help | Trash, Help | pass |
 | 30 | Entry: login, register, onboarding, join | Login, Register, Onboarding, OnboardingJoin, Join, JoinInvalid | pass |
@@ -50,7 +50,6 @@ State per item: `todo`, `pass` (commit plus cheap checks: `npx tsc --noEmit`, `n
 
 `pass` above means every listed board was compared and done. `partial` items still have these boards open:
 
-- 27: SettingsAutomation (runs, rule changes, dry run), SettingsTemplates
 - 28: SettingsAgent, AgentEdit, SettingsAccess
 - 32: confirm verbs and body, storage-full notice, clear-filters action, shared LoadError
 - 33: DesktopUpdateStates, DesktopImport open action

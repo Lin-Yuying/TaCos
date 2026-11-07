@@ -2,7 +2,6 @@
 import { safeAction } from "@/lib/ui/safe-action";
 
 import { useState } from "react";
-import { FileText } from "lucide-react";
 import { useUI } from "@/components/ui-context";
 import {
   createPageTemplateAction,
@@ -93,11 +92,6 @@ export function PageTemplatesManager({
 
   return (
     <div data-page-templates className="space-y-4">
-      <p className="text-small text-muted">
-        {t(
-          "A new document can start from a saved title and text. Variables: {date}, {author} and {project}. {project} is empty outside a project.",
-        )}
-      </p>
       {error && (
         <div role="alert" className="text-small text-danger">
           {t(error)}
@@ -115,12 +109,10 @@ export function PageTemplatesManager({
             data-template-row={template.id}
             className="flex flex-wrap items-center gap-3 px-4 py-2.5"
           >
-            <span className="flex w-6 shrink-0 justify-center text-lead">
-              {template.icon || <FileText size={14} className="text-muted" />}
-            </span>
+            {template.icon && <span className="flex w-6 shrink-0 justify-center text-lead">{template.icon}</span>}
             <span className="min-w-0 flex-1">
               <span className="block truncate text-body text-text">{template.name}</span>
-              <span className="block truncate text-small text-faint">{template.title}</span>
+              <span className="block truncate text-small text-faint">{t("Available when creating a document")}</span>
             </span>
             {canManage && (
               <span className="flex shrink-0 items-center gap-1">
@@ -156,25 +148,14 @@ export function PageTemplatesManager({
       {canManage && (
         <section className="space-y-2.5">
           <h2 className="text-body font-semibold">{t(editing ? "Edit template" : "New template")}</h2>
-          <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_4rem]">
+          <div className="grid gap-2.5 sm:grid-cols-[minmax(0,1fr)_4rem]">
             <label className="space-y-1 text-small text-muted">
               <span>{t("Template name")}</span>
               <input
                 data-template-name
                 value={draft.name}
                 onChange={(event) => setDraft({ ...draft, name: event.target.value })}
-                placeholder={t("Template name")}
-                className="w-full rounded-md border border-border bg-bg px-2.5 py-1.5 text-body text-text placeholder:text-faint focus:border-border-strong"
-              />
-            </label>
-            <label className="space-y-1 text-small text-muted">
-              <span>{t("Page title")}</span>
-              <input
-                data-template-title
-                value={draft.title}
-                onChange={(event) => setDraft({ ...draft, title: event.target.value })}
-                placeholder={t("Page title")}
-                className="w-full rounded-md border border-border bg-bg px-2.5 py-1.5 text-body text-text placeholder:text-faint focus:border-border-strong"
+                                className="w-full rounded-md border border-border bg-bg px-2.5 py-1.5 text-body text-text placeholder:text-faint focus:border-border-strong"
               />
             </label>
             <label className="space-y-1 text-small text-muted">
@@ -190,15 +171,25 @@ export function PageTemplatesManager({
             </label>
           </div>
           <label className="block space-y-1 text-small text-muted">
+            <span>{t("Page title")}</span>
+            <input
+              data-template-title
+              value={draft.title}
+              onChange={(event) => setDraft({ ...draft, title: event.target.value })}
+              placeholder={t("{date} weekly report")}
+              className="w-full rounded-md border border-border bg-bg px-2.5 py-1.5 text-body text-text placeholder:text-faint focus:border-border-strong"
+            />
+          </label>
+          <label className="block space-y-1 text-small text-muted">
             <span>{t("Template text")}</span>
             <textarea
               data-template-body
               value={draft.doc}
               onChange={(event) => setDraft({ ...draft, doc: event.target.value })}
-              rows={6}
-              placeholder={t("Markdown with {date}, {author} and {project}.")}
+              rows={5}
               className="w-full resize-y rounded-md border border-border bg-bg px-2.5 py-1.5 font-mono text-small text-text placeholder:text-faint focus:border-border-strong"
             />
+            <span className="block text-small text-faint">{t("Markdown with {date}, {author} and {project}.")}</span>
           </label>
           <div className="flex gap-2">
             <button
@@ -208,7 +199,7 @@ export function PageTemplatesManager({
               onClick={() => void save()}
               className="rounded-md bg-accent px-3 py-1.5 text-body font-medium text-white hover:bg-accent-hover disabled:opacity-40"
             >
-              {t(editing ? "Save template" : "Add template")}
+              {t("Save template")}
             </button>
             {editing && (
               <button
