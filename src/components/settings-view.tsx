@@ -47,7 +47,7 @@ import { AutomationSettingsSection } from "@/components/automation-settings-sect
 import { CycleSettingsSection } from "@/components/cycle-settings-section";
 import type { AutomationSettingsView } from "@/lib/automations/store";
 import type { CycleSettings, CycleSummary } from "@/lib/planning/cycles";
-import type { ApiKeyRecord, ApiKeyScope, DeletedWorkspace, Label, Member, Project } from "@/lib/issues";
+import type { ApiKeyRecord, ApiKeyScope, Label, Member, Project } from "@/lib/issues";
 import type { HarnessSettingsView } from "@/lib/harness/types";
 import type { PageTemplate } from "@/lib/page-templates";
 import { BUILTIN_AVATARS, BUILTIN_AVATAR_LABELS, builtinAvatarId } from "@/lib/avatars";

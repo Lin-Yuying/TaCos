@@ -20,3 +20,8 @@ export const PAGE_BOARD = `${PAGE_LEFT} pr-2 py-3`;
 export const SETTINGS_SCROLL = "min-h-0 min-w-0 flex-1 overflow-auto";
 export const SETTINGS_PAGE = "space-y-6 px-5 pb-10 pt-6";
 export const SETTINGS_TITLE = "text-title font-semibold";
+
+// Sign-in, registration, onboarding and invite screens: one card centered on the surface color.
+export const GATE = "flex h-full items-center justify-center overflow-auto bg-surface p-6";
+export const GATE_CARD = "flex w-full max-w-[380px] flex-col gap-4 rounded-[14px] border border-border bg-bg p-7";
+export const GATE_INPUT = "w-full rounded-md border border-border bg-bg px-2.5 py-2 text-body text-text placeholder:text-faint focus:border-border-strong focus:outline-none";

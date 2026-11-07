@@ -37,7 +37,7 @@ State per item: `todo`, `pass` (commit plus cheap checks: `npx tsc --noEmit`, `n
 | 27 | Settings: templates, cycles, automation, labels | SettingsTemplates, SettingsCycles, SettingsAutomation, RuleEdit, SettingsLabels | pass |
 | 28 | Settings: Agent, usage, access, danger | SettingsAgent, AgentEdit, SettingsUsage, SettingsAccess, SettingsDanger | pass |
 | 29 | Trash and Help | Trash, Help | pass |
-| 30 | Entry: login, register, onboarding, join | Login, Register, Onboarding, OnboardingJoin, Join, JoinInvalid | todo |
+| 30 | Entry: login, register, onboarding, join | Login, Register, Onboarding, OnboardingJoin, Join, JoinInvalid | pass |
 | 31 | Admin: instance and workspace | Admin, AdminWs | todo |
 | 32 | Shared states: empty, loading, load error, not found, no access, deleted workspace, reconnect, storage full, toast, confirm | EmptyStates, LoadingList, LoadingDoc, LoadError, NotFound, NoAccess, WsDeleted, Reconnect, StorageFull, Toasts, Confirm, SearchNoResult | todo |
 | 33 | Desktop screens | DesktopSetup, DesktopStarting, DesktopOffline, DesktopUpdate, DesktopUpdateStates, DesktopImport | todo |
