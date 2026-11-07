@@ -12,7 +12,7 @@ State per item: `todo`, `pass` (commit plus cheap checks: `npx tsc --noEmit`, `n
 | 2 | Tabs: sidebar replaces the current tab, tabs shrink, +N overflow | Tabs, TabMenu | pass |
 | 3 | Shared page frame: 52px header, 20px gutter, one primary action | every page | pass |
 | 4 | Task toolbar: at most two rows, one Select entry, export under More, pagination only when needed, Previous/Next copy | Main, TasksList, TasksTable, TasksCalendar, DisplayMenu, FilterSort, SaveView, FieldManager, PersonalOrder | pass |
-| 5 | Board: empty hint on top, one scroll layer | Main | todo |
+| 5 | Board: empty hint on top, one scroll layer | Main | pass |
 | 6 | Task grid: column menu, cell editing | GridColumn, GridCell | todo |
 | 7 | Bulk bar and batch selection | BulkBar, BatchSelect | todo |
 | 8 | Task panel: 520px, does not squeeze the list, one action row | TaskPanel, PanelProps, PanelReview, PanelSource, PanelClosed, DelegationStates, HandOver, Pickers | todo |

@@ -286,7 +286,7 @@ export function IssueBoard({
   return (
     // min-h-0 keeps the board inside the card: without it the columns' content height
     // wins over the flex budget and the last cards get clipped by the card's overflow.
-    <div className={`@container flex min-h-0 flex-1 gap-1.5 overflow-x-auto ${PAGE_BOARD}`} data-task-board>
+    <div className={`@container flex min-h-0 flex-1 gap-1.5 overflow-x-auto overflow-y-hidden ${PAGE_BOARD}`} data-task-board>
       {columns.map((column) => {
         const status = grouping === "status" && column.value ? (column.value as Status) : null;
         const canDragColumn = grouping === "status" || grouping === "assignee" || grouping === "priority";
@@ -300,7 +300,7 @@ export function IssueBoard({
               <span className="text-small text-faint">{column.tasks.length}</span>
               {status ? <AddIssueButton status={status} /> : null}
             </header>
-            <VirtualStack items={column.tasks} keyFor={issue=>issue.id} estimate={126} keepIndex={drag?.status===column.value&&columnByTask.get(drag.id)?.key===column.key?ranks.get(drag.id):undefined}
+            {column.tasks.length>0&&<VirtualStack items={column.tasks} keyFor={issue=>issue.id} estimate={126} keepIndex={drag?.status===column.value&&columnByTask.get(drag.id)?.key===column.key?ranks.get(drag.id):undefined}
               onDragOverIndex={(event,index)=>handleDragOver(event,column,index)} onDropIndex={(event,index)=>void handleDrop(event,column,index)}
               render={(issue,index)=>{
                 const source=columnByTask.get(drag?.id??"")?.key===column.key?(ranks.get(drag!.id)??-1):-1;
@@ -313,7 +313,7 @@ export function IssueBoard({
                     onDragEnd={()=>{cancelAnimationFrame(overFrame.current);overFrame.current=0;setDrag(null);setOver(null);}}/>
                   {!!drag&&over?.key===column.key&&index===column.tasks.length-1&&over.index===column.tasks.length-(source>=0?1:0)&&<DropLine/>}
                 </div>;
-              }}/>
+              }}/>}
             {column.tasks.length===0&&<div onDragOver={event=>handleDragOver(event,column,0)} onDrop={event=>void handleDrop(event,column,0)} className="min-h-24 rounded-lg border border-dashed border-border px-3 py-4 text-center text-small text-faint">
               {grouping === "status" ? t("No {status} tasks",{status:t(column.label)}) : t("Drop tasks here")}
             </div>}
