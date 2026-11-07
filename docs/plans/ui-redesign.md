@@ -27,7 +27,7 @@ State per item: `todo`, `pass` (commit plus cheap checks: `npx tsc --noEmit`, `n
 | 17 | Project overview and meta | Project, ProjectSelection, ProjectComments, ProjectHistory, ProjectAi, ProjectMenus, ProjectResource, NewProject | partial |
 | 18 | Project tasks and timeline | ProjectTasks, ProjectTimeline, MilestoneEdit | pass |
 | 19 | Documents index | DocsIndex, DocsImport, DocsImportResult | partial |
-| 20 | Document page | Doc, DocUpdates, DocMenus, DocOptions, DocShare, WatchMenu, MoveDoc, DocComments, DocOutline, DocLinks, DocFind, AiEdit, ReviewChanges, RestoreConfirm, EditorMenus, EditorBlocks | partial |
+| 20 | Document page | Doc, DocUpdates, DocMenus, DocOptions, DocShare, WatchMenu, MoveDoc, DocComments, DocOutline, DocLinks, DocFind, AiEdit, ReviewChanges, RestoreConfirm, EditorMenus, EditorBlocks | pass |
 | 21 | Person page | Person | pass |
 | 22 | Planning: cycles | Planning, PlanningOff, CycleAdd, CycleComplete | partial |
 | 23 | Planning: roadmap and initiatives | Roadmap, Initiatives, InitiativeEdit | partial |
@@ -54,7 +54,6 @@ State per item: `todo`, `pass` (commit plus cheap checks: `npx tsc --noEmit`, `n
 - 16: Agent, AgentSetup, AgentModel, AgentSkills, ThreadMenu
 - 17: ProjectSelection, ProjectComments, ProjectHistory, ProjectAi, ProjectMenus
 - 19: DocsImport, DocsImportResult (not compared board by board)
-- 20: DocUpdates, DocMenus, DocOptions, DocShare, WatchMenu, MoveDoc, DocComments, DocOutline, DocLinks, DocFind, AiEdit, ReviewChanges, RestoreConfirm, EditorMenus, EditorBlocks
 - 22: Planning (four stats), PlanningOff, CycleAdd, CycleComplete
 - 23: Initiatives (new-initiative position), InitiativeEdit
 - 25: ExportPage, ImportPage, ImportPreview

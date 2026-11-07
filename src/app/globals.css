@@ -260,6 +260,8 @@ html[data-desktop] .app-auth-menu {
 .document-editor .ProseMirror div[data-type="details"] div[data-type="detailsContent"] { grid-column: 1 / -1; grid-row: 2; }
 .document-editor .ProseMirror aside[data-callout] { border-left: 2px solid var(--color-accent); background: var(--color-surface); padding: 8px 12px; }
 .document-editor .ProseMirror pre { border: 1px solid var(--color-border); border-radius: 8px; background: var(--color-surface); padding: 12px; font-family: var(--font-mono); font-size: 12.5px; }
+.document-editor .ProseMirror pre.doc-code-collapsed { max-height: 7em; overflow: hidden; }
+.document-editor .ProseMirror .doc-code-line-number { display: inline-block; width: 2.5em; color: var(--color-faint); user-select: none; }
 .document-editor .ProseMirror pre .hljs-keyword,
 .document-editor .ProseMirror pre .hljs-selector-tag,
 .document-editor .ProseMirror pre .hljs-literal { color: var(--color-code-keyword); }

@@ -70,7 +70,7 @@ async function main() {
   const page = read("src/components/doc-page.tsx");
   assert(page.includes("docOutline(doc)"), "the reader builds its outline from the document");
   assert(page.includes("DocOutlinePanel"), "the reader-sidebar outline is rendered");
-  assert(page.includes("data-doc-outline-toggle"), "the outline has a stable toggle");
+  assert(read("src/components/document-tools.tsx").includes("data-doc-outline-toggle"), "the outline has a stable toggle");
   assert(page.includes("requestedHeading") && page.includes("scrollToHeading"), "a copied heading link scrolls the reader");
   const panel = read("src/components/doc-outline.tsx");
   assert(panel.includes("data-outline-item") && panel.includes("data-outline-copy"), "outline rows and copy buttons are addressable");
