@@ -1560,7 +1560,7 @@ function tabMeta(
   return { label: t("Tasks"), icon: <List size={13} /> };
 }
 
-const TAB_MIN_WIDTH = 68;
+const TAB_MIN_WIDTH = 96;
 const TAB_ROOM_DEFAULT = 8;
 
 function TabBar({
@@ -1702,6 +1702,8 @@ function TabBar({
     const liveProjects = new Set(projects.map((project) => project.id));
     const livePages = new Set(pages.map((page) => page.id));
     const alive = (key: string) => {
+      // The page on screen stays: adding it back here and dropping it there would loop forever.
+      if (key === current) return true;
       const project = key.match(new RegExp(`^/${workspace.id}/projects/([^/?]+)`));
       if (project && !liveProjects.has(project[1])) return false;
       const page = key.match(new RegExp(`^/${workspace.id}/docs/([^/?]+)`));
@@ -1710,7 +1712,7 @@ function TabBar({
     };
     if (tabs.every(alive)) return;
     setTabs(tabs.filter(alive));
-  }, [tabs, projects, pages, workspace.id]);
+  }, [tabs, projects, pages, workspace.id, current]);
 
   const visible = tabs ?? [];
   const { shown: shownTabs, hidden: hiddenTabs } = fitTabs(visible, current, tabRoom);
@@ -1787,7 +1789,7 @@ function TabBar({
           const isActive = key === current;
           return (
             <ContextMenu.Root key={key}><ContextMenu.Trigger asChild><div
-              className={`app-tab group flex h-8 min-w-[64px] max-w-[168px] flex-1 items-center gap-1.5 rounded-lg border px-2 text-small transition-colors ${
+              className={`app-tab group flex h-8 min-w-[92px] max-w-[168px] flex-1 items-center gap-1.5 rounded-lg border px-2 text-small transition-colors ${
                 isActive
                   ? "border-border bg-bg font-medium text-text shadow-[0_1px_2px_rgba(0,0,0,0.05)]"
                   : "border-transparent text-muted hover:bg-elevated/70 hover:text-text"
