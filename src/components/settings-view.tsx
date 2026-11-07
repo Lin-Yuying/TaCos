@@ -1006,7 +1006,7 @@ export function SettingsView({
         </section>
         </SettingsPanel>
 
-        <SettingsPanel id="agent" title={t("Harness and model API")}>
+        <SettingsPanel id="agent" title={t("Agent")}>
         <section className="space-y-3" data-testid="harness-settings">
           <div className="flex flex-wrap items-center gap-2">
             <h2 className="text-body font-semibold">{t("Harness")}</h2>
@@ -1120,23 +1120,32 @@ export function SettingsView({
             <p className="text-small text-faint">{t("Only a workspace admin can change harness toggles.")}</p>
           )}
         </section>
+        <ModelKeysSection workspaceId={workspace.id} view={modelKeys} serverMode={serverMode} />
         <AgentSettingsSection
           workspaceId={workspace.id}
           agents={agents}
           projects={projects}
           isAdmin={isAdmin}
         />
-        <ModelKeysSection workspaceId={workspace.id} view={modelKeys} serverMode={serverMode} />
+        </SettingsPanel>
+
+        <SettingsPanel id="usage" title={t("Agent usage")}>
+        <AgentUsageSection usage={agentUsage} />
+        </SettingsPanel>
+
+        <SettingsPanel id="access" title={t("Agent access: REST and MCP")}>
+          <p className="text-small leading-relaxed text-faint">{t("Only needed to connect other tools to TaCos or to get through a filtered network.")}</p>
               {isAdmin && (
-                <div className="space-y-3 rounded-lg border border-border p-3">
+                <section className="space-y-3">
+                  <h2 className="text-body font-semibold">{t("Proxy (optional)")}</h2>
                   <label className="block space-y-1 text-small text-muted">
-                    <span>{t("Proxy (optional)")}</span>
+                    <span className="sr-only">{t("Proxy (optional)")}</span>
                     <input
                       value={aiProxy}
                       onChange={(e) => setAiProxy(e.target.value)}
                       placeholder="http://127.0.0.1:7890"
                       spellCheck={false}
-                      className="w-full rounded-md border border-border bg-elevated/50 px-2.5 py-1.5 font-mono text-small text-text placeholder:text-faint focus:border-border-strong"
+                      className="w-full rounded-md border border-border bg-bg px-2.5 py-1.5 font-mono text-small text-text placeholder:text-faint focus:border-border-strong"
                     />
                     <span className="block text-small text-faint">
                       {t("Set a local proxy when this machine needs one to reach model providers. All harnesses use it.")}
@@ -1154,17 +1163,10 @@ export function SettingsView({
                   </div>
                   {aiError && <div className="text-small text-danger">{t(aiError)}</div>}
                   {aiNotice && <div className="text-small text-muted">{aiNotice}</div>}
-                </div>
+                </section>
               )}
-        </SettingsPanel>
-
-        <SettingsPanel id="usage" title={t("Agent usage")}>
-        <AgentUsageSection usage={agentUsage} />
-        </SettingsPanel>
-
-        <SettingsPanel id="access" title={t("Agent access: REST and MCP")}>
             <section className="space-y-3">
-              <h2 className="text-body font-semibold">{t("Agent access — REST API keys")}</h2>
+              <h2 className="text-body font-semibold">{t("REST API keys")}</h2>
               <p className="text-body leading-relaxed text-muted">
                 {interpolate(
                   t(
@@ -1407,7 +1409,7 @@ export function SettingsView({
             </section>
 
             <section className="space-y-3">
-              <h2 className="text-body font-semibold">{t("Agent access — MCP server")}</h2>
+              <h2 className="text-body font-semibold">{t("MCP server")}</h2>
               <p className="text-body leading-relaxed text-muted">
                 {interpolate(
                   t(
@@ -1462,11 +1464,10 @@ export function SettingsView({
             </section>
         </SettingsPanel>
 
-        {isOwner && (
         <SettingsPanel id="danger" title={t("Danger zone")}>
+          {isOwner && (
           <section className="space-y-3">
-            <h2 className="text-body font-semibold text-danger">{t("Danger zone")}</h2>
-            <div className="flex items-center gap-3 rounded-lg border border-danger/40 bg-danger/5 p-4">
+            <div className="flex items-center gap-3 rounded-lg border border-border px-4 py-3">
               <div className="min-w-0 flex-1">
                 <div className="text-body font-medium">{t("Delete this workspace")}</div>
                 <p className="mt-0.5 text-small leading-relaxed text-muted">
@@ -1490,13 +1491,11 @@ export function SettingsView({
               </button>
             </div>
           </section>
+          )}
+          {/* Scoped to workspaces this user owns, so it can render even in someone
+              else's settings page. */}
+          <WorkspaceTrashList items={deletedWorkspaces} />
         </SettingsPanel>
-        )}
-
-
-        {/* Scoped to workspaces this user owns, so it can render even in someone
-            else's settings page. */}
-        <WorkspaceTrashList items={deletedWorkspaces} />
       </div>
 
       {deleteOpen && (

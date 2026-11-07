@@ -41,13 +41,13 @@ type NavItem = { key: string; label: string; href: string; page?: SettingsPage; 
 export function SettingsShell({
   workspaceId,
   canTransfer,
-  isOwner,
+  showDanger,
   isInstanceAdmin,
   children,
 }: {
   workspaceId: string;
   canTransfer: boolean;
-  isOwner: boolean;
+  showDanger: boolean;
   isInstanceAdmin: boolean;
   children: ReactNode;
 }) {
@@ -89,7 +89,7 @@ export function SettingsShell({
         ...(isInstanceAdmin ? [route("system", t("System"))] : []),
       ],
     },
-    ...(isOwner ? [{ title: t("Other"), items: [page("danger", t("Danger zone"))] }] : []),
+    ...(showDanger ? [{ title: t("Other"), items: [page("danger", t("Danger zone"))] }] : []),
   ];
   return (
     <div className="flex min-h-0 min-w-0 flex-1 max-[760px]:flex-col" data-testid="settings-shell">

@@ -1,7 +1,8 @@
 "use client";
 
 import { useState } from "react";
-import { Bot, Plus, Trash2 } from "lucide-react";
+import { Bot, Plus, Trash2, X } from "lucide-react";
+import { Modal } from "@/components/ui/modal";
 import { createAgentAction, deleteAgentAction, updateAgentAction } from "@/app/agent-actions";
 import { AGENT_APPROVALS, AGENT_HARNESS_IDS } from "@/lib/ai-constants";
 import type { AgentView } from "@/lib/workspace-agents";
@@ -144,7 +145,7 @@ export function AgentSettingsSection({
           </span>
         </button>
       </div>
-      <p className="text-body leading-relaxed text-muted">
+      <p className="text-small leading-relaxed text-faint">
         {t(
           "Agents are teammates you can delegate tasks to. Shared agents are admin-managed and scoped to projects; each member also has a personal agent."
         )}
@@ -224,7 +225,15 @@ export function AgentSettingsSection({
       </div>
 
       {draft && (
-        <div className="space-y-2 rounded-lg border border-border p-3" data-testid="agent-form">
+        <Modal open onClose={() => setDraft(null)} title={draft.id ? t("Edit agent") : t("New agent")}>
+        <div className="rounded-xl border border-border bg-overlay shadow-2xl shadow-black/15" data-testid="agent-form">
+          <div className="flex items-center justify-between border-b border-border px-4 py-3">
+            <h2 className="text-lead font-semibold text-text">{draft.id ? t("Edit agent") : t("New agent")}</h2>
+            <button type="button" aria-label={t("Close")} onClick={() => setDraft(null)} className="rounded-md p-1 text-faint transition-colors hover:bg-elevated hover:text-text">
+              <X size={14} />
+            </button>
+          </div>
+          <div className="space-y-2 p-4">
           <div className="flex flex-wrap gap-2">
             <input
               value={draft.name}
@@ -336,9 +345,12 @@ export function AgentSettingsSection({
               {t("Cancel")}
             </button>
           </div>
+          {error && <div className="text-small text-danger">{t(error)}</div>}
+          </div>
         </div>
+        </Modal>
       )}
-      {error && <div className="text-small text-danger">{t(error)}</div>}
+      {!draft && error && <div className="text-small text-danger">{t(error)}</div>}
       {!isAdmin && (
         <p className="text-small text-faint">{t("Only a workspace admin can add or change shared agents.")}</p>
       )}

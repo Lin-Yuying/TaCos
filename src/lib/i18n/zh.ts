@@ -2,6 +2,10 @@
 // `{name}` placeholders must survive translation unchanged. Grouped by the file that
 // first uses a string; `npm run i18n:check` lists keys used in code but missing here.
 const zh: Record<string, string> = {
+  "Edit agent": "编辑 Agent",
+  "REST API keys": "REST API Key",
+  "MCP server": "MCP 服务器",
+  "Only needed to connect other tools to TaCos or to get through a filtered network.": "只有要连接其他工具，或需要穿过受限网络时才用到这一页。",
   "Avatar": "头像",
   "Profile and display": "个人资料与显示",
   "Basics and icon": "基本信息与图标",

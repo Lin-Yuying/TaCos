@@ -11,12 +11,11 @@ export function AgentUsageSection({ usage }: { usage: AgentUsageSummary }) {
   return (
     <section className="space-y-3" data-testid="agent-usage">
       <div className="flex flex-wrap items-center gap-2">
-        <h2 className="text-body font-semibold">{t("Agent usage")}</h2>
-        <span className="rounded-full bg-elevated px-2 py-0.5 font-variant-numeric tabular-nums text-caption text-faint">
+                <span className="rounded-full bg-elevated px-2 py-0.5 font-variant-numeric tabular-nums text-caption text-faint">
           {t("Last {days} days", { days: "30" })}
         </span>
       </div>
-      <p className="text-body leading-relaxed text-muted">
+      <p className="text-small leading-relaxed text-faint">
         {t("Tokens the harnesses and the built-in API agent reported. Usage never stops a run, and TaCos never shows a price or a budget.")}
       </p>
       <div className="grid grid-cols-2 gap-2 @md:grid-cols-4" data-testid="agent-usage-totals">
@@ -29,7 +28,7 @@ export function AgentUsageSection({ usage }: { usage: AgentUsageSummary }) {
           ] as const
         ).map(([label, value]) => (
           <div key={label} className="rounded-lg border border-border px-3 py-2">
-            <div className="text-caption uppercase tracking-[0.06em] text-faint">{t(label)}</div>
+            <div className="text-caption text-faint">{t(label)}</div>
             <div className="font-variant-numeric tabular-nums text-title">{formatTokens(value)}</div>
           </div>
         ))}
