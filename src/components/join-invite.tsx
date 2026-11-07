@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { joinWorkspaceAction } from "@/app/auth-actions";
+import { joinWorkspaceAction, logoutAction } from "@/app/auth-actions";
 import { OtterMark } from "@/components/icons";
 import { useT } from "@/components/i18n-context";
 import { GATE, GATE_CARD } from "@/lib/page-chrome";
@@ -33,6 +33,14 @@ export function JoinInvite({
     window.location.href = `/${result.data.id}`;
   }
 
+  // Signing out first: /login sends a signed-in visitor straight back to this invite.
+  async function switchAccount() {
+    if (busy) return;
+    setBusy(true);
+    await logoutAction();
+    window.location.href = `/login?invite=${encodeURIComponent(code)}`;
+  }
+
   return (
     <div className={GATE}>
       <div className={`${GATE_CARD} items-center text-center`}>
@@ -53,6 +61,14 @@ export function JoinInvite({
               className="w-full rounded-md bg-accent px-3 py-2 text-body font-medium text-white transition-colors hover:bg-accent-hover disabled:opacity-60"
             >
               {busy ? t("Joining…") : t("Join workspace")}
+            </button>
+            <button
+              type="button"
+              disabled={busy}
+              onClick={() => void switchAccount()}
+              className="text-small text-text underline disabled:opacity-60"
+            >
+              {t("Use a different account")}
             </button>
           </>
         ) : (
