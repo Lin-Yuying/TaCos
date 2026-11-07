@@ -1,5 +1,5 @@
 "use client";
-import { useRef, useState, type ReactNode } from "react";
+import { Fragment, useRef, useState, type ReactNode } from "react";
 import * as Context from "@radix-ui/react-context-menu";
 import { MoreHorizontal } from "lucide-react";
 import { useRouter } from "next/navigation";
@@ -143,27 +143,32 @@ export function ThreadMenu({
     },
     ...(thread.mine ? [{ label: "Delete conversation", run: remove }] : []),
   ];
+  const lead = ["Rename", "Move to project", "Copy link"];
+  const rank = (label: string) => (label === "Delete conversation" ? 9 : lead.includes(label) ? lead.indexOf(label) : 5);
+  actions.sort((a, b) => rank(a.label) - rank(b.label));
   const more = (
     <Menu
       align="right"
-      width={260}
+      width={220}
       trigger={<MoreHorizontal size={14} />}
       triggerClassName="rounded p-1 text-faint hover:bg-elevated"
     >
       {(close) => (
         <>
           {actions.map((action) => (
-            <MenuItem
-              key={action.label}
-              danger={action.label === "Delete conversation"}
-              disabled={busy}
-              onSelect={() => {
-                close();
-                action.run();
-              }}
-            >
-              {t(action.label)}
-            </MenuItem>
+            <Fragment key={action.label}>
+              {action.label === "Delete conversation" && <div className="my-1 h-px bg-border" />}
+              <MenuItem
+                danger={action.label === "Delete conversation"}
+                disabled={busy}
+                onSelect={() => {
+                  close();
+                  action.run();
+                }}
+              >
+                {t(action.label)}
+              </MenuItem>
+            </Fragment>
           ))}
         </>
       )}
