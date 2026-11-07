@@ -99,7 +99,7 @@ export function PlanningView({
         className={`${PAGE_HEADER} ${PAGE_INSET}`}
       >
         <h1 className={PAGE_TITLE}>{t("Planning")}</h1>
-        <nav aria-label={t("Planning sections")} className="flex items-center gap-0.5">
+        <nav aria-label={t("Planning sections")} className="ml-auto flex flex-wrap items-center gap-0.5">
           {TABS.map(({ key, label, icon: Icon }) => (
             <Link
               key={key}
@@ -107,7 +107,7 @@ export function PlanningView({
               scroll={false}
               aria-current={tab === key ? "page" : undefined}
               data-testid={`planning-tab-${key}`}
-              className={`flex items-center gap-1.5 rounded-full px-2.5 py-1 text-small transition-colors ${
+              className={`flex items-center gap-1.5 rounded-md px-2.5 py-1 text-small transition-colors ${
                 tab === key ? "bg-elevated text-text" : "text-muted hover:bg-elevated/60 hover:text-text"
               }`}
             >
