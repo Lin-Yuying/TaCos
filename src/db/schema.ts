@@ -1255,3 +1255,42 @@ export const initiativeLabels = sqliteTable(
   (t) => [primaryKey({ columns: [t.initiativeId, t.labelId] })]
 );
 
+// U-05: one row per export or import. The job runs in the server process; the row keeps
+// progress, the audit trail and the signed download's scope across a page reload.
+export const transferJobs = sqliteTable(
+  "transfer_jobs",
+  {
+    id: text("id").primaryKey(),
+    // export | import
+    kind: text("kind").notNull(),
+    // The workspace the owner/admin starts from. The download is scoped to it.
+    workspaceId: text("workspace_id").notNull(),
+    // Set once an import has created its new (hidden until finished) workspace.
+    targetWorkspaceId: text("target_workspace_id"),
+    createdBy: text("created_by").notNull(),
+    // queued | running | done | failed
+    status: text("status").notNull().default("queued"),
+    // Human-readable step for the progress line.
+    phase: text("phase").notNull().default(""),
+    // 0-100. Numbers that move in place render in tabular figures on the page.
+    progress: integer("progress").notNull().default(0),
+    // JSON: counts, options, the new workspace's name/id once known.
+    summary: text("summary").notNull().default("{}"),
+    error: text("error"),
+    // File name under <data>/exports; empty until the archive is finished.
+    artifactPath: text("artifact_path"),
+    artifactName: text("artifact_name"),
+    artifactBytes: integer("artifact_bytes"),
+    // Source hash used to make a repeated import a no-op.
+    fingerprint: text("fingerprint"),
+    expiresAt: text("expires_at"),
+    createdAt: text("created_at").notNull(),
+    updatedAt: text("updated_at").notNull(),
+    finishedAt: text("finished_at"),
+  },
+  (t) => [
+    index("transfer_jobs_workspace_idx").on(t.workspaceId, t.kind, t.createdAt),
+    index("transfer_jobs_fingerprint_idx").on(t.fingerprint, t.createdBy),
+  ]
+);
+

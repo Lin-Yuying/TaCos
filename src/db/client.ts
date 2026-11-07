@@ -789,6 +789,31 @@ CREATE TABLE IF NOT EXISTS agent_harness_sessions (
   updated_at TEXT NOT NULL,
   PRIMARY KEY (thread_id, engine)
 );
+
+-- U-05: export/import jobs. The work runs in this process; the row is the progress the
+-- Settings pages poll and the scope of the signed download link.
+CREATE TABLE IF NOT EXISTS transfer_jobs (
+  id TEXT PRIMARY KEY,
+  kind TEXT NOT NULL,
+  workspace_id TEXT NOT NULL,
+  target_workspace_id TEXT,
+  created_by TEXT NOT NULL,
+  status TEXT NOT NULL DEFAULT 'queued',
+  phase TEXT NOT NULL DEFAULT '',
+  progress INTEGER NOT NULL DEFAULT 0,
+  summary TEXT NOT NULL DEFAULT '{}',
+  error TEXT,
+  artifact_path TEXT,
+  artifact_name TEXT,
+  artifact_bytes INTEGER,
+  fingerprint TEXT,
+  expires_at TEXT,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL,
+  finished_at TEXT
+);
+CREATE INDEX IF NOT EXISTS transfer_jobs_workspace_idx ON transfer_jobs (workspace_id, kind, created_at);
+CREATE INDEX IF NOT EXISTS transfer_jobs_fingerprint_idx ON transfer_jobs (fingerprint, created_by);
 `;
 
 export function hashPassword(password: string): string {
