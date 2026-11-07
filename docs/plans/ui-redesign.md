@@ -30,7 +30,7 @@ State per item: `todo`, `pass` (commit plus cheap checks: `npx tsc --noEmit`, `n
 | 20 | Document page | Doc, DocUpdates, DocMenus, DocOptions, DocShare, WatchMenu, MoveDoc, DocComments, DocOutline, DocLinks, DocFind, AiEdit, ReviewChanges, RestoreConfirm, EditorMenus, EditorBlocks | pass |
 | 21 | Person page | Person | pass |
 | 22 | Planning: cycles | Planning, PlanningOff, CycleAdd, CycleComplete | pass |
-| 23 | Planning: roadmap and initiatives | Roadmap, Initiatives, InitiativeEdit | todo |
+| 23 | Planning: roadmap and initiatives | Roadmap, Initiatives, InitiativeEdit | pass |
 | 24 | Insights: four stats, one filter row, chart/table toggle | Insights | todo |
 | 25 | Settings shell: grouped left navigation, Storage, Export, Import and System inside it | SettingsNav, Storage, ExportPage, ImportPage, ImportPreview, System | todo |
 | 26 | Settings: profile, general, members, visibility, projects | SettingsProfile, SettingsGeneral, SettingsMembers, Invite, SettingsVisibility, SettingsProjects | todo |
