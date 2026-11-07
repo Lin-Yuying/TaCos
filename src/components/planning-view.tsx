@@ -108,6 +108,7 @@ export function PlanningView({
             </Link>
           ))}
         </nav>
+        <span id="planning-header-tools" className="contents" />
       </header>
       <div className="min-h-0 flex-1 overflow-y-auto">
         <div className={`${PAGE_INSET} py-5`}>

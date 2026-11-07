@@ -2,6 +2,8 @@
 // `{name}` placeholders must survive translation unchanged. Grouped by the file that
 // first uses a string; `npm run i18n:check` lists keys used in code but missing here.
 const zh: Record<string, string> = {
+  "No target date": "未填目标日期",
+  "Owner {name}": "负责人 {name}",
   "Finish": "完成",
   "Search tasks": "搜索任务",
   "{count} at the start": "开始时 {count}",
@@ -815,7 +817,7 @@ const zh: Record<string, string> = {
     "工作区里的所有人都已经在这里了。",
   "Remove {name}": "移除 {name}",
   Remove: "移除",
-  "Add resource": "添加资源",
+  "Add resource": "添加资源链接",
   "New document": "新建文档",
   "Project documents": "项目文档",
   "None yet": "还没有",
