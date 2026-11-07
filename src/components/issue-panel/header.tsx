@@ -1,6 +1,7 @@
 "use client";
 
-import { Link2, Lock, Maximize2, Minimize2, Trash2 } from "lucide-react";
+import { Link2, Lock, Maximize2, MessageSquare, Minimize2, Trash2 } from "lucide-react";
+import type { ReactNode } from "react";
 import { Menu, MenuItem } from "@/components/menu";
 import { STATUS_META, StatusIcon } from "@/components/icons";
 import { STATUS_ORDER } from "@/lib/constants";
@@ -19,6 +20,9 @@ export function PanelHeader({
   onClose,
   expanded,
   onToggleExpanded,
+  onWriteComment,
+  navigation,
+  watch,
 }: {
   detail: FlatDetail;
   canChangeStatus: boolean;
@@ -27,12 +31,15 @@ export function PanelHeader({
   onClose: () => void;
   expanded: boolean;
   onToggleExpanded: () => void;
+  onWriteComment: () => void;
+  navigation: ReactNode;
+  watch: ReactNode;
 }) {
   const t = useT();
   const {workspaceId}=useParams<{workspaceId:string}>();
   const {toast}=useUI();
   return (
-    <div className="flex h-12 shrink-0 items-center gap-2 border-b border-border px-4">
+    <div className="flex min-h-[52px] shrink-0 items-center gap-2 border-b border-border px-4">
       <span className="max-w-[240px] truncate font-mono text-small text-faint">
         {issueRef(detail)}
       </span>
@@ -74,7 +81,12 @@ export function PanelHeader({
           <Lock size={11} className="text-faint" />
         </span>
       )}
+      {navigation}
       <div className="ml-auto flex items-center gap-1">
+        {watch}
+        <button type="button" onClick={onWriteComment} aria-label={t("Write a comment")} title={t("Write a comment")} className="rounded-md p-1.5 text-muted transition-colors hover:bg-elevated hover:text-text">
+          <MessageSquare size={15} />
+        </button>
         <button type="button" aria-label={t("Copy link")} title={t("Copy link")} className="rounded p-1.5 text-muted" onClick={()=>{void navigator.clipboard.writeText(new URL(entityHref(workspaceId,{kind:"task",id:detail.id}),location.origin).href).then(()=>toast(t("Copied"))).catch(()=>toast(t("Could not copy. Retry.")));}}><Link2 size={15}/></button>
         <button
           type="button"

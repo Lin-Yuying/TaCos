@@ -12,7 +12,7 @@ export function DetailLayout({ children, detail }: { children: ReactNode; detail
   const panel = usePanelRef();
   const active = !!(openIssueId || openPageId);
   const [narrow, setNarrow] = useState(false);
-  const [width, remember] = useStoredJson(`tacos.panel.width.v1.${scope}.${openIssueId ? "task" : "document"}`, 460);
+  const [width, remember] = useStoredJson(`tacos.panel.width.v2.${scope}.${openIssueId ? "task" : "document"}`, 520);
   const widthRef = useRef(width); useEffect(()=>{widthRef.current=width;},[width]);
   useEffect(() => {
     const observer = new ResizeObserver(([entry]) => setNarrow(entry.contentRect.width < 760));
@@ -23,7 +23,7 @@ export function DetailLayout({ children, detail }: { children: ReactNode; detail
     if (!active) panel.current?.collapse();
     else panel.current?.resize(panelExpanded || narrow ? "100%" : Math.max(320, Math.min(800, widthRef.current)));
   }, [active, panelExpanded, narrow, panel, openIssueId ? "task" : "document"]);
-  function reset() { remember(460); panel.current?.resize(460); }
+  function reset() { remember(520); panel.current?.resize(520); }
   return <div ref={root} className="relative flex min-h-0 min-w-0 flex-1">
     <Group orientation="horizontal" className="min-h-0 flex-1" onLayoutChanged={() => {
       const size = panel.current?.getSize().inPixels;

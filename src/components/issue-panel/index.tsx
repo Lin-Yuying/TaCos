@@ -217,7 +217,6 @@ function IssuePanel({
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      <div className="border-b border-border px-3 py-1"><DetailNavigation kind="task" id={id} workspaceId={workspaceId} panel/></div>
       <PanelHeader
         detail={detail}
         canChangeStatus={canChangeStatus}
@@ -226,6 +225,9 @@ function IssuePanel({
         onClose={onClose}
         expanded={expanded}
         onToggleExpanded={onToggleExpanded}
+        onWriteComment={scrollToComposer}
+        navigation={<DetailNavigation kind="task" id={id} workspaceId={workspaceId} panel/>}
+        watch={<WatchControl workspaceId={workspaceId} scopeType="issue" scopeId={detail.id} compact />}
       />
 
       {/* Keep content in normal flow: a flex column shrinks the description to its
@@ -233,19 +235,6 @@ function IssuePanel({
       <div ref={scrollRef} className="min-h-0 flex-1 space-y-5 overflow-y-auto p-4">
         {error && <div role="alert" className="text-small text-danger">{t(error)} <button onClick={()=>setAttempt((n)=>n+1)}>{t("Retry")}</button></div>}
         <EditableTitle id={`task.${id}`} value={detail.title} onSave={(title)=>update({title})}/>
-        <div className="flex items-center gap-2">
-          <WatchControl workspaceId={workspaceId} scopeType="issue" scopeId={detail.id} />
-          <button className="text-small text-muted" onClick={scrollToComposer}>{t("Write a comment")}</button>
-        </div>
-
-        <PropertiesRow
-          detail={detail}
-          members={members}
-          allLabels={allLabels}
-          onCollection={changeCollection}
-          onUpdate={update}
-        />
-
         <ClaimRow
           workspaceId={workspaceId}
           detail={detail}
@@ -271,11 +260,26 @@ function IssuePanel({
 
         <SourceChatRow workspaceId={workspaceId} threadId={detail.sourceThreadId} />
 
+        <PropertiesRow
+          detail={detail}
+          members={members}
+          allLabels={allLabels}
+          onCollection={changeCollection}
+          onUpdate={update}
+        />
+
         <DueRow detail={detail} onUpdate={update} />
 
         <RecurrenceRow detail={detail} onUpdate={update} />
 
-        <Subtasks children={detail.children} busy={busy} onAdd={addSubtask} />
+        <DescriptionSection
+          workspaceId={workspaceId}
+          issueId={id}
+          description={detail.description}
+          onUpdate={update}
+        />
+
+        <BlockerReport events={detail.events} busy={busy} onSubmit={submitBlocker} />
 
         <Dependencies
           dependencies={detail.dependencies}
@@ -285,14 +289,7 @@ function IssuePanel({
           onRemove={removeTaskDependency}
         />
 
-        <BlockerReport events={detail.events} busy={busy} onSubmit={submitBlocker} />
-
-        <DescriptionSection
-          workspaceId={workspaceId}
-          issueId={id}
-          description={detail.description}
-          onUpdate={update}
-        />
+        <Subtasks children={detail.children} busy={busy} onAdd={addSubtask} />
 
         <div className="shrink-0 space-y-2 border-t border-border pt-4">
           {showReview && (
