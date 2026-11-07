@@ -552,7 +552,7 @@ const zh: Record<string, string> = {
   "Save template": "保存模板",
   "Add template": "添加模板",
   "Edit template {name}": "编辑模板 {name}",
-  "Add one above; it appears when someone creates a document.": "在上方添加，成员创建文档时会看到。",
+  "Add one below; it appears when someone creates a document.": "在下方添加，成员创建文档时会看到。",
   "Page templates": "页面模板",
   "Markdown with {date}, {author} and {project}.": "支持 Markdown；可用 {date}、{author}、{project}。",
   "Close outline": "关闭大纲",

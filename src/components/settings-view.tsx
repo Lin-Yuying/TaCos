@@ -3,7 +3,7 @@ import { safeAction } from "@/lib/ui/safe-action";
 
 import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { useRouter } from "next/navigation";
-import { Copy, Check, RefreshCw, Trash2, Upload } from "lucide-react";
+import { Copy, Check, RefreshCw, Upload } from "lucide-react";
 import {
   createApiKeyAction,
   createProjectAction,
@@ -961,7 +961,6 @@ export function SettingsView({
 
         <SettingsPanel id="page-templates" title={t("Page templates")}>
         <section id="page-templates" className="scroll-mt-6 space-y-3">
-          <h2 className="text-body font-semibold">{t("Page templates")}</h2>
           <PageTemplatesManager
             workspaceId={workspace.id}
             initialTemplates={pageTemplates}
@@ -972,7 +971,6 @@ export function SettingsView({
 
         <SettingsPanel id="cycles" title={t("Cycle settings")}>
         <section id="cycles" className="scroll-mt-6 space-y-3">
-          <h2 className="text-body font-semibold">{t("Cycle settings")}</h2>
           <CycleSettingsSection
             workspaceId={workspace.id}
             settings={cycleSettings}
@@ -984,7 +982,6 @@ export function SettingsView({
 
         <SettingsPanel id="automations" title={t("Automations")}>
         <section id="automations" className="scroll-mt-6 space-y-3" data-testid="automation-settings">
-          <h2 className="text-body font-semibold">{t("Automations")}</h2>
           <AutomationSettingsSection
             workspaceId={workspace.id}
             currentUserId={currentUser.id}
@@ -1002,7 +999,6 @@ export function SettingsView({
 
         <SettingsPanel id="labels" title={t("Labels")}>
         <section id="labels" className="scroll-mt-6 space-y-3">
-          <h2 className="text-body font-semibold">{t("Labels")}</h2>
           <p className="text-small leading-relaxed text-faint">
             {t("Create and delete labels for tasks in this workspace.")}
           </p>

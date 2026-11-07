@@ -4,7 +4,8 @@
 // scratch, dry-run them against a task, and read the run log. Members see the enabled
 // rules and the runs their own actions triggered.
 import { useState } from "react";
-import { ArrowDown, ArrowUp, Plus, Trash2 } from "lucide-react";
+import { ArrowDown, ArrowUp, Plus, Trash2, X } from "lucide-react";
+import { Modal } from "@/components/ui/modal";
 import { useUI } from "@/components/ui-context";
 import { useLocale, useT } from "@/components/i18n-context";
 import { safeAction } from "@/lib/ui/safe-action";
@@ -289,16 +290,20 @@ export function AutomationSettingsSection({
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center gap-2">
-        <span className="rounded-full bg-elevated px-2 py-0.5 text-caption text-faint">
-          {t("{count} rules", { count: String(rules.length) })}
-        </span>
+        <div className="min-w-0 flex-1 basis-64">
+          <p className="text-small leading-relaxed text-faint">
+        {t(
+          "When a trigger happens, matching rules run their actions in order inside TaCos. Actions fail independently and stay in the run log."
+        )}
+      </p>
+        </div>
         {canManage && (
           <button
             type="button"
             onClick={beginCreate}
             disabled={busy}
             data-testid="automation-create"
-            className={`ml-auto ${BUTTON}`}
+            className={BUTTON}
           >
             <span className="flex items-center gap-1">
               <Plus size={12} /> {t("New rule")}
@@ -306,11 +311,6 @@ export function AutomationSettingsSection({
           </button>
         )}
       </div>
-      <p className="text-body leading-relaxed text-muted">
-        {t(
-          "When a trigger happens, matching rules run their actions in order inside TaCos. Actions fail independently and stay in the run log."
-        )}
-      </p>
       {!canManage && (
         <p className="text-small text-faint">
           {t("You see enabled rules and the runs your own actions triggered. The owner or an admin manages rules.")}
@@ -347,6 +347,7 @@ export function AutomationSettingsSection({
         </div>
       )}
 
+      <h3 className="text-body font-semibold">{t("{count} rules", { count: String(rules.length) })}</h3>
       <div className="overflow-hidden rounded-lg border border-border">
         {rules.length === 0 && (
           <p className="px-4 py-3 text-small text-faint">{t("No rules yet.")}</p>
@@ -426,11 +427,18 @@ export function AutomationSettingsSection({
       </div>
 
       {draft && (
+        <Modal open onClose={() => setDraft(null)} title={draft.id ? t("Edit rule") : t("New rule")}>
         <div
-          className="space-y-3 rounded-lg border border-border bg-surface/60 p-4"
+          className="rounded-xl border border-border bg-overlay shadow-2xl shadow-black/15"
           data-testid="automation-editor"
         >
-          <div className="text-body font-medium">{draft.id ? t("Edit rule") : t("New rule")}</div>
+          <div className="flex items-center justify-between border-b border-border px-4 py-3">
+            <h2 className="text-lead font-semibold text-text">{draft.id ? t("Edit rule") : t("New rule")}</h2>
+            <button type="button" aria-label={t("Close")} onClick={() => setDraft(null)} className="rounded-md p-1 text-faint transition-colors hover:bg-elevated hover:text-text">
+              <X size={14} />
+            </button>
+          </div>
+          <div className="space-y-3 p-4">
           <label className={LABEL}>
             <span>{t("Rule name")}</span>
             <input
@@ -645,7 +653,9 @@ export function AutomationSettingsSection({
               </div>
             )}
           </div>
+          </div>
         </div>
+        </Modal>
       )}
 
       <div className="space-y-2" data-testid="automation-run-log">
