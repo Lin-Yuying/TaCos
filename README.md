@@ -392,6 +392,28 @@ the REST API and MCP have no rule-creation surface.
   reports back as a review, and the Inbox notices are the same. This feature has no Slack,
   GitHub, webhook, email, push or external-agent delivery.
 
+## Export, import and portability
+
+**Settings → Export** and **Settings → Import** are owner/admin actions. An export is one
+canonical ZIP: `workspace.json`, `manifest.json`, `tasks.csv`, `docs/<page>.md` with the
+page tree as folders, and `attachments/` with original bytes and a manifest. Passwords,
+API key hashes/plaintext, provider keys, runner tokens, sessions and join codes are never
+written; API keys export only their name, scopes and project allowlist. The export runs
+in the server process with live progress and a signed download URL valid for 15 minutes;
+`npm run export -- <workspace>` writes the same archive on the server. See
+[the export/import runbook](docs/runbook-import-export.md).
+
+Import accepts a TaCos export, a Notion Markdown export ZIP, a Markdown folder or a task
+CSV. It previews counts, conflicts and unmapped fields before writing anything, then
+builds a **new** workspace in the background. The workspace stays hidden until the last
+row lands; a failure rolls it back completely. Re-running the same import returns the
+first workspace instead of creating duplicates. Attachments are on by default with a
+size cap and can be turned off. There is no import REST API in v1: the Settings UI and
+`npm run import -- <file>` are the entry points.
+
+Checks: `check-export-roundtrip.ts`, `check-export-secrets.ts`,
+`check-import-markdown.ts` and `check-import-csv.ts` run under `npm run check:harness`.
+
 ## Search
 
 - `/` opens the full search page and focuses its query bar; `Cmd/Ctrl K` opens the
