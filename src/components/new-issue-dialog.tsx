@@ -236,16 +236,8 @@ export function NewIssueDialog({ workspaceId }: { workspaceId: string }) {
             }
           }}
         >
-          <div className="flex items-center justify-between border-b border-border px-4 py-2 text-small text-faint">
-            <span>
-              {t("New task")}
-              {project ? (
-                <span className="ml-1 inline-flex items-center gap-1 text-muted">
-                  <ProjectIcon color={project.color} icon={project.icon} size={12} />
-                  {project.name}
-                </span>
-              ) : null}
-            </span>
+          <div className="flex items-center justify-between border-b border-border px-4 py-3">
+            <h2 className="text-lead font-semibold text-text">{t("New task")}</h2>
             <button
               type="button"
               onClick={() => {if(!submitRunning.current)setComposerOpen(false);}}
@@ -267,126 +259,16 @@ export function NewIssueDialog({ workspaceId }: { workspaceId: string }) {
                 }
               }}
               placeholder={t("Task title")}
-              className="w-full bg-transparent text-title font-semibold text-text placeholder:text-faint"
+              className="w-full rounded-md border border-border bg-bg px-2.5 py-1.5 text-body text-text placeholder:text-faint focus:border-border-strong focus:outline-none"
             />
             <textarea
               value={description}
               onChange={(e) => setDescription(e.target.value)}
               placeholder={t("Add description…")}
               rows={4}
-              className="mt-2 w-full resize-none bg-transparent text-body leading-relaxed text-muted placeholder:text-faint"
+              className="mt-2 w-full resize-none rounded-md border border-border bg-bg px-2.5 py-1.5 text-body leading-relaxed text-text placeholder:text-faint focus:border-border-strong focus:outline-none"
             />
-            {aiReady && (
-              <div className="mt-2">
-                {aiOpen ? (
-                  <div className="flex items-center gap-1.5">
-                    <input
-                      autoFocus
-                      value={aiPrompt}
-                      onChange={(event) => setAiPrompt(event.target.value)}
-                      onKeyDown={(event) => {
-                        if (event.key === "Enter" && !event.nativeEvent.isComposing && event.nativeEvent.keyCode !== 229) {
-                          event.preventDefault();event.stopPropagation();
-                          void aiDraft();
-                        }
-                        if (event.key === "Escape") {event.stopPropagation();setAiOpen(false);}
-                      }}
-                      placeholder={t("Describe the task, e.g. 修复微信登录回调偶发失败")}
-                      className="min-w-0 flex-1 rounded-md border border-border bg-elevated/40 px-2.5 py-1.5 text-small text-text placeholder:text-faint focus:border-border-strong"
-                    />
-                    <button
-                      type="button"
-                      onClick={() => void aiDraft()}
-                      disabled={!aiPrompt.trim() || aiBusy}
-                      className="flex shrink-0 items-center gap-1 rounded-md bg-accent px-2.5 py-1.5 text-small font-medium text-white disabled:opacity-40"
-                    >
-                      {aiBusy ? <LoaderCircle size={11} className="animate-spin" /> : <Sparkles size={11} />}
-                      {aiBusy ? t("Drafting…") : t("Draft")}
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setAiOpen(false)}
-                      aria-label={t("Close AI draft")}
-                      className="shrink-0 rounded p-1 text-faint hover:bg-elevated hover:text-text"
-                    >
-                      <X size={13} />
-                    </button>
-                  </div>
-                ) : (
-                  <button
-                    type="button"
-                    onClick={() => setAiOpen(true)}
-                    className="flex items-center gap-1 rounded-md px-1.5 py-1 text-small text-muted transition-colors hover:bg-elevated hover:text-text"
-                  >
-                    <Sparkles size={12} /> AI draft
-                  </button>
-                )}
-                {aiError && <div className="mt-1 text-small text-danger">{t(aiError)}</div>}
-              </div>
-            )}
             <div className="mt-3 flex flex-wrap items-center gap-2">
-              <Menu
-                width={280}
-                trigger={
-                  <>
-                    <FileText size={12} />
-                    {t("Template")}
-                  </>
-                }
-              >
-                {(close) => (
-                  <div data-task-templates className="space-y-1 p-1">
-                    {templates.length === 0 ? (
-                      <div className="px-2 py-1 text-small text-faint">{t("No templates yet.")}</div>
-                    ) : (
-                      templates.map((template) => (
-                        <div key={template.id} className="flex items-center gap-1">
-                          <MenuItem
-                            onSelect={() => {
-                              applyTemplate(template);
-                              close();
-                            }}
-                          >
-                            <span className="min-w-0 flex-1 truncate">{template.name}</span>
-                            <span className="shrink-0 text-caption text-faint">{t(template.priority ? PRIORITY_META[template.priority].label : "No priority")}</span>
-                          </MenuItem>
-                          {canManageTemplates ? (
-                            <button
-                              type="button"
-                              aria-label={t("Delete template {name}", { name: template.name })}
-                              onClick={() => void removeTemplate(template)}
-                              className="shrink-0 rounded p-1 text-faint hover:text-danger"
-                            >
-                              <Trash2 size={12} />
-                            </button>
-                          ) : null}
-                        </div>
-                      ))
-                    )}
-                    {canManageTemplates ? (
-                      <div className="flex gap-1 border-t border-border pt-1">
-                        <input
-                          data-template-name
-                          aria-label={t("Template name")}
-                          placeholder={t("Template name")}
-                          value={templateName}
-                          onChange={(event) => setTemplateName(event.target.value)}
-                          className="min-w-0 flex-1 rounded border border-border bg-bg p-1 text-small"
-                        />
-                        <button
-                          type="button"
-                          data-template-save
-                          disabled={templateBusy || !templateName.trim() || !title.trim()}
-                          onClick={() => void saveTemplate()}
-                          className="rounded border border-border px-2 text-small text-muted disabled:opacity-40"
-                        >
-                          {t("Save draft as template")}
-                        </button>
-                      </div>
-                    ) : null}
-                  </div>
-                )}
-              </Menu>
 
               <Menu
                 width={200}
@@ -597,16 +479,135 @@ export function NewIssueDialog({ workspaceId }: { workspaceId: string }) {
                 )}
               </Menu>
 
+              <DuePicker value={dueDate} reminder={reminder} onSave={async(date,next)=>{setDueDate(date);setReminder(next);return true;}}/>
+              <label className="flex items-center gap-1 text-small text-muted">{t("Estimate")}<input aria-label={t("Estimate")} data-task-estimate type="number" min="0" step="1" value={estimate} onChange={event=>setEstimate(event.target.value)} className="w-14 rounded border border-border bg-bg px-1 py-0.5 text-small text-text"/></label>
+            </div>
               {Object.keys(fieldValues).some(id=>!fields.some(field=>field.id===id))&&<p role="alert" className="text-small text-danger">{t("Some saved properties are no longer available.")} <button type="button" onClick={()=>setFieldValues(old=>Object.fromEntries(Object.entries(old).filter(([id])=>fields.some(field=>field.id===id))))} className="underline">{t("Remove unavailable properties")}</button></p>}
             {fields.length>0&&<details className="my-2 text-small"><summary className="cursor-pointer">{t("More properties")}</summary><div className="mt-2 grid grid-cols-2 gap-2">{fields.map(field=><label key={field.id} className="block">{field.name}{field.type==="select"?<select disabled={busy} value={fieldValues[field.id]??""} onChange={e=>setFieldValues(old=>({...old,[field.id]:e.target.value}))} className="block w-full rounded border border-border bg-bg p-1"><option value=""/>{field.options.map(option=><option key={option}>{option}</option>)}</select>:<input disabled={busy} type={field.type==="checkbox"?"checkbox":field.type==="number"?"number":field.type==="date"?"date":"text"} checked={fieldValues[field.id]==="1"} value={fieldValues[field.id]??""} onChange={e=>setFieldValues(old=>({...old,[field.id]:field.type==="checkbox"?(e.target.checked?"1":""):e.target.value}))} className="block w-full rounded border border-border bg-bg p-1"/>}</label>)}</div></details>}
-              <div className="ml-auto flex items-center gap-2">
-                <div className="flex flex-wrap items-center gap-4 py-2"><DuePicker value={dueDate} reminder={reminder} onSave={async(date,next)=>{setDueDate(date);setReminder(next);return true;}}/><label className="flex items-center gap-1 text-small text-muted">{t("Estimate")}<input aria-label={t("Estimate")} data-task-estimate type="number" min="0" step="1" value={estimate} onChange={event=>setEstimate(event.target.value)} className="w-14 rounded border border-border bg-bg px-1 py-0.5 text-small text-text"/></label><label className="flex items-center gap-2 text-small"><input type="checkbox" checked={continueCreating} onChange={event=>setContinueCreating(event.target.checked)}/>{t("Create and continue")}</label></div>
-      {error && <span className="text-small text-danger">{t(error)}</span>}
-                {projectsLoaded && projects.length === 0 && (
-                  <button type="button" onClick={newProject} className="text-small text-accent hover:underline">
-                    {t("A task needs a project. Create one")}
+            <div className="mt-2 flex flex-wrap items-center gap-2">
+            {aiReady && (
+              <div className={aiOpen ? "w-full" : undefined}>
+                {aiOpen ? (
+                  <div className="flex items-center gap-1.5">
+                    <input
+                      autoFocus
+                      value={aiPrompt}
+                      onChange={(event) => setAiPrompt(event.target.value)}
+                      onKeyDown={(event) => {
+                        if (event.key === "Enter" && !event.nativeEvent.isComposing && event.nativeEvent.keyCode !== 229) {
+                          event.preventDefault();event.stopPropagation();
+                          void aiDraft();
+                        }
+                        if (event.key === "Escape") {event.stopPropagation();setAiOpen(false);}
+                      }}
+                      placeholder={t("Describe the task, e.g. 修复微信登录回调偶发失败")}
+                      className="min-w-0 flex-1 rounded-md border border-border bg-elevated/40 px-2.5 py-1.5 text-small text-text placeholder:text-faint focus:border-border-strong"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => void aiDraft()}
+                      disabled={!aiPrompt.trim() || aiBusy}
+                      className="flex shrink-0 items-center gap-1 rounded-md bg-accent px-2.5 py-1.5 text-small font-medium text-white disabled:opacity-40"
+                    >
+                      {aiBusy ? <LoaderCircle size={11} className="animate-spin" /> : <Sparkles size={11} />}
+                      {aiBusy ? t("Drafting…") : t("Draft")}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setAiOpen(false)}
+                      aria-label={t("Close AI draft")}
+                      className="shrink-0 rounded p-1 text-faint hover:bg-elevated hover:text-text"
+                    >
+                      <X size={13} />
+                    </button>
+                  </div>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => setAiOpen(true)}
+                    className="flex items-center gap-1 rounded-md px-1.5 py-1 text-small text-muted transition-colors hover:bg-elevated hover:text-text"
+                  >
+                    <Sparkles size={12} /> {t("Draft")}
                   </button>
                 )}
+                {aiError && <div className="mt-1 text-small text-danger">{t(aiError)}</div>}
+              </div>
+            )}
+              <Menu
+                width={280}
+                trigger={
+                  <>
+                    <FileText size={12} />
+                    {t("Template")}
+                  </>
+                }
+              >
+                {(close) => (
+                  <div data-task-templates className="space-y-1 p-1">
+                    {templates.length === 0 ? (
+                      <div className="px-2 py-1 text-small text-faint">{t("No templates yet.")}</div>
+                    ) : (
+                      templates.map((template) => (
+                        <div key={template.id} className="flex items-center gap-1">
+                          <MenuItem
+                            onSelect={() => {
+                              applyTemplate(template);
+                              close();
+                            }}
+                          >
+                            <span className="min-w-0 flex-1 truncate">{template.name}</span>
+                            <span className="shrink-0 text-caption text-faint">{t(template.priority ? PRIORITY_META[template.priority].label : "No priority")}</span>
+                          </MenuItem>
+                          {canManageTemplates ? (
+                            <button
+                              type="button"
+                              aria-label={t("Delete template {name}", { name: template.name })}
+                              onClick={() => void removeTemplate(template)}
+                              className="shrink-0 rounded p-1 text-faint hover:text-danger"
+                            >
+                              <Trash2 size={12} />
+                            </button>
+                          ) : null}
+                        </div>
+                      ))
+                    )}
+                    {canManageTemplates ? (
+                      <div className="flex gap-1 border-t border-border pt-1">
+                        <input
+                          data-template-name
+                          aria-label={t("Template name")}
+                          placeholder={t("Template name")}
+                          value={templateName}
+                          onChange={(event) => setTemplateName(event.target.value)}
+                          className="min-w-0 flex-1 rounded border border-border bg-bg p-1 text-small"
+                        />
+                        <button
+                          type="button"
+                          data-template-save
+                          disabled={templateBusy || !templateName.trim() || !title.trim()}
+                          onClick={() => void saveTemplate()}
+                          className="rounded border border-border px-2 text-small text-muted disabled:opacity-40"
+                        >
+                          {t("Save draft as template")}
+                        </button>
+                      </div>
+                    ) : null}
+                  </div>
+                )}
+              </Menu>
+            </div>
+            {projectsLoaded && projects.length === 0 && (
+              <div role="status" className="mt-3 flex flex-wrap items-center gap-2 rounded-md bg-elevated px-3 py-2 text-small text-muted">
+                <span className="min-w-0 flex-1">{t("A task goes in a project. Create one first.")}</span>
+                <button type="button" onClick={newProject} className="rounded-md border border-border px-2.5 py-1 text-small text-text hover:bg-overlay">{t("New project")}</button>
+              </div>
+            )}
+          </div>
+          <div className="flex flex-wrap items-center gap-2 border-t border-border px-4 py-3">
+            <label className="flex items-center gap-2 text-small text-muted"><input type="checkbox" checked={continueCreating} onChange={event=>setContinueCreating(event.target.checked)}/>{t("Create and continue")}</label>
+            <span className="flex-1" />
+            {error && <span className="text-small text-danger">{t(error)}</span>}
+            <button type="button" onClick={() => {if(!submitRunning.current)setComposerOpen(false);}} className="rounded-md border border-border px-3 py-1.5 text-body text-text transition-colors hover:bg-elevated">{t("Cancel")}</button>
                 <button
                   type="button"
                   onClick={() => void submit()}
@@ -616,8 +617,6 @@ export function NewIssueDialog({ workspaceId }: { workspaceId: string }) {
                   {t("Create task")}
                   <span className="ml-2 text-caption opacity-75">{modifier}↵</span>
                 </button>
-              </div>
-            </div>
           </div>
         </div>
       </fieldset>
