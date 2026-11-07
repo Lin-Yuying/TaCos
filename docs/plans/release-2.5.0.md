@@ -45,9 +45,29 @@ Not run: real Electron runtime (desktop screens compared as static pages only), 
   outside the workspace shell (login, join, onboarding) stay viewport-centred.
 - Lint baseline is unchanged from 2.4.1 (pre-existing errors in untouched files).
 
-## Release and deploy
+## Release and deploy (done)
 
-- Release `TaCos v2.5.0` published from tag `v2.5.0`; the tag workflow builds Windows,
-  macOS and Linux artifacts and the server tarball.
-- Server deploy to `ubuntu@43.130.57.28`: pending, this section is updated with the
-  backup, version and health evidence after the deploy runs.
+- Tag `v2.5.0` points at the version-bump commit `913603d` on `main`; the two merges
+  (`2f785bd` for #100, `43b6713` for #78) precede it. The tag workflow
+  (Desktop installers, run 42391233999) completed successfully and published seven
+  assets: macOS arm64 DMG + updater ZIP + `latest-mac.yml`, Windows x64 NSIS installer
+  + `latest.yml`, Linux x64 AppImage, and `TaCos-Server-2.5.0-linux-x64.tar.gz`.
+- Server deploy to `ubuntu@43.130.57.28`: manual backup
+  `/var/lib/tacos/backups/manual-pre-2.5.0`, installer pre-upgrade backup
+  `pre_upgrade-2026-11-07_16-31-51-bb27` (version 2.4.1, integrity ok). The release
+  tarball was installed over `/opt/tacos/app`; the previous 2.4.1 stays at
+  `/opt/tacos/app.old`.
+- Verified: `tacos.service` active; `/api/health` reports `version: 2.5.0`,
+  `status: ok`, `integrity: ok`, schemaVersion 526, ~32.8 GB free; `/login` returns
+  200; data counts unchanged from the pre-upgrade baseline (7 users, 3 workspaces,
+  14 issues, 13 pages, 2 comments, 7 agent threads); the site-admin login reaches
+  `/admin` and the instance console lists all 7 members.
+- Observed: the production `/admin` page logged one minified React hydration warning
+  (#418) in the automated browser run; the page rendered correctly with the expected
+  data, and the same flow is clean in a local dev run. Recorded as an observation, not
+  a functional failure.
+- Not verified over the tunnel: workspace UI (task create/comment) with a real member
+  account — the site admin is not a member of a workspace and member passwords are not
+  known. That flow was part of the 16/16 fresh-data browser smoke on the same build.
+- Rollback: `sudo /opt/tacos/deploy/rollback.sh` (refuses without a verified
+  pre-upgrade backup).
