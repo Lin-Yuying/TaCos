@@ -427,7 +427,7 @@ export function AiTaskDialog({
       >
         <header className="flex items-center gap-2 border-b border-border px-4 py-2.5">
           <Sparkles size={14} className="text-accent" />
-          <span className="text-body font-semibold">{t("Generate tasks with AI")}</span>
+          <span className="text-lead font-semibold">{t("Generate tasks with AI")}</span>
           <button
             type="button"
             onClick={onClose}
