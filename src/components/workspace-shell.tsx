@@ -285,6 +285,15 @@ function SidebarNav({
       </div>
       <div className="pb-1">
         <NavItem
+          href={`/${workspaceId}/activity`}
+          active={pathname.endsWith("/activity")}
+          icon={<Activity size={14} />}
+        >
+          {t("Activity")}
+        </NavItem>
+      </div>
+      <div className="pb-1">
+        <NavItem
           href={`/${workspaceId}/search`}
           active={pathname.endsWith("/search")}
           icon={<Search size={14} />}
@@ -1004,6 +1013,13 @@ function SidebarRail({
           labeled={labeled}
         />
         <RailLink
+          href={`/${workspaceId}/activity`}
+          active={pathname.endsWith("/activity")}
+          label={t("Activity")}
+          icon={<Activity size={16} />}
+          labeled={labeled}
+        />
+        <RailLink
           href={`/${workspaceId}/search`}
           active={pathname.endsWith("/search")}
           label={t("Search")}
@@ -1479,6 +1495,8 @@ function tabMeta(
   if (pathname.endsWith("/trash")) return { label: t("Trash"), icon: <Trash2 size={13} /> };
   if (pathname.endsWith("/review")) return { label: t("Review"), icon: <ShieldCheck size={13} /> };
   if (pathname.endsWith("/help")) return { label: t("Help"), icon: <CircleHelp size={13} /> };
+  if (pathname.endsWith("/activity"))
+    return { label: t("Activity"), icon: <Activity size={13} /> };
   if (pathname.endsWith("/notifications"))
     return { label: t("Inbox"), icon: <Inbox size={13} /> };
   const docPage = pathname.match(new RegExp(`^/${workspace.id}/docs/([^/]+)$`));

@@ -2,19 +2,21 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { Check, X } from "lucide-react";
+import { Check, MessageSquare, X } from "lucide-react";
 import { reviewIssueAction } from "@/app/actions";
 import { ProjectIcon, StatusIcon } from "@/components/icons";
 import { formatDate, issueRef } from "@/lib/format";
 import type { PendingReviewIssue, ReviewDecision } from "@/lib/issues";
 import { useLocale, useT } from "@/components/i18n-context";
 import { PAGE_INSET } from "@/lib/page-chrome";
+import { useUI } from "@/components/ui-context";
 
 // H-COLLAB-03: agent-published tasks wait here until a person approves or rejects them.
 export function ReviewView({ workspaceId, issues }: { workspaceId: string; issues: PendingReviewIssue[] }) {
   const t = useT();
   const locale = useLocale();
   const router = useRouter();
+  const { openIssue } = useUI();
   const [error, setError] = useState<string | null>(null);
 
   async function decide(issue: PendingReviewIssue, decision: ReviewDecision) {
@@ -58,6 +60,18 @@ export function ReviewView({ workspaceId, issues }: { workspaceId: string; issue
                   </div>
                 </div>
                 <div className="flex shrink-0 items-center gap-1">
+                  <button
+                    type="button"
+                    onClick={() => openIssue(issue.id, issue.latestReviewCommentId ?? undefined)}
+                    data-testid="review-open-thread"
+                    title={t("Open the review thread")}
+                    className="flex items-center gap-1 rounded-md border border-border px-2 py-1 text-small text-muted transition-colors hover:border-border-strong hover:text-text"
+                  >
+                    <MessageSquare size={13} />
+                    {issue.reviewCommentCount > 0
+                      ? t("Thread ({count})", { count: issue.reviewCommentCount })
+                      : t("Discuss")}
+                  </button>
                   <button
                     type="button"
                     onClick={() => void decide(issue, "approve")}
