@@ -58,10 +58,22 @@ before the server deploy; v2.4.0 stays published but is superseded.
 - Restore replaces the database only; uploads are documented as not restored.
 - Desktop builds remain unsigned (macOS ad-hoc), as in 2.4.0.
 
-## Release and deploy
+## Release and deploy (done)
 
-1. Commit version **2.4.1**, tag `v2.4.1`, let the tag workflow publish the
-   desktop artefacts and `TaCos-Server-2.4.1-linux-x64.tar.gz`.
-2. Back up the server, unpack the tarball, run `sudo ./deploy/install.sh ./payload`,
-   verify `/api/health` reports 2.4.1 and integrity ok through the SSH tunnel.
-3. Roll back with `/opt/tacos/deploy/rollback.sh` if health/login fails.
+- Release `TaCos v2.4.1` published with seven assets; tag `v2.4.1` on merge
+  commit `53c49aa`.
+- Server deploy to `ubuntu@43.130.57.28`: manual backup
+  `/var/lib/tacos/backups/manual-pre-2.4.1`, installer pre-upgrade backup
+  `pre_upgrade-2026-11-07_03-33-41-7ff1`, app installed at `/opt/tacos/app`
+  with `app.old` retained.
+- Verified: `tacos.service` active; `/api/health` reports `version: 2.4.1`,
+  `status: ok`, `integrity: ok`, schema 450; `/login` returns 200 through the
+  SSH tunnel (`127.0.0.1:13200`); site-admin login reaches `/admin`; workspace
+  data is present (`3` live tasks, `3` documents; search entries for all kinds).
+- Production workspace UI (task create/comment) was not driven end to end over
+  the tunnel: the production client takes 20–35 s to hydrate there, and the
+  project Tasks tab did not switch in the automated run. Database-level checks
+  confirm the app upgraded and serves its data; this is recorded as the one
+  unverified UI smoke, not claimed as passed.
+- Rollback: `sudo /opt/tacos/deploy/rollback.sh` (refuses without a verified
+  pre-upgrade backup).

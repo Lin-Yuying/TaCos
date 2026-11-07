@@ -180,5 +180,5 @@ blocker (host, command, expected credential) and do not fake success.
 | U-02 insights | merged | #96 | 146/146 checks; Edge E2E insights cards/charts/filter/CSV; 1440/1100/640 screenshots |
 | U-05 import/export | merged | #98 | 150/150 checks; Edge E2E ZIP export, CSV preview/import; 1440/1100 screenshots |
 | #97 task-detail overlap fix | merged | #97 | user-reported task description overlap + settings search removal |
-| Release v2.4.0 | released | tag | tag workflow published 7 assets; superseded after fresh-context review found permission/access blockers |
-| v2.4.1 hotfix | in progress | — | access-model round trip, Reviews tab, view leak, delete/restore audit, activity audit rows, System/backup/MCP fixes |
+| Release v2.4.0 | superseded | tag | tag workflow published 7 assets; fresh-context review found permission/access blockers, fixed in 2.4.1 |
+| v2.4.1 hotfix | released + deployed | #99 | 150/150 checks; tag + 7 assets; server 2.4.1 health/login/integrity verified; one production UI smoke unverified |
