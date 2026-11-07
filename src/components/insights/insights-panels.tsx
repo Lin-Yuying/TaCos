@@ -477,7 +477,7 @@ export function DataNotes({ data }: { data: InsightData }) {
       ))}
       {data.partial ? (
         <li className="text-faint">
-          {t("Some historical tasks predate event tracking, so time measures may be incomplete.")}
+          {t("This report is partial; the notes above say which part is incomplete.")}
         </li>
       ) : null}
     </ul>

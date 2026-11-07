@@ -2010,7 +2010,7 @@ const zh: Record<string, string> = {
   "Only the newest {count} matching tasks are listed and exported.": "仅列出并导出最新的 {count} 个匹配任务。",
   "{count} completed tasks have no status event; their last update time is used.": "{count} 个已完成任务没有状态事件；使用最后更新时间。",
   "That saved view is no longer available.": "该已保存视图已不可用。",
-  "Some historical tasks predate event tracking, so time measures may be incomplete.": "部分历史任务早于事件记录，时间指标可能不完整。",
+  "This report is partial; the notes above say which part is incomplete.": "此报告不完整；具体缺少哪一部分见上方说明。",
 
   "Could not copy. Copy the address bar.": "复制失败，请复制地址栏。",
   "Export CSV": "导出 CSV",
