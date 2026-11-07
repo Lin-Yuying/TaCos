@@ -446,7 +446,7 @@ export function SettingsView({
   async function removeProject(project: Project) {
     if (
       !await confirm(
-        t("Move project \"{name}\" and its issues to the Trash?", { name: project.name }),
+        t("Move project \"{name}\" and its tasks to the Trash?", { name: project.name }),
         { body: t("You can restore it from there."), action: t("Move to Trash") }
       )
     )
@@ -945,7 +945,7 @@ export function SettingsView({
                           className="shrink-0 rounded-md px-2 py-1 text-small text-muted transition-colors hover:bg-elevated hover:text-danger"
                           aria-label={t("Move {name} to trash", { name: project.name })}
                         >
-                          {t("Move to trash")}
+                          {t("Move to Trash")}
                         </button>
                       )}
                     </>

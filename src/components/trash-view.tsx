@@ -86,7 +86,7 @@ export function TrashView({
     <div className="flex min-h-0 flex-1 flex-col">
       <header className={`${PAGE_HEADER} ${PAGE_LEFT} ${PAGE_RIGHT}`}>
         <h1 className={PAGE_TITLE}>{t("Trash")}</h1>
-        <span className="text-small tabular-nums text-faint">{projects.length + issues.length + docs.length}</span>
+        <span className="text-small tabular-nums text-faint">{projects.length + issues.length + docs.length + deletedWorkspaces.length}</span>
         <nav aria-label={t("Type")} className="ml-auto flex items-center gap-1 text-small">
           {TABS.map(([value, label]) => (
             <button

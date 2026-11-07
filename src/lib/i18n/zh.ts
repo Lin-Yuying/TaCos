@@ -52,7 +52,7 @@ const zh: Record<string, string> = {
   "The old key stops working immediately.": "旧 Key 会立即失效。",
   "Revoke key \"{name}\"?": "吊销 Key“{name}”？",
   "Agents using it will lose access.": "正在使用它的 Agent 会失去访问权限。",
-  "Move project \"{name}\" and its issues to the Trash?": "把项目“{name}”及其任务移到回收站？",
+  "Move project \"{name}\" and its tasks to the Trash?": "把项目“{name}”及其任务移到回收站？",
   "You can restore it from there.": "可以从回收站恢复。",
   "Delete \"{name}\" and its {count} tasks permanently?": "永久删除“{name}”及其 {count} 个任务？",
   "Delete \"{name}\" permanently?": "永久删除“{name}”？",
@@ -970,7 +970,6 @@ const zh: Record<string, string> = {
   "Delete workspace": "删除工作区",
   "Let every member see all tasks": "让所有成员看到全部任务",
   "Rename project": "重命名项目",
-  "Move to trash": "移到回收站",
   "Project name (e.g. Mobile App)": "项目名称（例如 Mobile App）",
   "Key name (e.g. claude-code, triage-bot)":
     "key 名称（例如 claude-code、triage-bot）",

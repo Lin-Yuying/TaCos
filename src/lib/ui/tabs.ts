@@ -15,6 +15,16 @@ export function tabIdentity(href: string): string {
   return `${url.pathname}?${params}`;
 }
 
+// A tab's key has no hash, so a page that keeps its section in the hash records it here
+// and switching back to the tab lands on that section again.
+const tabHashes = new Map<string, string>();
+export function rememberTabHash(key: string, hash: string) {
+  tabHashes.set(key, hash);
+}
+export function tabHref(key: string): string {
+  return `${key}${tabHashes.get(key) ?? ""}`;
+}
+
 // Following a link keeps the strip the same length: the page replaces the tab it was
 // opened from. A pinned tab stays put, and so does a tab opened on purpose as a new one.
 export function placeInTabs(

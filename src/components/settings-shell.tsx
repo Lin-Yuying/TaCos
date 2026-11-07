@@ -1,20 +1,47 @@
 "use client";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useSyncExternalStore, type ReactNode } from "react";
+import { useEffect, useSyncExternalStore, type ReactNode } from "react";
+import { rememberTabHash } from "@/lib/ui/tabs";
 import { useT } from "@/components/i18n-context";
 
 // Hash values double as deep links (#labels, #cycles, #automations, #page-templates).
 const SETTINGS_PAGES = ["profile", "general", "members", "visibility", "projects", "page-templates", "cycles", "automations", "labels", "agent", "usage", "access", "danger"] as const;
 export type SettingsPage = (typeof SETTINGS_PAGES)[number];
 
+// Browsers without the Navigation API report a pushState by nothing at all, so one shared
+// timer watches the hash for them while a settings page is open.
+const polled = new Set<() => void>();
+let pollTimer: number | undefined;
+let polledHash = "";
+function pollHash(listener: () => void) {
+  polled.add(listener);
+  if (pollTimer === undefined) {
+    polledHash = window.location.hash;
+    pollTimer = window.setInterval(() => {
+      if (window.location.hash === polledHash) return;
+      polledHash = window.location.hash;
+      polled.forEach((notify) => notify());
+    }, 150);
+  }
+  return () => {
+    polled.delete(listener);
+    if (polled.size === 0) {
+      window.clearInterval(pollTimer);
+      pollTimer = undefined;
+    }
+  };
+}
+
 function subscribeHash(listener: () => void) {
   // Next.js moves between hashes with pushState, which fires no hashchange.
   const navigation = (window as unknown as { navigation?: EventTarget }).navigation;
+  const stopPolling = navigation ? undefined : pollHash(listener);
   window.addEventListener("hashchange", listener);
   window.addEventListener("popstate", listener);
   navigation?.addEventListener("currententrychange", listener);
   return () => {
+    stopPolling?.();
     window.removeEventListener("hashchange", listener);
     window.removeEventListener("popstate", listener);
     navigation?.removeEventListener("currententrychange", listener);
@@ -56,6 +83,9 @@ export function SettingsShell({
   const hashPage = useSettingsPage();
   const base = `/${workspaceId}/settings`;
   const onMain = pathname === base;
+  useEffect(() => {
+    if (onMain) rememberTabHash(base, `#${hashPage}`);
+  }, [onMain, base, hashPage]);
   const page = (id: SettingsPage, label: string): NavItem => ({ key: id, label, href: `${base}#${id}`, page: id });
   const route = (segment: string, label: string, testId?: string): NavItem => ({ key: segment, label, href: `${base}/${segment}`, testId });
   const groups: { title: string; items: NavItem[] }[] = [

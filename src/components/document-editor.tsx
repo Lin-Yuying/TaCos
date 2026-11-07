@@ -161,12 +161,15 @@ const EDITOR_TOOL = "flex items-center gap-1 rounded-md px-2 py-1 text-small tex
 /** The caret's code block: a language chip and ⋯, which opens the block's actions in place. */
 function CodeBlockMenu({ editor }: { editor: Editor }) {
   const t = useT();
-  const [open, setOpen] = useState(false);
+  // The menu belongs to one block: moving the caret to another block closes it.
+  const [openAt, setOpenAt] = useState<number | null>(null);
   const [copied, setCopied] = useState(false);
   const [, redraw] = useState(0);
   const view = codeViewKey.getState(editor.state);
   const showNumbers = useLineNumbers();
-  const blockPos = editor.state.selection.$from.depth > 0 ? editor.state.selection.$from.before() : -1;
+  const caretBlock = () => (editor.state.selection.$from.depth > 0 ? editor.state.selection.$from.before() : -1);
+  const blockPos = caretBlock();
+  const open = openAt === blockPos;
   const language = (
     <CodeLanguageMenu
       lang={String(editor.getAttributes("codeBlock").language ?? "")}
@@ -176,7 +179,7 @@ function CodeBlockMenu({ editor }: { editor: Editor }) {
     />
   );
   const toggleCollapsed = () => {
-    editor.view.dispatch(editor.state.tr.setMeta(codeViewKey, { toggle: blockPos }));
+    editor.view.dispatch(editor.state.tr.setMeta(codeViewKey, { toggle: caretBlock() }));
     redraw((value) => value + 1);
   };
   const item = "flex w-full rounded px-2 py-1 text-left text-body text-text hover:bg-elevated";
@@ -189,7 +192,7 @@ function CodeBlockMenu({ editor }: { editor: Editor }) {
           aria-label={t("Code block")}
           title={t("Code block")}
           onMouseDown={(event) => event.preventDefault()}
-          onClick={() => setOpen(true)}
+          onClick={() => setOpenAt(caretBlock())}
           className="rounded p-1 text-muted hover:bg-elevated hover:text-text"
         >
           <MoreHorizontal size={14} />
@@ -200,7 +203,7 @@ function CodeBlockMenu({ editor }: { editor: Editor }) {
     <div role="menu" aria-label={t("Code block")} className="w-[220px] p-0.5" onMouseDown={(event) => event.preventDefault()}>
       <div className="flex items-center justify-between px-2 pb-1 pt-0.5 text-caption text-faint">
         {t("Code block")}
-        <button type="button" aria-label={t("Close")} onClick={() => setOpen(false)} className="rounded p-0.5 text-muted hover:bg-elevated hover:text-text"><X size={12} /></button>
+        <button type="button" aria-label={t("Close")} onClick={() => setOpenAt(null)} className="rounded p-0.5 text-muted hover:bg-elevated hover:text-text"><X size={12} /></button>
       </div>
       <button
         type="button"

@@ -8,7 +8,7 @@ import { EntityRow,usePinned } from "@/components/ui/entity-row";
 import { PersonalOrder } from "@/components/personal-order";
 import { RecentDocuments } from "@/components/recent-documents";
 import Link from "next/link";
-import { fitTabs, placeInTabs, tabIdentity } from "@/lib/ui/tabs";
+import { fitTabs, placeInTabs, tabHref, tabIdentity } from "@/lib/ui/tabs";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import {
   Suspense,
@@ -1388,7 +1388,9 @@ function useSidebarWidth() {
   }, [remember]);
 
   const rendered=available===null?width:available<SIDEBAR_FORCE_RAIL_BELOW?Math.min(width,SIDEBAR_RAIL):Math.min(width,Math.max(SIDEBAR_RAIL_MIN,available-SIDEBAR_CONTENT_MIN));
-  return { width:rendered, rail: rendered < SIDEBAR_MIN, resize, commit, toggle };
+  // Too narrow for the full sidebar: the rail is not a choice here, so nothing may change or save it.
+  const forced=available!==null&&available<SIDEBAR_FORCE_RAIL_BELOW;
+  return { width:rendered, rail: rendered < SIDEBAR_MIN, forced, resize, commit, toggle };
 }
 
 /**
@@ -1579,7 +1581,7 @@ function TabBar({
   user: UserInfo;
   rail: boolean;
   sidebarWidth: number;
-  onToggleRail: () => void;
+  onToggleRail?: () => void;
 }) {
   const t = useT();
   const router = useRouter();
@@ -1597,6 +1599,8 @@ function TabBar({
   const lastKey = useRef<string | null>(null);
   // Set while a page is being opened as a new tab instead of replacing the current one.
   const openAsNew = useRef(false);
+  // Which tab each tab replaced when a link was followed: closing it goes back there.
+  const replacedBy = useRef(new Map<string, string>());
   const stripRef = useRef<HTMLDivElement>(null);
   const [tabRoom, setTabRoom] = useState(TAB_ROOM_DEFAULT);
   // Where the app sits when nothing is open. It is deliberately not a tab: the strip
@@ -1634,7 +1638,10 @@ function TabBar({
     // actually moved on the guard is spent, so revisiting the page later opens it again.
     if (justClosed.current !== null && current !== justClosed.current) justClosed.current = null;
     if (current === justClosed.current) return;
-    if (current === startKey) return;
+    if (current === startKey) {
+      openAsNew.current = false;
+      return;
+    }
     if (tabs.includes(current)) {
       openAsNew.current = false;
       return;
@@ -1645,6 +1652,11 @@ function TabBar({
       newTab: openAsNew.current,
     });
     openAsNew.current = false;
+    const from = cameFrom.current;
+    if (from && tabs.includes(from) && !next.includes(from)) {
+      replacedBy.current.set(current, from);
+      setRecentTabs(previous=>[from,...previous.filter(item=>item!==from)].slice(0,20));
+    }
     setTabs(next);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [current, tabs]);
@@ -1729,6 +1741,16 @@ function TabBar({
     setRecentTabs(previous=>[key,...previous.filter(item=>item!==key)].slice(0,20));
     const index = visible.indexOf(key);
     const rest = visible.filter((t) => t !== key);
+    const source = replacedBy.current.get(key);
+    replacedBy.current.delete(key);
+    if (key === current && source && !rest.includes(source)) {
+      // The page this tab replaced takes its place again.
+      justClosed.current = key;
+      setRecentTabs(previous=>[key,...previous.filter(item=>item!==key&&item!==source)].slice(0,20));
+      setTabs(visible.map((item) => (item === key ? source : item)));
+      router.push(tabHref(source));
+      return;
+    }
     setTabs(rest);
     if (key !== current) return;
     justClosed.current = key;
@@ -1739,7 +1761,7 @@ function TabBar({
       cameFrom.current && cameFrom.current !== key && rest.includes(cameFrom.current)
         ? cameFrom.current
         : rest[Math.max(0, Math.min(index, rest.length - 1))];
-    router.push(back ?? startKey);
+    router.push(back ? tabHref(back) : startKey);
   }
 
   function closeMany(key:string,right:boolean) {
@@ -1779,7 +1801,7 @@ function TabBar({
         data-rail={rail ? "true" : undefined}
         className="app-windowbar-left flex shrink-0 items-center px-3"
       >
-        <button
+        {onToggleRail && <button
           type="button"
           onClick={onToggleRail}
           title={rail ? t("Expand sidebar") : t("Collapse to icons")}
@@ -1787,7 +1809,7 @@ function TabBar({
           className="shrink-0 rounded-md p-1.5 text-muted transition-colors hover:bg-elevated hover:text-text"
         >
           {rail ? <PanelLeftOpen size={16} /> : <PanelLeftClose size={16} />}
-        </button>
+        </button>}
       </div>
 
       <div ref={stripRef} className="app-tabstrip flex min-w-0 flex-1 items-center gap-1 overflow-hidden pl-1.5">
@@ -1804,7 +1826,7 @@ function TabBar({
             >
               <button
                 type="button"
-                onClick={() => router.push(key)}
+                onClick={() => router.push(tabHref(key))}
                 className="flex min-w-0 flex-1 items-center gap-1.5"
                 title={label}
               >
@@ -1831,7 +1853,7 @@ function TabBar({
         })}
       </div>
 
-      <Menu align="right" width={300} trigger={<span aria-label={t("Open tabs")} className="tabular-nums">{hiddenTabs.length>0?`+${hiddenTabs.length}`:"▾"}</span>} triggerClassName="rounded px-2 py-1 text-small text-muted hover:bg-elevated hover:text-text">{close=><>{visible.map(key=><MenuItem key={key} onSelect={()=>{close();router.push(key);}}>{tabMeta(key,workspace,projects,members,pages,t).label}</MenuItem>)}{recentTabs.length>0&&<div className="border-t border-border px-2 py-1 text-small text-faint">{t("Recently closed")}</div>}{recentTabs.map(key=><MenuItem key={key} onSelect={()=>{close();setRecentTabs(previous=>previous.filter(item=>item!==key));openAsNew.current=true;router.push(key);}}>{tabMeta(key,workspace,projects,members,pages,t).label}</MenuItem>)}</>}</Menu>
+      <Menu align="right" width={300} trigger={<span aria-label={t("Open tabs")} className="tabular-nums">{hiddenTabs.length>0?`+${hiddenTabs.length}`:"▾"}</span>} triggerClassName="rounded px-2 py-1 text-small text-muted hover:bg-elevated hover:text-text">{close=><>{visible.map(key=><MenuItem key={key} onSelect={()=>{close();router.push(tabHref(key));}}>{tabMeta(key,workspace,projects,members,pages,t).label}</MenuItem>)}{recentTabs.length>0&&<div className="border-t border-border px-2 py-1 text-small text-faint">{t("Recently closed")}</div>}{recentTabs.map(key=><MenuItem key={key} onSelect={()=>{close();setRecentTabs(previous=>previous.filter(item=>item!==key));openAsNew.current=true;router.push(key);}}>{tabMeta(key,workspace,projects,members,pages,t).label}</MenuItem>)}</>}</Menu>
 
       <DesktopAppUpdateButton />
 
@@ -1930,6 +1952,7 @@ export function WorkspaceShell({
   const {
     width: sidebarWidth,
     rail,
+    forced: railForced,
     resize: resizeSidebar,
     commit: commitSidebar,
     toggle: toggleRail,
@@ -1993,7 +2016,7 @@ export function WorkspaceShell({
           user={user}
           rail={rail}
           sidebarWidth={sidebarWidth}
-          onToggleRail={toggleRail}
+          onToggleRail={railForced ? undefined : toggleRail}
         />
       </Suspense>
       </div>
@@ -2080,14 +2103,14 @@ export function WorkspaceShell({
           )}
 
           {/* The handle spans both looks and resets to whichever one is on screen. */}
-          <SidebarResizer
+          {!railForced && <SidebarResizer
             width={sidebarWidth}
             min={SIDEBAR_RAIL_MIN}
             max={SIDEBAR_MAX}
             resetTo={rail ? SIDEBAR_RAIL : SIDEBAR_DEFAULT}
             onWidth={resizeSidebar}
             onDone={commitSidebar}
-          />
+          />}
         </aside>
 
         {/*

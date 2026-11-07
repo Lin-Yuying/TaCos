@@ -1786,7 +1786,7 @@ export function AgentWorkspace({
             ))}
           </ul>
           <Link
-            href={`/${workspaceId}/settings`}
+            href={`/${workspaceId}/settings#agent`}
             className="mt-4 inline-flex items-center gap-1.5 rounded-md bg-accent px-3 py-1.5 text-small font-medium text-white transition-opacity hover:opacity-90"
           >
             <Settings2 size={13} /> {t("Open Settings")}

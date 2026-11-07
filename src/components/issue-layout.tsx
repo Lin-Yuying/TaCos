@@ -419,9 +419,9 @@ export function IssueLayout({
       ) : (
         <IssueTable issues={shown} groups={groups} properties={display.properties} selection={selection} />
       )}
-      {serverQuery && (pending || failure || (remote?.total ?? 0) > 100) && (
+      {serverQuery && (pending || failure || (remote?.total ?? 0) > 100 || (remote?.page ?? 0) > 0) && (
         <div className={`flex min-h-10 shrink-0 flex-wrap items-center gap-2 border-t border-border py-1 text-small text-muted ${PAGE_INSET}`}>
-          {(remote?.total ?? 0) > 100 && <>
+          {((remote?.total ?? 0) > 100 || (remote?.page ?? 0) > 0) && <>
             <span className="tabular-nums text-faint">{`${(remote?.page ?? 0) * 100 + (shown.length ? 1 : 0)}–${(remote?.page ?? 0) * 100 + shown.length} / ${remote?.total ?? 0}`}</span>
             <button type="button" className="rounded-md px-2 py-1 hover:bg-elevated hover:text-text disabled:opacity-50" disabled={pending || !remote?.page} onClick={() => void changePage((remote?.page ?? 0) - 1)}>{t("Previous page")}</button>
             <button type="button" className="rounded-md px-2 py-1 hover:bg-elevated hover:text-text disabled:opacity-50" disabled={pending || !remote || (remote.page + 1) * 100 >= remote.total} onClick={() => void changePage((remote?.page ?? 0) + 1)}>{t("Next page")}</button>
