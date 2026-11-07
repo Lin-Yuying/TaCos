@@ -1,4 +1,4 @@
-import { and, asc, desc, eq, inArray, isNotNull, or, sql } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, isNotNull, ne, or, sql } from "drizzle-orm";
 import { getDb } from "../db/client";
 import {
   events,
@@ -278,7 +278,9 @@ export async function listWorkspaceActivity(
     visibleActivityScope(workspaceId, viewerId),
     scope === "following" ? followingSets(workspaceId, viewerId) : Promise.resolve(null),
   ]);
-  const conditions = [eq(events.workspaceId, workspaceId)];
+  // Transfer audit rows are workspace-level jobs, not activity objects; they are
+  // visible in Settings → Export/Import, never as fake tasks in the feed.
+  const conditions = [eq(events.workspaceId, workspaceId), ne(events.objectType, "workspace")];
   if (query.objectType) conditions.push(eq(events.objectType, query.objectType));
   if (query.projectId) conditions.push(eq(events.projectId, query.projectId));
   if (query.personId) conditions.push(eq(events.actorId, query.personId));

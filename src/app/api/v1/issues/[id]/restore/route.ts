@@ -10,6 +10,7 @@ import {
   restoreIssue,
   TacosError,
 } from "@/lib/issues";
+import { apiActor } from "@/lib/api-auth";
 
 type Ctx = { params: Promise<{ id: string }> };
 
@@ -24,7 +25,7 @@ export async function POST(req: Request, ctx: Ctx) {
     const project = await getProject(key.workspaceId, row.projectId);
     assertKeyProjectId(key, row.projectId, project?.key ?? row.projectId);
     await assertSeesIssue(key.workspaceId, row.id, key.createdBy);
-    const restored = await restoreIssue(key.workspaceId, row.id);
+    const restored = await restoreIssue(key.workspaceId, row.id, apiActor(key));
     return Response.json({ restored });
   } catch (err) {
     return errorResponse(err);

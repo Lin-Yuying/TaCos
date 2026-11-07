@@ -1760,6 +1760,8 @@ const zh: Record<string, string> = {
   "edited a comment": "编辑了评论",
   "deleted a comment": "删除了评论",
   "restored a comment": "恢复了评论",
+  "moved the task to Trash": "将任务移入回收站",
+  "restored the task": "恢复了任务",
   "requested changes": "要求修改",
   "Waiting for review": "等待评审",
   "Say what needs to change": "说明需要修改什么",

@@ -109,7 +109,7 @@ export async function DELETE(req: Request, ctx: Ctx) {
     const { id } = await ctx.params;
     await assertSeesIssue(key.workspaceId, id, key.createdBy);
     await assertKeyIssueProject(key, id);
-    const deleted = await deleteIssue(key.workspaceId, id);
+    const deleted = await deleteIssue(key.workspaceId, id, apiActor(key));
     return Response.json({
       deleted: { id: deleted.id, identifier: deleted.identifier, title: deleted.title },
       trashed: true,

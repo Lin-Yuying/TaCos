@@ -28,6 +28,8 @@ export type ExportMember = {
   createdAt: string;
 };
 
+export type ExportProjectMember = { username: string; createdAt: string };
+
 export type ExportProject = {
   id: string;
   name: string;
@@ -38,6 +40,8 @@ export type ExportProject = {
   doc: string;
   createdBy: string | null;
   createdAt: string;
+  // Project membership is the access model when membersSeeAllTasks is off.
+  members: ExportProjectMember[];
 };
 
 export type ExportLabel = { id: string; name: string; color: string };
@@ -89,6 +93,8 @@ export type ExportComment = {
   createdAt: string;
 };
 
+export type ExportPageAccess = { username: string; level: "view" | "edit" };
+
 export type ExportPage = {
   id: string;
   parentId: string | null;
@@ -99,6 +105,8 @@ export type ExportPage = {
   markdownPath: string;
   shared: boolean;
   shareLevel: string;
+  // Per-member overrides on a shared document; the workspace shareLevel is the default.
+  access: ExportPageAccess[];
   position: number;
   createdBy: string;
   templateName: string | null;
@@ -271,6 +279,7 @@ export type PlannedProject = {
   description: string;
   doc: string;
   createdBy: string | null;
+  members: string[];
 };
 
 export type PlannedIssue = {
@@ -319,6 +328,7 @@ export type PlannedPage = {
   icon: string | null;
   shared: boolean;
   shareLevel: string;
+  access: ExportPageAccess[];
   position: number;
   createdBy: string | null;
   templateName: string | null;

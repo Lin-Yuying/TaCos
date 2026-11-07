@@ -16,7 +16,9 @@ import {
   type ExportLabel,
   type ExportMember,
   type ExportPage,
+  type ExportPageAccess,
   type ExportPageComment,
+  type ExportProjectMember,
   type ExportProject,
   type ExportTaskField,
   type ExportTaskView,
@@ -249,6 +251,13 @@ async function planCanonical(context: BuildContext, raw: ExportWorkspaceJson, in
       description: stringValue(project?.description).slice(0, 500),
       doc: stringValue(project?.doc),
       createdBy: personFor(stringValue(project?.createdBy), context.people)?.username ?? null,
+      members: [
+        ...new Set(
+          (arrayValue(project?.members) as ExportProjectMember[])
+            .map((member) => personFor(stringValue(member?.username), context.people)?.username ?? null)
+            .filter((username): username is string => Boolean(username))
+        ),
+      ],
     };
     projects.push(planned);
     projectByExternal.set(externalId, planned);
@@ -428,6 +437,17 @@ async function planCanonical(context: BuildContext, raw: ExportWorkspaceJson, in
       icon: stringValue(page.icon) || null,
       shared: boolValue(page.shared, true),
       shareLevel: stringValue(page.shareLevel) || "edit",
+      access: [
+        ...new Map(
+          (arrayValue(page?.access) as ExportPageAccess[])
+            .map((entry) => {
+              const username = personFor(stringValue(entry?.username), context.people)?.username;
+              const level = entry?.level === "edit" ? ("edit" as const) : ("view" as const);
+              return username ? [username, level] as const : null;
+            })
+            .filter((entry): entry is readonly [string, "view" | "edit"] => Boolean(entry))
+        ).entries(),
+      ].map(([username, level]) => ({ username, level })),
       position: numberValue(page.position),
       createdBy: personFor(stringValue(page.createdBy), context.people)?.username ?? null,
       templateName: stringValue(page.templateName) || null,
@@ -729,6 +749,7 @@ function addCsvRows(input: {
         description: "",
         doc: "",
         createdBy: null,
+        members: [],
       };
       projects.push(project);
       projectByName.set(projectName.toLowerCase(), project);
@@ -893,6 +914,7 @@ async function planMarkdown(
     // Import into a new team workspace; the pages were shared in the source tool.
     shared: true,
     shareLevel: "edit",
+    access: [],
     position: index,
     createdBy: null,
     templateName: null,

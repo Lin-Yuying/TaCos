@@ -2552,16 +2552,16 @@ async function notifyViewSubscribers(
   for (const row of watchers) {
     // Exclude self-triggered actions: the person who moved the task already knows.
     if (row.userId === actorUserId) continue;
-    if (row.scope === "project" && row.projectId) {
-      let allowed = projectAccess.get(row.userId);
-      if (allowed === undefined) {
-        allowed = (await seesAllTasks(workspaceId, row.userId))
-          ? true
-          : Boolean(await getProject(workspaceId, row.projectId, row.userId));
-        projectAccess.set(row.userId, allowed);
-      }
-      if (!allowed) continue;
+    // A workspace view can match a task in a project the subscriber cannot open, so
+    // project visibility is checked for every subscriber, not only project views.
+    let allowed = projectAccess.get(row.userId);
+    if (allowed === undefined) {
+      allowed = (await seesAllTasks(workspaceId, row.userId))
+        ? true
+        : Boolean(issue.projectId && (await getProject(workspaceId, issue.projectId, row.userId)));
+      projectAccess.set(row.userId, allowed);
     }
+    if (!allowed) continue;
     const definition = parseStoredDefinition(row.definition);
     if (!(await taskMatchesView(issue, definition, fields, values))) continue;
     await notify({
@@ -2966,6 +2966,12 @@ async function notifyAssigned(
   assigneeId: string,
   actor: MutationActor
 ) {
+  const [issueRow] = await getDb()
+    .select({ projectId: issues.projectId })
+    .from(issues)
+    .where(eq(issues.id, issueId))
+    .limit(1);
+  if (issueRow && !(await memberSeesProject(workspaceId, issueRow.projectId, assigneeId))) return;
   const who =
     actor.kind === "user" ? actor.displayName : `Agent (${actor.label})`;
   await notify({
@@ -3971,13 +3977,18 @@ export async function reviewIssue(
   return { id: row.id, reviewStatus, reviewedBy: reviewerId, reviewedAt: now };
 }
 
-export async function deleteIssue(workspaceId: string, idOrIdentifier: string): Promise<Issue> {
+export async function deleteIssue(
+  workspaceId: string,
+  idOrIdentifier: string,
+  actor?: MutationActor
+): Promise<Issue> {
   const row = await findIssueRow(workspaceId, idOrIdentifier);
   if (!row) throw new TacosError(`Issue "${idOrIdentifier}" not found`, 404);
   await getDb()
     .update(issues)
     .set({ deletedAt: nowIso() })
     .where(and(eq(issues.workspaceId, workspaceId), eq(issues.id, row.id)));
+  if (actor) await recordEvent(row.id, "deleted", {}, actor);
   return {
     id: row.id,
     number: row.number,
@@ -4101,13 +4112,18 @@ export async function findTrashedIssueRow(
   return numbered ?? null;
 }
 
-export async function restoreIssue(workspaceId: string, idOrIdentifier: string) {
+export async function restoreIssue(
+  workspaceId: string,
+  idOrIdentifier: string,
+  actor?: MutationActor
+) {
   const row = await findTrashedIssueRow(workspaceId, idOrIdentifier);
   if (!row) throw new TacosError(`Issue "${idOrIdentifier}" is not in the trash`, 404);
   await getDb()
     .update(issues)
     .set({ deletedAt: null })
     .where(and(eq(issues.workspaceId, workspaceId), eq(issues.id, row.id)));
+  if (actor) await recordEvent(row.id, "restored", {}, actor);
   return { id: row.id, identifier: row.identifier, title: row.title, projectId: row.projectId };
 }
 
@@ -4556,7 +4572,7 @@ export async function listNotificationPage(
   const limit = Math.min(Math.max(options.limit ?? 50, 1), 100);
   const q = (options.q ?? "").trim();
   const words = q ? q.split(/\s+/).filter(Boolean) : [];
-  const tab: NotificationTab = ["unread", "mentions", "assigned", "all"].includes(options.tab ?? "")
+  const tab: NotificationTab = ["unread", "mentions", "assigned", "reviews", "all"].includes(options.tab ?? "")
     ? (options.tab as NotificationTab)
     : "unread";
 

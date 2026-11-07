@@ -143,6 +143,15 @@ async function main() {
     0,
     "a project view does not notify someone who cannot open the project"
   );
+  // A workspace-scoped view must not leak a hidden project's task either.
+  subscriptions.subscribeToTaskView("ws", watcher, view.id, ["added"]);
+  const hiddenWorkspaceView = await create("Hidden workspace view task", 2, "TWO");
+  assert.equal(
+    notices("view_added", hiddenWorkspaceView.id).length,
+    0,
+    "a workspace view does not notify someone who cannot open the task's project"
+  );
+  subscriptions.unsubscribeFromTaskView("ws", watcher, view.id);
   assert.throws(
     () => subscriptions.subscribeToTaskView("ws", watcher, projectView.id, ["added"]),
     /View not found/,

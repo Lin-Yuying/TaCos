@@ -353,6 +353,10 @@ async function main() {
   assert(asObject(objectBody(restored).restored).identifier === betaTask.issue.identifier, "the restored identifier is returned");
   const [restoredRow] = await db.select().from(issues).where(eq(issues.id, betaTask.issue.id));
   assert(restoredRow.deletedAt === null, "the task is live again");
+  const deleteEvents = await eventFor(betaTask.issue.id, "deleted");
+  assert(deleteEvents.length === 1 && deleteEvents[0].agentActor === "api:full", "the delete event names the key");
+  const restoreEvents = await eventFor(betaTask.issue.id, "restored");
+  assert(restoreEvents.length === 1 && restoreEvents[0].agentActor === "api:full", "the restore event names the key");
   const restoredGet = await call(getIssueRoute, fullKey.key, `/api/v1/issues/${betaTask.issue.identifier}`, {
     ctx: { id: betaTask.issue.identifier },
   });

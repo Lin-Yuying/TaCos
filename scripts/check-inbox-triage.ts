@@ -106,6 +106,11 @@ async function main() {
     snoozedUntil: iso(86_400_000),
     createdAt: iso(-5000),
   });
+  const reviewDecision = await insert({
+    type: "review_decision",
+    data: { actorName: "Ada", title: "Review me", decision: "reject" },
+    createdAt: iso(-6000),
+  });
 
   const ids = async (options: Parameters<typeof listNotificationPage>[2] = {}) =>
     new Set((await listNotificationPage(workspaceId, userId, options)).rows.map((row) => row.id));
@@ -118,6 +123,9 @@ async function main() {
   assert(mentionIds.has(mentionedUnread) && !mentionIds.has(assignedUnread), "mentions tab must only show mentions");
   const assignedIds = await ids({ tab: "assigned" });
   assert(assignedIds.has(assignedUnread) && !assignedIds.has(doneAssigned), "assigned tab must exclude done rows");
+  const reviewIds = await ids({ tab: "reviews" });
+  assert(reviewIds.has(reviewDecision), "reviews tab must include the review decision");
+  assert(!reviewIds.has(assignedUnread) && !reviewIds.has(mentionedUnread), "reviews tab must not fall back to unread");
   const allIds = await ids({ tab: "all" });
   assert(allIds.has(commentedRead) && allIds.has(assignedUnread), "all tab must include read rows");
   assert(!allIds.has(doneAssigned) && !allIds.has(snoozed), "all tab must exclude done and snoozed rows");
@@ -127,6 +135,7 @@ async function main() {
   const counts = await notificationCounts(workspaceId, userId);
   assert(counts.unread >= baseline.unread + 3, "unread count must include the three visible unread rows");
   assert(counts.all >= baseline.all + 4, "all count must include read rows but not done/snoozed");
+  assert(counts.reviews >= 1, "reviews count must report the review decision");
 
   await markNotificationRead(workspaceId, userId, assignedUnread);
   assert(!(await ids({ tab: "unread" })).has(assignedUnread), "mark read must leave unread");

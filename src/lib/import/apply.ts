@@ -10,8 +10,10 @@ import {
   comments,
   issues as issuesTable,
   notifications,
+  pageAccess as pageAccessTable,
   pageComments,
   pages,
+  projectMembers as projectMembersTable,
   projects,
   taskFields as taskFieldsTable,
   users,
@@ -85,7 +87,11 @@ async function memberMap(plan: ImportPlan, actor: ImportActor): Promise<Map<stri
     for (const username of issue.assignees) usernames.add(username);
     if (issue.createdBy) usernames.add(issue.createdBy);
   }
-  for (const page of plan.pages) if (page.createdBy) usernames.add(page.createdBy);
+  for (const page of plan.pages) {
+    if (page.createdBy) usernames.add(page.createdBy);
+    for (const access of page.access) usernames.add(access.username);
+  }
+  for (const project of plan.projects) for (const username of project.members) usernames.add(username);
   const map = new Map<string, ImportActor>();
   map.set(actor.username.toLowerCase(), actor);
   if (usernames.size === 0) return map;
@@ -246,6 +252,19 @@ export async function applyImportPlan(input: {
       const created = await createProjectForImport(workspaceId, project, creator.id);
       projectIdByExternal.set(project.externalId, created.id);
       projectKeyById.set(created.id, created.key);
+      for (const username of project.members) {
+        const person = userFor(username, members, creator);
+        if (!person) continue;
+        try {
+          await db.insert(projectMembersTable).values({
+            projectId: created.id,
+            userId: person.id,
+            createdAt: new Date().toISOString(),
+          });
+        } catch {
+          // A duplicate row means the same person was listed twice.
+        }
+      }
     }
     const fallbackProject = plan.projects[0] ? projectIdByExternal.get(plan.projects[0].externalId) : undefined;
     if (plan.issues.length > 0 && !fallbackProject) {
@@ -439,6 +458,19 @@ export async function applyImportPlan(input: {
               ...(updatedAt ? { updatedAt } : {}),
             })
             .where(eq(pages.id, created.id));
+          for (const access of page.access) {
+            const person = userFor(access.username, members, creator);
+            if (!person) continue;
+            try {
+              await db.insert(pageAccessTable).values({
+                pageId: created.id,
+                userId: person.id,
+                level: access.level,
+              });
+            } catch {
+              // Duplicate overrides collapse to the first one.
+            }
+          }
         } catch (error) {
           throw new TacosError(
             `Document "${page.title}" could not be imported (${error instanceof Error ? error.message : "invalid document"}). The workspace was rolled back.`,
