@@ -2247,7 +2247,17 @@ function Conversation({
               {t("Open a copy")}
             </button>
           )}
-          <ThreadMenu workspaceId={workspaceId} thread={active} projects={projects}/>
+          <ThreadMenu
+            workspaceId={workspaceId}
+            thread={active}
+            projects={projects}
+            phoneItems={(close) => messages.length > 0 ? (
+              <div className="hidden max-[600px]:block">
+                <MenuItem disabled={busy || forkBusy !== null} onSelect={() => { close(); void forkAt(messages[messages.length - 1].id); }}>{t("Open a copy")}</MenuItem>
+                <div className="my-1 h-px bg-border" />
+              </div>
+            ) : null}
+          />
         </div>
       </header>
 

@@ -22,11 +22,14 @@ export function ThreadMenu({
   thread,
   projects,
   children,
+  phoneItems,
 }: {
   workspaceId: string;
   thread: AgentThread;
   projects: { id: string; name: string }[];
   children?: ReactNode;
+  // Header actions that collapse into this menu on a phone.
+  phoneItems?: (close: () => void) => ReactNode;
 }) {
   const t = useT(),
     router = useRouter(),
@@ -156,6 +159,7 @@ export function ThreadMenu({
     >
       {(close) => (
         <>
+          {phoneItems?.(close)}
           {actions.map((action) => (
             <Fragment key={action.label}>
               {action.label === "Delete conversation" && <div className="my-1 h-px bg-border" />}
