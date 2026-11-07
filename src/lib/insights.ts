@@ -34,11 +34,13 @@ import {
   workspaceAgents,
 } from "@/db/schema";
 import { isAutomationManager } from "@/lib/automations/store";
+import { getTaskView } from "@/lib/task-views";
 import { listMembers, listProjects } from "@/lib/issues";
 import { addDays, eachDay } from "@/lib/planning/dates";
 import {
   INSIGHT_MAX_ROWS,
   INSIGHT_MAX_TASKS,
+  defaultInsightConfig,
   insightQuery,
   median,
   normalizeInsightConfig,
@@ -58,6 +60,7 @@ import {
   type InsightProjectRow,
   type InsightRange,
   type InsightSavedConfig,
+  type InsightStatusFilter,
   type InsightTaskRow,
   type InsightTaskStatus,
   type InsightWeekPoint,
@@ -1168,6 +1171,85 @@ export async function aggregateInsights(
     partial,
     notices,
     generatedAt,
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Request resolution (URL params + a saved workspace view)
+// ---------------------------------------------------------------------------
+
+export type InsightRequest = {
+  config: InsightSavedConfig;
+  defaults: InsightSavedConfig;
+  timeZone: string;
+  today: string;
+  viewId: string | null;
+  viewName: string | null;
+  notices: InsightNotice[];
+};
+
+function readQuery(
+  query: Record<string, string | string[] | undefined>,
+  key: string
+): string | undefined {
+  const value = query[key];
+  return typeof value === "string" ? value : undefined;
+}
+
+/**
+ * The page, the export route and the checks share one interpretation of a report URL:
+ * a saved view supplies the base, explicit params override it, and normalization owns
+ * the default range and the one-year clamp.
+ */
+export async function resolveInsightRequest(
+  workspaceId: string,
+  userId: string,
+  query: Record<string, string | string[] | undefined>,
+  options: { timeZone?: string; now?: string } = {}
+): Promise<InsightRequest> {
+  const timeZone = resolveInsightTimeZone(options.timeZone);
+  const generatedAt = options.now ?? new Date().toISOString();
+  const today = zoneDayOf(generatedAt, timeZone);
+  const defaults = defaultInsightConfig(today);
+  const notices: InsightNotice[] = [];
+  let base: Partial<InsightSavedConfig> = {};
+  let viewId: string | null = null;
+  let viewName: string | null = null;
+  const requestedView = readQuery(query, "viewId");
+  if (requestedView) {
+    try {
+      const view = getTaskView(workspaceId, userId, requestedView);
+      // Only a shared report is a link another member can open; a personal view is not.
+      if (view.shared && view.definition.insight) {
+        base = view.definition.insight;
+        viewId = view.id;
+        viewName = view.name;
+      } else {
+        notices.push({ kind: "view-unavailable" });
+      }
+    } catch {
+      notices.push({ kind: "view-unavailable" });
+    }
+  }
+  const normalized = normalizeInsightConfig(
+    {
+      from: readQuery(query, "from") ?? base.from,
+      to: readQuery(query, "to") ?? base.to,
+      projectId: readQuery(query, "project") ?? base.projectId,
+      assigneeId: readQuery(query, "assignee") ?? base.assigneeId,
+      label: readQuery(query, "label") ?? base.label,
+      status: (readQuery(query, "status") as InsightStatusFilter | undefined) ?? base.status,
+    },
+    today
+  );
+  return {
+    config: normalized.config,
+    defaults,
+    timeZone,
+    today,
+    viewId,
+    viewName,
+    notices: [...notices, ...normalized.notices],
   };
 }
 

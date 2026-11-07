@@ -3,11 +3,8 @@ import { connection } from "next/server";
 import { redirect } from "next/navigation";
 import { getSessionUser, requireWorkspace } from "@/lib/auth";
 import { listLabels, listMembers, listProjects } from "@/lib/issues";
-import { aggregateInsights, resolveInsightTimeZone, zoneDayOf } from "@/lib/insights";
-import {
-  defaultInsightConfig,
-  type InsightStatusFilter,
-} from "@/lib/insights.shared";
+import { aggregateInsights, resolveInsightRequest, resolveInsightTimeZone } from "@/lib/insights";
+import { listInsightViews } from "@/lib/task-views";
 import { InsightsView } from "@/components/insights/insights-view";
 
 export default function InsightsPage({
@@ -44,37 +41,25 @@ async function View({
   if (!user) redirect("/login");
   await requireWorkspace(workspaceId);
 
-  const read = (key: string): string | undefined =>
-    typeof query[key] === "string" ? (query[key] as string) : undefined;
   const timeZone = resolveInsightTimeZone();
   const now = new Date().toISOString();
-  const today = zoneDayOf(now, timeZone);
-  const status = read("status");
-  const [data, projects, members, labels] = await Promise.all([
-    aggregateInsights(
-      workspaceId,
-      user.id,
-      {
-        from: read("from"),
-        to: read("to"),
-        projectId: read("project"),
-        assigneeId: read("assignee"),
-        label: read("label"),
-        status: (["all", "active", "done", "canceled"] as string[]).includes(status ?? "")
-          ? (status as InsightStatusFilter)
-          : "all",
-      },
-      { timeZone, now }
-    ),
+  const request = await resolveInsightRequest(workspaceId, user.id, query, { timeZone, now });
+  const [data, projects, members, labels, savedViews] = await Promise.all([
+    aggregateInsights(workspaceId, user.id, request.config, { timeZone: request.timeZone, now }),
     listProjects(workspaceId, user.id),
     listMembers(workspaceId),
     listLabels(workspaceId),
+    Promise.resolve(listInsightViews(workspaceId, user.id)),
   ]);
+  const viewNotice = request.notices.find((notice) => notice.kind === "view-unavailable");
+  const dataWithNotices = viewNotice
+    ? { ...data, notices: [viewNotice, ...data.notices] }
+    : data;
 
   return (
     <InsightsView
       workspaceId={workspaceId}
-      data={data}
+      data={dataWithNotices}
       projects={projects.map((project) => ({
         id: project.id,
         name: project.name,
@@ -87,7 +72,9 @@ async function View({
         avatar: member.avatar,
       }))}
       labels={labels.map((label) => ({ id: label.id, name: label.name, color: label.color }))}
-      defaults={defaultInsightConfig(today)}
+      defaults={request.defaults}
+      savedViews={savedViews.map((view) => ({ id: view.id, name: view.name }))}
+      activeView={request.viewId ? { id: request.viewId, name: request.viewName ?? "" } : null}
     />
   );
 }

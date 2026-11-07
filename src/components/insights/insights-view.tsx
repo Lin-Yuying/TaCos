@@ -1,8 +1,9 @@
 "use client";
 
-import { useMemo, useTransition } from "react";
-import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { RotateCcw } from "lucide-react";
+import { useMemo, useState, useTransition } from "react";
+import Link from "next/link";
+import { usePathname, useRouter } from "next/navigation";
+import { Copy, Download, RotateCcw, Save } from "lucide-react";
 import { useT } from "@/components/i18n-context";
 import { useDetailSource } from "@/components/detail-navigation";
 import { PAGE_INSET } from "@/lib/page-chrome";
@@ -10,10 +11,13 @@ import {
   formatInsightDays,
   formatInsightHours,
   formatInsightPercent,
+  insightQuery,
   type InsightSavedConfig,
   type InsightStatusFilter,
   type InsightData,
 } from "@/lib/insights.shared";
+import { saveInsightViewAction } from "@/app/insight-actions";
+import { Modal } from "@/components/ui/modal";
 import {
   AgentPanel,
   AutomationPanel,
@@ -49,6 +53,8 @@ export function InsightsView({
   members,
   labels,
   defaults,
+  savedViews,
+  activeView,
 }: {
   workspaceId: string;
   data: InsightData;
@@ -56,15 +62,22 @@ export function InsightsView({
   members: MemberOption[];
   labels: LabelOption[];
   defaults: InsightSavedConfig;
+  savedViews: { id: string; name: string }[];
+  activeView: { id: string; name: string } | null;
 }) {
   const t = useT();
   const router = useRouter();
   const pathname = usePathname();
-  const searchParams = useSearchParams();
   const [pending, startTransition] = useTransition();
+  const [saveOpen, setSaveOpen] = useState(false);
+  const [saveName, setSaveName] = useState("");
+  const [saveError, setSaveError] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
+  const [copyState, setCopyState] = useState<"idle" | "copied" | "error">("idle");
   useDetailSource("task", data.rows.map((row) => row.id));
   const filters = data.filters;
   const metrics = data.metrics;
+  const exportHref = `/${workspaceId}/insights/export?${insightQuery(filters)}`;
 
   function navigate(next: InsightSavedConfig) {
     const params = new URLSearchParams();
@@ -74,11 +87,20 @@ export function InsightsView({
     if (next.assigneeId) params.set("assignee", next.assigneeId);
     if (next.label) params.set("label", next.label);
     if (next.status !== "all") params.set("status", next.status);
-    const viewId = searchParams.get("viewId");
-    if (viewId) params.set("viewId", viewId);
     startTransition(() => {
       router.replace(`${pathname}?${params.toString()}`, { scroll: false });
     });
+  }
+
+  async function copyLink() {
+    const url = `${window.location.origin}${pathname}?${insightQuery(filters)}`;
+    try {
+      await navigator.clipboard.writeText(url);
+      setCopyState("copied");
+    } catch {
+      setCopyState("error");
+    }
+    window.setTimeout(() => setCopyState("idle"), 2200);
   }
 
   const patch = (change: Partial<InsightSavedConfig>) => navigate({ ...filters, ...change });
@@ -110,6 +132,43 @@ export function InsightsView({
         <span className="text-caption text-faint" data-testid="insight-timezone">
           {t("Days use {zone}", { zone: data.range.timeZone })}
         </span>
+        <div className="ml-auto flex flex-wrap items-center gap-1.5">
+          <button
+            type="button"
+            onClick={() => {
+              setSaveError(null);
+              setSaveOpen(true);
+            }}
+            className="flex items-center gap-1 rounded-md border border-border px-2.5 py-1.5 text-small text-muted transition-colors hover:border-border-strong hover:text-text"
+            data-testid="insight-save-view"
+          >
+            <Save size={12} />
+            {t("Save view")}
+          </button>
+          <button
+            type="button"
+            onClick={copyLink}
+            className="flex items-center gap-1 rounded-md border border-border px-2.5 py-1.5 text-small text-muted transition-colors hover:border-border-strong hover:text-text"
+            data-testid="insight-copy-link"
+          >
+            <Copy size={12} />
+            {copyState === "copied" ? t("Copied") : t("Copy link")}
+          </button>
+          {copyState === "error" ? (
+            <span className="text-caption text-danger" role="alert">
+              {t("Could not copy. Copy the address bar.")}
+            </span>
+          ) : null}
+          <a
+            href={exportHref}
+            download
+            className="flex items-center gap-1 rounded-md border border-border px-2.5 py-1.5 text-small text-muted transition-colors hover:border-border-strong hover:text-text"
+            data-testid="insight-export-csv"
+          >
+            <Download size={12} />
+            {t("Export CSV")}
+          </a>
+        </div>
       </header>
 
       <div className="min-h-0 flex-1 overflow-y-auto">
@@ -214,6 +273,46 @@ export function InsightsView({
             <span className="ml-auto text-caption text-faint" aria-live="polite">
               {pending ? t("Updating…") : null}
             </span>
+          </div>
+
+          <div
+            className="flex flex-wrap items-center gap-1.5 text-small"
+            data-testid="insight-saved-views"
+          >
+            <span className="text-caption uppercase tracking-[0.06em] text-faint">{t("Saved views")}</span>
+            {savedViews.length === 0 ? (
+              <span className="text-caption text-faint">{t("No saved views yet.")}</span>
+            ) : (
+              savedViews.map((view) => (
+                <Link
+                  key={view.id}
+                  href={`${pathname}?viewId=${view.id}`}
+                  data-testid={`insight-saved-view-${view.id}`}
+                  aria-current={activeView?.id === view.id ? "page" : undefined}
+                  className={`rounded-full border px-2 py-0.5 text-caption transition-colors ${
+                    activeView?.id === view.id
+                      ? "border-border-strong bg-elevated text-text"
+                      : "border-border text-muted hover:border-border-strong hover:text-text"
+                  }`}
+                >
+                  {view.name}
+                </Link>
+              ))
+            )}
+            {activeView ? (
+              <button
+                type="button"
+                onClick={() =>
+                  startTransition(() => {
+                    router.replace(`${pathname}?${insightQuery(filters)}`, { scroll: false });
+                  })
+                }
+                className="ml-1 text-caption text-faint underline-offset-2 hover:text-text hover:underline"
+                data-testid="insight-clear-view"
+              >
+                {t("Clear view")}
+              </button>
+            ) : null}
           </div>
 
           {pending ? (
@@ -408,6 +507,70 @@ export function InsightsView({
           ) : null}
         </div>
       </div>
+
+      <Modal open={saveOpen} onClose={() => setSaveOpen(false)} title={t("Save as workspace view")}>
+        <form
+          onSubmit={async (event) => {
+            event.preventDefault();
+            if (!saveName.trim() || saving) return;
+            setSaving(true);
+            setSaveError(null);
+            const result = await saveInsightViewAction(workspaceId, {
+              name: saveName,
+              config: filters,
+            });
+            setSaving(false);
+            if (!result.ok) {
+              setSaveError(result.error);
+              return;
+            }
+            setSaveOpen(false);
+            setSaveName("");
+            startTransition(() => {
+              router.replace(`${pathname}?viewId=${result.data.id}`, { scroll: false });
+            });
+          }}
+          data-testid="insight-save-form"
+        >
+          <h2 className="text-title font-semibold">{t("Save as workspace view")}</h2>
+          <p className="mt-1 text-small text-muted">
+            {t("Every member of this workspace can open this report. Guests cannot.")}
+          </p>
+          <label className="mt-3 flex flex-col gap-1 text-small text-muted">
+            {t("View name")}
+            <input
+              value={saveName}
+              onChange={(event) => setSaveName(event.target.value)}
+              maxLength={80}
+              autoFocus
+              className="rounded-md border border-border bg-bg px-2 py-1.5 text-body text-text"
+              data-testid="insight-view-name"
+            />
+          </label>
+          {saveError ? (
+            <p className="mt-2 text-small text-danger" role="alert" data-testid="insight-save-error">
+              {saveError}
+            </p>
+          ) : null}
+          <div className="mt-4 flex justify-end gap-2">
+            <button
+              type="button"
+              onClick={() => setSaveOpen(false)}
+              className="rounded-md border border-border px-3 py-1.5 text-body text-muted hover:border-border-strong hover:text-text"
+            >
+              {t("Cancel")}
+            </button>
+            <button
+              type="submit"
+              disabled={!saveName.trim() || saving}
+              className="rounded-md bg-accent px-3 py-1.5 text-body font-medium text-white transition-colors hover:bg-accent-hover disabled:cursor-not-allowed disabled:opacity-50"
+              data-testid="insight-save-submit"
+            >
+              {saving ? t("Saving…") : t("Save")}
+            </button>
+          </div>
+        </form>
+      </Modal>
     </div>
   );
 }

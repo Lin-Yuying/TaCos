@@ -2015,5 +2015,13 @@ const zh: Record<string, string> = {
   "Some historical tasks predate event tracking, so time measures may be incomplete.": "部分历史任务早于事件记录，时间指标可能不完整。",
   "No data in this range.": "此区间内没有数据。",
 
+  "Could not copy. Copy the address bar.": "复制失败，请复制地址栏。",
+  "Export CSV": "导出 CSV",
+  "Saved views": "已保存视图",
+  "No saved views yet.": "还没有已保存视图。",
+  "Clear view": "清除视图",
+  "Save as workspace view": "保存为工作区视图",
+  "Every member of this workspace can open this report. Guests cannot.": "此工作区的每位成员都能打开此报告。访客不能。",
+
 }
 export default zh;
