@@ -40,7 +40,7 @@ State per item: `todo`, `pass` (commit plus cheap checks: `npx tsc --noEmit`, `n
 | 30 | Entry: login, register, onboarding, join | Login, Register, Onboarding, OnboardingJoin, Join, JoinInvalid | pass |
 | 31 | Admin: instance and workspace | Admin, AdminWs | pass |
 | 32 | Shared states: empty, loading, load error, not found, no access, deleted workspace, reconnect, storage full, toast, confirm | EmptyStates, LoadingList, LoadingDoc, LoadError, NotFound, NoAccess, WsDeleted, Reconnect, StorageFull, Toasts, Confirm, SearchNoResult | pass |
-| 33 | Desktop screens | DesktopSetup, DesktopStarting, DesktopOffline, DesktopUpdate, DesktopUpdateStates, DesktopImport | partial |
+| 33 | Desktop screens | DesktopSetup, DesktopStarting, DesktopOffline, DesktopUpdate, DesktopUpdateStates, DesktopImport | pass |
 | 34 | Narrow window (720) | Narrow720, Narrow720Panel | partial |
 | 35 | Phone: bottom navigation, drawer, full-screen task/doc/new-task/search | PhoneTasks, PhoneTask, PhoneDrawer, PhoneInbox, PhoneAgent, PhoneSearch, PhoneNewTask, PhoneDoc | partial |
 | 36 | Batch end-to-end run and screenshots (real models, fresh data dir) | all | partial |
@@ -50,7 +50,6 @@ State per item: `todo`, `pass` (commit plus cheap checks: `npx tsc --noEmit`, `n
 
 `pass` above means every listed board was compared and done. `partial` items still have these boards open:
 
-- 33: DesktopUpdateStates, DesktopImport open action
 - 34: Narrow720Panel (overlay width)
 - 35: PhoneDoc, PhoneInbox, PhoneAgent, PhoneTasks (44px rows, filter icon)
 - 36: re-run after the gaps close

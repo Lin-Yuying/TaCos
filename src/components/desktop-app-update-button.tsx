@@ -88,7 +88,7 @@ function tooltipFor(status: AppUpdateStatus | null): string {
 }
 
 // Restarting ends a running Agent turn, so the pill asks the server before it does.
-async function agentIsWorking(): Promise<boolean> {
+export async function agentIsWorking(): Promise<boolean> {
   try {
     const response = await fetch("/api/agent/busy", {
       cache: "no-store",

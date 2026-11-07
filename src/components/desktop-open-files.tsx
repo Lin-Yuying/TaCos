@@ -68,7 +68,8 @@ export function DesktopOpenFiles({ workspaceId }: { workspaceId: string }) {
           toast(
             result.data.created
               ? t("Imported “{title}”", { title: result.data.title })
-              : t("Opened “{title}” — it was already in Docs", { title: result.data.title })
+              : t("Opened “{title}” — it was already in Docs", { title: result.data.title }),
+            { label: t("Open"), run: () => router.push(`/${workspaceId}/docs/${result.data.id}`) }
           );
         }
         // A strict-mode remount tears this effect down/re-arms it in the same tick, while

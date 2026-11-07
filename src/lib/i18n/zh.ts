@@ -2,6 +2,14 @@
 // `{name}` placeholders must survive translation unchanged. Grouped by the file that
 // first uses a string; `npm run i18n:check` lists keys used in code but missing here.
 const zh: Record<string, string> = {
+  "Preparing to restart": "正在准备重启",
+  "New version available": "有新版本",
+  "Unpacking": "正在解压",
+  "Checking the signature": "正在检查签名",
+  "Downloading": "正在下载",
+  "Ready to install": "可以安装",
+  "Install and restart": "安装并重启",
+  "Update failed": "更新失败",
   "Clear all {count} notifications?": "清除全部 {count} 条通知？",
   "You can undo this.": "可以撤销。",
   "Delete the rule “{name}”?": "删除规则“{name}”？",
@@ -823,7 +831,7 @@ const zh: Record<string, string> = {
   "Change language": "更改语言",
   "Show line numbers": "显示行号",
   "Code options": "代码选项",
-  "Imported “{title}”": "已导入「{title}」",
+  "Imported “{title}”": "已导入“{title}”",
   "Opened “{title}” — it was already in Docs":
     "已打开「{title}」，它之前就在文档里",
   "Mark as not done": "标为未完成",

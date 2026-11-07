@@ -2,7 +2,8 @@
 
 import { useEffect, useState } from "react";
 import { useT } from "@/components/i18n-context";
-import type { AppUpdateApi, AppUpdateStatus } from "./desktop-app-update-button";
+import { useUI } from "@/components/ui-context";
+import { DESKTOP_APP_UPDATE_COPY, agentIsWorking, type AppUpdateApi, type AppUpdateStatus } from "./desktop-app-update-button";
 
 function desktopUpdateApi(): AppUpdateApi | null {
   return (
@@ -28,6 +29,8 @@ export function DesktopUpdateDetails() {
   const t = useT();
   const [status, setStatus] = useState<AppUpdateStatus | null>(null);
   const [present, setPresent] = useState(false);
+  const [preparing, setPreparing] = useState(false);
+  const { confirm } = useUI();
 
   useEffect(() => {
     const api = desktopUpdateApi();
@@ -68,6 +71,45 @@ export function DesktopUpdateDetails() {
     );
   }
 
+  // Restarting ends a running Agent turn, so this asks first, the way the pill does.
+  async function installAndRestart() {
+    const api = desktopUpdateApi();
+    if (!api) return;
+    if (!api.restart) {
+      await api.install();
+      return;
+    }
+    if (
+      (await agentIsWorking()) &&
+      !(await confirm(DESKTOP_APP_UPDATE_COPY.busyTitle, {
+        body: DESKTOP_APP_UPDATE_COPY.busyBody,
+        action: DESKTOP_APP_UPDATE_COPY.busyConfirm,
+      }))
+    )
+      return;
+    setPreparing(true);
+    const result = await api.restart().catch(() => null);
+    if (!result?.ok || result.degraded) setPreparing(false);
+  }
+
+  const state = status?.state ?? "idle";
+  const version = status?.availableVersion ?? undefined;
+  const row: { label: string; detail?: string; action?: { label: string; primary: boolean; run: () => unknown } } = preparing
+    ? { label: t("Preparing to restart") }
+    : state === "available"
+      ? { label: t("New version available"), detail: version, action: { label: t("Download"), primary: true, run: () => desktopUpdateApi()?.install() } }
+      : state === "downloading"
+        ? status?.stage === "unpacking"
+          ? { label: t("Unpacking") }
+          : status?.stage === "verifying"
+            ? { label: t("Checking the signature") }
+            : { label: t("Downloading"), detail: typeof status?.progress === "number" ? `${Math.round(status.progress)}%` : undefined }
+        : state === "downloaded"
+          ? { label: t("Ready to install"), detail: version, action: { label: t("Install and restart"), primary: true, run: installAndRestart } }
+          : state === "error"
+            ? { label: t("Update failed"), detail: status?.error ?? undefined, action: { label: t("Retry"), primary: false, run: () => desktopUpdateApi()?.check() } }
+            : { label: t(STATE_LABEL[state] ?? state) };
+
   const unsigned = status?.unsigned;
   return (
     <div className="rounded-lg border border-border p-3" data-testid="desktop-update">
@@ -83,8 +125,6 @@ export function DesktopUpdateDetails() {
         <dd className="font-mono tabular-nums">{status?.currentVersion || "—"}</dd>
         <dt className="text-muted">{t("Available version")}</dt>
         <dd className="font-mono tabular-nums">{status?.availableVersion || t("None")}</dd>
-        <dt className="text-muted">{t("State")}</dt>
-        <dd>{t(STATE_LABEL[status?.state ?? "idle"] ?? status?.state ?? "Idle")}</dd>
         {status?.releaseDate && (
           <>
             <dt className="text-muted">{t("Released")}</dt>
@@ -92,6 +132,27 @@ export function DesktopUpdateDetails() {
           </>
         )}
       </dl>
+      <div className="mt-2 flex items-center gap-3 rounded-md border border-border px-3 py-2" data-testid="desktop-update-state">
+        <div className="min-w-0 flex-1">
+          <div className="text-small font-medium text-text">{row.label}</div>
+          {row.detail && (
+            <div role={state === "error" ? "alert" : undefined} className={`break-words text-small tabular-nums ${state === "error" ? "text-danger" : "text-faint"}`}>
+              {row.detail}
+            </div>
+          )}
+        </div>
+        {row.action && (
+          <button
+            type="button"
+            onClick={() => void row.action?.run()}
+            className={row.action.primary
+              ? "shrink-0 rounded-md bg-accent px-3 py-1.5 text-small font-medium text-white transition-colors hover:bg-accent-hover"
+              : "shrink-0 rounded-md border border-border px-2 py-1 text-small text-muted transition-colors hover:bg-elevated hover:text-text"}
+          >
+            {row.action.label}
+          </button>
+        )}
+      </div>
       {status?.releaseNotes && (
         <div className="mt-2">
           <p className="text-small font-medium">{t("Release notes")}</p>
@@ -99,11 +160,6 @@ export function DesktopUpdateDetails() {
             {status.releaseNotes}
           </p>
         </div>
-      )}
-      {status?.state === "error" && (
-        <p role="alert" className="mt-2 break-words text-small text-danger">
-          {status.error}
-        </p>
       )}
       <p className="mt-2 text-small text-muted">
         {t(
