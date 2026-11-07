@@ -67,6 +67,32 @@ npm run start
 
 Put the app behind a reverse proxy with TLS. If it is reachable from the public internet, restrict access with something like Cloudflare Access or a VPN, change the built-in admin password, and set `TACOS_SEED_DEMO=0`. The SQLite file contains password hashes, session tokens, and hashed API keys; never serve `data/` or commit it.
 
+## Operations
+
+Open **Settings → System** as the instance admin for version, database size and
+integrity, free disk, uptime, backup age, runner state and the update channel.
+`GET /api/health` returns the same aggregate status as JSON without paths or
+secrets (`503` when database integrity fails).
+
+- **Backups**: the daily timer keeps 14 days by default and writes a manifest naming
+  the app version, size, hash and integrity result. **Back up now** writes the same
+  shape and records the run. Retention is configurable (1–90 days).
+- **Restore**: workspace owner only, same app version only. Type `RESTORE`; TaCos
+  creates a safety backup, replaces the database, checks integrity, and puts the
+  safety backup back if the swap fails. Restart the service afterwards. Uploaded
+  files are not replaced.
+- **Upgrades**: `deploy/install.sh` requires 1 GB free, takes a verified pre-upgrade
+  backup, keeps `app.old`, and checks that `/api/health` reports the new version.
+  `sudo /opt/tacos/deploy/rollback.sh` restores the previous app and its
+  pre-upgrade backup.
+- **Diagnostics**: one capped text bundle with redacted config, schema version,
+  the operations log and recent harness logs; no database rows or secrets.
+- **Runners**: a read-only view of which computers are online, their harness
+  readiness and recent errors; there is no remote runner or tunnel control.
+
+The full procedure, thresholds and screenshot checklist are in
+[`docs/runbook-ops.md`](docs/runbook-ops.md).
+
 ## Agent tab and delegation
 
 Open **Agent** to chat with a harness, the built-in API agent, or an ACP agent. The

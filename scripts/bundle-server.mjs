@@ -87,6 +87,8 @@ function dereference(dir) {
 cpSync(standaloneDir, outDir, { recursive: true });
 dereference(outDir);
 cpSync(path.join(nextDir, "static"), path.join(outDir, ".next", "static"), { recursive: true });
+// U-12: the installer and /api/health compare this version with the running one.
+copyFileSync(path.join(root, "package.json"), path.join(outDir, "package.json"));
 if (existsSync(path.join(root, "public"))) {
   cpSync(path.join(root, "public"), path.join(outDir, "public"), { recursive: true });
 }
