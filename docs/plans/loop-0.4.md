@@ -177,4 +177,6 @@ blocker (host, command, expected credential) and do not fake success.
 | U-11 collaboration | merged | #93 | 136/136 checks; Edge E2E comments/watchers/activity; local-day grouping fix; screenshots |
 | U-03 planning | merged | #94 | 140/140 checks; Edge E2E cycles/roadmap/initiatives/timeline; month-label fix; screenshots |
 | U-12 desktop/self-host ops | merged | #95 | 144/144 checks; Edge E2E System/backup/restore dialog/diagnostics; screenshots |
-| U-02 insights | in progress | — | — |
+| U-02 insights | merged | #96 | 146/146 checks; Edge E2E insights cards/charts/filter/CSV; 1440/1100/640 screenshots |
+| U-05 import/export | merged | #98 | 150/150 checks; Edge E2E ZIP export, CSV preview/import; 1440/1100 screenshots |
+| #97 task-detail overlap fix | merged | #97 | user-reported task description overlap + settings search removal |
