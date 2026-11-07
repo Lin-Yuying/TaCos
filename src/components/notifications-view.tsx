@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Bell, Check, ChevronDown, ChevronRight, Clock, MoreHorizontal, Search, X } from "lucide-react";
+import { Bell, Check, ChevronDown, ChevronRight, Clock, Inbox, MoreHorizontal, Search, X } from "lucide-react";
 import { AssigneeAvatar } from "@/components/issue-table";
 import { useUI, NOTIFICATIONS_READ } from "@/components/ui-context";
 import { Menu, MenuItem } from "@/components/menu";
@@ -626,6 +626,7 @@ export function NotificationsView({
       <div>
         {items.length === 0 && (
           <EmptyState
+            icon={initialQuery ? <Search size={16} /> : <Inbox size={16} />}
             title={initialQuery ? t("No notifications match this search.") : t("Your inbox is empty")}
             hint={initialQuery ? undefined : t("Nothing yet — you'll see mentions, assignments, and comments here.")}
           />

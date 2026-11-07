@@ -5,6 +5,7 @@ import { createPortal } from "react-dom";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { ExternalLink, Search, Trash2, X } from "lucide-react";
+import { ProjectIcon } from "@/components/icons";
 import { Modal } from "@/components/ui/modal";
 import { useT, useLocale } from "@/components/i18n-context";
 import { useUI } from "@/components/ui-context";
@@ -298,6 +299,9 @@ export function PlanningInitiatives({
                       href={`/${workspaceId}/projects/${project.id}?tab=timeline`}
                       className="flex items-center gap-2 py-1.5 text-body transition-colors hover:text-text"
                     >
+                      <span className="flex w-4 shrink-0 items-center justify-center">
+                        <ProjectIcon color={project.color} icon={project.icon} size={13} />
+                      </span>
                       <span className="min-w-0 flex-1 truncate">{project.name}</span>
                       <span className="shrink-0 text-small text-faint tabular-nums">
                         {t("{done}/{total} done", {
@@ -344,7 +348,7 @@ export function PlanningInitiatives({
           if (!saving) setDraft(null);
         }}
         title={draft?.id ? t("Edit initiative") : t("New initiative")}
-        className="max-w-[520px] !p-0"
+        className="max-w-[480px] !p-0"
       >
         {draft && (
           <div data-testid="initiative-editor">

@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { RotateCw } from "lucide-react";
 import { useT } from "@/components/i18n-context";
 import { EmptyState } from "@/components/ui/empty-state";
 
@@ -12,7 +13,7 @@ export function LoadError({ title, hint, error, onRetry, testId, retryTestId }: 
   const [details, setDetails] = useState(false);
   return (
     <div className="flex min-h-0 flex-1" data-testid={testId}>
-      <EmptyState title={title} hint={hint}>
+      <EmptyState icon={<RotateCw size={16} />} title={title} hint={hint}>
         <button
           type="button"
           onClick={onRetry}

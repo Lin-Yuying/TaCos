@@ -9,6 +9,7 @@ import {
   type EntityRef,
 } from "@/lib/ui/entity-actions";
 import { reorderPersonalEntitiesAction } from "@/app/entity-actions";
+import { BTN_PRIMARY } from "@/lib/page-chrome";
 export function PersonalOrder({
   workspaceId,
   group,
@@ -79,13 +80,14 @@ export function PersonalOrder({
           {draft?.map((item, at) => (
             <div
               key={`${item.kind}:${item.id}`}
-              className="flex items-center gap-3 rounded border border-border p-2 text-body"
+              className="flex items-center gap-3 border-b border-border py-2.5 text-body last:border-0"
             >
               <span className="min-w-0 flex-1 truncate">{item.title}</span>
               <button
                 disabled={at === 0}
                 aria-label={t("Move {name} up", { name: item.title })}
                 onClick={() => move(at, -1)}
+                className="text-faint transition-colors hover:text-text disabled:opacity-30"
               >
                 ↑
               </button>
@@ -93,19 +95,18 @@ export function PersonalOrder({
                 disabled={at === draft.length - 1}
                 aria-label={t("Move {name} down", { name: item.title })}
                 onClick={() => move(at, 1)}
+                className="text-faint transition-colors hover:text-text disabled:opacity-30"
               >
                 ↓
               </button>
             </div>
           ))}
         </fieldset>
-        <button
-          disabled={busy}
-          onClick={() => void save()}
-          className="inline-flex items-center justify-center gap-1.5 whitespace-nowrap h-[30px] rounded-lg px-2.5 text-small border border-border bg-bg text-text hover:bg-active"
-        >
-          {t("Save")}
-        </button>
+        <div className="flex justify-end">
+          <button disabled={busy} onClick={() => void save()} className={BTN_PRIMARY}>
+            {t("Save")}
+          </button>
+        </div>
       </Modal>
     </>
   );

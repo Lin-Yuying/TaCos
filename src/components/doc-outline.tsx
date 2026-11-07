@@ -9,21 +9,27 @@ import { useT } from "@/components/i18n-context";
 /** The reader's outline: jump within the document, and copy a link to one heading. */
 export function DocOutlinePanel({
   headings,
+  title,
   compact,
   linkBase,
   onSelect,
+  onSelectTitle,
   onClose,
 }: {
   headings: DocHeading[];
+  // The page title is the outline's first entry: it is the document's top level.
+  title: string;
   compact: boolean;
   // Canonical path of the document, without a query string.
   linkBase: string;
   onSelect: (id: string) => void;
+  onSelectTitle: () => void;
   onClose: () => void;
 }) {
   const t = useT();
   const [copied, setCopied] = useState<string | null>(null);
-  const [active, setActive] = useState(0);
+  // -1 is the page title, 0..n-1 the document headings.
+  const [active, setActive] = useState(-1);
   const root = useRef<HTMLElement>(null);
   useEffect(() => {
     const scroller = root.current?.closest("[data-document-root]")?.querySelector("[data-document-scroll]");
@@ -34,10 +40,11 @@ export function DocOutlinePanel({
       frame = requestAnimationFrame(() => {
         frame = 0;
         const top = scroller.getBoundingClientRect().top + 120;
-        let current = 0;
-        scroller.querySelectorAll(".tiptap h1,.tiptap h2,.tiptap h3").forEach((heading, index) => {
-          if (heading.getBoundingClientRect().top <= top) current = index;
-        });
+        let current = -1;
+        if (scroller.scrollTop > 4)
+          scroller.querySelectorAll(".tiptap h1,.tiptap h2,.tiptap h3").forEach((heading, index) => {
+            if (heading.getBoundingClientRect().top <= top) current = index;
+          });
         setActive(current);
       });
     };
@@ -80,6 +87,17 @@ export function DocOutlinePanel({
           </button>
         </div>
         <div className="min-h-0 flex-1 overflow-y-auto p-2">
+          <button
+            type="button"
+            data-outline-title
+            onClick={onSelectTitle}
+            title={title}
+            aria-current={active === -1 ? "location" : undefined}
+            style={{ paddingLeft: 8 }}
+            className={`min-w-0 w-full truncate rounded-md px-1 py-1.5 text-left text-body transition-colors hover:bg-elevated/60 hover:text-text ${active === -1 && headings.length > 0 ? "bg-elevated text-text" : "text-text"}`}
+          >
+            {title}
+          </button>
           {headings.length === 0 ? (
             <p className="p-2 text-small text-faint">{t("Add a heading with # to build an outline.")}</p>
           ) : (
@@ -91,8 +109,8 @@ export function DocOutlinePanel({
                   onClick={() => onSelect(heading.id)}
                   style={{ paddingLeft: 8 + Math.max(0, heading.level - 1) * 10 }}
                   title={heading.text}
-                  aria-current={active === index ? "location" : undefined}
-                  className={`min-w-0 flex-1 truncate rounded-md px-1 py-1.5 text-left text-body transition-colors hover:bg-elevated/60 hover:text-text ${active === index ? "bg-elevated text-text" : "text-muted"}`}
+                  aria-current={active === index + 1 ? "location" : undefined}
+                  className={`min-w-0 flex-1 truncate rounded-md px-1 py-1.5 text-left text-body transition-colors hover:bg-elevated/60 hover:text-text ${active === index + 1 ? "bg-elevated text-text" : "text-muted"}`}
                 >
                   {heading.text || t("Untitled")}
                 </button>

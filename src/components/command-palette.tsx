@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Command } from "cmdk";
 import { useUI } from "@/components/ui-context";
+import { useContentColumnOffset } from "@/components/ui/modal";
 import { Search } from "lucide-react";
 import { StatusIcon, STATUS_META } from "@/components/icons";
 import { updateIssueAction } from "@/app/actions";
@@ -38,6 +39,7 @@ export function CommandPalette({ workspaceId }: { workspaceId: string }) {
 
 function PaletteInner({ workspaceId }: { workspaceId: string }) {
   const t = useT();
+  const paletteOffset = useContentColumnOffset(true);
   const { setPaletteOpen, openIssue, openPage, focused, setComposerOpen, scope } = useUI();
   const router = useRouter();
   const inputRef = useRef<HTMLInputElement>(null);
@@ -157,14 +159,22 @@ function PaletteInner({ workspaceId }: { workspaceId: string }) {
   return (
     <>
       <div className="fixed inset-0 z-40 bg-black/40" onClick={close} />
-      <div className="fixed inset-x-0 top-[12vh] z-50 mx-auto w-[620px] max-w-[94vw]">
+      <div
+        className="fixed left-1/2 top-[12vh] z-50 w-[620px] max-w-[94vw] -translate-x-1/2"
+        style={{ left: `calc(50% + ${paletteOffset}px)` }}
+      >
         <Command
           loop
           shouldFilter={false}
           data-testid="command-palette"
           className="cmdk-palette overflow-hidden rounded-xl border border-border bg-overlay shadow-2xl shadow-black/15"
         >
-          <div className="border-b border-border">
+          <div className="relative border-b border-border">
+            <Search
+              size={15}
+              aria-hidden
+              className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-faint"
+            />
             <Command.Input
               ref={inputRef}
               data-testid="palette-input"
@@ -172,6 +182,10 @@ function PaletteInner({ workspaceId }: { workspaceId: string }) {
               value={query}
               onValueChange={setQuery}
               placeholder={t("Search or jump to…")}
+              className="!pl-10 outline-none"
+              // The global :focus-visible ring is unlayered, so a utility class cannot remove
+              // it; the palette already marks focus by opening itself, so the input stays flat.
+              style={{ outline: "none" }}
             />
             {(parsed.prefix || activeFilters.length > 0) && (
               <div

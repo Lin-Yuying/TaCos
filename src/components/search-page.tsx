@@ -20,6 +20,7 @@ import { useSearchRecents, type RecentItem, type RecentSearch } from "@/lib/sear
 import {
   GROUP_LABELS,
   GROUP_ORDER,
+  KIND_GROUP,
   kindsForGroup,
   SEARCH_GROUPS,
   type SearchFilters,
@@ -282,7 +283,7 @@ export function SearchPageView({
             }}
             aria-label={t("Search everything")}
             placeholder={t("Search tasks, documents, people, labels, files and rules…")}
-            className="h-10 w-full rounded-lg border border-border bg-bg pl-9 pr-9 text-body outline-none transition-colors placeholder:text-muted focus:border-border-strong focus-visible:outline-none"
+            className="h-10 w-full rounded-lg border border-border bg-bg pl-9 pr-9 text-body outline-none transition-colors placeholder:text-muted focus:border-border-strong focus-visible:outline-none [&::-webkit-search-cancel-button]:appearance-none"
           />
           {query && (
             <button
@@ -486,6 +487,7 @@ export function SearchPageView({
           ) : result && result.hits.length === 0 && !loading ? (
             <div data-testid="search-empty">
               <EmptyState
+                icon={<Search size={16} />}
                 title={t("No results for “{query}”", { query: query.trim() })}
                 hint={hasFilters
                   ? t("Clear filters or try a different term.")
@@ -564,7 +566,7 @@ export function SearchPageView({
                     onClick={() => setPage((value) => Math.max(1, value - 1))}
                     className="inline-flex items-center justify-center gap-1.5 whitespace-nowrap h-[30px] rounded-lg px-2.5 text-small border border-border disabled:opacity-40 bg-bg text-text hover:bg-active"
                   >
-                    {t("Previous")}
+                    {t("Previous page")}
                   </button>
                   <button
                     type="button"
@@ -573,7 +575,7 @@ export function SearchPageView({
                     onClick={() => setPage((value) => Math.min(pages, value + 1))}
                     className="inline-flex items-center justify-center gap-1.5 whitespace-nowrap h-[30px] rounded-lg px-2.5 text-small border border-border disabled:opacity-40 bg-bg text-text hover:bg-active"
                   >
-                    {t("Next")}
+                    {t("Next page")}
                   </button>
                 </span>
               </div>
@@ -648,7 +650,9 @@ function SearchIdle({
                 <SearchKindIcon kind={item.kind} />
                 <span className="min-w-0 flex-1">
                   <span className="block truncate">{item.title || t("Untitled")}</span>
-                  {(item.ref || item.context) && <span className={`block truncate ${LINE_SUB}`}>{item.ref || item.context}</span>}
+                  <span className={`block truncate ${LINE_SUB}`}>
+                    {item.ref || item.context || t(GROUP_LABELS[KIND_GROUP[item.kind]])}
+                  </span>
                 </span>
                 <span suppressHydrationWarning className={`shrink-0 ${LINE_SUB}`}>{timeAgo(item.at, locale)}</span>
               </button>

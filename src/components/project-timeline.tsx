@@ -248,81 +248,71 @@ export function ProjectTimeline({
             </div>
           ) : (
             <>
-              {dated.length > 0 && <MilestoneTrack milestones={dated} locale={locale} />}
-              <div className="grid grid-cols-1 gap-2 xl:grid-cols-2">
+              <div className="overflow-hidden rounded-[10px] border border-border" data-testid="milestone-list">
                 {milestones.map((milestone, index) => (
-                  <article
+                  <div
                     key={milestone.id}
                     data-testid="milestone-card"
-                    className="rounded-lg border border-border p-3"
+                    className="flex items-center gap-2.5 border-b border-border px-4 py-2.5 last:border-b-0"
                   >
-                    <div className="flex flex-wrap items-start gap-2">
-                      <span className="mt-0.5 text-caption text-faint tabular-nums">{index + 1}</span>
-                      <div className="min-w-0 flex-1">
-                        <div className="flex flex-wrap items-center gap-1.5">
-                          <h3 className="min-w-0 truncate text-body font-semibold">{milestone.name}</h3>
-                          {milestone.current && (
-                            <Pill color="#f2c94c" dataTestId="milestone-current-badge">
-                              {t("Current")}
-                            </Pill>
-                          )}
-                          {milestone.targetDate && (
-                            <span className="text-caption text-faint">
-                              {formatDay(milestone.targetDate, locale)}
-                            </span>
-                          )}
-                        </div>
-                        {milestone.description && (
-                          <p className="mt-0.5 line-clamp-2 text-small leading-relaxed text-muted">
-                            {milestone.description}
-                          </p>
+                    <CalendarDays size={14} className="shrink-0 text-faint" />
+                    <div className="min-w-0 flex-1">
+                      <div className="flex min-w-0 items-center gap-1.5">
+                        <h3 className="min-w-0 truncate text-body font-medium text-text">
+                          {milestone.name}
+                        </h3>
+                        {milestone.current && (
+                          <Pill color="#f2c94c" dataTestId="milestone-current-badge">
+                            {t("Current")}
+                          </Pill>
                         )}
-                        <div className="mt-2 flex items-center gap-2">
-                          <ProgressBar percent={milestone.progress.percent} className="max-w-[180px] flex-1" />
-                          <span className="text-caption text-faint tabular-nums" data-testid="milestone-progress">
-                            {t("{done}/{total} done", {
-                              done: milestone.progress.done,
-                              total: milestone.progress.total,
-                            })}{" "}
-                            · {milestone.progress.percent}%
-                          </span>
-                        </div>
                       </div>
-                      <div className="flex shrink-0 items-center gap-0.5">
-                        <button
-                          type="button"
-                          aria-label={t("Move {name} up", { name: milestone.name })}
-                          title={t("Move up")}
-                          disabled={index === 0 || movingId === milestone.id}
-                          onClick={() => move(milestone, "up")}
-                          className="rounded p-1 text-faint transition-colors hover:bg-elevated hover:text-text disabled:opacity-30"
-                        >
-                          <ArrowUp size={12} />
-                        </button>
-                        <button
-                          type="button"
-                          aria-label={t("Move {name} down", { name: milestone.name })}
-                          title={t("Move down")}
-                          disabled={index === milestones.length - 1 || movingId === milestone.id}
-                          onClick={() => move(milestone, "down")}
-                          className="rounded p-1 text-faint transition-colors hover:bg-elevated hover:text-text disabled:opacity-30"
-                        >
-                          <ArrowDown size={12} />
-                        </button>
-                        <button
-                          type="button"
-                          aria-label={t("Edit {name}", { name: milestone.name })}
-                          title={t("Edit")}
-                          onClick={() => openEdit(milestone)}
-                          className="rounded p-1 text-faint transition-colors hover:bg-elevated hover:text-text"
-                        >
-                          <Pencil size={12} />
-                        </button>
-                      </div>
+                      <p className="mt-0.5 truncate text-small text-faint" data-testid="milestone-progress">
+                        {milestone.targetDate
+                          ? t("Target {date}", { date: formatDay(milestone.targetDate, locale) })
+                          : t("No target date")}{" "}
+                        ·{" "}
+                        {t("{done}/{total} done", {
+                          done: milestone.progress.done,
+                          total: milestone.progress.total,
+                        })}
+                      </p>
                     </div>
-                  </article>
+                    <div className="flex shrink-0 items-center gap-0.5">
+                      <button
+                        type="button"
+                        aria-label={t("Move {name} up", { name: milestone.name })}
+                        title={t("Move up")}
+                        disabled={index === 0 || movingId === milestone.id}
+                        onClick={() => move(milestone, "up")}
+                        className="rounded p-1 text-faint transition-colors hover:bg-elevated hover:text-text disabled:opacity-30"
+                      >
+                        <ArrowUp size={12} />
+                      </button>
+                      <button
+                        type="button"
+                        aria-label={t("Move {name} down", { name: milestone.name })}
+                        title={t("Move down")}
+                        disabled={index === milestones.length - 1 || movingId === milestone.id}
+                        onClick={() => move(milestone, "down")}
+                        className="rounded p-1 text-faint transition-colors hover:bg-elevated hover:text-text disabled:opacity-30"
+                      >
+                        <ArrowDown size={12} />
+                      </button>
+                      <button
+                        type="button"
+                        aria-label={t("Edit {name}", { name: milestone.name })}
+                        title={t("Edit")}
+                        onClick={() => openEdit(milestone)}
+                        className="ml-1 inline-flex h-[26px] items-center justify-center rounded-[7px] border border-border px-2 text-small text-text transition-colors hover:bg-active"
+                      >
+                        {t("Edit")}
+                      </button>
+                    </div>
+                  </div>
                 ))}
               </div>
+              {dated.length > 0 && <MilestoneTrack milestones={dated} locale={locale} />}
             </>
           )}
 
@@ -431,11 +421,11 @@ export function ProjectTimeline({
           if (!saving) setDraft(null);
         }}
         title={draft?.id ? t("Edit milestone") : t("New milestone")}
-        className="max-w-[520px]"
+        className="max-w-[420px] !p-0"
       >
         {draft && (
-          <div className="space-y-3" data-testid="milestone-editor">
-            <div className="flex items-center justify-between gap-2">
+          <div data-testid="milestone-editor">
+            <div className="flex items-center justify-between gap-2 border-b border-border px-4 py-3">
               <h2 className="text-lead font-semibold">
                 {draft.id ? t("Edit milestone") : t("New milestone")}
               </h2>
@@ -448,6 +438,7 @@ export function ProjectTimeline({
                 <X size={14} />
               </button>
             </div>
+            <div className="space-y-3 p-4">
             {error && <div className="rounded border border-danger/40 p-2 text-small text-danger">{error}</div>}
             <label className="block space-y-1">
               <FieldLabel>{t("Name")}</FieldLabel>
@@ -478,7 +469,13 @@ export function ProjectTimeline({
                 data-testid="milestone-target"
               />
             </label>
-            <div className="flex items-center justify-end gap-2 pt-1">
+            </div>
+            {draft.id && (
+              <p className="px-4 pb-3 text-small text-faint">
+                {t("Its tasks stay in the project and lose the milestone.")}
+              </p>
+            )}
+            <div className="flex items-center justify-end gap-2 border-t border-border px-4 py-2.5">
               {draft.id && (
                 <button
                   type="button"

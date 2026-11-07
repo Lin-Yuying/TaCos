@@ -2,7 +2,7 @@
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { PanelLeftClose } from "lucide-react";
+import { PanelLeftClose, Plus } from "lucide-react";
 import { ThreadMenu } from "@/components/thread-menu";
 import { useUI } from "@/components/ui-context";
 import { useT } from "@/components/i18n-context";
@@ -177,8 +177,9 @@ export function ThreadSidebar({
           data-testid="agent-new-chat"
           href={`/${workspaceId}/agent`}
           onClick={onNavigate}
-          className="flex h-[30px] min-w-0 flex-1 items-center justify-center rounded-md border border-border bg-bg text-small font-medium text-text transition-colors hover:bg-elevated"
+          className="flex h-[30px] min-w-0 flex-1 items-center justify-center gap-1 rounded-md border border-border bg-bg text-small font-medium text-text transition-colors hover:bg-elevated"
         >
+          <Plus size={13} className="shrink-0" />
           {t("New conversation")}
         </Link>
         <button

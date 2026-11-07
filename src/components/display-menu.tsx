@@ -109,7 +109,7 @@ export function DisplayMenu({
         <div data-task-display className="space-y-2.5 p-2 text-small">
           <div>
             <div className="pb-1 text-caption uppercase tracking-wide text-faint">{t("Layout")}</div>
-            <div className="flex flex-wrap gap-1">
+            <div className="flex gap-0.5 rounded-lg bg-elevated p-0.5">
               {VIEW_LAYOUTS.map((value) => (
                 <button
                   key={value}
@@ -117,10 +117,10 @@ export function DisplayMenu({
                   data-display-layout={value}
                   aria-pressed={layout === value}
                   onClick={() => onLayoutChange(value)}
-                  className={`rounded-lg border px-2 py-0.5 text-small transition-colors ${
+                  className={`flex-1 rounded-md px-1.5 py-0.5 text-small transition-colors ${
                     layout === value
-                      ? "border-border-strong bg-elevated font-medium text-text"
-                      : "border-border text-muted hover:text-text"
+                      ? "bg-bg font-medium text-text shadow-sm"
+                      : "text-muted hover:text-text"
                   }`}
                 >
                   {t(LAYOUT_LABEL[value])}
@@ -128,15 +128,15 @@ export function DisplayMenu({
               ))}
             </div>
           </div>
-          <label className="block">
-            <span className="text-caption uppercase tracking-wide text-faint">{t("Grouping")}</span>
+          <label className="flex items-center justify-between gap-2">
+            <span className="shrink-0 text-small text-muted">{t("Grouping")}</span>
             <select
               data-display-grouping
               value={display.grouping}
               onChange={(event) =>
                 onChange({ ...display, grouping: event.target.value as ViewGrouping })
               }
-              className="h-[26px] rounded-[7px] px-2 mt-1 w-full border border-border bg-bg text-small text-text"
+              className="h-[26px] w-[132px] shrink-0 rounded-[7px] px-2 border border-border bg-bg text-small text-text"
             >
               {VIEW_GROUPINGS.map((value) => (
                 <option key={value} value={value}>
@@ -145,15 +145,15 @@ export function DisplayMenu({
               ))}
             </select>
           </label>
-          <label className="block">
-            <span className="text-caption uppercase tracking-wide text-faint">{t("Ordering")}</span>
+          <label className="flex items-center justify-between gap-2">
+            <span className="shrink-0 text-small text-muted">{t("Ordering")}</span>
             <select
               data-display-ordering
               value={display.ordering}
               onChange={(event) =>
                 onChange({ ...display, ordering: event.target.value as ViewOrdering })
               }
-              className="h-[26px] rounded-[7px] px-2 mt-1 w-full border border-border bg-bg text-small text-text"
+              className="h-[26px] w-[132px] shrink-0 rounded-[7px] px-2 border border-border bg-bg text-small text-text"
             >
               {VIEW_ORDERINGS.map((value) => (
                 <option key={value} value={value}>

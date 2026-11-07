@@ -61,7 +61,7 @@ export function NewProjectDialog({
   }
 
   return (
-    <Modal open={projectComposerOpen} onClose={() => {if(!busy)setProjectComposerOpen(false);}} title={t("New project")}>
+    <Modal open={projectComposerOpen} onClose={() => {if(!busy)setProjectComposerOpen(false);}} title={t("New project")} className="max-w-[420px] !p-0">
         <div
           className="rounded-xl border border-border bg-overlay shadow-2xl shadow-black/15"
           onKeyDown={(e) => {

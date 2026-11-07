@@ -456,7 +456,9 @@ function ComposerSubscription({ workspaceId, engine }: { workspaceId: string; en
             }`
         )
         .join("\n")
-    : info?.hint ?? t("This harness does not report plan usage.");
+    : info?.hint
+      ? t(info.hint)
+      : t("This harness does not report plan usage.");
   return (
     <p data-testid="composer-subscription" title={title} className="px-2 py-1 text-small tabular-nums text-faint">
       {first
@@ -2242,8 +2244,9 @@ function Conversation({
               type="button"
               disabled={busy || forkBusy !== null}
               onClick={() => void forkAt(messages[messages.length - 1].id)}
-              className="rounded-md px-2 py-1 text-small text-muted transition-colors hover:bg-elevated hover:text-text disabled:opacity-40 max-[600px]:hidden"
+              className="flex items-center gap-1 rounded-md px-2 py-1 text-small text-muted transition-colors hover:bg-elevated hover:text-text disabled:opacity-40 max-[600px]:hidden"
             >
+              <GitBranch size={13} className="shrink-0" />
               {t("Open a copy")}
             </button>
           )}

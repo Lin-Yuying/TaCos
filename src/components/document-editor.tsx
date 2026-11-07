@@ -129,8 +129,26 @@ const TABLE_EDITS: { label: string; run: (editor: Editor) => void }[] = [
   { label: "Delete this column", run: (editor) => editor.chain().focus().deleteColumn().run() },
 ];
 
-function TableEditButtons({ editor }: { editor: Editor }) {
+function TableEditButtons({ editor, vertical = false }: { editor: Editor; vertical?: boolean }) {
   const t = useT();
+  if (vertical)
+    return (
+      <div data-testid="doc-table-actions" className="w-[196px] p-0.5">
+        <div className="px-2 pb-1 pt-0.5 text-caption text-faint">{t("Table")}</div>
+        {TABLE_EDITS.map((action) => (
+          <button
+            key={action.label}
+            type="button"
+            aria-label={t(action.label)}
+            onMouseDown={(event) => event.preventDefault()}
+            onClick={() => action.run(editor)}
+            className="flex w-full rounded px-2 py-1.5 text-left text-body text-text transition-colors hover:bg-elevated"
+          >
+            {t(action.label)}
+          </button>
+        ))}
+      </div>
+    );
   const groups = [TABLE_EDITS.slice(0, 2), TABLE_EDITS.slice(2)];
   return (
     <>
@@ -1175,10 +1193,10 @@ export function DocumentEditor({
           shouldShow={({ editor: current, state, view }) =>
             state.selection.empty && current.isActive("table") && view.hasFocus()
           }
-          className="flex max-w-[320px] flex-wrap items-center gap-0.5 rounded-md border border-border bg-overlay p-0.5 shadow-md"
+          className="rounded-md border border-border bg-overlay p-0.5 shadow-md"
           data-testid="doc-table-menu"
         >
-          <TableEditButtons editor={editor} />
+          <TableEditButtons editor={editor} vertical />
         </BubbleMenu>
       )}
       {editor && editable && (
@@ -1279,6 +1297,7 @@ export function DocumentEditor({
       )}
       {mentionMenu && mentionMenu.items.length > 0 && (
         <SuggestionMenu rect={mentionMenu.rect} context={editor?.view.dom} testId="doc-mention-menu">
+          <div className="px-2 pb-1 pt-1 text-caption text-faint">{t("Mentions")}</div>
           {mentionMenu.items.map((member, index) => (
             <button
               key={member.id}

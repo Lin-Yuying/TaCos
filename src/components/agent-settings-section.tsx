@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { ChevronDown, Trash2, X } from "lucide-react";
+import { Bot, ChevronDown, Plus, Trash2, X } from "lucide-react";
 import { Modal } from "@/components/ui/modal";
 import { Menu, MenuItem } from "@/components/menu";
 import { createAgentAction, deleteAgentAction, updateAgentAction } from "@/app/agent-actions";
@@ -137,9 +137,9 @@ export function AgentSettingsSection({
           }}
           disabled={!isAdmin || busy}
           data-testid="agent-create"
-          className={BUTTON}
+          className={`${BUTTON} inline-flex items-center gap-1`}
         >
-          {t("New agent")}
+          <Plus size={12} aria-hidden="true" /> {t("New agent")}
         </button>
       </div>
       <div className="overflow-hidden rounded-lg border border-border">
@@ -152,6 +152,7 @@ export function AgentSettingsSection({
             data-agent-id={agent.id}
             title={agent.description || undefined}
           >
+            <Bot size={14} className="shrink-0" aria-hidden="true" />
             <div className="min-w-0 flex-1 space-y-0.5">
               <div className="flex flex-wrap items-center gap-2">
                 <span className="text-body font-medium text-text">{agent.name}</span>

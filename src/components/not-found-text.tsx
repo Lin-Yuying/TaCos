@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { Search } from "lucide-react";
 import { useT } from "@/components/i18n-context";
 import { EmptyState } from "@/components/ui/empty-state";
 
@@ -8,6 +9,7 @@ export function NotFoundText() {
   const t = useT();
   return (
     <EmptyState
+      icon={<Search size={16} />}
       title={t("This page could not be found")}
       hint={t("It may have been deleted, or the link may be wrong.")}
     >

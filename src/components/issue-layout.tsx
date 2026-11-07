@@ -15,7 +15,7 @@ import {
 } from "@/app/task-view-actions";
 import type { TaskQuery,queryTaskView } from "@/lib/task-query";
 import { usePathname, useSearchParams, useRouter } from "next/navigation";
-import { CalendarDays, CheckSquare, Columns3, List, Plus, Table2 } from "lucide-react";
+import { CalendarDays, CheckSquare, Columns3, Filter, List, Plus, Table2 } from "lucide-react";
 import { IssueBoard } from "@/components/issue-board";
 import { IssueTable } from "@/components/issue-table";
 import { useUI, type IssueLayout as Layout, type TaskSelection } from "@/components/ui-context";
@@ -78,6 +78,7 @@ function Empty() {
   const { setComposerOpen } = useUI();
   return (
     <EmptyState
+      icon={<List size={16} />}
       title={t("No tasks found")}
       hint={interpolate(t("Adjust your filters, or press {key} to create one."), {
         key: <kbd className="rounded border border-border px-1 font-mono text-caption">C</kbd>,
@@ -383,6 +384,7 @@ export function IssueLayout({
       />
       {shown.length === 0 ? (
         <EmptyState
+          icon={<Filter size={16} />}
           title={t("No tasks match this filter")}
           hint={view.filters.length > 0 ? t("Current filters: {filters}", { filters: filterSummary(view, fields, pageIssues, t, choices) }) : undefined}
         >

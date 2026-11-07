@@ -1244,7 +1244,7 @@ export function ProjectOverview({
     // The scroll box and the floating History/AI dock are siblings, so the dock stays in
     // the corner instead of scrolling away with the document (Linear's arrangement).
     <div className="@container relative min-h-0 min-w-0 flex-1">
-      <div ref={scrollRef} className={`h-full overflow-y-auto ${commentsOpen || historyOpen ? "@min-[800px]:pr-[320px]" : ""}`}>
+      <div ref={scrollRef} className={`h-full overflow-y-auto ${commentsOpen || historyOpen ? "@min-[800px]:pr-[420px]" : ""}`}>
         {/* Properties and Resources live in the header now, so the document starts right
             under it. */}
         <div className={`w-full pb-8 pt-3 ${PAGE_INSET}`}>
@@ -1473,7 +1473,7 @@ export function ProjectOverview({
         </div>
       </div>
       {historyOpen && (
-        <aside data-overview-history className="absolute inset-y-0 right-0 z-30 flex w-full flex-col border-l border-border bg-bg @min-[800px]:w-[320px]">
+        <aside data-overview-history className="absolute inset-y-0 right-0 z-30 flex w-full flex-col border-l border-border bg-bg @min-[800px]:w-[420px]">
           <header className="flex h-11 shrink-0 items-center gap-2 border-b border-border px-3">
             <h2 className="text-body font-semibold text-text">{t("Document history")}</h2>
             <span className="text-caption text-faint">
@@ -1605,7 +1605,7 @@ export function ProjectOverview({
         </aside>
       )}
       {commentsOpen && (
-        <aside data-overview-comments className="absolute inset-y-0 right-0 z-30 flex w-full flex-col border-l border-border bg-bg @min-[800px]:w-[320px]">
+        <aside data-overview-comments className="absolute inset-y-0 right-0 z-30 flex w-full flex-col border-l border-border bg-bg @min-[800px]:w-[420px]">
           <header className="flex h-11 shrink-0 items-center gap-2 border-b border-border px-3">
             <h2 className="text-body font-semibold text-text">{t("Comments")}</h2>
             <button

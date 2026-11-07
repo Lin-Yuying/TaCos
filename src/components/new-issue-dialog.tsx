@@ -9,7 +9,7 @@ import { useDraft } from "@/lib/ui/draft-store";
 
 import { useEffect, useRef, useState } from "react";
 import { usePathname, useSearchParams } from "next/navigation";
-import { FileText, LoaderCircle, Sparkles, Trash2, Users, X } from "lucide-react";
+import { FileText, LoaderCircle, Plus, Sparkles, Trash2, Users, X } from "lucide-react";
 import { useUI } from "@/components/ui-context";
 import { Menu, MenuItem } from "@/components/menu";
 import {
@@ -262,10 +262,22 @@ export function NewIssueDialog({ workspaceId }: { workspaceId: string }) {
               placeholder={t("Task title")}
               className="h-[34px] rounded-lg px-2.5 w-full border border-border-strong bg-bg text-body text-text placeholder:text-faint focus:border-border-strong focus:outline-none"
             />
+            {projectsLoaded && projects.length === 0 && (
+              <div role="status" className="mt-2">
+                <p className="text-small text-danger">{t("A task goes in a project. Create one first.")}</p>
+                <button
+                  type="button"
+                  onClick={newProject}
+                  className="mt-1.5 inline-flex items-center justify-center gap-1.5 whitespace-nowrap h-[30px] rounded-lg px-2.5 text-small border border-border text-text bg-bg transition-colors hover:bg-active"
+                >
+                  <Plus size={12} /> {t("New project")}
+                </button>
+              </div>
+            )}
             <textarea
               value={description}
               onChange={(e) => setDescription(e.target.value)}
-              placeholder={t("Add description…")}
+              placeholder={t("Describe the task, e.g. 修复微信登录回调偶发失败")}
               rows={4}
               className="mt-2 w-full resize-none rounded-lg border border-border-strong bg-bg px-2.5 py-1.5 text-body leading-relaxed text-text placeholder:text-faint focus:border-border-strong focus:outline-none"
             />
@@ -597,12 +609,6 @@ export function NewIssueDialog({ workspaceId }: { workspaceId: string }) {
                 )}
               </Menu>
             </div>
-            {projectsLoaded && projects.length === 0 && (
-              <div role="status" className="mt-3 flex flex-wrap items-center gap-2 rounded-md bg-elevated px-3 py-2 text-small text-muted">
-                <span className="min-w-0 flex-1">{t("A task goes in a project. Create one first.")}</span>
-                <button type="button" onClick={newProject} className="inline-flex items-center justify-center gap-1.5 whitespace-nowrap h-[30px] rounded-lg px-2.5 text-small border border-border text-text bg-bg hover:bg-active">{t("New project")}</button>
-              </div>
-            )}
           </div>
           <div className="flex flex-wrap items-center gap-2 border-t border-border px-4 py-3">
             <label className="flex items-center gap-2 text-small text-muted"><input type="checkbox" checked={continueCreating} onChange={event=>setContinueCreating(event.target.checked)}/>{t("Create and continue")}</label>

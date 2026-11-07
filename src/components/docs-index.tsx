@@ -9,7 +9,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useScrollMemory } from "@/lib/ui/scroll-memory";
 import { useMemo, useRef, useState } from "react";
-import { ChevronDown, FileText, Link2, Lock, Search, Upload, X } from "lucide-react";
+import { Check, ChevronDown, FileText, FolderOpen, Link2, Lock, Search, Upload, X } from "lucide-react";
 import { importMarkdownAction } from "@/app/pages-actions";
 import { Menu, MenuItem } from "@/components/menu";
 import { NewPageMenu } from "@/components/new-page-menu";
@@ -187,7 +187,7 @@ export function DocsIndex({
                   filesRef.current?.click();
                 }}
               >
-                {t("Markdown files…")}
+                <FileText size={13} /> {t("Markdown files…")}
               </MenuItem>
               <MenuItem
                 onSelect={() => {
@@ -195,7 +195,7 @@ export function DocsIndex({
                   folderRef.current?.click();
                 }}
               >
-                {t("Folder…")}
+                <FolderOpen size={13} /> {t("Folder…")}
               </MenuItem>
             </>
           )}
@@ -211,6 +211,9 @@ export function DocsIndex({
               <ul className="max-h-[50dvh] divide-y divide-border overflow-auto rounded-lg border border-border">
                 {importResults.map((result, index) => (
                   <li key={index} className="flex items-center gap-2 px-3 py-2">
+                    <span className={`flex w-4 shrink-0 justify-center ${result.status === "Failed" ? "text-danger" : "text-muted"}`} aria-hidden>
+                      {result.status === "Failed" ? <X size={13} /> : <Check size={13} />}
+                    </span>
                     <span className="min-w-0 flex-1">
                       <span className="block truncate text-small text-text">{relativePath(result.file)}</span>
                       {result.error && <span className="block text-caption text-faint">{t(result.error)}</span>}

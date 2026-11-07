@@ -4,7 +4,7 @@ import { useRef, useState } from "react";
 import { useUI } from "@/components/ui-context";
 import { entityHref } from "@/lib/ui/entity-actions";
 import { useRouter } from "next/navigation";
-import { FileText } from "lucide-react";
+import { FileText, Trash2 } from "lucide-react";
 import type { ComponentProps } from "react";
 import {
   purgeIssueAction,
@@ -79,14 +79,14 @@ export function TrashView({
     await perform(doc.id,()=>purgePageAction(workspaceId,doc.id));
   }
 
-  const listed = { all: projects.length + issues.length + docs.length + deletedWorkspaces.length, tasks: issues.length, docs: docs.length, projects: projects.length }[tab];
+  const listed = { all: projects.length + issues.length + docs.length, tasks: issues.length, docs: docs.length, projects: projects.length }[tab];
   const empty = listed === 0;
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
       <header className={`${PAGE_HEADER} ${PAGE_LEFT} ${PAGE_RIGHT}`}>
         <h1 className={PAGE_TITLE}>{t("Trash")}</h1>
-        <span className="text-small tabular-nums text-faint">{projects.length + issues.length + docs.length + deletedWorkspaces.length}</span>
+        <span className="text-small tabular-nums text-faint">{projects.length + issues.length + docs.length}</span>
         <nav aria-label={t("Type")} className="ml-1.5 flex items-center gap-0.5">
           {TABS.map(([value, label]) => (
             <button key={value} type="button" aria-pressed={tab === value} onClick={() => setTab(value)} className={vtab(tab === value)}>
@@ -98,7 +98,7 @@ export function TrashView({
       <div className="min-h-0 flex-1 overflow-y-auto pb-10">
         {Object.entries(errors).filter(([,message])=>message).map(([id,message])=><p role="alert" key={id} className="text-small text-danger">{t(message)}</p>)}
         {empty && (
-          <EmptyState title={t("Trash is empty.")} />
+          <EmptyState icon={<Trash2 size={16} />} title={t("Trash is empty.")} />
         )}
         {issues.length > 0 && (tab === "all" || tab === "tasks") && (
           <div>

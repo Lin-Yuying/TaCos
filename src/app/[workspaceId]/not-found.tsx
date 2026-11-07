@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { Search } from "lucide-react";
 import { useParams } from "next/navigation";
 import { useT } from "@/components/i18n-context";
 import { EmptyState } from "@/components/ui/empty-state";
@@ -10,6 +11,7 @@ export default function WorkspaceNotFound() {
   const { workspaceId } = useParams<{ workspaceId: string }>();
   return (
     <EmptyState
+      icon={<Search size={16} />}
       title={t("This page could not be found")}
       hint={t("It may have been deleted, the link may be wrong, or it may not be shared with you.")}
     >

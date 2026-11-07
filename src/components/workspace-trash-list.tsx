@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { RotateCcw } from "lucide-react";
 import { restoreWorkspaceAction } from "@/app/auth-actions";
 import { WorkspaceMark } from "@/components/icons";
-import { timeAgo } from "@/lib/format";
+import { friendlyDate } from "@/lib/format";
 import type { DeletedWorkspace } from "@/lib/issues";
 import { useLocale, useT } from "@/components/i18n-context";
 
@@ -47,12 +47,12 @@ export function WorkspaceTrashList({ items }: { items: DeletedWorkspace[] }) {
             <div className="min-w-0 flex-1">
               <div className="truncate text-body font-medium">{item.name}</div>
               <div className="text-caption text-faint">
+                {t("deleted {date}", { date: friendlyDate(item.deletedAt, locale) })} ·{" "}
                 {item.daysLeft === 0
                   ? t("Expires today")
                   : item.daysLeft === 1
                     ? t("1 day left")
-                    : t("{count} days left", { count: item.daysLeft })}{" "}
-                · {t("deleted {date}", { date: timeAgo(item.deletedAt, locale) })}
+                    : t("{count} days left", { count: item.daysLeft })}
               </div>
             </div>
             <button

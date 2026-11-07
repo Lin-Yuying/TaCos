@@ -10,13 +10,8 @@ export function AgentUsageSection({ usage }: { usage: AgentUsageSummary }) {
   const totals = usage.totals;
   return (
     <section className="space-y-3" data-testid="agent-usage">
-      <div className="flex flex-wrap items-center gap-2">
-                <span className="tabular-nums text-small text-faint">
-          {t("Last {days} days", { days: "30" })}
-        </span>
-      </div>
       <p className="text-small leading-relaxed text-faint">
-        {t("Tokens the harnesses and the built-in API agent reported. Usage never stops a run, and TaCos never shows a price or a budget.")}
+        {t("Tokens the harnesses and the built-in API agent reported in the last 30 days. Usage never stops a run, and TaCos never shows a price or a budget.")}
       </p>
       <div className="grid grid-cols-2 gap-2 @md:grid-cols-4" data-testid="agent-usage-totals">
         {(

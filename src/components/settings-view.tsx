@@ -3,7 +3,7 @@ import { safeAction } from "@/lib/ui/safe-action";
 
 import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { useRouter } from "next/navigation";
-import { Copy, Check, RefreshCw, Upload } from "lucide-react";
+import { Bot, Check, Copy, KeyRound, RefreshCw, Server, Upload } from "lucide-react";
 import {
   createApiKeyAction,
   createProjectAction,
@@ -599,7 +599,7 @@ export function SettingsView({
         <section className="space-y-2.5">
           <h2 className="text-body font-semibold">{t("Avatar")}</h2>
           <div className="flex flex-wrap items-center gap-2.5">
-            <AssigneeAvatar displayName={currentUser.displayName} avatar={avatar} size={40} />
+            <AssigneeAvatar displayName={currentUser.displayName} avatar={avatar} size={64} />
             <label
               className={`inline-flex cursor-pointer items-center gap-1 rounded-md border border-border px-2.5 py-1 text-small text-muted transition-colors hover:text-text ${
                 busy ? "pointer-events-none opacity-50" : ""
@@ -1041,6 +1041,7 @@ export function SettingsView({
                   index > 0 ? "border-t border-border" : ""
                 }`}
               >
+                <Bot size={14} className="shrink-0" aria-hidden="true" />
                 <div className="min-w-0 flex-1 space-y-0.5">
                   <div className="text-body font-medium text-text">{row.label}</div>
                   <div className="flex flex-wrap items-center gap-x-1.5 text-small text-faint" title={row.binary ?? undefined}>
@@ -1314,6 +1315,7 @@ export function SettingsView({
                       className="flex flex-wrap items-center gap-3 px-4 py-3"
                       title={`${key.keyPrefix && key.last4 ? `${key.keyPrefix}…${key.last4}` : "tac_…"} · ${t("created {date}", { date: formatDate(key.createdAt, locale) })}${key.lastUsedIp ? ` · ${t("Last used from {ip}", { ip: key.lastUsedIp })}` : ""}`}
                     >
+                      <KeyRound size={14} className="shrink-0" aria-hidden="true" />
                       <div className="min-w-0 flex-1 space-y-0.5">
                         <div className="text-body font-medium text-text">{key.name}</div>
                         <div className="text-small text-faint" suppressHydrationWarning>
@@ -1390,6 +1392,7 @@ export function SettingsView({
             <section className="space-y-3">
               <h2 className="text-body font-semibold">{t("MCP server")}</h2>
               <div className="flex items-center gap-3 rounded-lg border border-border px-4 py-3">
+                <Server size={14} className="shrink-0" aria-hidden="true" />
                 <span className="min-w-0 flex-1 text-body text-text">{t("Connect TaCos to tools that support MCP")}</span>
                 <CopyButton
                   label={t("Copy config")}

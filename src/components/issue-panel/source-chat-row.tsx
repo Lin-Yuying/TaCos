@@ -26,18 +26,24 @@ export function SourceChatRow({ workspaceId, threadId }: { workspaceId: string; 
 
   if (!threadId || thread === undefined) return null;
   return (
-    <div className="flex items-center gap-2 text-body text-muted" data-testid="source-chat-row">
+    <div
+      className="flex items-center gap-2 rounded-lg border border-border px-3 py-2.5 text-body text-muted"
+      data-testid="source-chat-row"
+    >
       <MessageSquare size={13} className="shrink-0 text-faint" />
+      <span className="min-w-0 flex-1 truncate">
+        {thread
+          ? t("Source chat: {title}", { title: thread.title || t("New conversation") })
+          : t("Made in a private chat")}
+      </span>
       {thread ? (
         <Link
           href={`/${workspaceId}/agent?thread=${thread.id}`}
-          className="truncate rounded-md px-1 hover:bg-elevated hover:text-text"
+          className="shrink-0 text-small text-muted transition-colors hover:text-text"
         >
-          {t("Source chat: {title}", { title: thread.title || t("New conversation") })}
+          {t("Open conversation")}
         </Link>
-      ) : (
-        <span>{t("Made in a private chat")}</span>
-      )}
+      ) : null}
     </div>
   );
 }

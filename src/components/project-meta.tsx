@@ -4,11 +4,9 @@ import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import {
-  ArrowUpRight,
   ChevronDown,
   FileText,
   Link2,
-  Lock,
   MoreHorizontal,
   Plus,
   X,
@@ -301,299 +299,280 @@ export function ProjectMeta({
     else router.refresh();
   }
 
+  const linkResources = resources.filter((resource) => resource.kind === "link");
+  const docResources = resources.filter((resource) => resource.kind === "doc");
+
+  // A document's name and icon belong to the page, not to the attachment: deriving them
+  // keeps the row in step with a rename made in the pane.
+  function documentOf(resource: ProjectResource) {
+    return resource.kind === "doc" && resource.pageId
+      ? documents.find((document) => document.id === resource.pageId)
+      : undefined;
+  }
+
   // Nothing left to show: the header gives the space back to the document.
   if (!showProperties && !showResources) return null;
 
   return (
-    <div className="flex min-w-0 flex-col gap-4 text-body">
+    <div className="flex min-w-0 flex-col gap-5 text-body">
       {showProperties && (
-        <div className="flex flex-col gap-2">
+        <section className="flex flex-col gap-3">
           <MetaLabel label={t("Properties")} onHide={() => rows.toggle("properties")} />
-          <div className="flex min-w-0 flex-1 flex-wrap items-center gap-x-3 gap-y-1.5">
-            {lead && (
-              <span
-                className="flex h-6 shrink-0 items-center gap-1.5 rounded-full border border-border bg-elevated/40 py-0.5 pl-0.5 pr-2 text-small text-text"
-                title={t("Project lead")}
-              >
+          <div className="flex min-w-0 items-center justify-between gap-2">
+            <span className="shrink-0 text-small text-faint">{t("Project lead")}</span>
+            {lead ? (
+              <span className="flex min-w-0 items-center gap-1.5 text-small text-text" title={t("Project lead")}>
                 <AssigneeAvatar displayName={lead.displayName} avatar={lead.avatar} size={18} />
-                {lead.displayName}
+                <span className="max-w-[168px] truncate">{lead.displayName}</span>
               </span>
+            ) : (
+              <span className="text-small text-faint">—</span>
             )}
-            {roster.map((entry) => {
-              const role = grantRoleByUser.get(entry.id) ?? null;
-              const isMember = members.some((member) => member.id === entry.id);
-              const name = (
-                <>
-                  <AssigneeAvatar displayName={entry.displayName} avatar={entry.avatar} size={18} />
-                  <span className="max-w-[160px] truncate">{entry.displayName}</span>
-                </>
-              );
-              // Readers see the same pill without the disclosure or the access level.
-              if (!access.manage) {
-                return (
-                  <span
-                    key={entry.id}
-                    className="flex h-6 shrink-0 items-center gap-1.5 rounded-full border border-border py-0.5 pl-0.5 pr-2 text-small text-muted"
-                  >
-                    {name}
-                  </span>
+          </div>
+          <div className="flex flex-col gap-1.5">
+            <span className="text-small text-faint">{t("Overview access")}</span>
+            <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1.5">
+              {roster.map((entry) => {
+                const role = grantRoleByUser.get(entry.id) ?? null;
+                const isMember = members.some((member) => member.id === entry.id);
+                const name = (
+                  <>
+                    <AssigneeAvatar displayName={entry.displayName} avatar={entry.avatar} size={18} />
+                    <span className="max-w-[160px] truncate">{entry.displayName}</span>
+                  </>
                 );
-              }
-              return (
+                // Readers see the same pill without the disclosure or the access level.
+                if (!access.manage) {
+                  return (
+                    <span
+                      key={entry.id}
+                      className="flex h-6 shrink-0 items-center gap-1.5 rounded-full border border-border py-0.5 pl-0.5 pr-2 text-small text-muted"
+                    >
+                      {name}
+                    </span>
+                  );
+                }
+                return (
+                  <Menu
+                    key={entry.id}
+                    width={200}
+                    triggerClassName="group flex h-6 shrink-0 items-center gap-1.5 rounded-full border border-border py-0.5 pl-0.5 pr-2 text-small text-muted transition-colors hover:border-border-strong hover:text-text"
+                    trigger={
+                      <>
+                        {name}
+                        <ChevronDown size={11} className="shrink-0 text-faint" />
+                      </>
+                    }
+                  >
+                    {(close) => (
+                      <>
+                        {OVERVIEW_LEVELS.map(({ level, label }) => (
+                          <MenuItem
+                            key={level}
+                            active={role === level}
+                            onSelect={() => {
+                              close();
+                              void changeGrant(entry.id, level);
+                            }}
+                          >
+                            {t(label)}
+                          </MenuItem>
+                        ))}
+                        {(isMember || role) && (
+                          <>
+                            <div className="my-1 h-px bg-border" />
+                            <MenuItem
+                              danger
+                              onSelect={() => {
+                                close();
+                                void removePerson(entry.id);
+                              }}
+                            >
+                              {t("Remove")}
+                            </MenuItem>
+                          </>
+                        )}
+                      </>
+                    )}
+                  </Menu>
+                );
+              })}
+              {grants.length === 0 && (
+                <span className="text-small text-muted">{t("Owner only")}</span>
+              )}
+              {access.manage && (
                 <Menu
-                  key={entry.id}
-                  width={200}
-                  triggerClassName="group flex h-6 shrink-0 items-center gap-1.5 rounded-full border border-border py-0.5 pl-0.5 pr-2 text-small text-muted transition-colors hover:border-border-strong hover:text-text"
+                  width={280}
+                  // Last item in the row: a left-anchored panel would run past the card's
+                  // right edge and be clipped, so it opens inward instead.
+                  align="right"
+                  triggerClassName="ml-auto flex size-[22px] shrink-0 items-center justify-center rounded-lg text-faint transition-colors hover:bg-elevated hover:text-text"
                   trigger={
                     <>
-                      {name}
-                      <ChevronDown size={11} className="shrink-0 text-faint" />
+                      <span className="sr-only">{t("Add person")}</span>
+                      <Plus size={13} />
                     </>
                   }
                 >
                   {(close) => (
                     <>
-                      {OVERVIEW_LEVELS.map(({ level, label }) => (
-                        <MenuItem
-                          key={level}
-                          active={role === level}
-                          onSelect={() => {
-                            close();
-                            void changeGrant(entry.id, level);
-                          }}
+                      <div className="px-2 pb-1 pt-1 text-caption text-faint">{t("Add person")}</div>
+                      <div className="px-1 pb-1">
+                        <input
+                          autoFocus
+                          value={personQuery}
+                          onChange={(event) => setPersonQuery(event.target.value)}
+                          aria-label={t("Search members")}
+                          placeholder={t("Search members")}
+                          className="h-[34px] rounded-lg px-2.5 w-full border border-border-strong bg-transparent outline-none placeholder:text-faint focus:border-border-strong text-body"
+                        />
+                      </div>
+                      {candidates.filter((member) => member.displayName.toLowerCase().includes(personQuery.trim().toLowerCase())).map((member) => (
+                        <div
+                          key={member.id}
+                          className="flex items-center gap-2 rounded-md px-2 py-1.5 text-body hover:bg-elevated"
                         >
-                          {t(label)}
-                        </MenuItem>
+                          <AssigneeAvatar
+                            displayName={member.displayName}
+                            avatar={member.avatar}
+                            size={18}
+                          />
+                          <span className="min-w-0 flex-1 truncate">{member.displayName}</span>
+                          {OVERVIEW_LEVELS.map(({ level, label }) => (
+                            <button
+                              key={level}
+                              type="button"
+                              onClick={() => {
+                                close();
+                                void addPerson(member.id, level);
+                              }}
+                              className="inline-flex items-center justify-center gap-1.5 whitespace-nowrap h-[30px] rounded-lg px-2.5 text-small border border-border bg-bg text-text hover:bg-active"
+                            >
+                              {t(label)}
+                            </button>
+                          ))}
+                        </div>
                       ))}
-                      {(isMember || role) && (
-                        <>
-                          <div className="my-1 h-px bg-border" />
-                          <MenuItem
-                            danger
-                            onSelect={() => {
-                              close();
-                              void removePerson(entry.id);
-                            }}
-                          >
-                            {t("Remove")}
-                          </MenuItem>
-                        </>
+                      {candidates.length === 0 && (
+                        <div className="px-2 py-1.5 text-small text-faint">
+                          {t("Everyone in the workspace is already here.")}
+                        </div>
                       )}
                     </>
                   )}
                 </Menu>
-              );
-            })}
-            <span className="flex shrink-0 items-center text-faint" title={t("Overview access")}>
-              <Lock size={11} />
-            </span>
-            {grants.length === 0 && <span className="text-small text-faint">{t("Owner only")}</span>}
-            {access.manage && (
-              <Menu
-                width={280}
-                // Last item in the row: a left-anchored panel would run past the card's
-                // right edge and be clipped, so it opens inward instead.
-                align="right"
-                triggerClassName="flex h-[22px] shrink-0 items-center gap-1 rounded-full border border-dashed border-border px-2 text-small text-muted transition-colors hover:border-border-strong hover:text-text"
-                trigger={
-                  <>
-                    <span className="sr-only">{t("Add person")}</span>
-                    <Plus size={12} />
-                  </>
-                }
-              >
-                {(close) => (
-                  <>
-                    <div className="px-2 pb-1 pt-1 text-caption text-faint">{t("Add person")}</div>
-                    <div className="px-1 pb-1">
-                      <input
-                        autoFocus
-                        value={personQuery}
-                        onChange={(event) => setPersonQuery(event.target.value)}
-                        aria-label={t("Search members")}
-                        placeholder={t("Search members")}
-                        className="h-[34px] rounded-lg px-2.5 w-full border border-border-strong bg-transparent outline-none placeholder:text-faint focus:border-border-strong text-body"
-                      />
-                    </div>
-                    {candidates.filter((member) => member.displayName.toLowerCase().includes(personQuery.trim().toLowerCase())).map((member) => (
-                      <div
-                        key={member.id}
-                        className="flex items-center gap-2 rounded-md px-2 py-1.5 text-body hover:bg-elevated"
-                      >
-                        <AssigneeAvatar
-                          displayName={member.displayName}
-                          avatar={member.avatar}
-                          size={18}
-                        />
-                        <span className="min-w-0 flex-1 truncate">{member.displayName}</span>
-                        {OVERVIEW_LEVELS.map(({ level, label }) => (
-                          <button
-                            key={level}
-                            type="button"
-                            onClick={() => {
-                              close();
-                              void addPerson(member.id, level);
-                            }}
-                            className="inline-flex items-center justify-center gap-1.5 whitespace-nowrap h-[30px] rounded-lg px-2.5 text-small border border-border bg-bg text-text hover:bg-active"
-                          >
-                            {t(label)}
-                          </button>
-                        ))}
-                      </div>
-                    ))}
-                    {candidates.length === 0 && (
-                      <div className="px-2 py-1.5 text-small text-faint">
-                        {t("Everyone in the workspace is already here.")}
-                      </div>
-                    )}
-                  </>
-                )}
-              </Menu>
-            )}
+              )}
+            </div>
           </div>
-        </div>
+        </section>
       )}
       {showResources && (
-        <div className="flex flex-col gap-2">
+        <section className="flex flex-col gap-1">
           <MetaLabel label={t("Resources")} onHide={() => rows.toggle("resources")} />
-          <div className="flex min-w-0 flex-1 flex-wrap items-center gap-1.5">
-            {resources.map((resource) => {
-              // A document's name and icon belong to the page, not to the attachment:
-              // deriving them keeps the chip in step with a rename made in the pane,
-              // which refreshes the page props but leaves this row's local copy alone.
-              const page =
-                resource.kind === "doc" && resource.pageId
-                  ? documents.find((document) => document.id === resource.pageId)
-                  : undefined;
-              const title = page?.title ?? resource.title;
-              const docIcon = page ? page.icon : resource.icon;
-              const icon =
-                resource.kind === "doc" && docIcon ? (
-                  <span className="text-small leading-none">{docIcon}</span>
-                ) : resource.kind === "doc" ? (
-                  <FileText size={12} className="text-muted" />
-                ) : (
-                  <Link2 size={12} className="text-muted" />
-                );
-              return (
-                <span
-                  key={resource.id}
-                  className="group flex h-[22px] min-w-0 items-center rounded-full border border-border text-small text-muted transition-colors hover:border-border-strong hover:text-text"
-                >
-                  {resource.kind === "doc" && resource.pageId ? (
-                    <Link
-                      href={`/${workspaceId}/docs/${resource.pageId}`}
-                      onClick={(event) => {
-                        event.preventDefault();
-                        openPage(resource.pageId!);
-                      }}
-                      className="flex min-w-0 items-center gap-1.5 py-0.5 pl-2 pr-1.5"
-                    >
-                      {icon}
-                      <span className="max-w-[220px] truncate">{title}</span>
-                    </Link>
-                  ) : (
-                    <a
-                      href={resource.url ?? "#"}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="flex min-w-0 items-center gap-1.5 py-0.5 pl-2 pr-1.5"
-                    >
-                      {icon}
-                      <span className="max-w-[220px] truncate">{title}</span>
-                      <ArrowUpRight size={11} className="shrink-0 text-faint" />
-                    </a>
-                  )}
-                  {access.canEdit && (
-                    <button
-                      type="button"
-                      aria-label={t("Remove {name}", { name: title })}
-                      title={t("Remove")}
-                      onClick={() => void removeResource(resource.id)}
-                      className="mr-1 rounded-lg p-0.5 text-faint transition-colors hover:bg-elevated hover:text-danger"
-                    >
-                      <X size={10} />
-                    </button>
-                  )}
-                </span>
-              );
-            })}
-            {access.canEdit && (
-              <Menu
-                width={260}
-                // Sits at the row's right end once resources are in place, so it opens
-                // toward the card instead of past its edge.
-                align="right"
-                triggerClassName="flex h-[22px] shrink-0 items-center gap-1 rounded-full border border-dashed border-border px-2 text-small text-muted transition-colors hover:border-border-strong hover:text-text"
-                trigger={
-                  <>
-                    <span className="sr-only">{t("Add resource")}</span>
-                    <Plus size={12} />
-                  </>
-                }
+          {linkResources.map((resource) => {
+            const title = resource.title;
+            return (
+              <span
+                key={resource.id}
+                className="group -mx-1 flex min-w-0 items-center gap-1.5 rounded-md px-1 py-1 text-body text-text transition-colors hover:bg-elevated/60"
               >
-                {(close) => (
-                  <>
-                    <MenuItem
-                      onSelect={() => {
-                        close();
-                        setResourceError(null);
-                        setLinkOpen(true);
-                      }}
-                    >
-                      <Link2 size={13} className="text-muted" />
-                      {t("Link")}
-                    </MenuItem>
-                    <MenuItem
-                      onSelect={() => {
-                        close();
-                        void createDocument();
-                      }}
-                    >
-                      <FileText size={13} className="text-muted" />
-                      {t("New document")}
-                    </MenuItem>
-                    {attachableDocs.length > 0 && (
-                      <>
-                        <div className="my-1 border-t border-border" />
-                        <div className="px-2 py-1 text-caption font-medium text-faint">
-                          {t("Project documents")}
-                        </div>
-                        {attachableDocs.map((page) => (
-                          <MenuItem
-                            key={page.id}
-                            onSelect={() => {
-                              close();
-                              void attachDocument(page.id);
-                            }}
-                          >
-                            {page.icon ? (
-                              <span className="text-body leading-none">{page.icon}</span>
-                            ) : (
-                              <FileText size={13} className="text-muted" />
-                            )}
-                            <span className="min-w-0 flex-1 truncate">
-                              {page.title || t("Untitled")}
-                            </span>
-                          </MenuItem>
-                        ))}
-                      </>
-                    )}
-                  </>
+                <a
+                  href={resource.url ?? "#"}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="flex min-w-0 flex-1 items-center gap-2"
+                >
+                  <Link2 size={13} className="shrink-0 text-muted" />
+                  <span className="min-w-0 flex-1 truncate">{title}</span>
+                </a>
+                {access.canEdit && (
+                  <button
+                    type="button"
+                    aria-label={t("Remove {name}", { name: title })}
+                    title={t("Remove")}
+                    onClick={() => void removeResource(resource.id)}
+                    className="shrink-0 rounded-lg p-0.5 text-faint opacity-0 transition-opacity hover:bg-elevated hover:text-danger group-hover:opacity-100"
+                  >
+                    <X size={11} />
+                  </button>
                 )}
-              </Menu>
-            )}
-            {resources.length === 0 && !access.canEdit && (
-              <span className="text-small text-faint">{t("None yet")}</span>
-            )}
-          </div>
+              </span>
+            );
+          })}
+          {linkResources.length === 0 && !access.canEdit && (
+            <span className="text-small text-faint">{t("None yet")}</span>
+          )}
+          {access.canEdit && (
+            <Menu
+              width={260}
+              align="right"
+              triggerClassName="-mx-1 flex items-center gap-1.5 rounded-md px-1 py-1 text-left text-small text-faint transition-colors hover:bg-elevated/60 hover:text-text"
+              trigger={
+                <>
+                  <span className="sr-only">{t("Add resource")}</span>
+                  <Plus size={13} className="shrink-0" />
+                  {t("Add resource")}
+                </>
+              }
+            >
+              {(close) => (
+                <>
+                  <MenuItem
+                    onSelect={() => {
+                      close();
+                      setResourceError(null);
+                      setLinkOpen(true);
+                    }}
+                  >
+                    <Link2 size={13} className="text-muted" />
+                    {t("Link")}
+                  </MenuItem>
+                  <MenuItem
+                    onSelect={() => {
+                      close();
+                      void createDocument();
+                    }}
+                  >
+                    <FileText size={13} className="text-muted" />
+                    {t("New document")}
+                  </MenuItem>
+                  {attachableDocs.length > 0 && (
+                    <>
+                      <div className="my-1 border-t border-border" />
+                      <div className="px-2 py-1 text-caption font-medium text-faint">
+                        {t("Project documents")}
+                      </div>
+                      {attachableDocs.map((page) => (
+                        <MenuItem
+                          key={page.id}
+                          onSelect={() => {
+                            close();
+                            void attachDocument(page.id);
+                          }}
+                        >
+                          {page.icon ? (
+                            <span className="text-body leading-none">{page.icon}</span>
+                          ) : (
+                            <FileText size={13} className="text-muted" />
+                          )}
+                          <span className="min-w-0 flex-1 truncate">
+                            {page.title || t("Untitled")}
+                          </span>
+                        </MenuItem>
+                      ))}
+                    </>
+                  )}
+                </>
+              )}
+            </Menu>
+          )}
           {resourceError && (
-            <span className="w-full pl-[5.75rem] text-small text-danger">{t(resourceError)}</span>
+            <span className="text-small text-danger">{t(resourceError)}</span>
           )}
           {linkOpen && access.canEdit && (
             <form
               onSubmit={addLink}
-              className="ml-[5.75rem] flex w-full max-w-md flex-col gap-2 rounded-lg border border-border bg-overlay p-2.5 shadow-sm"
+              className="mt-1 flex w-full flex-col gap-2 rounded-lg border border-border bg-overlay p-2.5 shadow-sm"
             >
               <input
                 autoFocus
@@ -631,9 +610,71 @@ export function ProjectMeta({
               </div>
             </form>
           )}
-        </div>
+        </section>
       )}
-      {error && <span className="pl-[5.75rem] text-small text-danger">{t(error)}</span>}
+      {(docResources.length > 0 || access.canEdit) && (
+        <section className="flex flex-col gap-1">
+          <span className="text-small leading-[22px] text-faint">
+            {t("Project documents")}
+          </span>
+          {docResources.map((resource) => {
+            const page = documentOf(resource);
+            const title = page?.title ?? resource.title;
+            const icon = page?.icon ? (
+              <span className="text-small leading-none">{page.icon}</span>
+            ) : (
+              <FileText size={13} className="shrink-0 text-muted" />
+            );
+            return (
+              <span
+                key={resource.id}
+                className="group -mx-1 flex min-w-0 items-center gap-1.5 rounded-md px-1 py-1 text-body text-text transition-colors hover:bg-elevated/60"
+              >
+                {page ? (
+                  <Link
+                    href={`/${workspaceId}/docs/${page.id}`}
+                    onClick={(event) => {
+                      event.preventDefault();
+                      openPage(page.id);
+                    }}
+                    className="flex min-w-0 flex-1 items-center gap-2"
+                  >
+                    {icon}
+                    <span className="min-w-0 flex-1 truncate">{title}</span>
+                  </Link>
+                ) : (
+                  <span className="flex min-w-0 flex-1 items-center gap-2">
+                    {icon}
+                    <span className="min-w-0 flex-1 truncate">{title}</span>
+                  </span>
+                )}
+                {access.canEdit && (
+                  <button
+                    type="button"
+                    aria-label={t("Remove {name}", { name: title })}
+                    title={t("Remove")}
+                    onClick={() => void removeResource(resource.id)}
+                    className="shrink-0 rounded-lg p-0.5 text-faint opacity-0 transition-opacity hover:bg-elevated hover:text-danger group-hover:opacity-100"
+                  >
+                    <X size={11} />
+                  </button>
+                )}
+              </span>
+            );
+          })}
+          {access.canEdit && (
+            <button
+              type="button"
+              onClick={() => void createDocument()}
+              className="-mx-1 flex items-center gap-1.5 rounded-md px-1 py-1 text-left text-small text-faint transition-colors hover:bg-elevated/60 hover:text-text"
+            >
+              <Plus size={13} className="shrink-0" />
+              {t("New document")}
+            </button>
+          )}
+        </section>
+      )}
+      {error && <span className="text-small text-danger">{t(error)}</span>}
     </div>
   );
 }

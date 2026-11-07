@@ -1,5 +1,5 @@
 "use client";
-import { PAGE_HEADER, PAGE_INSET } from "@/lib/page-chrome";
+import { BADGE, BADGE_GREEN, PAGE_HEADER, PAGE_INSET } from "@/lib/page-chrome";
 import { SafeImage } from "./safe-image";
 
 import { DetailNavigation } from "@/components/detail-navigation";
@@ -18,14 +18,12 @@ import {
   History,
   FileText,
   Link2,
-  Lock,
   Maximize2,
   MessageSquare,
   Minimize2,
   Paperclip,
   Plus,
   Sparkles,
-  Users,
   Image as ImageIcon,
   Star,
   X,
@@ -458,6 +456,9 @@ export function DocPageView({
   );
   const placed = useMemo(() => placedPageKeys(doc), [doc]);
   const outline = useMemo(() => docOutline(doc), [doc]);
+  const scrollToTitle = useCallback(() => {
+    root.current?.querySelector<HTMLElement>("[data-document-scroll]")?.scrollTo({ top: 0 });
+  }, []);
   const scrollToHeading = useCallback((id: string) => {
     const heading = root.current?.querySelector<HTMLElement>(
       `[data-doc-heading="${CSS.escape(id)}"]`
@@ -496,7 +497,7 @@ export function DocPageView({
         <span className="flex min-w-0 flex-1 items-center gap-2 max-[600px]:hidden">
           <nav data-doc-breadcrumb className="flex min-w-0 items-center gap-1 truncate">
             <Link href={`/${workspaceId}/docs`} className="shrink-0 hover:text-text">
-              {t("Documents")}
+              {t("All documents")}
             </Link>
             {ancestors.map((ancestor) => (
               <span key={ancestor.id} className="flex min-w-0 items-center gap-1">
@@ -514,13 +515,16 @@ export function DocPageView({
                 </Link>
               </span>
             ))}
+            <span className="flex min-w-0 items-center gap-1">
+              <span className="text-faint">/</span>
+              <span data-doc-current-title className="min-w-0 truncate text-text">{title || t("Untitled")}</span>
+            </span>
           </nav>
           <span
-            className="inline-flex h-[18px] items-center rounded-[5px] px-1.5 whitespace-nowrap shrink-0 gap-1 bg-elevated text-caption text-muted"
+            className={shared ? BADGE_GREEN : BADGE}
             title={shared ? t("Shared with the workspace") : t("Private")}
           >
-            {shared ? <Users size={11} /> : <Lock size={11} />}
-            {!compact && (shared ? t("Shared with the workspace") : t("Private"))}
+            {shared ? t("Shared") : t("Private")}
           </span>
           {/* A shared document says whose it is right where it says what it is. */}
           {author && (
@@ -749,7 +753,7 @@ export function DocPageView({
         <div
           style={{maxWidth:readingWidth,marginInline:"auto"}}
           className={`w-full pb-8 pt-6 max-[600px]:px-4 max-[600px]:pt-3.5 ${
-            onClose ? "px-5" : "px-10 lg:px-20 xl:px-32"
+            onClose ? "px-5" : "px-10 lg:px-16 xl:px-20"
           }`}
         >
           <input
@@ -1066,9 +1070,11 @@ export function DocPageView({
       {side === "outline" && (
         <DocOutlinePanel
           headings={outline}
+          title={title || t("Untitled")}
           compact={compact}
           linkBase={`/${workspaceId}/docs/${page.id}`}
           onSelect={scrollToHeading}
+          onSelectTitle={scrollToTitle}
           onClose={() => setSide(null)}
         />
       )}
