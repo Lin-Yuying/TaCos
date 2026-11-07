@@ -101,6 +101,27 @@ async function main() {
     .prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'watchers'")
     .get();
   assert(watcherTable, "bootstrap must create the watchers table on an older database");
+  // U-03: an upgraded database gets the planning links and tables, so the planning
+  // surface does not die with "no such column: cycle_id".
+  const planningColumns = check.prepare("PRAGMA table_info(issues)").all() as Array<{ name: string }>;
+  assert(
+    planningColumns.some((column) => column.name === "cycle_id"),
+    "bootstrap must add issues.cycle_id to an older database"
+  );
+  assert(
+    planningColumns.some((column) => column.name === "milestone_id"),
+    "bootstrap must add issues.milestone_id to an older database"
+  );
+  for (const table of ["cycle_settings", "cycles", "project_milestones", "initiatives", "initiative_projects", "initiative_labels"]) {
+    const row = check
+      .prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name = ?")
+      .get(table);
+    assert(row, `bootstrap must create ${table} on an older database`);
+  }
+  const planningIndex = check
+    .prepare("SELECT name FROM sqlite_master WHERE type = 'index' AND name = 'issues_cycle_idx'")
+    .get();
+  assert(planningIndex, "bootstrap must index issues.cycle_id after the ALTER");
   check.close();
   console.log("ok   2.3 upgrade boots on a database without issues.parent_id");
 }

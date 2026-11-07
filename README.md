@@ -308,6 +308,39 @@ Desktop binaries are not code-signed. On Windows 11, Smart App Control blocks un
 Checks: `check-task-comments.ts`, `check-watchers.ts`, `check-activity-feed.ts` and
 `check-review-threads.ts` run under `npm run check:harness`.
 
+## Planning: cycles, milestones and initiatives
+
+**Planning** (`/planning`, one sidebar row with three tabs) is the planning layer. It is
+deliberately small: no custom planning fields, no forecast, no drag scheduling.
+
+- **Cycles** are workspace time boxes, because TaCos has no team layer yet. Settings ›
+  Cycles sets the length (1–8 weeks), the start weekday, a cooldown, how many upcoming
+  cycles to keep scheduled and whether active unplanned tasks join the current cycle
+  (opt-in, off by default). The schedule is filled lazily when someone opens Planning or
+  saves the settings; there is no background job. A cycle's page shows its progress, a
+  simple burndown, the committed estimates and a capacity figure averaged from the last
+  three completed cycles (points when every task was sized, otherwise task count).
+- **Rollover** runs once per completed cycle and moves only `todo` and `in_progress`
+  tasks to the next cycle; `done` and `canceled` never move. The conditional status
+  update and each task's conditional `cycle_id` update make a restart or two concurrent
+  ticks harmless: no duplicate cycles, moves or changelog rows. A successor cycle is
+  created on demand even when automatic creation is off, so work is never stranded.
+- **Milestones** belong to a project (project Timeline tab): name, description, optional
+  target date and plan order. Progress counts their tasks, the first unfinished stage is
+  marked **Current**, and the tab groups and filters tasks by milestone. A task can only
+  take a milestone from its own project; deleting a milestone keeps its tasks.
+- **Initiatives** group projects under one objective with status, priority, owner,
+  target date, labels, resources and a project set. Progress rolls up from the tasks of
+  the linked projects; the tab filters by status, owner and text.
+- **Roadmap** is list/timeline only: milestones by month or quarter, grouped by
+  initiative, with projects that belong to no initiative still listed. Dates change by
+  editing a milestone, not by dragging.
+- An optional `.ics` download for a cycle lives beside the cycle date range; there is no
+  calendar sync or feed token.
+
+Checks: `check-cycles.ts`, `check-milestones.ts`, `check-initiatives.ts` and
+`check-planning-rollover.ts` run under `npm run check:harness`.
+
 ## Documents, links and page templates
 
 - Type `[[` in a document to open the page picker; **Link a page** does the same from the

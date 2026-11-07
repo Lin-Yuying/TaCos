@@ -30,6 +30,7 @@ import {
   blockers,
   commentReactions,
   comments,
+  cycles,
   events,
   favorites,
   issueAssignees,
@@ -50,6 +51,7 @@ import {
   overviewDocEdits,
   projectGrants,
   projectMembers,
+  projectMilestones,
   projects,
   users,
   workspaceMembers,
@@ -129,6 +131,9 @@ export type Issue = {
   dueDate: string | null;
   // Numeric planning estimate, or null when unsized (U-03 planning reads it).
   estimate: number | null;
+  // U-03: the workspace cycle this task is planned into, and its project milestone.
+  cycleId: string | null;
+  milestoneId: string | null;
   reminder: ReminderPreset | null;
   recurrence: Recurrence | null;
   // the person who opened it, or who ran the agent that published it
@@ -1963,6 +1968,8 @@ async function toIssueRows(workspaceId: string, rows: IssueRow[]): Promise<Issue
       assignees: assigneesByIssue.get(row.id) ?? [],
       dueDate: row.dueDate ?? null,
       estimate: row.estimate ?? null,
+      cycleId: row.cycleId ?? null,
+      milestoneId: row.milestoneId ?? null,
       reminder: (row.reminder as ReminderPreset | null) ?? null,
       recurrence: (row.recurrence as Recurrence | null) ?? null,
       createdBy: row.createdBy,
@@ -2013,6 +2020,9 @@ export type ListFilters = {
   // #79: tasks delegated to any agent, or to one named agent.
   delegated?: boolean;
   delegatedAgentId?: string;
+  // U-03: planning membership. null means "not in any cycle / milestone".
+  cycleId?: string | null;
+  milestoneId?: string | null;
 };
 
 // Totals for a project's Overview page; grouped in SQL so the count stays right
@@ -2085,6 +2095,16 @@ async function issueConditions(workspaceId: string, filters: ListFilters) {
   }
   if (filters.projectId) {
     conditions.push(eq(issues.projectId, filters.projectId));
+  }
+  if (filters.cycleId === null) {
+    conditions.push(isNull(issues.cycleId));
+  } else if (filters.cycleId) {
+    conditions.push(eq(issues.cycleId, filters.cycleId));
+  }
+  if (filters.milestoneId === null) {
+    conditions.push(isNull(issues.milestoneId));
+  } else if (filters.milestoneId) {
+    conditions.push(eq(issues.milestoneId, filters.milestoneId));
   }
   if (filters.projectIds) {
     if (filters.projectIds.length === 0) return null;
@@ -2649,6 +2669,10 @@ export type CreateIssueInput = {
   labelNames?: string[];
   dueDate?: string | null;
   estimate?: number | null;
+  // U-03 planning links. A cycle is workspace-level; a milestone must belong to the
+  // task's project.
+  cycleId?: string | null;
+  milestoneId?: string | null;
   reminder?: ReminderPreset | null;
   recurrence?: Recurrence | null;
   project: string;
@@ -2664,6 +2688,10 @@ export type UpdateIssueInput = {
   labelNames?: string[];
   dueDate?: string | null;
   estimate?: number | null;
+  // U-03 planning links. Null detaches; a cycle is workspace-level and a milestone
+  // must belong to the task's project.
+  cycleId?: string | null;
+  milestoneId?: string | null;
   reminder?: ReminderPreset | null;
   recurrence?: Recurrence | null;
   // Identifier or id of the parent task. Null or "" detaches this task.
@@ -2686,6 +2714,45 @@ function normalizeEstimate(value: unknown): number | null {
     throw new TacosError("Estimate must be a number between 0 and 10000");
   }
   return Math.round(number * 100) / 100;
+}
+
+/**
+ * U-03: the planning links are validated in the business layer, not the UI. A cycle
+ * must live in the same workspace; a milestone must belong to the task's own project,
+ * because milestones are project-level (plan decision 2).
+ */
+async function resolveCycleLink(
+  workspaceId: string,
+  value: unknown
+): Promise<{ id: string | null; name: string | null }> {
+  if (value === null || value === undefined || value === "") return { id: null, name: null };
+  const id = String(value);
+  const [row] = await getDb()
+    .select({ id: cycles.id, name: cycles.name })
+    .from(cycles)
+    .where(and(eq(cycles.id, id), eq(cycles.workspaceId, workspaceId)))
+    .limit(1);
+  if (!row) throw new TacosError("Cycle not found in this workspace", 404);
+  return { id: row.id, name: row.name };
+}
+
+async function resolveMilestoneLink(
+  workspaceId: string,
+  value: unknown,
+  projectId: string
+): Promise<{ id: string | null; name: string | null }> {
+  if (value === null || value === undefined || value === "") return { id: null, name: null };
+  const id = String(value);
+  const [row] = await getDb()
+    .select({ id: projectMilestones.id, name: projectMilestones.name, projectId: projectMilestones.projectId })
+    .from(projectMilestones)
+    .where(and(eq(projectMilestones.id, id), eq(projectMilestones.workspaceId, workspaceId)))
+    .limit(1);
+  if (!row) throw new TacosError("Milestone not found in this workspace", 404);
+  if (row.projectId !== projectId) {
+    throw new TacosError("A milestone belongs to one project", 400, "Pick a milestone from this task's project");
+  }
+  return { id: row.id, name: row.name };
 }
 
 function normalizeRecurrence(value: unknown): Recurrence | null {
@@ -2780,6 +2847,8 @@ export async function createIssue(
   const description = input.description ?? "";
   const dueDate = normalizeDueDate(input.dueDate);
   const estimate = normalizeEstimate(input.estimate);
+  const cycleLink = await resolveCycleLink(workspaceId, input.cycleId);
+  const milestoneLink = await resolveMilestoneLink(workspaceId, input.milestoneId, project.id);
   const reminder = dueDate ? normalizeReminder(input.reminder) : null;
   const recurrence = normalizeRecurrence(input.recurrence);
   const id = crypto.randomUUID();
@@ -2814,10 +2883,10 @@ export async function createIssue(
     if(value!==null)customValues.push({issueId:id,fieldId,value});
   }
   await db.run(sql`INSERT INTO issues
-    (id, workspace_id, project_id, parent_id, number, identifier, title, description, status, priority, due_date, estimate, reminder, created_by, published_by, review_status, source_thread_id, created_via, created_at, updated_at, position)
+    (id, workspace_id, project_id, parent_id, number, identifier, title, description, status, priority, due_date, estimate, cycle_id, milestone_id, reminder, created_by, published_by, review_status, source_thread_id, created_via, created_at, updated_at, position)
     VALUES (${id}, ${workspaceId}, ${project.id}, ${parentId},
       (SELECT COALESCE(MAX(number), 0) + 1 FROM issues WHERE project_id = ${project.id}),
-      'pending', ${title}, ${description}, ${status}, ${priority}, ${dueDate}, ${estimate}, ${reminder},
+      'pending', ${title}, ${description}, ${status}, ${priority}, ${dueDate}, ${estimate}, ${cycleLink.id}, ${milestoneLink.id}, ${reminder},
       ${publisherId}, ${publisherId}, ${reviewStatus}, ${sourceThreadId},
       ${actor.kind === "agent" ? actor.via : "web"}, ${now}, ${now},
       (SELECT COALESCE(MAX(position), 0) + 1 FROM issues WHERE workspace_id = ${workspaceId}))`);
@@ -2837,6 +2906,13 @@ export async function createIssue(
   }
   if(customValues.length)await db.insert(taskFieldValues).values(customValues);
   await recordEvent(id, "created", { title }, actor);
+  // A task planned while it is created still records that placement in its timeline.
+  if (cycleLink.id) {
+    await recordEvent(id, "cycle_changed", { from: null, to: cycleLink.id, toName: cycleLink.name }, actor);
+  }
+  if (milestoneLink.id) {
+    await recordEvent(id, "milestone_changed", { from: null, to: milestoneLink.id, toName: milestoneLink.name }, actor);
+  }
   // U-11: the creator and the first assignees start as watchers, exactly like the old
   // implicit creator/assignee audience; being assigned also follows from here on.
   await followIssueCreator(workspaceId, id, publisherId);
@@ -2963,6 +3039,38 @@ export async function updateIssue(
     if (estimate !== (row.estimate ?? null)) {
       sets.estimate = estimate;
       changes.push({ type: "estimate_changed", data: { from: row.estimate ?? null, to: estimate } });
+    }
+  }
+  if (patch.cycleId !== undefined) {
+    const link = await resolveCycleLink(workspaceId, patch.cycleId);
+    if (link.id !== (row.cycleId ?? null)) {
+      let fromName: string | null = null;
+      if (row.cycleId) {
+        const [before] = await db
+          .select({ name: cycles.name })
+          .from(cycles)
+          .where(eq(cycles.id, row.cycleId))
+          .limit(1);
+        fromName = before?.name ?? null;
+      }
+      sets.cycleId = link.id;
+      changes.push({ type: "cycle_changed", data: { from: row.cycleId ?? null, to: link.id, fromName, toName: link.name } });
+    }
+  }
+  if (patch.milestoneId !== undefined) {
+    const link = await resolveMilestoneLink(workspaceId, patch.milestoneId, row.projectId);
+    if (link.id !== (row.milestoneId ?? null)) {
+      let fromName: string | null = null;
+      if (row.milestoneId) {
+        const [before] = await db
+          .select({ name: projectMilestones.name })
+          .from(projectMilestones)
+          .where(eq(projectMilestones.id, row.milestoneId))
+          .limit(1);
+        fromName = before?.name ?? null;
+      }
+      sets.milestoneId = link.id;
+      changes.push({ type: "milestone_changed", data: { from: row.milestoneId ?? null, to: link.id, fromName, toName: link.name } });
     }
   }
   if (patch.recurrence !== undefined) {
@@ -3307,12 +3415,16 @@ export async function moveIssueToProject(
   const now = nowIso();
   db.transaction((tx) => {
     // Allocate the number against the target project in the same statement that moves it.
+    // A milestone belongs to one project, so the moved task loses its old one.
     tx.run(sql`UPDATE issues SET
       number = (SELECT COALESCE(MAX(number), 0) + 1 FROM issues WHERE project_id = ${target.id}),
-      project_id = ${target.id}, updated_at = ${now}
+      project_id = ${target.id}, milestone_id = NULL, updated_at = ${now}
       WHERE id = ${row.id}`);
     tx.run(sql`UPDATE issues SET identifier = (SELECT key FROM projects WHERE id = ${target.id}) || '-' || number WHERE id = ${row.id}`);
   });
+  if (row.milestoneId) {
+    await recordEvent(row.id, "milestone_changed", { from: row.milestoneId, to: null }, actor);
+  }
   await recordEvent(
     row.id,
     "project_changed",
@@ -3881,6 +3993,8 @@ export async function deleteIssue(workspaceId: string, idOrIdentifier: string): 
     assignees: [],
     dueDate: row.dueDate ?? null,
     estimate: row.estimate ?? null,
+    cycleId: row.cycleId ?? null,
+    milestoneId: row.milestoneId ?? null,
     reminder: (row.reminder as ReminderPreset | null) ?? null,
     recurrence: (row.recurrence as Recurrence | null) ?? null,
     createdBy: row.createdBy,

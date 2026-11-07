@@ -1,6 +1,9 @@
 # U-03: Planning layer (cycles, milestones, initiatives, roadmap)
 
-Status: plan for a future PR. No implementation started. Written 2026-11-06.
+Status: implemented on `feat/planning` (2026-11-06). Four commits: planning services,
+the Planning surface, checks, and docs. The Lead still runs the browser E2E and the
+1440/1100 screenshot review (UI gate, decision 10). See "Implementation status" at the
+end.
 
 ## Why
 
@@ -199,3 +202,33 @@ milestones/initiatives follow in a second PR; ask before splitting.
 - New views: cycles page, project timeline, roadmap/initiatives page; project
   settings for cycles; insight panels.
 - `src/lib/i18n/zh.ts`, README, new checks.
+
+## Implementation status
+
+| Item | State | Evidence |
+| --- | --- | --- |
+| Cycles: settings (length/start/cooldown/upcoming/auto-add), lazy upcoming creation, cycle page, progress, burndown, capacity | done | `check-cycles.ts` (41 assertions) |
+| Rollover todo/in_progress only; idempotent across restarts and concurrent ticks; successor created on demand | done | `check-planning-rollover.ts` (25 assertions) |
+| Auto-add opt-in, off by default, only tasks that already exist | done | `check-planning-rollover.ts`, `check-cycles.ts` |
+| Capacity from the last three completed cycles using the U-09 estimate, task-count fallback | done | `check-cycles.ts` |
+| Optional .ics download for a cycle | done | `check-cycles.ts` payload, `/api/cycles/[cycleId]/calendar` |
+| Project milestones: name/description/target date/order, progress, current milestone, Timeline tab, filter/group | done | `check-milestones.ts` (26 assertions) |
+| Initiatives: name/description/status/priority/owner/target date/labels/resources, list/filter, roll-up | done | `check-initiatives.ts` (32 assertions) |
+| Roadmap list/timeline by month/quarter grouped by initiative, no drag scheduling | done | `check-initiatives.ts` (grouping), UI in Planning > Roadmap |
+| Settings section, sidebar entry, seed data, README, i18n notes | done | `npm run i18n:check`, `check-upgrade-old-db.ts` |
+| Milestone to project conversion | not built | Stretch item; skipped because it needs a project key/identifier policy, not a cheap addition |
+| Insights (U-02) dimensions and #80 automation triggers | not built | Explicitly deferred by decisions 9 and the PR scope |
+| Browser E2E and 1440/1100 screenshots | pending Lead | UI gate, decision 10 |
+
+Implementation notes:
+
+- The lazy sweep runs from the planning page and the settings page. It is cheap when
+  nothing is due and is the only scheduler; there is no daemon.
+- Concurrency safety is data-level: a unique `(workspace_id, starts_at)` index, a
+  conditional status UPDATE that claims completion, and a conditional `cycle_id` UPDATE
+  per rolled task (the event is written only by the process whose UPDATE changed a row).
+- Milestone progress excludes canceled tasks. Initiative progress sums the visible
+  linked projects' tasks and also excludes canceled tasks.
+- The roadmap has no project bars because projects carry no start/end dates in this
+  scope; milestones are the dated objects and are placed by target date.
+- New strings are in `src/lib/i18n/zh.ts`; `npm run i18n:check` reports 0 missing.

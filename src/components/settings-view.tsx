@@ -46,7 +46,9 @@ import { WorkspaceTrashList } from "@/components/workspace-trash-list";
 import { LabelsManager } from "@/components/labels-manager";
 import { PageTemplatesManager } from "@/components/page-templates-manager";
 import { AutomationSettingsSection } from "@/components/automation-settings-section";
+import { CycleSettingsSection } from "@/components/cycle-settings-section";
 import type { AutomationSettingsView } from "@/lib/automations/store";
+import type { CycleSettings, CycleSummary } from "@/lib/planning/cycles";
 import type { ApiKeyRecord, ApiKeyScope, DeletedWorkspace, Label, Member, Project } from "@/lib/issues";
 import type { HarnessSettingsView } from "@/lib/harness/types";
 import type { PageTemplate } from "@/lib/page-templates";
@@ -154,6 +156,8 @@ export function SettingsView({
   agents,
   agentUsage,
   automations,
+  cycleSettings,
+  cycles,
 }: {
   workspace: { id: string; name: string; key: string; icon: string | null };
   role: string;
@@ -178,6 +182,8 @@ export function SettingsView({
   agents: AgentView[];
   agentUsage: AgentUsageSummary;
   automations: AutomationSettingsView;
+  cycleSettings: CycleSettings;
+  cycles: CycleSummary[];
 }) {
   const router = useRouter();
   const t = useT();
@@ -966,6 +972,16 @@ export function SettingsView({
             workspaceId={workspace.id}
             initialTemplates={pageTemplates}
             canManage={canManagePageTemplates}
+          />
+        </section>
+
+        <section id="cycles" className="scroll-mt-6 space-y-3">
+          <h2 className="text-body font-semibold">{t("Cycle settings")}</h2>
+          <CycleSettingsSection
+            workspaceId={workspace.id}
+            settings={cycleSettings}
+            cycles={cycles}
+            isAdmin={isAdmin}
           />
         </section>
 

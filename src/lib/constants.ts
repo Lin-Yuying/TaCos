@@ -96,3 +96,44 @@ export const REMINDER_META: Record<ReminderPreset, { label: string; hours: numbe
   "5d": { label: "5 days before", hours: 120 },
   "7d": { label: "7 days before", hours: 168 },
 };
+
+// U-03 planning. Cycles are workspace-level, 1-8 weeks, starting on one weekday.
+export type CycleStatus = "upcoming" | "active" | "completed";
+export const CYCLE_STATUSES: CycleStatus[] = ["active", "upcoming", "completed"];
+export const CYCLE_STATUS_META: Record<CycleStatus, { label: string }> = {
+  active: { label: "Active" },
+  upcoming: { label: "Upcoming" },
+  completed: { label: "Completed" },
+};
+export const CYCLE_WEEK_RANGE = { min: 1, max: 8 } as const;
+export const CYCLE_UPCOMING_RANGE = { min: 0, max: 15 } as const;
+export const CYCLE_COOLDOWN_RANGE = { min: 0, max: 8 } as const;
+// ISO weekday: 1 Monday ... 7 Sunday. The stored value is normalized to this range.
+export const CYCLE_START_DAYS: Array<{ value: number; label: string }> = [
+  { value: 1, label: "Monday" },
+  { value: 2, label: "Tuesday" },
+  { value: 3, label: "Wednesday" },
+  { value: 4, label: "Thursday" },
+  { value: 5, label: "Friday" },
+  { value: 6, label: "Saturday" },
+  { value: 7, label: "Sunday" },
+];
+
+// U-03 initiatives: a workspace objective grouping projects. The name is Initiative,
+// not Goal or OKR (plan decision 3).
+export type InitiativeStatus = "proposed" | "planned" | "active" | "completed" | "canceled";
+export const INITIATIVE_STATUSES: InitiativeStatus[] = [
+  "proposed",
+  "planned",
+  "active",
+  "completed",
+  "canceled",
+];
+export const INITIATIVE_STATUS_META: Record<InitiativeStatus, { label: string; color: string }> = {
+  proposed: { label: "Proposed", color: "#8a8f98" },
+  planned: { label: "Planned", color: "#3b82f6" },
+  active: { label: "Active", color: "#f2c94c" },
+  completed: { label: "Completed", color: "#4cb782" },
+  canceled: { label: "Canceled", color: "#5f636b" },
+};
+

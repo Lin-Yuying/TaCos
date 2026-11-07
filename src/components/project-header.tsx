@@ -8,11 +8,12 @@ import { WatchControl } from "@/components/watch-control";
 import { useParams } from "next/navigation";
 import { useT } from "@/components/i18n-context";
 
-export type ProjectTab = "overview" | "issues" | "documents";
+export type ProjectTab = "overview" | "issues" | "documents" | "timeline";
 
 const TABS: { key: ProjectTab; label: string }[] = [
   { key: "overview", label: "Overview" },
   { key: "issues", label: "Tasks" },
+  { key: "timeline", label: "Timeline" },
   { key: "documents", label: "Documents" },
 ];
 
