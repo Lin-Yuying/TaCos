@@ -18,7 +18,7 @@ State per item: `todo`, `pass` (commit plus cheap checks: `npx tsc --noEmit`, `n
 | 8 | Task panel: 520px, does not squeeze the list, one action row | TaskPanel, PanelProps, PanelReview, PanelSource, PanelClosed, DelegationStates, HandOver, Pickers | pass |
 | 9 | Task panel: comments, blockers, dependencies | PanelComments, PanelCommentsEmpty, PanelBlocker | pass |
 | 10 | New task dialog | NewTask, NewTaskDraft, NewTaskNoProject, AiTasks | pass |
-| 11 | Review queue | Review, ReviewThread | todo |
+| 11 | Review queue | Review, ReviewThread | pass |
 | 12 | Start screen | Start | todo |
 | 13 | Inbox | Inbox, InboxRowMenu, InboxMuted | todo |
 | 14 | Activity | Activity | todo |
