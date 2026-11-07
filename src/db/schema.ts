@@ -417,6 +417,10 @@ export const issues = sqliteTable(
     dueDate: text("due_date"),
     // planning estimate in points/hours; null when nobody sized the task yet (U-03 reads it)
     estimate: real("estimate"),
+    // U-03: the workspace cycle this task is planned into; null when unscheduled.
+    cycleId: text("cycle_id"),
+    // U-03: the project milestone this task closes; null when the project has none.
+    milestoneId: text("milestone_id"),
     // how long before dueDate to remind: 12h | 1d | 3d | 5d | 7d
     reminder: text("reminder"),
     // daily | weekly | monthly. Null when the task does not repeat.
@@ -1136,3 +1140,118 @@ export const automationAudit = sqliteTable(
   },
   (t) => [index("automation_audit_workspace_idx").on(t.workspaceId, t.createdAt)]
 );
+
+// U-03 planning: one time-box configuration per workspace. Cycles are workspace-level
+// because TaCos has no team layer (plan decision 1); a missing row means "not enabled
+// yet", so no workspace starts creating cycles silently.
+export const cycleSettings = sqliteTable("cycle_settings", {
+  workspaceId: text("workspace_id").primaryKey(),
+  enabled: integer("enabled").notNull().default(0),
+  // 1-8 weeks
+  durationWeeks: integer("duration_weeks").notNull().default(2),
+  // ISO weekday of the start: 1 Monday ... 7 Sunday, 0 is normalized to 7 on write.
+  startDay: integer("start_day").notNull().default(1),
+  // 0-8 empty weeks between two cycles.
+  cooldownWeeks: integer("cooldown_weeks").notNull().default(0),
+  // How many future cycles to keep scheduled, 0-15.
+  upcomingCount: integer("upcoming_count").notNull().default(2),
+  // Opt-in: put active tasks without a cycle into the current one (plan decision 7).
+  autoAdd: integer("auto_add").notNull().default(0),
+  updatedAt: text("updated_at").notNull(),
+});
+
+// U-03: a time-boxed cycle. `starts_at` is the workspace's calendar date, not an
+// instant; the unique key makes a repeated lazy sweep a no-op.
+export const cycles = sqliteTable(
+  "cycles",
+  {
+    id: text("id").primaryKey(),
+    workspaceId: text("workspace_id").notNull(),
+    // 1-based, per workspace; the UI says "Cycle 4".
+    number: integer("number").notNull(),
+    name: text("name").notNull(),
+    // YYYY-MM-DD
+    startsAt: text("starts_at").notNull(),
+    endsAt: text("ends_at").notNull(),
+    // upcoming | active | completed
+    status: text("status").notNull().default("upcoming"),
+    // Set when the rollover ran. The conditional status update is the claim, so a
+    // second process (or a restart) never rolls the same cycle twice.
+    rolledOverAt: text("rolled_over_at"),
+    createdBy: text("created_by"),
+    createdAt: text("created_at").notNull(),
+  },
+  (t) => [
+    uniqueIndex("cycles_workspace_start_idx").on(t.workspaceId, t.startsAt),
+    index("cycles_workspace_idx").on(t.workspaceId, t.startsAt),
+  ]
+);
+
+// U-03: project-level milestone/release stage. Position is the plan's order; progress
+// is always computed from attached tasks, never stored.
+export const projectMilestones = sqliteTable(
+  "project_milestones",
+  {
+    id: text("id").primaryKey(),
+    workspaceId: text("workspace_id").notNull(),
+    projectId: text("project_id").notNull(),
+    name: text("name").notNull(),
+    description: text("description").notNull().default(""),
+    // YYYY-MM-DD, optional: a milestone can be undated.
+    targetDate: text("target_date"),
+    position: integer("position").notNull().default(0),
+    createdBy: text("created_by"),
+    createdAt: text("created_at").notNull(),
+  },
+  (t) => [
+    index("project_milestones_project_idx").on(t.projectId, t.position),
+    index("project_milestones_workspace_idx").on(t.workspaceId),
+  ]
+);
+
+// U-03: an initiative groups projects under one objective. Status/priority/owner/
+// target date are the whole planning surface; progress is computed from the projects.
+export const initiatives = sqliteTable(
+  "initiatives",
+  {
+    id: text("id").primaryKey(),
+    workspaceId: text("workspace_id").notNull(),
+    name: text("name").notNull(),
+    description: text("description").notNull().default(""),
+    // proposed | planned | active | completed | canceled
+    status: text("status").notNull().default("proposed"),
+    // 0 none, 1 low, 2 medium, 3 high, 4 urgent
+    priority: integer("priority").notNull().default(0),
+    ownerId: text("owner_id"),
+    // YYYY-MM-DD, optional.
+    targetDate: text("target_date"),
+    // JSON array of { title, url } links.
+    resources: text("resources").notNull().default("[]"),
+    createdBy: text("created_by"),
+    createdAt: text("created_at").notNull(),
+    updatedAt: text("updated_at").notNull(),
+  },
+  (t) => [index("initiatives_workspace_idx").on(t.workspaceId, t.status)]
+);
+
+export const initiativeProjects = sqliteTable(
+  "initiative_projects",
+  {
+    initiativeId: text("initiative_id").notNull(),
+    projectId: text("project_id").notNull(),
+  },
+  (t) => [
+    primaryKey({ columns: [t.initiativeId, t.projectId] }),
+    index("initiative_projects_project_idx").on(t.projectId),
+  ]
+);
+
+export const initiativeLabels = sqliteTable(
+  "initiative_labels",
+  {
+    initiativeId: text("initiative_id").notNull(),
+    labelId: text("label_id").notNull(),
+  },
+  (t) => [primaryKey({ columns: [t.initiativeId, t.labelId] })]
+);
+

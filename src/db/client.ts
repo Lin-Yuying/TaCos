@@ -133,6 +133,75 @@ CREATE TABLE IF NOT EXISTS automation_audit (
 );
 CREATE INDEX IF NOT EXISTS automation_audit_workspace_idx ON automation_audit (workspace_id, created_at);
 
+-- U-03 planning: workspace cycle configuration and the cycles it schedules.
+CREATE TABLE IF NOT EXISTS cycle_settings (
+  workspace_id TEXT PRIMARY KEY,
+  enabled INTEGER NOT NULL DEFAULT 0,
+  duration_weeks INTEGER NOT NULL DEFAULT 2,
+  start_day INTEGER NOT NULL DEFAULT 1,
+  cooldown_weeks INTEGER NOT NULL DEFAULT 0,
+  upcoming_count INTEGER NOT NULL DEFAULT 2,
+  auto_add INTEGER NOT NULL DEFAULT 0,
+  updated_at TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS cycles (
+  id TEXT PRIMARY KEY,
+  workspace_id TEXT NOT NULL,
+  number INTEGER NOT NULL,
+  name TEXT NOT NULL,
+  starts_at TEXT NOT NULL,
+  ends_at TEXT NOT NULL,
+  status TEXT NOT NULL DEFAULT 'upcoming',
+  rolled_over_at TEXT,
+  created_by TEXT,
+  created_at TEXT NOT NULL
+);
+CREATE UNIQUE INDEX IF NOT EXISTS cycles_workspace_start_idx ON cycles (workspace_id, starts_at);
+CREATE INDEX IF NOT EXISTS cycles_workspace_idx ON cycles (workspace_id, starts_at);
+
+-- U-03 milestones: project-level stages with an optional target date and a plan order.
+CREATE TABLE IF NOT EXISTS project_milestones (
+  id TEXT PRIMARY KEY,
+  workspace_id TEXT NOT NULL,
+  project_id TEXT NOT NULL,
+  name TEXT NOT NULL,
+  description TEXT NOT NULL DEFAULT '',
+  target_date TEXT,
+  position INTEGER NOT NULL DEFAULT 0,
+  created_by TEXT,
+  created_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS project_milestones_project_idx ON project_milestones (project_id, position);
+CREATE INDEX IF NOT EXISTS project_milestones_workspace_idx ON project_milestones (workspace_id);
+
+-- U-03 initiatives: workspace objectives grouping projects, with status/priority/owner.
+CREATE TABLE IF NOT EXISTS initiatives (
+  id TEXT PRIMARY KEY,
+  workspace_id TEXT NOT NULL,
+  name TEXT NOT NULL,
+  description TEXT NOT NULL DEFAULT '',
+  status TEXT NOT NULL DEFAULT 'proposed',
+  priority INTEGER NOT NULL DEFAULT 0,
+  owner_id TEXT,
+  target_date TEXT,
+  resources TEXT NOT NULL DEFAULT '[]',
+  created_by TEXT,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS initiatives_workspace_idx ON initiatives (workspace_id, status);
+CREATE TABLE IF NOT EXISTS initiative_projects (
+  initiative_id TEXT NOT NULL,
+  project_id TEXT NOT NULL,
+  PRIMARY KEY (initiative_id, project_id)
+);
+CREATE INDEX IF NOT EXISTS initiative_projects_project_idx ON initiative_projects (project_id);
+CREATE TABLE IF NOT EXISTS initiative_labels (
+  initiative_id TEXT NOT NULL,
+  label_id TEXT NOT NULL,
+  PRIMARY KEY (initiative_id, label_id)
+);
+
 CREATE TABLE IF NOT EXISTS users (
   id TEXT PRIMARY KEY,
   username TEXT NOT NULL UNIQUE,
@@ -1507,6 +1576,13 @@ function bootstrap(sqlite: Database.Database) {
   addColumnIfMissing(sqlite, "issues", "due_date", "TEXT");
   // U-09: numeric estimate read by U-03 planning; null means unsized.
   addColumnIfMissing(sqlite, "issues", "estimate", "REAL");
+  // U-03: a task can be planned into one workspace cycle and one project milestone.
+  // Both columns are nullable, and their indexes follow the ALTERs for the same reason
+  // as parent_id above: an index on a missing column would abort an upgrade.
+  addColumnIfMissing(sqlite, "issues", "cycle_id", "TEXT");
+  addColumnIfMissing(sqlite, "issues", "milestone_id", "TEXT");
+  sqlite.exec(`CREATE INDEX IF NOT EXISTS issues_cycle_idx ON issues (cycle_id);
+    CREATE INDEX IF NOT EXISTS issues_milestone_idx ON issues (milestone_id);`);
   addColumnIfMissing(sqlite, "issues", "reminder", "TEXT");
   addColumnIfMissing(sqlite, "issues", "recurrence", "TEXT");
   addColumnIfMissing(sqlite, "issues", "recurred_into", "TEXT");
