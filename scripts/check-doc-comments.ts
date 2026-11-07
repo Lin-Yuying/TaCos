@@ -88,8 +88,12 @@ async function main() {
 
   await comments.addPageComment(ws, page.id, "b", { body: "second" });
   assert((await listNotifications(ws, "a")).length === 2, "page author is told about a comment");
+  const beforeSelf = (await listNotifications(ws, "a")).length;
   await comments.addPageComment(ws, page.id, "a", { body: "@ann self" });
-  assert((await listNotifications(ws, "a")).length === 3, "a self @ in a comment notifies the author");
+  assert(
+    (await listNotifications(ws, "a")).length === beforeSelf,
+    "a self @ in a comment does not notify the author"
+  );
 
   const secret = await lib.createPage(ws, "a", { title: "Secret" });
   await comments.addPageComment(ws, secret.id, "a", { body: "@bob read this" });

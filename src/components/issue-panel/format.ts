@@ -61,10 +61,22 @@ export function eventText(event: ActivityEvent, t: Translate, locale: Locale): s
   switch (event.type) {
     case "created":
       return t("created the task");
+    case "commented":
+      return t("commented");
+    case "comment_edited":
+      return t("edited a comment");
+    case "comment_deleted":
+      return t("deleted a comment");
+    case "comment_restored":
+      return t("restored a comment");
+    case "comment_resolved":
+      return t("resolved a comment thread");
+    case "comment_reopened":
+      return t("reopened a comment thread");
     case "review_approved":
       return t("approved the task");
     case "review_rejected":
-      return t("rejected the task");
+      return t("requested changes");
     case "agent_delegated":
       return t("started working on this task");
     case "agent_retried":

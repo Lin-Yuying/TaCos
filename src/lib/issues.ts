@@ -28,6 +28,7 @@ import { getDb } from "../db/client";
 import {
   apiKeys,
   blockers,
+  commentReactions,
   comments,
   events,
   favorites,
@@ -69,12 +70,22 @@ import {
   RECURRENCES,
   RECURRENCE_META,
   STATUS_ORDER,
+  COMMENT_REACTIONS,
+  type CommentReaction,
   type Priority,
   type Recurrence,
   type ReminderPreset,
   type Status,
   type Via,
 } from "./constants";
+import {
+  autoFollow,
+  followIssueAssigneesByIds,
+  followIssueCreator,
+  followObjectCreator,
+  watcherIds,
+} from "./watchers";
+import { recordActivity } from "./activity";
 
 export { LABEL_COLORS, PRIORITY_NAMES, REMINDER_PRESETS, REMINDER_META, STATUS_ORDER, STATUS_META } from "./constants";
 export type { Priority, ReminderPreset, Status, Via } from "./constants";
@@ -143,12 +154,25 @@ export type Issue = {
 };
 export type ReviewStatus = "approved" | "pending" | "rejected";
 export type IssueWithLabels = Issue & { labels: Label[] };
+export type CommentReviewState = "approve" | "changes_requested";
+export type CommentReactionCount = {
+  emoji: CommentReaction;
+  count: number;
+  mine: boolean;
+};
 export type Comment = {
   id: string;
   issueId: string;
   body: string;
   author: Assignee | null;
   agentAuthor: string | null;
+  parentId: string | null;
+  editedAt: string | null;
+  deletedAt: string | null;
+  resolvedAt: string | null;
+  reviewState: CommentReviewState | null;
+  via: string;
+  reactions: CommentReactionCount[];
   createdAt: string;
 };
 export type ActivityEvent = {
@@ -717,6 +741,16 @@ export async function seesAllTasks(
   return facts.seeAll || facts.ownerId === viewerId || (facts.role ?? "member") === "admin";
 }
 
+/** Project visibility for a notification recipient; watchers must not leak task titles. */
+async function memberSeesProject(
+  workspaceId: string,
+  projectId: string,
+  userId: string
+): Promise<boolean> {
+  if (await seesAllTasks(workspaceId, userId)) return true;
+  return Boolean(await getProject(workspaceId, projectId, userId));
+}
+
 function ownProjectCondition(viewerId: string) {
   return sql`EXISTS (
     SELECT 1 FROM projects visible
@@ -1024,6 +1058,21 @@ export async function createProject(input: {
     createdAt: nowIso(),
   };
   await db.insert(projects).values(record);
+  // U-11: the project's creator follows it and its creation lands in Activity.
+  if (input.createdBy) {
+    await followObjectCreator(input.workspaceId, "project", record.id, input.createdBy);
+    await recordActivity({
+      workspaceId: input.workspaceId,
+      objectType: "project",
+      objectId: record.id,
+      type: "project_created",
+      data: { title: record.name },
+      actor: await userActor(input.createdBy),
+      projectId: record.id,
+      ownerId: input.createdBy,
+      visibility: "project",
+    });
+  }
   return record;
 }
 
@@ -1134,6 +1183,19 @@ export async function updateProject(
   }
   const updated = await findProjectById(workspaceId, projectId);
   if (!updated) throw new TacosError("Project not found", 404);
+  if (viewerId && (next.name !== undefined || next.description !== undefined || next.icon !== undefined)) {
+    await recordActivity({
+      workspaceId,
+      objectType: "project",
+      objectId: projectId,
+      type: next.name !== undefined ? "project_renamed" : "project_updated",
+      data: { title: updated.name },
+      actor: await userActor(viewerId),
+      projectId,
+      ownerId: updated.createdBy,
+      visibility: "project",
+    });
+  }
   return updated;
 }
 
@@ -1334,14 +1396,33 @@ export async function addOverviewComment(
   if (!text) throw new TacosError("Comment cannot be empty");
   if (text.length > 5_000) throw new TacosError("Comment is too long (5k characters max)");
   const quote = anchor?.quote.trim() ?? "";
+  const commentId = crypto.randomUUID();
   await getDb().insert(overviewComments).values({
-    id: crypto.randomUUID(),
+    id: commentId,
     projectId,
     authorId: viewerId,
     body: text,
     quote: quote ? quote.slice(0, 1_000) : null,
     occurrence: quote ? Math.max(1, Math.floor(anchor?.occurrence ?? 1)) : 1,
     createdAt: nowIso(),
+  });
+  // U-11: commenting on the Overview follows the project and shows in Activity.
+  await autoFollow(workspaceId, viewerId, "project", projectId, "comment");
+  const [projectRow] = await getDb()
+    .select({ name: projects.name, createdBy: projects.createdBy })
+    .from(projects)
+    .where(eq(projects.id, projectId))
+    .limit(1);
+  await recordActivity({
+    workspaceId,
+    objectType: "project",
+    objectId: projectId,
+    type: "project_commented",
+    data: { title: projectRow?.name ?? "", commentId, preview: text.slice(0, 160) },
+    actor: await userActor(viewerId),
+    projectId,
+    ownerId: projectRow?.createdBy ?? null,
+    visibility: "project",
   });
   return listOverviewComments(workspaceId, projectId);
 }
@@ -2150,6 +2231,21 @@ export async function getIssueDetail(
     .from(comments)
     .where(eq(comments.issueId, row.id))
     .orderBy(comments.createdAt);
+  const reactionRows = commentRows.length
+    ? await db
+        .select()
+        .from(commentReactions)
+        .where(inArray(commentReactions.commentId, commentRows.map((comment) => comment.id)))
+    : [];
+  const reactionsByComment = new Map<string, Map<string, { count: number; mine: boolean }>>();
+  for (const reaction of reactionRows) {
+    const byEmoji = reactionsByComment.get(reaction.commentId) ?? new Map();
+    const current = byEmoji.get(reaction.emoji) ?? { count: 0, mine: false };
+    current.count += 1;
+    if (viewerId && reaction.userId === viewerId) current.mine = true;
+    byEmoji.set(reaction.emoji, current);
+    reactionsByComment.set(reaction.commentId, byEmoji);
+  }
   const eventRows = await db
     .select()
     .from(events)
@@ -2204,9 +2300,30 @@ export async function getIssueDetail(
     comments: commentRows.map((c) => ({
       id: c.id,
       issueId: c.issueId,
-      body: c.body,
+      // A deleted comment stays in the thread as a tombstone, without its words.
+      body: c.deletedAt ? "" : c.body,
       author: c.authorId ? memberMap.get(c.authorId) ?? null : null,
       agentAuthor: c.agentAuthor,
+      parentId: c.parentId,
+      editedAt: c.editedAt,
+      deletedAt: c.deletedAt,
+      resolvedAt: c.resolvedAt,
+      reviewState:
+        c.reviewState === "approve" || c.reviewState === "changes_requested"
+          ? c.reviewState
+          : null,
+      via: c.via,
+      reactions: [...(reactionsByComment.get(c.id) ?? new Map()).entries()]
+        .map(([emoji, value]) => ({
+          emoji: emoji as CommentReaction,
+          count: value.count,
+          mine: value.mine,
+        }))
+        .filter((reaction) => (COMMENT_REACTIONS as readonly string[]).includes(reaction.emoji))
+        .sort(
+          (a, b) =>
+            COMMENT_REACTIONS.indexOf(a.emoji) - COMMENT_REACTIONS.indexOf(b.emoji)
+        ),
       createdAt: c.createdAt,
     })),
     events: eventRows.map((e) => ({
@@ -2238,6 +2355,7 @@ export type NotificationInput = {
     | "assigned"
     | "commented"
     | "mentioned"
+    | "review_decision"
     | "doc_mentioned"
     | "doc_commented"
     | "due_soon"
@@ -2447,6 +2565,10 @@ export type MutationActor =
   // publishedBy is the person who ran the agent. An agent task waits for human review.
   | { kind: "agent"; label: string; via: Via; publishedBy?: string; sourceThreadId?: string };
 
+function actorViewerId(actor: MutationActor): string | undefined {
+  return actor.kind === "user" ? actor.userId : actor.publishedBy ?? undefined;
+}
+
 function actorFields(actor: MutationActor) {
   return actor.kind === "user"
     ? { actorId: actor.userId, agentActor: null }
@@ -2489,12 +2611,30 @@ export async function recordEvent(
   data: Record<string, unknown>,
   actor: MutationActor
 ) {
+  // The activity feed keys every row by workspace/project/visibility. Read them once
+  // here instead of relying on a backfill that never runs for later rows.
+  const [row] = await getDb()
+    .select({
+      workspaceId: issues.workspaceId,
+      projectId: issues.projectId,
+      createdBy: issues.createdBy,
+      title: issues.title,
+    })
+    .from(issues)
+    .where(eq(issues.id, issueId))
+    .limit(1);
   await getDb().insert(events).values({
     id: crypto.randomUUID(),
     issueId,
     type,
-    data: JSON.stringify(data),
+    data: JSON.stringify({ title: row?.title, ...data }),
     createdAt: nowIso(),
+    workspaceId: row?.workspaceId ?? null,
+    objectType: "task",
+    objectId: issueId,
+    projectId: row?.projectId ?? null,
+    ownerId: row?.createdBy ?? null,
+    visibility: "project",
     ...actorFields(actor),
   });
 }
@@ -2697,6 +2837,10 @@ export async function createIssue(
   }
   if(customValues.length)await db.insert(taskFieldValues).values(customValues);
   await recordEvent(id, "created", { title }, actor);
+  // U-11: the creator and the first assignees start as watchers, exactly like the old
+  // implicit creator/assignee audience; being assigned also follows from here on.
+  await followIssueCreator(workspaceId, id, publisherId);
+  await followIssueAssigneesByIds(workspaceId, id, assigneeIds);
   const mentioned = description
     ? await notifyMentions(workspaceId, id, description, actor)
     : new Set<string>();
@@ -2707,7 +2851,7 @@ export async function createIssue(
     }
   }
 
-  const detail = await getIssueDetail(workspaceId, id);
+  const detail = await getIssueDetail(workspaceId, id, actorViewerId(actor));
   if (!detail) throw new TacosError("Failed to create issue", 500);
   await notifyViewSubscribers(workspaceId, detail, "added", actor);
   // #80: a rule sees the finished task, its labels and its assignees.
@@ -2933,6 +3077,8 @@ export async function updateIssue(
     if (assigneeChange) {
       const actorUserId = actor.kind === "user" ? actor.userId : null;
       const issueTitle = (sets.title as string | undefined) ?? row.title;
+      // U-11: being assigned opts you into the task's comment notices.
+      await followIssueAssigneesByIds(workspaceId, row.id, addedAssignees);
       for (const assigneeId of addedAssignees) {
         if (assigneeId !== actorUserId) {
           await notifyAssigned(workspaceId, row.id, issueTitle, assigneeId, actor);
@@ -2943,7 +3089,7 @@ export async function updateIssue(
 
   await openNextOccurrence(workspaceId, row.id, actor);
 
-  const detail = await getIssueDetail(workspaceId, row.id);
+  const detail = await getIssueDetail(workspaceId, row.id, actorViewerId(actor));
   if (!detail) throw new TacosError("Issue disappeared while updating", 500);
   const completed = changes.some(
     (change) =>
@@ -3097,7 +3243,7 @@ export async function moveIssue(
 
   await openNextOccurrence(workspaceId, row.id, actor);
 
-  const detail = await getIssueDetail(workspaceId, row.id);
+  const detail = await getIssueDetail(workspaceId, row.id, actorViewerId(actor));
   if (!detail) throw new TacosError("Issue disappeared while moving", 500);
   if (
     input.status &&
@@ -3133,7 +3279,7 @@ export async function moveIssueToProject(
   const target = await findProjectRow(workspaceId, projectIdOrKey);
   if (!target) throw new TacosError(`Project "${projectIdOrKey}" not found`, 404);
   if (target.id === row.projectId) {
-    const unchanged = await getIssueDetail(workspaceId, row.id);
+    const unchanged = await getIssueDetail(workspaceId, row.id, actorViewerId(actor));
     if (!unchanged) throw new TacosError("Task not found", 404);
     return unchanged;
   }
@@ -3178,7 +3324,10 @@ export async function moveIssueToProject(
     },
     actor
   );
-  const detail = await getIssueDetail(workspaceId, row.id);
+  // The task's whole history follows it into the new project, so Activity never keeps
+  // showing a moved task to the project it left.
+  await getDb().update(events).set({ projectId: target.id }).where(eq(events.issueId, row.id));
+  const detail = await getIssueDetail(workspaceId, row.id, actorViewerId(actor));
   if (!detail) throw new TacosError("Issue disappeared while moving", 500);
   return detail;
 }
@@ -3330,6 +3479,8 @@ export async function claimIssue(
     .returning({ id: issues.id });
   if (updated.length === 0) throw new TacosError("Someone else already claimed this task", 409);
   const claimActor = actor ?? (await userActor(userId));
+  // U-11: claiming is a hand-raise, so the claimer follows the task.
+  await autoFollow(workspaceId, userId, "issue", row.id, "assignee");
   await recordEvent(row.id, "claimed", {}, claimActor);
   await notifyClaimWatchers(workspaceId, row.id, "claimed", userId);
   await emitTaskEvent(workspaceId, row, "task.claimed", claimActor, { userId });
@@ -3402,7 +3553,7 @@ async function userActor(userId: string): Promise<MutationActor & { kind: "user"
 
 // The creator and the assignees follow a task. The person who acts gets no notice.
 // H-COLLAB-10: notify each workspace member that the text mentions, except the actor and
-// the ids in `skip`. Returns the ids that got a notice.
+// the ids in `skip`. Returns the ids that got a notice. U-11: a mention also follows.
 async function notifyMentions(
   workspaceId: string,
   issueId: string,
@@ -3418,10 +3569,25 @@ async function notifyMentions(
     actor.kind === "user" ? actor.userId : (actor.publishedBy ?? null);
   const who = actor.kind === "user" ? actor.displayName : `Agent (${actor.label})`;
   // A project view must not notify someone who cannot open that project.
+  const [issueRow] = await getDb()
+    .select({ projectId: issues.projectId })
+    .from(issues)
+    .where(eq(issues.id, issueId))
+    .limit(1);
   const projectAccess = new Map<string, boolean>();
   for (const member of await listMembers(workspaceId)) {
     if (!names.includes(member.username.toLowerCase())) continue;
     if (member.id === actorUserId || skip.has(member.id)) continue;
+    if (issueRow) {
+      let allowed = projectAccess.get(member.id);
+      if (allowed === undefined) {
+        allowed = await memberSeesProject(workspaceId, issueRow.projectId, member.id);
+        projectAccess.set(member.id, allowed);
+      }
+      if (!allowed) continue;
+    }
+    // U-11: a mention is a follow signal, even when the person was not watching.
+    await autoFollow(workspaceId, member.id, "issue", issueId, "mention");
     await notify({ workspaceId, userId: member.id, issueId, type: "mentioned", body: who, data: { actorName: who } });
     sent.add(member.id);
   }
@@ -3567,17 +3733,18 @@ export async function removeDependency(
 }
 
 async function notifyClaimWatchers(workspaceId: string, issueId: string, type: ClaimNotice, actorId: string) {
-  const db = getDb();
-  const [issue] = await db.select({ createdBy: issues.createdBy }).from(issues).where(eq(issues.id, issueId));
-  const assignees = await db
-    .select({ userId: issueAssignees.userId })
-    .from(issueAssignees)
-    .where(eq(issueAssignees.issueId, issueId));
-  const watchers = new Set<string>(assignees.map((a) => a.userId));
-  if (issue?.createdBy) watchers.add(issue.createdBy);
+  // U-11: the watcher list replaces the old creator/assignee set, so an Unfollow
+  // stops claim notices too. Explicit mutes already filter inside notify().
+  const watchers = new Set(await watcherIds(workspaceId, "issue", issueId));
   watchers.delete(actorId);
+  const [issueRow] = await getDb()
+    .select({ projectId: issues.projectId })
+    .from(issues)
+    .where(eq(issues.id, issueId))
+    .limit(1);
   const actor = await userActor(actorId);
   for (const userId of watchers) {
+    if (issueRow && !(await memberSeesProject(workspaceId, issueRow.projectId, userId))) continue;
     await notify({ workspaceId, userId, issueId, type, body: actor.displayName, data: { actorName: actor.displayName } });
   }
 }
@@ -3595,6 +3762,10 @@ export type PendingReviewIssue = {
   publisherName: string | null;
   createdVia: Via;
   createdAt: string;
+  // U-11 review thread: how many marked review comments the task carries, and the
+  // newest one for a deep link from the queue.
+  reviewCommentCount: number;
+  latestReviewCommentId: string | null;
 };
 
 // Agent-published tasks that wait for a person to approve or reject them (H-COLLAB-03).
@@ -3626,12 +3797,33 @@ export async function listPendingReview(workspaceId: string): Promise<PendingRev
       )
     )
     .orderBy(sql`${issues.createdAt} ASC`);
+  const threadRows = rows.length
+    ? await getDb()
+        .select({ id: comments.id, issueId: comments.issueId })
+        .from(comments)
+        .where(
+          and(
+            inArray(comments.issueId, rows.map((row) => row.id)),
+            isNotNull(comments.reviewState),
+            isNull(comments.deletedAt)
+          )
+        )
+        .orderBy(desc(comments.createdAt))
+    : [];
+  const threads = new Map<string, { count: number; latest: string }>();
+  for (const comment of threadRows) {
+    const current = threads.get(comment.issueId) ?? { count: 0, latest: comment.id };
+    current.count += 1;
+    threads.set(comment.issueId, current);
+  }
   return rows.map((row) => ({
     ...row,
     status: row.status as Status,
     projectName: row.projectName ?? "(no project)",
     projectColor: row.projectColor ?? DEFAULT_PROJECT_COLOR,
     createdVia: row.createdVia as Via,
+    reviewCommentCount: threads.get(row.id)?.count ?? 0,
+    latestReviewCommentId: threads.get(row.id)?.latest ?? null,
   }));
 }
 
@@ -3811,61 +4003,164 @@ export async function purgeIssue(workspaceId: string, issueId: string) {
   getDb().$client.transaction(()=>{const row=getDb().$client.prepare("SELECT id FROM issues WHERE workspace_id=? AND id=? AND deleted_at IS NOT NULL").get(workspaceId,issueId);if(row)deleteTaskRecords([issueId]);}).immediate();
 }
 
+export type CommentOptions = {
+  // This person hears about the comment another way.
+  exceptUser?: string;
+  // One reply level: a reply points at a top-level comment.
+  parentId?: string | null;
+  // Set by Request changes / Approve; the comment is the review record itself.
+  reviewState?: CommentReviewState | null;
+};
+
+async function issueComment(workspaceId: string, issueId: string, commentId: string) {
+  const [row] = await getDb()
+    .select()
+    .from(comments)
+    .innerJoin(issues, eq(issues.id, comments.issueId))
+    .where(
+      and(
+        eq(comments.id, commentId),
+        eq(comments.issueId, issueId),
+        eq(issues.workspaceId, workspaceId)
+      )
+    )
+    .limit(1);
+  if (!row) throw new TacosError("Comment not found", 404);
+  return row.comments;
+}
+
+async function commentDetail(workspaceId: string, issueId: string, viewerId?: string) {
+  const detail = await getIssueDetail(workspaceId, issueId, viewerId);
+  if (!detail) throw new TacosError("Issue disappeared while commenting", 500);
+  return detail;
+}
+
 export async function addComment(
   workspaceId: string,
   idOrIdentifier: string,
   body: string,
   actor: MutationActor,
-  // This person hears about the comment another way.
-  options: { exceptUser?: string } = {}
-): Promise<IssueDetail> {  const text = typeof body === "string" ? body.trim() : "";
-  if (!text) throw new TacosError("Comment body is required");
+  options: CommentOptions = {}
+): Promise<IssueDetail> {
+  const text = typeof body === "string" ? body.trim() : "";
+  if (!text && !options.reviewState) throw new TacosError("Comment body is required");
+  if (text.length > 5_000) throw new TacosError("Comment is too long (5k characters max)");
   const row = await findIssueRow(workspaceId, idOrIdentifier);
   if (!row) throw new TacosError(`Issue "${idOrIdentifier}" not found`, 404);
 
+  let parent: typeof comments.$inferSelect | null = null;
+  if (options.parentId) {
+    parent = await issueComment(workspaceId, row.id, options.parentId);
+    if (parent.deletedAt) throw new TacosError("This comment was deleted. Reply to another comment.", 409);
+    if (parent.parentId) throw new TacosError("Replies go one level deep. Reply to the first comment.", 400);
+  }
+
   const db = getDb();
+  const id = crypto.randomUUID();
+  const reviewState = options.reviewState ?? null;
   await db.insert(comments).values({
-    id: crypto.randomUUID(),
+    id,
     issueId: row.id,
     body: text,
+    parentId: parent?.id ?? null,
+    reviewState,
+    via: actor.kind === "user" ? "you" : actor.via,
     createdAt: nowIso(),
     ...commentAuthorFields(actor),
   });
-  await recordEvent(row.id, "commented", {}, actor);
+  await recordEvent(row.id, "commented", { commentId: id, parentId: parent?.id ?? null }, actor);
 
-  // notify every assignee (if not the actor) and the issue creator
-  const actorUserId = actor.kind === "user" ? actor.userId : null;
-  const targets = new Set<string>();
-  const assigned = await db
-    .select({ userId: issueAssignees.userId })
-    .from(issueAssignees)
-    .where(eq(issueAssignees.issueId, row.id));
-  for (const entry of assigned) {
-    if (entry.userId !== actorUserId) targets.add(entry.userId);
-  }
-  if (row.createdBy && row.createdBy !== actorUserId) {
-    targets.add(row.createdBy);
+  const actorUserId = actor.kind === "user" ? actor.userId : (actor.publishedBy ?? null);
+  const who = actor.kind === "user" ? actor.displayName : `Agent (${actor.label})`;
+  // U-11: writing a comment follows the task (Linear's subscribe-on-comment).
+  if (actorUserId) await autoFollow(workspaceId, actorUserId, "issue", row.id, "comment");
+
+  const mentioned = await notifyMentions(workspaceId, row.id, text, actor);
+  const targets = new Set(await watcherIds(workspaceId, "issue", row.id));
+  // A reply addresses the parent's author even if they stopped following; a review
+  // decision addresses the publisher/creator who is waiting for it.
+  if (parent?.authorId && parent.authorId !== actorUserId) targets.add(parent.authorId);
+  if (reviewState) {
+    if (row.publishedBy) targets.add(row.publishedBy);
+    if (row.createdBy) targets.add(row.createdBy);
   }
   if (options.exceptUser) targets.delete(options.exceptUser);
-  const who = actor.kind === "user" ? actor.displayName : `Agent (${actor.label})`;
-  // A mentioned member gets one "mentioned" notice instead of the "commented" one.
-  const mentioned = await notifyMentions(workspaceId, row.id, text, actor);
+  if (actorUserId) targets.delete(actorUserId);
+  // One Inbox notice per person: a mention wins over the generic comment notice.
+  for (const userId of mentioned) targets.delete(userId);
+  // A watcher who left the project must not receive the task's title or comment.
+  for (const userId of [...targets]) {
+    if (!(await memberSeesProject(workspaceId, row.projectId, userId))) targets.delete(userId);
+  }
+
+  let parentAuthorName = "";
+  if (parent?.authorId) {
+    const member = (await membersById(workspaceId)).get(parent.authorId);
+    parentAuthorName = member?.displayName ?? "";
+  }
   for (const userId of targets) {
-    if (mentioned.has(userId)) continue;
+    if (reviewState) {
+      await notify({
+        workspaceId,
+        userId,
+        issueId: row.id,
+        type: "review_decision",
+        body: "",
+        data: {
+          actorName: who,
+          title: row.title,
+          decision: reviewState === "approve" ? "approved" : "changes_requested",
+          commentId: id,
+        },
+      });
+      continue;
+    }
     await notify({
       workspaceId,
       userId,
       issueId: row.id,
       type: "commented",
       body: "",
-      data: { actorName: who, title: row.title },
+      data: {
+        actorName: who,
+        title: row.title,
+        commentId: id,
+        ...(parent?.id
+          ? { replyToId: parent.id, replyToName: parentAuthorName || undefined }
+          : {}),
+      },
     });
   }
 
-  const detail = await getIssueDetail(workspaceId, row.id);
-  if (!detail) throw new TacosError("Issue disappeared while commenting", 500);
+  const now = nowIso();
+  if (reviewState) {
+    // The comment is the review record. Only an approval of a task that is waiting on
+    // the publish gate changes that gate; Request changes leaves the gate alone, so a
+    // pending task stays in the review queue and a normal task never disappears from
+    // the board because someone asked for changes.
+    const resolvesGate = reviewState === "approve" && row.reviewStatus === "pending";
+    await db
+      .update(issues)
+      .set({
+        ...(resolvesGate ? { reviewStatus: "approved" as ReviewStatus } : {}),
+        reviewedBy: actorUserId,
+        reviewedAt: now,
+        updatedAt: now,
+      })
+      .where(and(eq(issues.workspaceId, workspaceId), eq(issues.id, row.id)));
+    await recordEvent(
+      row.id,
+      reviewState === "approve" ? "review_approved" : "review_rejected",
+      { commentId: id },
+      actor
+    );
+  }
+
+  const detail = await commentDetail(workspaceId, row.id, actorUserId ?? undefined);
   await emitTaskEvent(workspaceId, detail.issue, "task.comment_added", actor, {
     body: text.slice(0, 500),
+    parentId: parent?.id ?? null,
+    reviewState,
   });
   if (mentioned.size > 0) {
     await emitTaskEvent(workspaceId, detail.issue, "task.mention", actor, {
@@ -3875,9 +4170,165 @@ export async function addComment(
   return detail;
 }
 
+/** Request changes / Approve posts one marked task comment and moves review status. */
+export async function addReviewComment(
+  workspaceId: string,
+  idOrIdentifier: string,
+  reviewerId: string,
+  decision: "approve" | "request_changes",
+  body: string
+): Promise<IssueDetail> {
+  const text = typeof body === "string" ? body.trim() : "";
+  if (decision === "request_changes" && !text) {
+    throw new TacosError("Say what needs to change", 400);
+  }
+  const member = (await listMembers(workspaceId)).find((entry) => entry.id === reviewerId);
+  if (!member) throw new TacosError("Not a workspace member", 403);
+  return addComment(
+    workspaceId,
+    idOrIdentifier,
+    text,
+    { kind: "user", userId: member.id, displayName: member.displayName },
+    { reviewState: decision === "approve" ? "approve" : "changes_requested" }
+  );
+}
+
+/** Only the author rewrites their own words, and an agent comment has no human author. */
+export async function editComment(
+  workspaceId: string,
+  idOrIdentifier: string,
+  commentId: string,
+  body: string,
+  actor: MutationActor
+): Promise<IssueDetail> {
+  const row = await findIssueRow(workspaceId, idOrIdentifier);
+  if (!row) throw new TacosError(`Issue "${idOrIdentifier}" not found`, 404);
+  const comment = await issueComment(workspaceId, row.id, commentId);
+  if (comment.authorId !== (actor.kind === "user" ? actor.userId : null)) {
+    throw new TacosError("Only the author can edit this comment", 403);
+  }
+  if (comment.deletedAt) throw new TacosError("Restore the comment before editing", 409);
+  const text = typeof body === "string" ? body.trim() : "";
+  if (!text) throw new TacosError("Comment body is required", 400);
+  if (text.length > 5_000) throw new TacosError("Comment is too long (5k characters max)");
+  await getDb()
+    .update(comments)
+    .set({ body: text, editedAt: nowIso() })
+    .where(eq(comments.id, commentId));
+  await recordEvent(row.id, "comment_edited", { commentId }, actor);
+  return commentDetail(workspaceId, row.id, actor.kind === "user" ? actor.userId : undefined);
+}
+
+/** Soft delete keeps the thread readable; the author or the task creator may do it. */
+export async function deleteComment(
+  workspaceId: string,
+  idOrIdentifier: string,
+  commentId: string,
+  actor: MutationActor
+): Promise<IssueDetail> {
+  const row = await findIssueRow(workspaceId, idOrIdentifier);
+  if (!row) throw new TacosError(`Issue "${idOrIdentifier}" not found`, 404);
+  const comment = await issueComment(workspaceId, row.id, commentId);
+  const actorUserId = actor.kind === "user" ? actor.userId : null;
+  if (comment.authorId !== actorUserId && row.createdBy !== actorUserId) {
+    throw new TacosError("You cannot delete this comment", 403);
+  }
+  if (!comment.deletedAt) {
+    await getDb().update(comments).set({ deletedAt: nowIso() }).where(eq(comments.id, commentId));
+    await recordEvent(row.id, "comment_deleted", { commentId }, actor);
+  }
+  return commentDetail(workspaceId, row.id, actorUserId ?? undefined);
+}
+
+export async function restoreComment(
+  workspaceId: string,
+  idOrIdentifier: string,
+  commentId: string,
+  actor: MutationActor
+): Promise<IssueDetail> {
+  const row = await findIssueRow(workspaceId, idOrIdentifier);
+  if (!row) throw new TacosError(`Issue "${idOrIdentifier}" not found`, 404);
+  const comment = await issueComment(workspaceId, row.id, commentId);
+  const actorUserId = actor.kind === "user" ? actor.userId : null;
+  if (comment.authorId !== actorUserId && row.createdBy !== actorUserId) {
+    throw new TacosError("You cannot restore this comment", 403);
+  }
+  await getDb().update(comments).set({ deletedAt: null }).where(eq(comments.id, commentId));
+  await recordEvent(row.id, "comment_restored", { commentId }, actor);
+  return commentDetail(workspaceId, row.id, actorUserId ?? undefined);
+}
+
+/** Any member who can open the task may close the thread; Reopen clears the flag. */
+export async function setCommentResolved(
+  workspaceId: string,
+  idOrIdentifier: string,
+  commentId: string,
+  resolved: boolean,
+  actor: MutationActor
+): Promise<IssueDetail> {
+  const row = await findIssueRow(workspaceId, idOrIdentifier);
+  if (!row) throw new TacosError(`Issue "${idOrIdentifier}" not found`, 404);
+  const comment = await issueComment(workspaceId, row.id, commentId);
+  if (comment.parentId) throw new TacosError("Resolve the thread's first comment", 400);
+  await getDb()
+    .update(comments)
+    .set({ resolvedAt: resolved ? nowIso() : null })
+    .where(eq(comments.id, commentId));
+  await recordEvent(row.id, resolved ? "comment_resolved" : "comment_reopened", { commentId }, actor);
+  return commentDetail(workspaceId, row.id, actor.kind === "user" ? actor.userId : undefined);
+}
+
+export async function toggleCommentReaction(
+  workspaceId: string,
+  idOrIdentifier: string,
+  commentId: string,
+  emoji: string,
+  userId: string
+): Promise<IssueDetail> {
+  if (!(COMMENT_REACTIONS as readonly string[]).includes(emoji)) {
+    throw new TacosError("That reaction is not available", 400);
+  }
+  const row = await findIssueRow(workspaceId, idOrIdentifier);
+  if (!row) throw new TacosError(`Issue "${idOrIdentifier}" not found`, 404);
+  const comment = await issueComment(workspaceId, row.id, commentId);
+  if (comment.deletedAt) throw new TacosError("A deleted comment cannot be reacted to", 409);
+  const db = getDb();
+  const [existing] = await db
+    .select({ userId: commentReactions.userId })
+    .from(commentReactions)
+    .where(
+      and(
+        eq(commentReactions.commentId, commentId),
+        eq(commentReactions.userId, userId),
+        eq(commentReactions.emoji, emoji)
+      )
+    )
+    .limit(1);
+  if (existing) {
+    await db
+      .delete(commentReactions)
+      .where(
+        and(
+          eq(commentReactions.commentId, commentId),
+          eq(commentReactions.userId, userId),
+          eq(commentReactions.emoji, emoji)
+        )
+      );
+  } else {
+    await db.insert(commentReactions).values({
+      commentId,
+      userId,
+      emoji,
+      createdAt: nowIso(),
+    });
+  }
+  return commentDetail(workspaceId, row.id, userId);
+}
+
+
 // --- notifications ---
 
-export type NotificationTab = "unread" | "mentions" | "assigned" | "all";
+export type NotificationTab = "unread" | "mentions" | "assigned" | "reviews" | "all";
 
 export type NotificationRow = {
   id: string;
@@ -3904,6 +4355,7 @@ export type NotificationCounts = {
   unread: number;
   mentions: number;
   assigned: number;
+  reviews: number;
   all: number;
 };
 
@@ -3954,6 +4406,7 @@ function tabCondition(tab: NotificationTab) {
     return inArray(notifications.type, ["mentioned", "doc_mentioned"]);
   }
   if (tab === "assigned") return eq(notifications.type, "assigned");
+  if (tab === "reviews") return eq(notifications.type, "review_decision");
   if (tab === "all") return undefined;
   return eq(notifications.state, "unread");
 }
@@ -4088,13 +4541,14 @@ export async function notificationCounts(
   userId: string
 ): Promise<NotificationCounts> {
   await purgeOldNotifications();
-  const [unread, mentions, assigned, all] = await Promise.all([
+  const [unread, mentions, assigned, reviews, all] = await Promise.all([
     countNotifications(workspaceId, userId, eq(notifications.state, "unread")),
     countNotifications(workspaceId, userId, inArray(notifications.type, ["mentioned", "doc_mentioned"])),
     countNotifications(workspaceId, userId, eq(notifications.type, "assigned")),
+    countNotifications(workspaceId, userId, eq(notifications.type, "review_decision")),
     countNotifications(workspaceId, userId, undefined),
   ]);
-  return { unread, mentions, assigned, all };
+  return { unread, mentions, assigned, reviews, all };
 }
 
 export async function unreadNotificationCount(workspaceId: string, userId: string): Promise<number> {

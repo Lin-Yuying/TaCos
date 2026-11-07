@@ -9,6 +9,7 @@ export function ensureRevisions(db: Database.Database) {
   const direct: Record<string, string> = {
     issues: "tasks", projects: "projects", labels: "tasks", task_fields: "tasks",
     pages: "documents", page_comments: "documents", page_versions: "documents",
+    watchers: "permissions",
     agent_threads: "threads", agent_runs: "threads", workspace_members: "permissions", workspaces: "permissions",
     personal_entity_state: "personal", personal_task_views: "personal",
     automation_rules: "automations", automation_runs: "automations", automation_audit: "automations",
@@ -19,7 +20,11 @@ export function ensureRevisions(db: Database.Database) {
     project_resources: ["projects", "SELECT workspace_id FROM projects WHERE id = ROW.project_id"],
     blockers: ["tasks", "SELECT workspace_id FROM issues WHERE id = ROW.issue_id"],
     page_collab: ["documents", "SELECT workspace_id FROM pages WHERE id = ROW.page_id"],
-    events: ["tasks", "SELECT workspace_id FROM issues WHERE id = ROW.issue_id"],
+    // Every event row now stores its workspace directly; task rows are backfilled at
+    // bootstrap, so no correlated lookup is needed here (and a nested SELECT would
+    // confuse the alias rewrite below).
+    events: ["tasks", "SELECT ROW.workspace_id"],
+    comment_reactions: ["tasks", "SELECT workspace_id FROM issues WHERE id = (SELECT issue_id FROM comments WHERE id = ROW.comment_id)"],
     comments: ["tasks", "SELECT workspace_id FROM issues WHERE id = ROW.issue_id"],
     issue_assignees: ["tasks", "SELECT workspace_id FROM issues WHERE id = ROW.issue_id"],
     issue_labels: ["tasks", "SELECT workspace_id FROM issues WHERE id = ROW.issue_id"],
@@ -40,6 +45,9 @@ export function ensureRevisions(db: Database.Database) {
   }
   // A workspace-deletion notification is visible in the user's other inboxes too.
   via.notifications = ["notifications", "SELECT '@user:' || ROW.user_id"];
+  // The events trigger changed when U-11 added workspace-owned activity rows; recreate
+  // it so an upgraded database does not keep the tasks-only scope.
+  db.exec("DROP TRIGGER IF EXISTS revision_events_insert; DROP TRIGGER IF EXISTS revision_events_update; DROP TRIGGER IF EXISTS revision_events_delete;");
   for (const [table, [domain, scope]] of Object.entries(via)) {
     if (!db.prepare("SELECT 1 FROM sqlite_master WHERE type='table' AND name=?").get(table)) continue;
     for (const event of ["INSERT", "UPDATE", "DELETE"]) {

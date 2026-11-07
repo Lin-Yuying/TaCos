@@ -37,6 +37,7 @@ import { DocCommentsPanel } from "@/components/doc-comments";
 import { DocLinksPanel } from "@/components/doc-links";
 import { DocOutlinePanel } from "@/components/doc-outline";
 import { DocShareMenu } from "@/components/doc-share";
+import { WatchControl } from "@/components/watch-control";
 import { AssigneeAvatar } from "@/components/issue-table";
 import { AiEditPanel } from "@/components/ai-assist";
 import { DiffLines, DocUpdatesPanel } from "@/components/doc-updates";
@@ -549,6 +550,7 @@ export function DocPageView({
           >
             {t(sharing ? collab.pending || collab.status === "reconnecting" ? "Offline changes are kept on this device" : "Synchronized" : saved ? "Saved" : "Unsaved changes")}
           </span>
+          <WatchControl workspaceId={workspaceId} scopeType="page" scopeId={page.id} compact />
           <button
             type="button"
             onClick={() => setSide((open) => (open === "comments" ? null : "comments"))}

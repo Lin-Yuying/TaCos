@@ -12,7 +12,7 @@ import {
 import { NOTIFICATION_EVENT_GROUPS } from "@/lib/notification-constants";
 import { NotificationsView } from "@/components/notifications-view";
 
-const TABS: NotificationTab[] = ["unread", "mentions", "assigned", "all"];
+const TABS: NotificationTab[] = ["unread", "mentions", "assigned", "reviews", "all"];
 
 export default async function NotificationsPage({
   params,

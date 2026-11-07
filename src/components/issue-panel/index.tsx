@@ -25,6 +25,8 @@ import { DelegationRow } from "./delegation-row";
 import { DescriptionSection } from "./description";
 import { ChangelogSection } from "./changelog";
 import { CommentsSection } from "./comments";
+import { ReviewRow } from "./review-row";
+import { WatchControl } from "@/components/watch-control";
 import type { FlatDetail, IssuePatch } from "./types";
 import { useT } from "@/components/i18n-context";
 
@@ -149,11 +151,11 @@ function IssuePanel({
 
   async function submitBlocker(body: string) { return mutate(() => reportBlockerAction(workspaceId,id,body)); }
 
-  async function submitComment() {
+  async function submitComment(parentId?: string) {
     if (!detail || !comment.trim() || busy) return;
     setBusy(true);
     try {
-    const result = await addCommentAction(workspaceId, detail.id, comment);
+    const result = await addCommentAction(workspaceId, detail.id, comment, { parentId: parentId ?? null });
     if (result.ok) {
       setComment("");
       setDetail({ ...result.data.issue, comments: result.data.comments, events: result.data.events, children: result.data.children, dependencies: result.data.dependencies, blocked: result.data.blocked });
@@ -196,6 +198,22 @@ function IssuePanel({
   const canChangeStatus = detail.assignees.some(
     (assignee) => assignee.id === currentUserId
   );
+  // U-11: the newest marked review comment is the review state shown in the panel; the
+  // publish gate (pending/approved) is the fallback when nobody has reviewed yet.
+  const latestReview = [...comments].reverse().find((item) => item.reviewState && !item.deletedAt);
+  const reviewStatus =
+    latestReview?.reviewState === "approve"
+      ? ("approved" as const)
+      : latestReview?.reviewState === "changes_requested"
+        ? ("changes_requested" as const)
+        : detail.reviewStatus;
+  // Keep the panel calm for ordinary approved tasks: the review bar appears only when
+  // something is waiting on a decision or a review thread already exists.
+  const showReview =
+    detail.reviewStatus !== "approved" ||
+    Boolean(latestReview) ||
+    detail.delegationStatus === "review" ||
+    detail.delegationStatus === "changes_requested";
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
@@ -213,7 +231,10 @@ function IssuePanel({
       <div ref={scrollRef} className="flex min-h-0 flex-1 flex-col space-y-5 overflow-y-auto p-4">
         {error && <div role="alert" className="text-small text-danger">{t(error)} <button onClick={()=>setAttempt((n)=>n+1)}>{t("Retry")}</button></div>}
         <EditableTitle id={`task.${id}`} value={detail.title} onSave={(title)=>update({title})}/>
-        <button className="self-start text-small text-muted" onClick={scrollToComposer}>{t("Write a comment")}</button>
+        <div className="flex items-center gap-2">
+          <WatchControl workspaceId={workspaceId} scopeType="issue" scopeId={detail.id} />
+          <button className="text-small text-muted" onClick={scrollToComposer}>{t("Write a comment")}</button>
+        </div>
 
         <PropertiesRow
           detail={detail}
@@ -272,14 +293,29 @@ function IssuePanel({
         />
 
         <div className="shrink-0 space-y-2 border-t border-border pt-4">
+          {showReview && (
+            <ReviewRow
+              workspaceId={workspaceId}
+              issueId={detail.id}
+              status={reviewStatus}
+              members={members}
+              onSaved={(next) => setDetail({ ...next.issue, comments: next.comments, events: next.events, children: next.children, dependencies: next.dependencies, blocked: next.blocked })}
+              onError={setError}
+            />
+          )}
           <ChangelogSection events={changelog} />
           <CommentsSection
+            workspaceId={workspaceId}
+            issueId={detail.id}
+            currentUserId={currentUserId}
+            canModerate={detail.createdBy === currentUserId}
             members={members}
             comments={comments}
             comment={comment}
             busy={busy}
             onCommentChange={setComment}
-            onSubmit={() => void submitComment()}
+            onSubmit={(parentId) => void submitComment(parentId)}
+            onDetail={(next) => setDetail({ ...next.issue, comments: next.comments, events: next.events, children: next.children, dependencies: next.dependencies, blocked: next.blocked })}
           />
         </div>
 

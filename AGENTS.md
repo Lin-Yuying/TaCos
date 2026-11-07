@@ -85,6 +85,8 @@ Always-on rules for this repo. Put occasional workflows in skills or docs, and d
 | Agent | A named or personal teammate a task can be delegated to. The human assignee keeps the task. | `workspace_agents` |
 | Delegation | Handing a task to an agent while keeping human ownership; ends in review. | `issues.delegated_agent_id` |
 | Thread / turn | A conversation with Agent / one request and its reply inside it. | `agent_threads` |
+| Watcher | A member who follows a task, project or document and receives its comment notices. | `watchers` |
+| Activity | The workspace-wide, read-only timeline of changes. Inbox is the actionable notices. | `events` |
 
 <!-- BEGIN:nextjs-agent-rules -->
 

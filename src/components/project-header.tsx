@@ -4,6 +4,8 @@ import type { ReactNode } from "react";
 import { Star } from "lucide-react";
 import { ProjectIcon } from "@/components/icons";
 import { Menu } from "@/components/menu";
+import { WatchControl } from "@/components/watch-control";
+import { useParams } from "next/navigation";
 import { useT } from "@/components/i18n-context";
 
 export type ProjectTab = "overview" | "issues" | "documents";
@@ -35,7 +37,7 @@ export function ProjectHeader({
   meta,
   metaMenu,
 }: {
-  project: { name: string; color: string; icon: string | null };
+  project: { id: string; name: string; color: string; icon: string | null };
   tab: ProjectTab;
   issueCount: number;
   documentCount: number;
@@ -53,6 +55,7 @@ export function ProjectHeader({
   metaMenu?: ReactNode;
 }) {
   const t = useT();
+  const workspaceId = useParams<{ workspaceId: string }>().workspaceId;
   const mark = <ProjectIcon color={project.color} icon={project.icon} size={22} />;
   return (
     <header className="shrink-0 border-b border-border px-4 pb-3 pt-3">
@@ -101,6 +104,7 @@ export function ProjectHeader({
           <span className="shrink-0 p-0.5">{mark}</span>
         )}
         <h1 className="truncate text-heading font-semibold tracking-tight">{project.name}</h1>
+        <WatchControl workspaceId={workspaceId} scopeType="project" scopeId={project.id} compact />
         <button
           type="button"
           onClick={onToggleFavorite}

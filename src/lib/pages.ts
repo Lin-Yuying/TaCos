@@ -2,7 +2,7 @@ import { packText,unpackText } from "./compressed-text";
 import crypto from "node:crypto";
 import { and, sql, getTableColumns, desc, eq, inArray, isNotNull, isNull, lt, or } from "drizzle-orm";
 import { getDb } from "../db/client";
-import { pageAccess, pageCollab, pageComments, pageFavorites, pageVersions, pages, users } from "../db/schema";
+import { events, pageAccess, pageCollab, pageComments, pageFavorites, pageVersions, pages, users } from "../db/schema";
 import { attachmentImageType, getAttachment, removePageAttachments } from "./attachments";
 import { collabDocWritten, withStoredCollabPage, collabAccessChanged } from "./collab/live";
 import { isPageLevel, levelAllows, type PageLevel } from "./page-level";
@@ -11,6 +11,17 @@ import { DOC_UPDATE_MERGE_MS } from "./doc-update-groups";
 import { parseDocMentions } from "./mentions";
 import { pageLinkTargets, replacePageLinks } from "./page-links";
 import { emitAutomationEvent } from "./automations/dispatch";
+import { followScope } from "./watchers";
+import { recordActivity } from "./activity";
+
+async function activityActor(workspaceId: string, userId: string) {
+  const [row] = await getDb()
+    .select({ displayName: users.displayName })
+    .from(users)
+    .where(eq(users.id, userId))
+    .limit(1);
+  return { kind: "user" as const, userId, displayName: row?.displayName ?? "A member" };
+}
 
 export type DocPage = {
   id: string;
@@ -298,6 +309,19 @@ export async function createPage(
     );
   }
   if (created.doc.includes("[[")) await refreshPageLinks(workspaceId, viewerId, created);
+  // U-11: the page's creator follows it, and creating it shows in Activity.
+  await followScope(workspaceId, viewerId, "page", created.id, "creator");
+  await recordActivity({
+    workspaceId,
+    objectType: "document",
+    objectId: created.id,
+    type: "page_created",
+    data: { title: created.title },
+    actor: await activityActor(workspaceId, viewerId),
+    projectId: created.projectId,
+    ownerId: created.createdBy,
+    visibility: created.shared ? "workspace" : "private",
+  });
   return created;
 }
 
@@ -699,6 +723,8 @@ async function notifyDocMentions(page: DocPage, doc: string, authorId: string): 
   const who = members.find((member) => member.id === authorId)?.displayName ?? "";
   for (const member of members) {
     if (!added.includes(member.username.toLowerCase())) continue;
+    // U-11: an action never notifies its actor, including a self @.
+    if (member.id === authorId) continue;
     if (!pageVisible(page, member.id)) continue;
     await notify({
       workspaceId: page.workspaceId,
@@ -787,6 +813,19 @@ export async function updatePage(
   });
   const updated = await findPage(workspaceId, pageId);
   if (!updated) throw new TacosError("Page not found", 404);
+  if (next.title !== undefined || next.icon !== undefined) {
+    await recordActivity({
+      workspaceId,
+      objectType: "document",
+      objectId: pageId,
+      type: next.title !== undefined ? "page_renamed" : "page_icon_changed",
+      data: next.title !== undefined ? { title: updated.title, from: page.title } : { title: updated.title },
+      actor: await activityActor(workspaceId, viewerId),
+      projectId: updated.projectId,
+      ownerId: updated.createdBy,
+      visibility: updated.shared ? "workspace" : "private",
+    });
+  }
   if (next.doc !== undefined) await notifyDocMentions(page, updated.doc, viewerId);
   if (next.doc !== undefined && !options.fromCollab) collabDocWritten(pageId, updated.doc, updated.revision);
   if (next.doc !== undefined || next.title !== undefined) {
@@ -1057,8 +1096,31 @@ export async function setPageShared(
     .set({ shared: shared ? 1 : 0 })
     .where(and(eq(pages.workspaceId, workspaceId), inArray(pages.id, ids)));
   collabAccessChanged(ids);
+  // A page's past activity follows its current visibility, so making a page private
+  // does not leave its titles in the workspace feed.
+  await getDb()
+    .update(events)
+    .set({ visibility: shared ? "workspace" : "private" })
+    .where(
+      and(
+        eq(events.workspaceId, workspaceId),
+        eq(events.objectType, "document"),
+        inArray(events.objectId, ids)
+      )
+    );
   const updated = await findPage(workspaceId, pageId);
   if (!updated) throw new TacosError("Page not found", 404);
+  await recordActivity({
+    workspaceId,
+    objectType: "document",
+    objectId: pageId,
+    type: shared ? "page_shared" : "page_private",
+    data: { title: updated.title },
+    actor: await activityActor(workspaceId, viewerId),
+    projectId: updated.projectId,
+    ownerId: updated.createdBy,
+    visibility: shared ? "workspace" : "private",
+  });
   return updated;
 }
 

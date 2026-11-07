@@ -38,6 +38,27 @@ CREATE TABLE issues (
 );
 INSERT INTO issues (id, workspace_id, project_id, number, identifier, title, created_at, updated_at)
 VALUES ('old-issue', 'ws-old', 'project-old', 1, 'OLD-1', 'kept', '2026-01-01T00:00:00.000Z', '2026-01-01T00:00:00.000Z');
+-- U-11: the 2.3 comments/events tables lack the new columns. Bootstrap must ALTER them
+-- before creating indexes, or the whole upgrade aborts.
+CREATE TABLE comments (
+  id TEXT PRIMARY KEY,
+  issue_id TEXT NOT NULL,
+  author_id TEXT,
+  agent_author TEXT,
+  body TEXT NOT NULL,
+  created_at TEXT NOT NULL
+);
+CREATE TABLE events (
+  id TEXT PRIMARY KEY,
+  issue_id TEXT NOT NULL,
+  type TEXT NOT NULL,
+  data TEXT NOT NULL DEFAULT '{}',
+  actor_id TEXT,
+  agent_actor TEXT,
+  created_at TEXT NOT NULL
+);
+INSERT INTO events (id, issue_id, type, data, created_at)
+VALUES ('old-event', 'old-issue', 'created', '{}', '2026-01-01T00:00:00.000Z');
 `);
 old.close();
 
@@ -62,6 +83,24 @@ async function main() {
     | { title: string }
     | undefined;
   assert(row?.title === "kept", "an upgrade keeps the tasks that were already there");
+  const commentColumns = check.prepare("PRAGMA table_info(comments)").all() as Array<{ name: string }>;
+  assert(
+    commentColumns.some((column) => column.name === "parent_id"),
+    "bootstrap must add comments.parent_id to an older database"
+  );
+  const eventColumns = check.prepare("PRAGMA table_info(events)").all() as Array<{ name: string }>;
+  assert(
+    eventColumns.some((column) => column.name === "workspace_id"),
+    "bootstrap must add events.workspace_id to an older database"
+  );
+  const eventIndex = check
+    .prepare("SELECT name FROM sqlite_master WHERE type = 'index' AND name = 'events_workspace_idx'")
+    .get();
+  assert(eventIndex, "bootstrap must index events after the ALTER");
+  const watcherTable = check
+    .prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'watchers'")
+    .get();
+  assert(watcherTable, "bootstrap must create the watchers table on an older database");
   check.close();
   console.log("ok   2.3 upgrade boots on a database without issues.parent_id");
 }

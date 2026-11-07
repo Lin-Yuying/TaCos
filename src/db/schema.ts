@@ -563,9 +563,53 @@ export const comments = sqliteTable(
     // for agent authors: "api:key-name" | "mcp"; null for humans
     agentAuthor: text("agent_author"),
     body: text("body").notNull(),
+    // U-11: one reply level. A reply points at its top-level comment.
+    parentId: text("parent_id"),
+    editedAt: text("edited_at"),
+    deletedAt: text("deleted_at"),
+    resolvedAt: text("resolved_at"),
+    // approve | changes_requested. Set only on a review decision comment.
+    reviewState: text("review_state"),
+    via: text("via").notNull().default("you"),
     createdAt: text("created_at").notNull(),
   },
-  (t) => [index("comments_issue_idx").on(t.issueId)]
+  (t) => [index("comments_issue_idx").on(t.issueId), index("comments_parent_idx").on(t.parentId)]
+);
+
+// U-11: fixed-set reactions on a task comment, one row per person and emoji.
+export const commentReactions = sqliteTable(
+  "comment_reactions",
+  {
+    commentId: text("comment_id").notNull(),
+    userId: text("user_id").notNull(),
+    emoji: text("emoji").notNull(),
+    createdAt: text("created_at").notNull(),
+  },
+  (t) => [
+    primaryKey({ columns: [t.commentId, t.userId, t.emoji] }),
+    index("comment_reactions_comment_idx").on(t.commentId),
+  ]
+);
+
+// U-11: explicit follow rows shared by tasks, projects and documents.
+export const watchers = sqliteTable(
+  "watchers",
+  {
+    workspaceId: text("workspace_id").notNull(),
+    userId: text("user_id").notNull(),
+    // issue | project | page
+    scopeType: text("scope_type").notNull(),
+    scopeId: text("scope_id").notNull(),
+    // manual | creator | assignee | mention | comment | migrated
+    source: text("source").notNull().default("manual"),
+    muted: integer("muted").notNull().default(0),
+    createdAt: text("created_at").notNull(),
+  },
+  (t) => [
+    primaryKey({ columns: [t.workspaceId, t.userId, t.scopeType, t.scopeId] }),
+    index("watchers_scope_idx").on(t.scopeType, t.scopeId),
+    index("watchers_user_idx").on(t.workspaceId, t.userId),
+  ]
 );
 
 export const events = sqliteTable(
@@ -575,14 +619,28 @@ export const events = sqliteTable(
     issueId: text("issue_id").notNull(),
     // created | status_changed | priority_changed | title_changed |
     // description_changed | labels_changed | assignee_changed | reordered | commented |
-    // blocker_reported
+    // blocker_reported | comment_edited | comment_deleted | comment_resolved …
     type: text("type").notNull(),
     data: text("data").notNull().default("{}"),
     actorId: text("actor_id"),
     agentActor: text("agent_actor"),
+    // U-11 activity feed: every event names its workspace, object and visibility so one
+    // read model covers tasks, documents and projects without joining first.
+    workspaceId: text("workspace_id"),
+    objectType: text("object_type").notNull().default("task"),
+    objectId: text("object_id"),
+    projectId: text("project_id"),
+    pageId: text("page_id"),
+    ownerId: text("owner_id"),
+    // workspace | project | private
+    visibility: text("visibility").notNull().default("project"),
     createdAt: text("created_at").notNull(),
   },
-  (t) => [index("events_issue_idx").on(t.issueId)]
+  (t) => [
+    index("events_issue_idx").on(t.issueId),
+    index("events_workspace_idx").on(t.workspaceId, t.createdAt),
+    index("events_object_idx").on(t.objectType, t.objectId),
+  ]
 );
 
 export const notifications = sqliteTable(

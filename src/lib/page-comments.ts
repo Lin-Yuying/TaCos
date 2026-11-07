@@ -6,6 +6,8 @@ import type { DocAnchor } from "./doc-anchor";
 import { TacosError, listMembers, notify, nowIso } from "./issues";
 import { parseMentions } from "./mentions";
 import { getPage, pageVisible, requirePageLevel, type DocPage, type PageAuthor } from "./pages";
+import { autoFollow, watcherIds } from "./watchers";
+import { recordActivity } from "./activity";
 
 export type PageComment = {
   id: string;
@@ -65,9 +67,15 @@ export async function listPageComments(
   }));
 }
 
-// A mentioned member who can read the page gets one notice, including a self @; its author
-// gets one for any other comment without a mention.
-async function notifyPageComment(page: DocPage, body: string, authorId: string): Promise<void> {
+// A mentioned member who can read the page gets one notice; a page watcher gets one
+// comment notice. U-11 dedupes watcher + mention into a single Inbox row and never
+// notifies the author about their own comment.
+async function notifyPageComment(
+  page: DocPage,
+  body: string,
+  authorId: string,
+  parentAuthorId?: string | null
+): Promise<void> {
   const names = parseMentions(body);
   const members = await listMembers(page.workspaceId);
   const author = members.find((member) => member.id === authorId);
@@ -80,17 +88,29 @@ async function notifyPageComment(page: DocPage, body: string, authorId: string):
       pageId: page.id,
       type,
       body: who,
-      data: { actorName: who },
+      data: { actorName: who, title: page.title },
     });
   const mentioned = new Set<string>();
   for (const member of members) {
     if (!names.includes(member.username.toLowerCase())) continue;
     if (!pageVisible(page, member.id)) continue;
+    if (member.id === authorId) continue;
+    // A mention follows the document.
+    await autoFollow(page.workspaceId, member.id, "page", page.id, "mention");
     await send(member.id, "doc_mentioned");
     mentioned.add(member.id);
   }
-  if (page.createdBy !== authorId && !mentioned.has(page.createdBy)) {
-    await send(page.createdBy, "doc_commented");
+  const targets = new Set(await watcherIds(page.workspaceId, "page", page.id));
+  if (page.createdBy) targets.add(page.createdBy);
+  if (parentAuthorId) targets.add(parentAuthorId);
+  targets.delete(authorId);
+  for (const userId of mentioned) targets.delete(userId);
+  // A private page's watcher list may include people from when it was shared; never
+  // send them a document title they can no longer open, and never notify removed members.
+  const memberIds = new Set(members.map((member) => member.id));
+  for (const userId of targets) {
+    if (!memberIds.has(userId) || !pageVisible(page, userId)) continue;
+    await send(userId, "doc_commented");
   }
 }
 
@@ -122,7 +142,22 @@ export async function addPageComment(
     via: options.via ?? "you",
     createdAt: nowIso(),
   });
-  await notifyPageComment(page, body, viewerId);
+  // U-11: commenting follows the document, and the page's Activity row appears.
+  await autoFollow(workspaceId, viewerId, "page", pageId, "comment");
+  const parent = input.parentId ? await commentOn(pageId, input.parentId) : null;
+  await notifyPageComment(page, body, viewerId, parent?.authorId ?? null);
+  const member = (await listMembers(workspaceId)).find((entry) => entry.id === viewerId);
+  await recordActivity({
+    workspaceId,
+    objectType: "document",
+    objectId: pageId,
+    type: "page_commented",
+    data: { title: page.title, commentId: id, preview: body.slice(0, 160) },
+    actor: { kind: "user", userId: viewerId, displayName: member?.displayName ?? "A member" },
+    projectId: page.projectId,
+    ownerId: page.createdBy,
+    visibility: page.shared ? "workspace" : "private",
+  });
   return listPageComments(workspaceId, pageId, viewerId,{ids:options.incremental?[id]:undefined});
 }
 
@@ -146,10 +181,23 @@ export async function setPageCommentResolved(
 ): Promise<PageComment[]> {
   await requirePageLevel(await readablePage(workspaceId, pageId, viewerId), viewerId, "comment");
   await commentOn(pageId, commentId);
+  const page = await readablePage(workspaceId, pageId, viewerId);
   await getDb()
     .update(pageComments)
     .set({ resolvedAt: resolved ? nowIso() : null })
     .where(eq(pageComments.id, commentId));
+  const member = (await listMembers(workspaceId)).find((entry) => entry.id === viewerId);
+  await recordActivity({
+    workspaceId,
+    objectType: "document",
+    objectId: pageId,
+    type: resolved ? "page_comment_resolved" : "page_comment_reopened",
+    data: { title: page.title, commentId },
+    actor: { kind: "user", userId: viewerId, displayName: member?.displayName ?? "A member" },
+    projectId: page.projectId,
+    ownerId: page.createdBy,
+    visibility: page.shared ? "workspace" : "private",
+  });
   return listPageComments(workspaceId, pageId, viewerId,{ids:options.incremental?[commentId]:undefined});
 }
 
