@@ -748,7 +748,7 @@ export function DocPageView({
             margins it would use on a full tab would leave no text at all. */}
         <div
           style={{maxWidth:readingWidth,marginInline:"auto"}}
-          className={`w-full pb-8 pt-6 ${
+          className={`w-full pb-8 pt-6 max-[600px]:px-4 max-[600px]:pt-3.5 ${
             onClose ? "px-5" : "px-10 lg:px-20 xl:px-32"
           }`}
         >

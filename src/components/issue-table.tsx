@@ -305,7 +305,8 @@ export function IssueTable({
             const opened = openIssueId === issue.id;
             const checked = selection?.selected.has(issue.id) ?? false;
             return (
-              <EntityRow key={issue.id} kind="task" id={issue.id} title={issue.title}>
+              <div key={issue.id} className="max-[600px]:border-b max-[600px]:border-border">
+              <EntityRow kind="task" id={issue.id} title={issue.title}>
               <div
                 key={issue.id}
                 ref={(el) => {
@@ -322,7 +323,7 @@ export function IssueTable({
                   else openIssue(issue.id);
                 }}
                 onMouseEnter={() => setFocusIndex(index)}
-                className={`flex cursor-default items-center gap-2.5 py-[7px] text-body transition-colors ${PAGE_INSET} max-[600px]:min-h-11 max-[600px]:border-b max-[600px]:border-b-border max-[600px]:py-2.5 max-[600px]:pl-4 max-[600px]:pr-4 ${
+                className={`flex cursor-default items-center gap-2.5 py-[7px] text-body transition-colors ${PAGE_INSET} max-[600px]:min-h-11 max-[600px]:py-2.5 max-[600px]:pl-4 max-[600px]:pr-4 ${
                   focused ? "bg-row-active" : opened ? "bg-surface" : "hover:bg-elevated/40"
                 } ${opened ? "border-l-2 border-l-accent" : "border-l-2 border-l-transparent"}`}
               >
@@ -443,6 +444,7 @@ export function IssueTable({
                 </span>
               </div>
               </EntityRow>
+              </div>
             );
     }}/>
   );
