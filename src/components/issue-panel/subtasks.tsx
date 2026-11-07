@@ -6,11 +6,11 @@ import type { IssueChild } from "@/lib/issues";
 import { useT } from "@/components/i18n-context";
 
 export function Subtasks({
-  children,
+  tasks,
   busy,
   onAdd,
 }: {
-  children: IssueChild[];
+  tasks: IssueChild[];
   busy: boolean;
   onAdd: (title: string) => Promise<boolean>;
 }) {
@@ -27,7 +27,7 @@ export function Subtasks({
   return (
     <div className="space-y-2" data-testid="subtasks">
       <div className="text-small font-medium text-muted">{t("Subtasks")}</div>
-      {children.map((child) => (
+      {tasks.map((child) => (
         <div key={child.id} className="flex items-baseline gap-2 text-small">
           <span className="shrink-0 text-faint">{child.identifier}</span>
           <span className="min-w-0 truncate text-text">{child.title}</span>

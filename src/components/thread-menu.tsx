@@ -149,6 +149,7 @@ export function ThreadMenu({
   ];
   const lead = ["Rename", "Move to project", "Copy link"];
   const rank = (label: string) => (label === "Delete conversation" ? 9 : lead.includes(label) ? lead.indexOf(label) : 5);
+  // eslint-disable-next-line react-hooks/refs -- these refs are read only when a menu action runs
   actions.sort((a, b) => rank(a.label) - rank(b.label));
   const more = (
     <Menu
@@ -235,6 +236,7 @@ export function ThreadMenu({
             collisionPadding={8}
             className="z-[80] min-w-52 rounded-lg border border-border bg-overlay p-1 shadow-xl"
           >
+            {/* eslint-disable-next-line react-hooks/refs -- these refs are read only when a menu action runs */}
             {actions.map((action) => (
               <Context.Item
                 key={action.label}

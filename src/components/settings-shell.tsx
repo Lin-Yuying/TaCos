@@ -49,8 +49,9 @@ function subscribeHash(listener: () => void) {
 }
 
 export function useSettingsPage(): SettingsPage {
-  // A soft navigation back to a page first loaded with a hash can arrive with it doubled.
-  const hash = useSyncExternalStore(subscribeHash, () => window.location.hash.slice(1).split("#")[0], () => "");
+  // A soft navigation back to a page first loaded with a hash can add to the old one
+  // (#labels#cycles); the last fragment is the one just asked for.
+  const hash = useSyncExternalStore(subscribeHash, () => window.location.hash.split("#").pop() ?? "", () => "");
   return (SETTINGS_PAGES as readonly string[]).includes(hash) ? (hash as SettingsPage) : "profile";
 }
 
@@ -88,7 +89,7 @@ export function SettingsShell({
     if (!onMain) return;
     rememberTabHash(base, `#${hashPage}`);
     if (window.location.hash.lastIndexOf("#") > 0) {
-      history.replaceState(history.state, "", `${window.location.pathname}${window.location.search}#${window.location.hash.slice(1).split("#")[0]}`);
+      history.replaceState(history.state, "", `${window.location.pathname}${window.location.search}#${window.location.hash.split("#").pop()}`);
     }
   });
   const page = (id: SettingsPage, label: string): NavItem => ({ key: id, label, href: `${base}#${id}`, page: id });

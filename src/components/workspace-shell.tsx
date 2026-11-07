@@ -227,6 +227,7 @@ function SidebarNav({
   useEffect(() => {
     try {
       const saved = JSON.parse(window.localStorage.getItem(COLLAPSED_KEY) ?? "[]");
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- localStorage and live data are read after hydration
       if (Array.isArray(saved)) setCollapsed(saved.filter((key) => typeof key === "string"));
     } catch {
       /* unreadable storage — keep everything expanded */
@@ -1336,6 +1337,7 @@ function useSidebarWidth() {
         lastRail.current = Math.min(SIDEBAR_RAIL_MAX, Math.max(SIDEBAR_RAIL_MIN, savedRail));
       }
       // The old key meant "hidden", so "1" already reads as the compact state.
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- localStorage and live data are read after hydration
       setWidth(window.localStorage.getItem(SIDEBAR_KEY) === "1" ? lastRail.current : lastFull.current);
     } catch {
       /* storage unavailable — keep the defaults */
@@ -1617,6 +1619,7 @@ function TabBar({
     try {
       const saved = JSON.parse(window.localStorage.getItem(`${TABS_KEY}.${scope}`) ?? "[]");
       const keys: string[] = Array.isArray(saved) ? saved.filter((t) => typeof t === "string") : [];
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- localStorage and live data are read after hydration
       setTabs(keys.filter((key, i) => keys.findIndex((other) => sameTab(other, key)) === i));
     } catch {
       setTabs([]);
@@ -1664,8 +1667,13 @@ function TabBar({
   // Cmd/Ctrl-click on any link in the workspace opens it in a new tab of this strip.
   useEffect(() => {
     const onClick = (event: MouseEvent) => {
-      if (event.defaultPrevented || event.button !== 0 || !(event.metaKey || event.ctrlKey)) return;
+      if (event.defaultPrevented || event.button !== 0) return;
       const link = (event.target as Element | null)?.closest?.("a[href]") as HTMLAnchorElement | null;
+      if (!(event.metaKey || event.ctrlKey)) {
+        // An ordinary link after the palette closed without a choice stays in this tab.
+        if (link && !paletteOpen) openAsNew.current = false;
+        return;
+      }
       if (!link || link.target === "_blank") return;
       const url = new URL(link.href);
       if (url.origin !== window.location.origin) return;
@@ -1682,7 +1690,7 @@ function TabBar({
     };
     document.addEventListener("click", onClick, true);
     return () => document.removeEventListener("click", onClick, true);
-  }, [router, workspace.id]);
+  }, [router, workspace.id, paletteOpen]);
 
   // The + button opens a new tab through the palette; closing the palette without a
   // choice must not make the next ordinary link open a new tab.
@@ -1730,6 +1738,7 @@ function TabBar({
       return true;
     };
     if (tabs.every(alive)) return;
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- localStorage and live data are read after hydration
     setTabs(tabs.filter(alive));
   }, [tabs, projects, pages, workspace.id, current]);
 
@@ -1967,6 +1976,7 @@ export function WorkspaceShell({
       if (raw) {
         const saved = JSON.parse(raw);
         if (Array.isArray(saved)) {
+          // eslint-disable-next-line react-hooks/set-state-in-effect -- localStorage and live data are read after hydration
           setHiddenSections(
             saved.filter(
               (key) =>

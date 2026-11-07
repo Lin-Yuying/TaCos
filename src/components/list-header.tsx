@@ -2,7 +2,7 @@
 
 import { DebouncedInput } from "./ui/debounced-input";
 import { Menu, MenuItem } from "@/components/menu";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Filter, Search, X } from "lucide-react";
 import { useUI } from "@/components/ui-context";
@@ -63,7 +63,11 @@ export function ListHeader({
   const { phoneTaskToolsOpen: toolsOpen, setPhoneTaskToolsOpen } = useUI();
   const [value, setValue] = useState(q);
 
-  useEffect(() => setValue(q), [q]);
+  const [seenQ, setSeenQ] = useState(q);
+  if (q !== seenQ) {
+    setSeenQ(q);
+    setValue(q);
+  }
 
   const buildUrl = (over: Record<string, string | undefined>) => {
     const sp = new URLSearchParams();

@@ -63,7 +63,7 @@ export function UserMenu({
     try {
       const result = await switchUserAction(id);
       if (result.ok) {
-        window.location.href = result.data.url;
+        window.location.assign(result.data.url);
         return;
       }
       setError(result.error);

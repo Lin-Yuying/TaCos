@@ -656,10 +656,12 @@ export function DocumentEditor({
   useEffect(()=>()=>{for(const item of uploadsRef.current)item.controller.abort();},[]);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  // eslint-disable-next-line react-hooks/immutability -- the editor extension reads these live values outside React
   useEffect(() => {
     onChangeRef.current = onChange;
     pagesRef.current = pages;
     embedPages.update(pages);
+    // eslint-disable-next-line react-hooks/immutability -- the editor extension reads these live values outside React
     embedPages.open = (id: string) => {
       const ctx = pagesRef.current;
       if (!ctx) return;
@@ -712,6 +714,7 @@ export function DocumentEditor({
 
   const mention = useMemo(
     () =>
+      // eslint-disable-next-line react-hooks/refs -- the editor extension reads these live values outside React
       DocMention.configure({
         suggestion: {
           char: "@",

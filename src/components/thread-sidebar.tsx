@@ -44,6 +44,7 @@ export function ThreadSidebar({
     [error, setError] = useState<string | null>(null),
     [busy, setBusy] = useState(false);
   const [changed,setChanged]=useState<Record<string,AgentThread|null>>({});
+  // eslint-disable-next-line react-hooks/set-state-in-effect -- server updates replace older local edits
   useEffect(()=>{setChanged(old=>{const next={...old};for(const thread of threads){const local=next[thread.id];if(local && (thread.updatedAt>local.updatedAt || JSON.stringify(local)===JSON.stringify(thread)))delete next[thread.id];}return Object.keys(next).length===Object.keys(old).length?old:next;});},[threads]);
   const sequence = useRef(0),
     running = useRef(false);

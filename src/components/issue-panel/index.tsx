@@ -289,7 +289,7 @@ function IssuePanel({
           onRemove={removeTaskDependency}
         />
 
-        <Subtasks children={detail.children} busy={busy} onAdd={addSubtask} />
+        <Subtasks tasks={detail.children} busy={busy} onAdd={addSubtask} />
 
         <div className="shrink-0 space-y-2 border-t border-border pt-4">
           {showReview && (

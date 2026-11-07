@@ -100,8 +100,9 @@ export function TaskBulkBar({
     <div data-task-bulk role="toolbar" aria-label={t("Select tasks")} className="fixed bottom-5 left-1/2 max-[600px]:bottom-[72px] max-[600px]:w-[calc(100vw-32px)] z-40 flex max-w-[calc(100vw-32px)] -translate-x-1/2 flex-wrap items-center gap-1.5 rounded-[10px] border border-border bg-bg px-2 py-1.5 text-small shadow-xl">
       <span className="flex items-center gap-1 font-medium text-text">
         <CheckSquare size={12} />
-        {t("{count} selected", { count: selected.length })}
+        {selected.length > 0 ? t("{count} selected", { count: selected.length }) : t("Select tasks to change them")}
       </span>
+      {selected.length > 0 && <>
       <Menu width={180} triggerClassName={triggerClass} trigger={<>{t("Status")}</>}>
         {(close) => (
           <>
@@ -257,6 +258,7 @@ export function TaskBulkBar({
           </>
         )}
       </Menu>
+      </>}
       <button type="button" onClick={clear} disabled={busy} className="flex items-center gap-1 rounded-md px-2 py-1 text-muted hover:bg-elevated hover:text-text disabled:opacity-40">
         <X size={12} /> {t("Clear")}
       </button>

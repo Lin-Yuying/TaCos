@@ -62,6 +62,7 @@ export function useMetaRows() {
     try {
       const saved = JSON.parse(window.localStorage.getItem(META_HIDDEN_KEY) ?? "[]");
       if (Array.isArray(saved)) {
+        // eslint-disable-next-line react-hooks/set-state-in-effect -- localStorage is read after hydration
         setHidden(META_ROWS.filter((row) => saved.includes(row.key)).map((row) => row.key));
       }
     } catch {

@@ -27,6 +27,7 @@ export function NewProjectDialog({
 
   useEffect(() => {
     if (!projectComposerOpen) return;
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- the form resets each time the dialog opens
     setError(null);
     setBusy(false);
   }, [projectComposerOpen]);

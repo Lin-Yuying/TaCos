@@ -79,6 +79,7 @@ export function NewIssueDialog({ workspaceId }: { workspaceId: string }) {
     if(composerSeed?.title !== undefined) setTitle(composerSeed.title);
     if(composerSeed?.description !== undefined) setDescription(composerSeed.description);
     if(composerStatus) setStatus(composerStatus);
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- the form resets each time the dialog opens
     setError(null);
     setBusy(false);
     setAiOpen(false);

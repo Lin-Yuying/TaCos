@@ -2,6 +2,8 @@
 // `{name}` placeholders must survive translation unchanged. Grouped by the file that
 // first uses a string; `npm run i18n:check` lists keys used in code but missing here.
 const zh: Record<string, string> = {
+  "Discard your changes to this rule?": "放弃对这条规则的修改？",
+  "Select tasks to change them": "选择任务后可以批量修改",
   "Roadmap": "路线图",
   "Initiatives": "倡议",
   "Monday": "周一",

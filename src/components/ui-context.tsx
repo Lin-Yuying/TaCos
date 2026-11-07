@@ -229,6 +229,7 @@ export function UIProvider({
   function setLayout(next: IssueLayout) { setLayoutState(next); }
   const [phoneTaskToolsOpen, setPhoneTaskToolsOpen] = useState(false);
   // Native history participates in Next navigation without reloading the list.
+  // eslint-disable-next-line react-hooks/set-state-in-effect -- the URL drives which panel is open
   useEffect(() => { setOpenIssueId(params.get("issue"));setOpenPageId(params.get("issue")?null:params.get("doc")); }, [params]);
   useEffect(() => {
     const failed = () => setStorageFull(true);

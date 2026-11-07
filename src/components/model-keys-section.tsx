@@ -62,6 +62,7 @@ export function ModelKeysSection({
   useEffect(() => {
     if (!serverMode) return;
     const keys = desktopRunner()?.keys;
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- the desktop bridge exists only in the browser
     setOnThisComputer(Boolean(keys));
     if (!keys) return;
     void keys.list().then((result) => {

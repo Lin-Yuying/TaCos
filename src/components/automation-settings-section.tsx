@@ -3,7 +3,7 @@
 // #80: Settings › Automations. Owner/admin create or edit rules from a template or from
 // scratch, dry-run them against a task, and read the run log. Members see the enabled
 // rules and the runs their own actions triggered.
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { Menu } from "@/components/menu";
 import { ArrowDown, ArrowUp, MoreHorizontal, Trash2, X } from "lucide-react";
 import { Modal } from "@/components/ui/modal";
@@ -117,6 +117,7 @@ export function AutomationSettingsSection({
   const locale = useLocale();
   const { confirm } = useUI();
   const [draft, setDraft] = useState<Draft | null>(null);
+  const draftAtStart = useRef("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
@@ -126,8 +127,17 @@ export function AutomationSettingsSection({
   const sharedAgents = agents.filter((agent) => !agent.personal);
   const lastRun = draft?.id ? runs.find((run) => run.ruleId === draft.id) ?? null : null;
 
+  // Esc and a click outside are easy to do by accident, so an edited draft asks first.
+  async function dismissDraft() {
+    if (draft && JSON.stringify(draft) !== draftAtStart.current) {
+      if (!(await confirm(t("Discard your changes to this rule?"), { action: t("Discard") }))) return;
+    }
+    setDraft(null);
+  }
+
   function start(draft: Draft) {
     setDraft(draft);
+    draftAtStart.current = JSON.stringify(draft);
     setDryRun(null);
     setDryTask("");
     setError(null);
@@ -435,7 +445,7 @@ export function AutomationSettingsSection({
       </div>
 
       {draft && (
-        <Modal open onClose={() => setDraft(null)} title={draft.id ? t("Edit rule") : t("New rule")} className="max-w-[640px] !p-0">
+        <Modal open onClose={() => void dismissDraft()} title={draft.id ? t("Edit rule") : t("New rule")} className="max-w-[640px] !p-0">
         <div
           data-testid="automation-editor"
         >
