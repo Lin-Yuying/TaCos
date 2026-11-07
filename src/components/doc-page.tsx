@@ -522,7 +522,7 @@ export function DocPageView({
             </span>
           )}
         </span>
-        <div className="ml-auto flex shrink-0 items-center gap-2">
+        <div className="ml-auto flex shrink-0 items-center gap-2 max-[600px]:ml-0 max-[600px]:w-full max-[600px]:flex-wrap">
           {sharing && collab.storageError && <p role="alert" className="text-small text-danger">{t(collab.storageError)}</p>}
           {collab.status === "reconnecting" && (
             <span data-doc-reconnecting role="status" className="fixed left-1/2 top-16 z-40 -translate-x-1/2 rounded-lg border border-border bg-bg px-3 py-2 text-small text-text shadow-sm">
