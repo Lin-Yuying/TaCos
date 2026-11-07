@@ -530,6 +530,16 @@ function MilestoneTrack({
     if (months.length > 36) break;
   }
   const todayVisible = today >= start && today <= end;
+  // In a short range the first two month labels sit only a few percent apart and
+  // overlap; keep the first label and skip any month whose label would collide.
+  const monthMarkers: { month: string; position: number }[] = [];
+  let lastLabelPosition = -Infinity;
+  for (const month of months) {
+    const position = left(monthStart(month) > start ? monthStart(month) : start);
+    if (monthMarkers.length > 0 && position - lastLabelPosition < 6) continue;
+    monthMarkers.push({ month, position });
+    lastLabelPosition = position;
+  }
   return (
     <div className="rounded-lg border border-border p-3" data-testid="milestone-timeline">
       <div className="flex items-center justify-between gap-2">
@@ -539,11 +549,11 @@ function MilestoneTrack({
       <div className="mt-2 flex">
         <div className="w-36 shrink-0" />
         <div className="relative h-5 flex-1 overflow-hidden border-b border-border text-caption text-faint">
-          {months.map((month) => (
+          {monthMarkers.map(({ month, position }) => (
             <span
               key={month}
               className="absolute top-0 whitespace-nowrap"
-              style={{ left: `${left(monthStart(month) > start ? monthStart(month) : start)}%` }}
+              style={{ left: `${position}%` }}
             >
               {monthLabel(month, locale)}
             </span>
