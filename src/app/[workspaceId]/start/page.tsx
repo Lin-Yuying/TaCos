@@ -20,7 +20,7 @@ async function StartContent({ params }: { params: Promise<{ workspaceId: string 
   const { workspaceId } = await params;
   const user = await getSessionUser();
   if (!user) redirect("/login");
-  const { workspace } = await requireWorkspace(workspaceId);
+  await requireWorkspace(workspaceId);
   const [projects, pages] = await Promise.all([
     listProjects(workspaceId, user.id),
     listPageTree(workspaceId, user.id),
@@ -28,8 +28,6 @@ async function StartContent({ params }: { params: Promise<{ workspaceId: string 
   return (
     <StartScreen
       workspaceId={workspaceId}
-      workspaceName={workspace.name}
-      workspaceIcon={workspace.icon}
       projects={projects}
       pages={pages}
     />
