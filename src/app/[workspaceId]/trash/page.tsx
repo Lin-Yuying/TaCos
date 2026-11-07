@@ -1,11 +1,8 @@
-import { PAGE_HEADER, PAGE_INSET, PAGE_TITLE } from "@/lib/page-chrome";
 import { Suspense } from "react";
 import { connection } from "next/server";
 import { redirect } from "next/navigation";
 import { getSessionUser, requireWorkspace } from "@/lib/auth";
-import { translator } from "@/lib/i18n";
-import { resolveLocale } from "@/lib/locale";
-import { listTrashedIssues, listTrashedProjects } from "@/lib/issues";
+import { listDeletedWorkspaces, listTrashedIssues, listTrashedProjects } from "@/lib/issues";
 import { listTrashedPages } from "@/lib/pages";
 import { TrashView } from "@/components/trash-view";
 
@@ -27,20 +24,16 @@ async function View({ params }: { params: Promise<{ workspaceId: string }> }) {
   const user = await getSessionUser();
   if (!user) redirect("/login");
   const ctx = await requireWorkspace(workspaceId);
-  const [projects, issues, docs] = await Promise.all([
+  const [projects, issues, docs, deletedWorkspaces] = await Promise.all([
     listTrashedProjects(workspaceId, user.id),
     listTrashedIssues(workspaceId),
     listTrashedPages(workspaceId, user.id),
+    listDeletedWorkspaces(user.id),
   ]);
   return (
     <>
-      <header className={`${PAGE_HEADER} ${PAGE_INSET}`}>
-        <h1 className={PAGE_TITLE}>{translator(await resolveLocale(user))("Trash")}</h1>
-        <span className="rounded-full bg-elevated px-2 py-0.5 text-caption text-muted">
-          {projects.length + issues.length + docs.length}
-        </span>
-      </header>
       <TrashView
+        deletedWorkspaces={deletedWorkspaces}
         workspaceId={workspaceId}
         userId={user.id}
         isOwner={ctx.workspace.createdBy === user.id}

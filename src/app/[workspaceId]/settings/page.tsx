@@ -9,7 +9,6 @@ import {
   getJoinCode,
   getMembersSeeAllTasks,
   listApiKeys,
-  listDeletedWorkspaces,
   listMembers,
   listLabelsWithCounts,
   listProjects,
@@ -43,7 +42,7 @@ async function View({ params }: { params: Promise<{ workspaceId: string }> }) {
   if (!user) redirect("/login");
   const ws = await requireWorkspace(workspaceId);
   await syncCycleLifecycle(workspaceId, { actorId: ws.user.id });
-  const [members, projects, labels, keys, joinCode, allWorkspaces, deletedWorkspaces, seeAll, ai, harness, modelKeys, pageTemplates, agents, usage, automations, cycleSettings, cycles] =
+  const [members, projects, labels, keys, joinCode, allWorkspaces, seeAll, ai, harness, modelKeys, pageTemplates, agents, usage, automations, cycleSettings, cycles] =
     await Promise.all([
       listMembers(workspaceId),
       listProjects(workspaceId, user.id),
@@ -51,7 +50,6 @@ async function View({ params }: { params: Promise<{ workspaceId: string }> }) {
       listApiKeys(workspaceId),
       getJoinCode(workspaceId),
       listUserWorkspaces(ws.user.id),
-      listDeletedWorkspaces(ws.user.id),
       getMembersSeeAllTasks(workspaceId),
       getAiSettingsView(workspaceId),
       getHarnessSettingsView(workspaceId, ...(await harnessViewFor(ws.user.id))),
@@ -86,7 +84,6 @@ async function View({ params }: { params: Promise<{ workspaceId: string }> }) {
       harness={harness}
       isOwner={ws.workspace.createdBy === ws.user.id}
       nextWorkspaceHref={next ? `/${next.id}` : "/onboarding"}
-      deletedWorkspaces={deletedWorkspaces}
       pageTemplates={pageTemplates}
       canManagePageTemplates={canManagePageTemplates(workspaceId, ws.user.id)}
       agents={agents}

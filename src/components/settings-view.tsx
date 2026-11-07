@@ -41,7 +41,6 @@ import type { AgentView } from "@/lib/workspace-agents";
 import type { AgentUsageSummary } from "@/lib/agent-usage";
 import { AssigneeAvatar } from "@/components/issue-table";
 import { ProjectIcon, WorkspaceMark } from "@/components/icons";
-import { WorkspaceTrashList } from "@/components/workspace-trash-list";
 import { LabelsManager } from "@/components/labels-manager";
 import { PageTemplatesManager } from "@/components/page-templates-manager";
 import { AutomationSettingsSection } from "@/components/automation-settings-section";
@@ -149,7 +148,6 @@ export function SettingsView({
   harness,
   isOwner,
   nextWorkspaceHref,
-  deletedWorkspaces,
   pageTemplates,
   canManagePageTemplates,
   agents,
@@ -175,7 +173,6 @@ export function SettingsView({
   harness: HarnessSettingsView;
   isOwner: boolean;
   nextWorkspaceHref: string;
-  deletedWorkspaces: DeletedWorkspace[];
   pageTemplates: PageTemplate[];
   canManagePageTemplates: boolean;
   agents: AgentView[];
@@ -1492,9 +1489,6 @@ export function SettingsView({
             </div>
           </section>
           )}
-          {/* Scoped to workspaces this user owns, so it can render even in someone
-              else's settings page. */}
-          <WorkspaceTrashList items={deletedWorkspaces} />
         </SettingsPanel>
       </div>
 
