@@ -2,6 +2,12 @@
 // `{name}` placeholders must survive translation unchanged. Grouped by the file that
 // first uses a string; `npm run i18n:check` lists keys used in code but missing here.
 const zh: Record<string, string> = {
+  "Finish": "完成",
+  "Search tasks": "搜索任务",
+  "{count} at the start": "开始时 {count}",
+  "Pick a cycle": "选择周期",
+  "Complete {cycle}?": "完成{cycle}？",
+  "{count} unfinished tasks will move to the next cycle. Done and canceled tasks stay in {cycle}.": "{count} 项未完成的任务会移到下一个周期。已完成和已取消的任务留在{cycle}。",
   "Search members": "搜索成员",
   "Shared conversations": "共享",
   "Private conversations": "仅自己可见",
@@ -1849,9 +1855,9 @@ const zh: Record<string, string> = {
   "1 cycle": "1 个周期",
   "Active tasks that are not in a cycle. Done, canceled and already planned tasks stay where they are.": "未加入周期的进行中任务。已完成、已取消和已规划的任务保持原样。",
   "Add active tasks without a cycle to the current one": "把未加入周期的进行中任务加入当前周期",
-  "Add tasks to {cycle}": "向{cycle}添加任务",
+  "Add tasks to {cycle}": "添加任务到{cycle}",
   "Add tasks": "添加任务",
-  "Add {count} tasks": "添加 {count} 个任务",
+  "Add {count} tasks": "添加 {count} 项",
   "Added {count} tasks to {cycle}.": "已向{cycle}添加 {count} 个任务。",
   "All milestones": "全部里程碑",
   "All owners": "全部负责人",

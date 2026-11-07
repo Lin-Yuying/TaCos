@@ -9,7 +9,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useScrollMemory } from "@/lib/ui/scroll-memory";
 import { useMemo, useRef, useState } from "react";
-import { FileText, FolderOpen, Lock, Upload, Users, X } from "lucide-react";
+import { FileText, Lock, Upload, Users, X } from "lucide-react";
 import { importMarkdownAction } from "@/app/pages-actions";
 import { Menu, MenuItem } from "@/components/menu";
 import { NewPageMenu } from "@/components/new-page-menu";
@@ -205,8 +205,8 @@ export function DocsIndex({
           )}
         </Menu>
         </div>
-        <Modal open={importResults.length>0&&!progress} onClose={()=>setImportResults([])} title={t("Import results")} className="max-w-[480px]">
-          <div className="rounded-xl border border-border bg-overlay shadow-2xl shadow-black/15">
+        <Modal open={importResults.length>0&&!progress} onClose={()=>setImportResults([])} title={t("Import results")} className="max-w-[480px] !p-0">
+          <div>
             <div className="flex items-center justify-between border-b border-border px-4 py-3">
               <h2 className="text-lead font-semibold text-text">{t("Import results")}</h2>
               <button type="button" aria-label={t("Close")} onClick={()=>setImportResults([])} className="rounded p-1 text-faint transition-colors hover:bg-elevated hover:text-text"><X size={14} /></button>
@@ -243,7 +243,7 @@ export function DocsIndex({
                 onClick={() => setImportResults([])}
                 className="rounded-md bg-accent px-2.5 py-1 text-small font-medium text-white transition-colors hover:bg-accent-hover"
               >
-                {t("Done")}
+                {t("Finish")}
               </button>
             </div>
           </div>

@@ -29,7 +29,7 @@ State per item: `todo`, `pass` (commit plus cheap checks: `npx tsc --noEmit`, `n
 | 19 | Documents index | DocsIndex, DocsImport, DocsImportResult | pass |
 | 20 | Document page | Doc, DocUpdates, DocMenus, DocOptions, DocShare, WatchMenu, MoveDoc, DocComments, DocOutline, DocLinks, DocFind, AiEdit, ReviewChanges, RestoreConfirm, EditorMenus, EditorBlocks | pass |
 | 21 | Person page | Person | pass |
-| 22 | Planning: cycles | Planning, PlanningOff, CycleAdd, CycleComplete | partial |
+| 22 | Planning: cycles | Planning, PlanningOff, CycleAdd, CycleComplete | pass |
 | 23 | Planning: roadmap and initiatives | Roadmap, Initiatives, InitiativeEdit | partial |
 | 24 | Insights: four stats, one filter row, chart/table toggle | Insights | pass |
 | 25 | Settings shell: grouped left navigation, Storage, Export, Import and System inside it | SettingsNav, Storage, ExportPage, ImportPage, ImportPreview, System | partial |
@@ -50,7 +50,6 @@ State per item: `todo`, `pass` (commit plus cheap checks: `npx tsc --noEmit`, `n
 
 `pass` above means every listed board was compared and done. `partial` items still have these boards open:
 
-- 22: Planning (four stats), PlanningOff, CycleAdd, CycleComplete
 - 23: Initiatives (new-initiative position), InitiativeEdit
 - 25: ExportPage, ImportPage, ImportPreview
 - 26: Invite

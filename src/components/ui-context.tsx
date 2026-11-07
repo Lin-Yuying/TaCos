@@ -14,7 +14,7 @@ import { listPinsAction } from "@/app/entity-actions";
 import { PERSONAL_STATE_CHANGED, type PersonalPin } from "@/lib/ui/entity-actions";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { exportLocalDrafts, useStoredJson } from "@/lib/use-stored-json";
-import { ConfirmDialog } from "@/components/ui/confirmation";
+import { ConfirmDialog, type ConfirmOptions } from "@/components/ui/confirmation";
 import { useT } from "@/components/i18n-context";
 import type { Priority, Status } from "@/lib/constants";
 
@@ -77,7 +77,7 @@ type UIState = {
   density:"compact"|"comfortable";
   setDensity:(density:"compact"|"comfortable")=>void;
   refreshPins: () => void;
-  confirm: (message: string) => Promise<boolean>;
+  confirm: (message: string, options?: ConfirmOptions) => Promise<boolean>;
   openIssueId: string | null;
   openIssue: (id: string,commentId?:string) => void;
   closeIssue: () => void;
@@ -157,8 +157,8 @@ export function UIProvider({
   const [pins, setPins] = useState<PersonalPin[]>([]);
   const refreshPins = useCallback(() => { void listPinsAction(workspaceId).then((result) => { if (result.ok) setPins(result.data); }); }, [workspaceId]);
   useEffect(() => { refreshPins(); window.addEventListener(PERSONAL_STATE_CHANGED, refreshPins); return () => window.removeEventListener(PERSONAL_STATE_CHANGED, refreshPins); }, [refreshPins]);
-  const [confirmation, setConfirmation] = useState<{message: string; resolve: (ok: boolean) => void} | null>(null);
-  const confirm = useCallback((message: string) => new Promise<boolean>((resolve) => setConfirmation({message, resolve})), []);
+  const [confirmation, setConfirmation] = useState<{message: string; options?: ConfirmOptions; resolve: (ok: boolean) => void} | null>(null);
+  const confirm = useCallback((message: string, options?: ConfirmOptions) => new Promise<boolean>((resolve) => setConfirmation({message, options, resolve})), []);
   const [openIssueId, setOpenIssueId] = useState<string | null>(null);
   const [openPageId, setOpenPageId] = useState<string | null>(null);
   const [panelExpanded, setPanelExpandedState] = useStoredJson(`tacos.panel.expanded.${scope}`, false);
@@ -294,7 +294,7 @@ export function UIProvider({
       }}
     >
       {children}
-      <ConfirmDialog message={confirmation?.message ?? null} onFinish={(ok) => { confirmation?.resolve(ok); setConfirmation(null); }} />
+      <ConfirmDialog message={confirmation?.message ?? null} options={confirmation?.options} onFinish={(ok) => { confirmation?.resolve(ok); setConfirmation(null); }} />
       <div className="pointer-events-none fixed bottom-6 left-1/2 z-50 flex -translate-x-1/2 flex-col items-center gap-1.5">
         {toasts.map((entry) => (
           <div
