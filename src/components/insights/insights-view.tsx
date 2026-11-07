@@ -6,7 +6,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { Copy, Download, RotateCcw, Save } from "lucide-react";
 import { useT } from "@/components/i18n-context";
 import { useDetailSource } from "@/components/detail-navigation";
-import { PAGE_INSET } from "@/lib/page-chrome";
+import { PAGE_HEADER, PAGE_INSET, PAGE_TITLE } from "@/lib/page-chrome";
 import {
   formatInsightDays,
   formatInsightHours,
@@ -123,9 +123,9 @@ export function InsightsView({
   return (
     <div className="flex min-h-0 min-w-0 flex-1 flex-col" data-testid="insights-page">
       <header
-        className={`flex min-h-12 shrink-0 flex-wrap items-center gap-x-3 gap-y-1.5 border-b border-border py-2 ${PAGE_INSET}`}
+        className={`${PAGE_HEADER} ${PAGE_INSET}`}
       >
-        <h1 className="text-body font-semibold">{t("Insights")}</h1>
+        <h1 className={PAGE_TITLE}>{t("Insights")}</h1>
         <span className="rounded-full bg-elevated px-2 py-0.5 text-caption text-faint">
           {filters.from} – {filters.to}
         </span>
@@ -349,22 +349,10 @@ export function InsightsView({
 
           <div className="grid grid-cols-2 gap-2 @2xl:grid-cols-4" data-testid="insight-metrics">
             <MetricCard
-              label={t("Created")}
-              value={String(metrics.created)}
-              caption={t("{count} subtasks", { count: metrics.subtaskCreated })}
-              testId="insight-metric-created"
-            />
-            <MetricCard
               label={t("Completed")}
               value={String(metrics.completed)}
               caption={t("{rate} per week", { rate: metrics.throughputPerWeek.toFixed(1) })}
               testId="insight-metric-completed"
-            />
-            <MetricCard
-              label={t("Canceled")}
-              value={String(metrics.canceled)}
-              caption={t("Excluded from time measures")}
-              testId="insight-metric-canceled"
             />
             <MetricCard
               label={t("WIP")}
@@ -373,16 +361,32 @@ export function InsightsView({
               testId="insight-metric-wip"
             />
             <MetricCard
+              label={t("Cycle time")}
+              value={formatInsightDays(metrics.cycleTimeDays)}
+              caption={t("median · {count} tasks", { count: metrics.cycleSample })}
+              testId="insight-metric-cycle-time"
+            />
+            <MetricCard
               label={t("Lead time")}
               value={formatInsightDays(metrics.leadTimeDays)}
               caption={t("median · {count} tasks", { count: metrics.leadSample })}
               testId="insight-metric-lead-time"
             />
+          </div>
+          <details data-testid="insight-more-metrics">
+            <summary className="cursor-pointer text-small text-muted">{t("Four more metrics")}</summary>
+            <div className="mt-2 grid grid-cols-2 gap-2 @2xl:grid-cols-4">
             <MetricCard
-              label={t("Cycle time")}
-              value={formatInsightDays(metrics.cycleTimeDays)}
-              caption={t("median · {count} tasks", { count: metrics.cycleSample })}
-              testId="insight-metric-cycle-time"
+              label={t("Created")}
+              value={String(metrics.created)}
+              caption={t("{count} subtasks", { count: metrics.subtaskCreated })}
+              testId="insight-metric-created"
+            />
+            <MetricCard
+              label={t("Canceled")}
+              value={String(metrics.canceled)}
+              caption={t("Excluded from time measures")}
+              testId="insight-metric-canceled"
             />
             <MetricCard
               label={t("Review latency")}
@@ -400,7 +404,8 @@ export function InsightsView({
               })}
               testId="insight-metric-delegation-coverage"
             />
-          </div>
+            </div>
+          </details>
 
           <div className="grid gap-3 @4xl:grid-cols-2">
             <Section

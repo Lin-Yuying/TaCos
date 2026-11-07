@@ -59,7 +59,6 @@ const PILL =
   "group relative flex h-7 shrink-0 items-center rounded-full border border-update-border bg-update-bg text-small font-medium text-update-text transition-colors";
 const LABEL =
   "flex h-full items-center gap-1.5 rounded-full pl-2.5 pr-2.5 transition-colors hover:bg-update-bg-hover disabled:cursor-default disabled:hover:bg-transparent";
-const MODAL_BUTTON = "flex h-9 w-full items-center justify-center rounded-lg text-body font-medium transition-colors";
 
 function labelFor(status: AppUpdateStatus | null, preparing: boolean): string {
   if (preparing) return COPY.preparing;
@@ -89,7 +88,7 @@ function tooltipFor(status: AppUpdateStatus | null): string {
 }
 
 // Restarting ends a running Agent turn, so the pill asks the server before it does.
-async function agentIsWorking(): Promise<boolean> {
+export async function agentIsWorking(): Promise<boolean> {
   try {
     const response = await fetch("/api/agent/busy", {
       cache: "no-store",
@@ -261,35 +260,35 @@ export function DesktopAppUpdateButton() {
         title={COPY.busyTitle}
         className="max-w-[420px]"
       >
-        <div className="p-1">
-          <h2 className="text-title font-semibold text-text">{COPY.busyTitle}</h2>
-          <p className="mt-2 text-body text-muted">{COPY.busyBody}</p>
+        <h2 className="px-4 pb-2.5 pt-3.5 text-lead font-semibold text-text">{COPY.busyTitle}</h2>
+        <div className="space-y-2.5 px-4 pb-3">
+          <p className="text-body text-muted">{COPY.busyBody}</p>
           {status?.unsigned === true && (
-            <p className="mt-2 rounded-md border border-update-border bg-update-bg px-2 py-1 text-small text-update-text">
+            <p className="rounded-md border border-update-border bg-update-bg px-2 py-1 text-small text-update-text">
               未签名版本：更新会打开 GitHub 下载页，由你手动安装。
             </p>
           )}
           {status?.releaseNotes && (
-            <p className="mt-2 max-h-24 overflow-auto whitespace-pre-wrap text-small text-muted">
+            <p className="max-h-24 overflow-auto whitespace-pre-wrap text-small text-muted">
               {status.releaseNotes.slice(0, 600)}
             </p>
           )}
-          <div className="mt-5 flex flex-col gap-2">
-            <button
-              type="button"
-              onClick={() => void restart()}
-              className={`${MODAL_BUTTON} bg-accent text-white hover:bg-accent-hover`}
-            >
-              {COPY.busyConfirm}
-            </button>
-            <button
-              type="button"
-              onClick={() => setConfirmOpen(false)}
-              className={`${MODAL_BUTTON} bg-elevated text-text hover:bg-border`}
-            >
-              {COPY.busyCancel}
-            </button>
-          </div>
+        </div>
+        <div className="flex justify-end gap-2 border-t border-border px-4 py-3">
+          <button
+            type="button"
+            onClick={() => setConfirmOpen(false)}
+            className="rounded-md border border-border px-3 py-1.5 text-small text-muted transition-colors hover:text-text"
+          >
+            {COPY.busyCancel}
+          </button>
+          <button
+            type="button"
+            onClick={() => void restart()}
+            className="rounded-md bg-danger px-3 py-1.5 text-small font-medium text-white transition-opacity hover:opacity-90"
+          >
+            {COPY.busyConfirm}
+          </button>
         </div>
       </Modal>
     </>

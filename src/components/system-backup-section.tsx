@@ -314,19 +314,19 @@ export function SystemBackupSection({
       >
         {target && (
           <div className="space-y-3" data-testid="restore-dialog">
-            <h2 className="text-title font-semibold text-danger">{t("Restore this backup?")}</h2>
+            <h2 className="text-title font-semibold">{t("Restore this backup?")}</h2>
+            <div className="text-body text-muted">
+              <p>{t("A safety backup is created automatically before anything is replaced.")}</p>
+              <p>{t("The server must be restarted after the restore.")}</p>
+            </div>
             <p className="text-body">
               {t(
                 "This replaces the current database with the backup from {when}. Everyone else must stop editing first. Changes made after the safety backup are lost.",
                 { when: when(target.createdAt, locale) }
               )}
             </p>
-            <div className="rounded-md border border-border bg-surface px-3 py-2 text-small">
-              <p>{t("A safety backup is created automatically before anything is replaced.")}</p>
-              <p>{t("The server must be restarted after the restore.")}</p>
-              <p className="mt-1 font-mono">{t("Backup version: {version}", {
-                version: target.version ?? t("unknown"),
-              })}</p>
+            <div className="rounded-md border border-border bg-surface px-3 py-2 text-small tabular-nums">
+              {when(target.createdAt, locale)} · {t("version {version}", { version: target.version ?? t("unknown") })} · {target.integrity === "ok" ? t("verified") : t("not verified")}
             </div>
             <label className="block text-small" htmlFor="restore-confirm">
               {t("Type {phrase} to confirm", { phrase: gate.requiredPhrase })}

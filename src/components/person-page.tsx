@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { PAGE_HEADER, PAGE_INSET, PAGE_TITLE } from "@/lib/page-chrome";
 import Link from "next/link";
 import { ArrowUpRight, FileText, Lock, Search, Users, X } from "lucide-react";
 import { IssueLayout, LayoutToggle } from "@/components/issue-layout";
@@ -56,17 +57,17 @@ export function PersonPage({
 
   return (
     <div className="flex min-h-0 min-w-0 flex-1 flex-col">
-      <header className="shrink-0 border-b border-border px-4 pb-2 pt-3">
-        <div className="flex items-center gap-2.5">
+      <header className={`${PAGE_HEADER} ${PAGE_INSET}`}>
+        <div className="flex min-w-0 items-center gap-2.5">
           <AssigneeAvatar displayName={person.displayName} avatar={person.avatar} size={26} />
-          <h1 className="truncate text-heading font-semibold tracking-tight">
+          <h1 className={PAGE_TITLE}>
             {person.displayName}
           </h1>
           <span className="shrink-0 rounded-full bg-elevated px-2 py-0.5 text-caption text-muted">
             {t(workspaceRole)}
           </span>
         </div>
-        <nav className="mt-2 flex items-center gap-1.5">
+        <nav className="ml-auto flex flex-wrap items-center gap-1">
           {tabs.map((item) => {
             const active = item.key === tab;
             return (
@@ -75,10 +76,10 @@ export function PersonPage({
                 type="button"
                 onClick={() => setTab(item.key)}
                 aria-current={active ? "page" : undefined}
-                className={`flex items-center gap-1.5 rounded-full border px-3 py-1 text-small transition-colors ${
+                className={`flex items-center gap-1.5 rounded-md px-2.5 py-1 text-small transition-colors ${
                   active
-                    ? "border-transparent bg-elevated font-medium text-text"
-                    : "border-border text-muted hover:border-border-strong hover:text-text"
+                    ? "bg-elevated font-medium text-text"
+                    : "text-muted hover:text-text"
                 }`}
               >
                 {item.label}
@@ -93,7 +94,7 @@ export function PersonPage({
 
       {tab === "projects" ? (
         <div className="flex-1 overflow-y-auto">
-          <div className="w-full px-10 py-5 lg:px-20 xl:px-32">
+          <div className={`w-full py-5 ${PAGE_INSET}`}>
             {projects.length === 0 ? (
               <p className="text-body text-faint">
                 {firstName(person.displayName)} does not own or belong to any project yet.
@@ -135,7 +136,7 @@ export function PersonPage({
         </div>
       ) : tab === "documents" ? (
         <div className="flex-1 overflow-y-auto">
-          <div className="w-full px-10 py-5 lg:px-20 xl:px-32">
+          <div className={`w-full py-5 ${PAGE_INSET}`}>
             {documents.length === 0 ? (
               <p className="text-body text-faint">
                 {firstName(person.displayName)} has not written any documents you can see.
@@ -168,7 +169,7 @@ export function PersonPage({
         </div>
       ) : (
         <>
-          <header className="flex h-12 shrink-0 items-center gap-2 border-b border-border px-10 lg:px-20 xl:px-32">
+          <header className={`flex min-h-12 shrink-0 flex-wrap items-center gap-2 border-b border-border py-1.5 ${PAGE_INSET}`}>
             <span className="text-body font-medium text-muted">{t("Tasks")}</span>
             <span className="rounded-full bg-elevated px-2 py-0.5 text-caption text-muted">
               {shown.length}

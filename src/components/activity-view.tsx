@@ -13,7 +13,7 @@ import type { Locale, Translate } from "@/lib/i18n";
 import type { ActivityObjectType, ActivityScope, WorkspaceActivityItem, WorkspaceActivityPage } from "@/lib/activity";
 import type { Member } from "@/lib/issues";
 import { useLocale, useT } from "@/components/i18n-context";
-import { PAGE_INSET } from "@/lib/page-chrome";
+import { PAGE_HEADER, PAGE_INSET, PAGE_TITLE } from "@/lib/page-chrome";
 
 type ProjectOption = { id: string; name: string; color: string; icon: string | null };
 
@@ -272,17 +272,16 @@ export function ActivityView({
   }
 
   return (
-    <div className={`flex-1 overflow-y-auto pb-10 pt-6 ${PAGE_INSET}`} data-testid="activity-feed">
-      <div className="space-y-4">
-        <div className="flex flex-wrap items-baseline gap-2">
-          <h1 className="text-heading font-semibold tracking-tight">{t("Activity")}</h1>
-          <span className="text-body text-muted">
-            {t("Everything that changed in this workspace. Inbox is for notices that need you.")}
-          </span>
-        </div>
-
+    <div className="flex-1 overflow-y-auto pb-10" data-testid="activity-feed">
+      <header className={`${PAGE_HEADER} ${PAGE_INSET}`}>
+        <h1 className={PAGE_TITLE}>{t("Activity")}</h1>
+      </header>
+      <p className={`pt-3 text-small text-muted ${PAGE_INSET}`}>
+        {t("Everything that changed in this workspace. Inbox is for notices that need you.")}
+      </p>
+      <div className={`space-y-4 pt-3 ${PAGE_INSET}`}>
         <div className="flex flex-wrap items-center gap-2" data-testid="activity-filters">
-          <div className="flex items-center gap-1 rounded-full border border-border p-0.5">
+          <div className="flex items-center gap-1 rounded-md border border-border p-0.5">
             {SCOPES.map((option) => (
               <button
                 key={option.id}
@@ -290,7 +289,7 @@ export function ActivityView({
                 onClick={() => changeScope(option.id)}
                 aria-pressed={scope === option.id}
                 data-testid={`activity-scope-${option.id}`}
-                className={`rounded-full px-2.5 py-1 text-small transition-colors ${
+                className={`rounded px-2.5 py-1 text-small transition-colors ${
                   scope === option.id ? "bg-elevated font-medium text-text" : "text-muted hover:text-text"
                 }`}
               >
@@ -364,7 +363,7 @@ export function ActivityView({
 
         {groups.map((group) => (
           <section key={group.key} className="space-y-1">
-            <h2 className="px-1 text-small font-medium uppercase tracking-wider text-faint">
+            <h2 className="px-1 text-small font-medium text-faint">
               {dayLabel(group.items[0].createdAt, locale, t)}
             </h2>
             <div className="divide-y divide-border rounded-lg border border-border bg-bg" data-testid="activity-list">

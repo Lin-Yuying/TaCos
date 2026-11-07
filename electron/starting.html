@@ -29,7 +29,7 @@
         display: flex;
         align-items: center;
         justify-content: center;
-        background: radial-gradient(1200px 600px at 50% -10%, #f7f7f7 0%, var(--bg) 55%);
+        background: #f9f9f9;
         color: var(--text);
         font: 14px/1.45 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
         letter-spacing: -0.005em;
@@ -46,11 +46,15 @@
         width: 380px;
         max-width: 88vw;
         text-align: center;
+        padding: 28px;
+        border: 1px solid var(--border);
+        border-radius: 14px;
+        background: var(--bg);
       }
       .logo {
-        width: 48px;
-        height: 48px;
-        margin: 0 auto 18px;
+        width: 28px;
+        height: 28px;
+        margin: 0 auto 16px;
       }
       .logo img {
         width: 100%;
@@ -58,9 +62,8 @@
         display: block;
       }
       h1 {
-        font-size: 23px;
+        font-size: 18px;
         font-weight: 600;
-        letter-spacing: -0.02em;
       }
       .lede {
         margin-top: 6px;
@@ -93,11 +96,6 @@
           transform: translateX(350%);
         }
       }
-      .hint {
-        margin-top: 24px;
-        font-size: 12.5px;
-        color: var(--faint);
-      }
     </style>
   </head>
   <body>
@@ -105,9 +103,8 @@
     <div class="wrap">
       <div class="logo"><img src="assets/otter-line.png" alt="" /></div>
       <h1>Starting TaCos…</h1>
-      <p class="lede">Booting the local server and opening your workspace.</p>
+      <p class="lede">The first launch takes a few seconds while the database is created.</p>
       <div class="bar"></div>
-      <p class="hint">The first launch takes a few seconds while the database is created.</p>
     </div>
   </body>
 </html>

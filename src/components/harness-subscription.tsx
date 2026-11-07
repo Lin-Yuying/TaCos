@@ -41,8 +41,8 @@ export function HarnessSubscription({ workspaceId, harnessId }: { workspaceId: s
         <span className="text-faint">{t("Checking plan usage…")}</span>
       ) : info.windows.length > 0 ? (
         info.windows.map((window) => (
-          <span key={window.id} className="flex items-center gap-1.5 rounded-full bg-elevated px-2 py-0.5">
-            <span className="text-muted">{window.label}</span>
+          <span key={window.id} className="flex items-center gap-1.5">
+            <span>{window.label}</span>
             <span className="font-variant-numeric tabular-nums text-text">
               {t("{percent}% left", { percent: String(Math.round(window.remainingPercent)) })}
             </span>
@@ -51,7 +51,7 @@ export function HarnessSubscription({ workspaceId, harnessId }: { workspaceId: s
         ))
       ) : (
         <span className="text-faint" data-testid={`subscription-none-${harnessId}`}>
-          {t("Not reported")}
+          {t("Plan usage:")}{t("Not reported")}
           {info.hint ? <span className="text-caption"> · {t(info.hint)}</span> : null}
         </span>
       )}
@@ -60,7 +60,7 @@ export function HarnessSubscription({ workspaceId, harnessId }: { workspaceId: s
         onClick={() => void load()}
         disabled={busy}
         aria-label={t("Refresh plan usage")}
-        className="rounded-md border border-border p-1 text-muted hover:bg-elevated disabled:opacity-40"
+        className="rounded-md p-0.5 text-faint hover:bg-elevated hover:text-text disabled:opacity-40"
       >
         <RefreshCw size={11} className={busy ? "animate-spin" : ""} />
       </button>

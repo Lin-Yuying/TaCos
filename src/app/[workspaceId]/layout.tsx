@@ -117,7 +117,7 @@ export default async function WorkspaceLayout({
           {children}
         </WorkspaceShell>
         <NewIssueDialog workspaceId={active.id} />
-        <NewProjectDialog workspaceId={active.id} workspaceName={active.name} />
+        <NewProjectDialog workspaceId={active.id} />
         <CommandPalette workspaceId={active.id} />
         {isServerMode() && <RunnerBridge userId={user.id} />}
       </UIProvider>

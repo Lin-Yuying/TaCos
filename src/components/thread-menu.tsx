@@ -1,5 +1,5 @@
 "use client";
-import { useRef, useState, type ReactNode } from "react";
+import { Fragment, useRef, useState, type ReactNode } from "react";
 import * as Context from "@radix-ui/react-context-menu";
 import { MoreHorizontal } from "lucide-react";
 import { useRouter } from "next/navigation";
@@ -22,11 +22,14 @@ export function ThreadMenu({
   thread,
   projects,
   children,
+  phoneItems,
 }: {
   workspaceId: string;
   thread: AgentThread;
   projects: { id: string; name: string }[];
   children?: ReactNode;
+  // Header actions that collapse into this menu on a phone.
+  phoneItems?: (close: () => void) => ReactNode;
 }) {
   const t = useT(),
     router = useRouter(),
@@ -75,6 +78,7 @@ export function ThreadMenu({
     if (
       await confirm(
         t("Delete “{title}” and its history?", { title: thread.title }),
+        { action: t("Delete") },
       )
     )
       await run(
@@ -143,27 +147,33 @@ export function ThreadMenu({
     },
     ...(thread.mine ? [{ label: "Delete conversation", run: remove }] : []),
   ];
+  const lead = ["Rename", "Move to project", "Copy link"];
+  const rank = (label: string) => (label === "Delete conversation" ? 9 : lead.includes(label) ? lead.indexOf(label) : 5);
+  actions.sort((a, b) => rank(a.label) - rank(b.label));
   const more = (
     <Menu
       align="right"
-      width={260}
+      width={220}
       trigger={<MoreHorizontal size={14} />}
       triggerClassName="rounded p-1 text-faint hover:bg-elevated"
     >
       {(close) => (
         <>
+          {phoneItems?.(close)}
           {actions.map((action) => (
-            <MenuItem
-              key={action.label}
-              danger={action.label === "Delete conversation"}
-              disabled={busy}
-              onSelect={() => {
-                close();
-                action.run();
-              }}
-            >
-              {t(action.label)}
-            </MenuItem>
+            <Fragment key={action.label}>
+              {action.label === "Delete conversation" && <div className="my-1 h-px bg-border" />}
+              <MenuItem
+                danger={action.label === "Delete conversation"}
+                disabled={busy}
+                onSelect={() => {
+                  close();
+                  action.run();
+                }}
+              >
+                {t(action.label)}
+              </MenuItem>
+            </Fragment>
           ))}
         </>
       )}
@@ -178,7 +188,7 @@ export function ThreadMenu({
           if (!busy) setMoving(false);
         }}
       >
-        <h2 className="text-title">{t("Move to project")}</h2>
+        <h2 className="text-lead font-semibold">{t("Move to project")}</h2>
         <select
           disabled={busy}
           aria-label={t("Move to project")}
@@ -245,7 +255,7 @@ export function ThreadMenu({
           if (!busy) setRenaming(false);
         }}
       >
-        <h2 className="text-title">{t("Rename")}</h2>
+        <h2 className="text-lead font-semibold">{t("Rename")}</h2>
         <form
           onSubmit={(e) => {
             e.preventDefault();

@@ -1,47 +1,29 @@
 "use client";
 import { documentIndex, searchDocument } from "@/lib/editor/document-index";
 import { documentMarkdown } from "@/lib/editor/document-markdown";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import type { Editor } from "@tiptap/react";
+import { ChevronDown, ChevronUp, MoreHorizontal, X } from "lucide-react";
 import { Menu, MenuItem } from "@/components/menu";
 import { useT } from "@/components/i18n-context";
 import { useUI } from "@/components/ui-context";
-export function DocumentTools({
-  title,
-  doc,
-  editor,
-  width,
-  onWidth,
-}: {
-  title: string;
-  doc: string;
-  editor: Editor | null;
-  width: number;
-  onWidth: (width: number) => void;
-}) {
-  const serializer = useMemo(() => documentMarkdown(), []);
-  const t = useT(),
-    { toast } = useUI();
+
+const READING_WIDTHS = [
+  { label: "Narrow", width: 680 },
+  { label: "Medium", width: 880 },
+  { label: "Wide", width: 1120 },
+] as const;
+
+/** The floating find bar over a document. */
+export function DocFindBar({ editor, onClose }: { editor: Editor | null; onClose: () => void }) {
+  const t = useT();
   const [query, setQuery] = useState(""),
     [matches, setMatches] = useState<{ from: number; to: number }[]>([]),
-    [index, setIndex] = useState(0),
-    [active, setActive] = useState<number | null>(null);
-  const root = useRef<HTMLDivElement>(null);
-  const [revision,setRevision]=useState(0);
+    [index, setIndex] = useState(-1);
+  const [revision, setRevision] = useState(0);
   useEffect(()=>{if(!editor)return;const changed=()=>setRevision(value=>value+1);editor.on("update",changed);return()=>{editor.off("update",changed);};},[editor]);
   const indexed=useMemo(()=>editor?documentIndex(editor.state.doc):null,[editor,revision]);
-  const outline=indexed?.headings??[];
   useEffect(()=>{let cancelled=false;const timer=setTimeout(()=>{if(!cancelled)setMatches(indexed?searchDocument(indexed,query):[]);},100);return()=>{cancelled=true;clearTimeout(timer);};},[indexed,query]);
-  useEffect(() => {
-    const scroller=root.current?.closest("[data-document-root]")?.querySelector("[data-document-scroll]");
-    if(!scroller)return;
-    let offsets:number[]=[],frame=0;
-    const measure=()=>{const top=scroller.getBoundingClientRect().top;offsets=[...scroller.querySelectorAll(".tiptap h1,.tiptap h2,.tiptap h3")].map(heading=>heading.getBoundingClientRect().top-top+scroller.scrollTop);onScroll();};
-    const onScroll=()=>{if(frame)return;frame=requestAnimationFrame(()=>{frame=0;const target=scroller.scrollTop+120;let low=0,high=offsets.length;while(low<high){const middle=(low+high)>>>1;if(offsets[middle]<=target)low=middle+1;else high=middle;}setActive(Math.max(0,low-1));});};
-    const observer=new ResizeObserver(measure);observer.observe(scroller);const content=scroller.querySelector(".tiptap");if(content)observer.observe(content);
-    measure();scroller.addEventListener("scroll",onScroll,{passive:true});
-    return()=>{observer.disconnect();scroller.removeEventListener("scroll",onScroll);cancelAnimationFrame(frame);};
-  },[indexed]);
   useEffect(()=>{CSS.highlights?.delete("document-find");return()=>{CSS.highlights?.delete("document-find");};},[query,editor]);
   function locate(from: number, to = from) {
     if (!editor) return;
@@ -49,12 +31,83 @@ export function DocumentTools({
     editor.commands.scrollIntoView();
     if(CSS.highlights&&typeof Highlight!=="undefined"&&to>from){const start=editor.view.domAtPos(from),end=editor.view.domAtPos(to);const range=document.createRange();range.setStart(start.node,start.offset);range.setEnd(end.node,end.offset);CSS.highlights.set("document-find",new Highlight(range));}else editor.commands.focus();
   }
-  function find(step: number) {
-    if (!matches.length) return;
-    const next = index<0?(step<0?matches.length-1:0):(index + step + matches.length) % matches.length;
+  function step(by: number, fresh = matches) {
+    if (!fresh.length) return;
+    const next = index < 0 ? (by < 0 ? fresh.length - 1 : 0) : (index + by + fresh.length) % fresh.length;
     setIndex(next);
-    locate(matches[next].from, matches[next].to);
+    locate(fresh[next].from, fresh[next].to);
   }
+  const iconButton = "flex size-7 shrink-0 items-center justify-center rounded-md text-muted transition-colors hover:bg-elevated hover:text-text disabled:opacity-40";
+  return (
+    <div
+      role="search"
+      data-doc-find
+      className="flex max-w-full items-center gap-1 rounded-lg border border-border bg-overlay p-1.5 text-small text-muted shadow-xl"
+    >
+      <input
+        autoFocus
+        aria-label={t("Find in document")}
+        value={query}
+        onChange={(e) => {
+          setQuery(e.target.value);
+          setIndex(-1);
+        }}
+        onKeyDown={(e) => {
+          if (e.key === "Escape") {
+            e.stopPropagation();
+            onClose();
+          }
+          if (e.key === "Enter" && !e.nativeEvent.isComposing) {
+            e.preventDefault();
+            const fresh = indexed ? searchDocument(indexed, query) : [];
+            setMatches(fresh);
+            step(e.shiftKey ? -1 : 1, fresh);
+          }
+        }}
+        className="w-[180px] min-w-0 rounded-md border border-border bg-bg px-2 py-1 text-body text-text"
+      />
+      <span className="shrink-0 px-1 tabular-nums">
+        {matches.length ? Math.max(0, index + 1) : 0} / {matches.length}
+      </span>
+      <button type="button" disabled={!matches.length} aria-label={t("Previous")} title={t("Previous")} onClick={() => step(-1)} className={iconButton}>
+        <ChevronUp size={14} />
+      </button>
+      <button type="button" disabled={!matches.length} aria-label={t("Next")} title={t("Next")} onClick={() => step(1)} className={iconButton}>
+        <ChevronDown size={14} />
+      </button>
+      <button type="button" aria-label={t("Close find")} title={t("Close find")} onClick={onClose} className={iconButton}>
+        <X size={14} />
+      </button>
+    </div>
+  );
+}
+
+/** The document's ⋯ menu: panels, export and reading width. */
+export function DocumentTools({
+  title,
+  doc,
+  editor,
+  width,
+  onWidth,
+  onOutline,
+  onLinks,
+  onFind,
+  children,
+}: {
+  title: string;
+  doc: string;
+  editor: Editor | null;
+  width: number;
+  onWidth: (width: number) => void;
+  onOutline: () => void;
+  onLinks: () => void;
+  onFind: () => void;
+  // Actions on the document itself, listed last. They get the menu's close function.
+  children?: (close: () => void) => ReactNode;
+}) {
+  const serializer = useMemo(() => documentMarkdown(), []);
+  const t = useT(),
+    { toast } = useUI();
   const markdown = () =>
     (editor ? serializer.serialize(editor.getJSON()) : doc).replace(
       /\]\((\/api\/files\/[^)]+)\)/g,
@@ -129,130 +182,89 @@ export function DocumentTools({
     frame.contentWindow?.print();
     setTimeout(() => frame.remove(), 60000);
   }
+  const nearest = READING_WIDTHS.reduce((best, option) => (Math.abs(option.width - width) < Math.abs(best.width - width) ? option : best));
   return (
-    <div
-      ref={root}
-      className="flex flex-wrap items-center gap-2 text-small text-muted"
+    <Menu
+      width={230}
+      align="right"
+      triggerClassName="flex size-7 items-center justify-center rounded-md text-muted transition-colors hover:bg-elevated hover:text-text"
+      trigger={
+        <span aria-label={t("Document options")} title={t("Document options")} data-doc-options>
+          <MoreHorizontal size={15} />
+        </span>
+      }
     >
-      <Menu trigger={t("Outline")} width={300}>
-        {(close) => (
-          <div className="max-h-80 overflow-auto p-1">
-            {outline.length
-              ? outline.map((heading, index) => (
-                  <button
-                    key={`${heading.pos}:${index}`}
-                    onClick={() => {
-                      locate(heading.pos + 1);
-                      setActive(index);
-                      close();
-                    }}
-                    aria-current={active === index ? "location" : undefined}
-                    style={{ paddingLeft: 8 + (heading.level - 1) * 12 }}
-                    className={`block w-full truncate py-1 text-left ${active === index ? "bg-elevated text-text" : ""}`}
-                  >
-                    {heading.title || t("Untitled")}
-                  </button>
-                ))
-              : t("No headings yet.")}
-          </div>
-        )}
-      </Menu>
-      <Menu trigger={t("Find in document")} width={300}>
-        {() => (
-          <div className="space-y-2 p-2">
-            <input
-              aria-label={t("Find in document")}
-              value={query}
-              onChange={(e) => {
-                setQuery(e.target.value);
-                setIndex(-1);
-              }}
-              onKeyDown={(e) => {
-                if (e.key === "Enter" && !e.nativeEvent.isComposing) {
-                  e.preventDefault();
-                  const fresh=indexed?searchDocument(indexed,query):[];setMatches(fresh);
-                  if(fresh.length){const next=index<0?(e.shiftKey?fresh.length-1:0):(index+(e.shiftKey?-1:1)+fresh.length)%fresh.length;setIndex(next);locate(fresh[next].from,fresh[next].to);}
-                }
-              }}
-              className="w-full rounded border border-border bg-bg p-1"
-            />
-            <div className="flex gap-3">
-              <button disabled={!matches.length} onClick={() => find(-1)}>
-                {t("Previous")}
+      {(close) => (
+        <>
+          <MenuItem onSelect={() => { close(); onOutline(); }}>
+            <span data-doc-outline-toggle>{t("Outline")}</span>
+          </MenuItem>
+          <MenuItem onSelect={() => { close(); onLinks(); }}>
+            <span data-doc-links-toggle>{t("Linked from")}</span>
+          </MenuItem>
+          <MenuItem onSelect={() => { close(); onFind(); }}>{t("Find in document")}</MenuItem>
+          <div className="my-1 h-px bg-border" />
+          <MenuItem
+            onSelect={() => {
+              close();
+              void navigator.clipboard
+                .writeText(markdown())
+                .then(() => toast(t("Copied")))
+                .catch(() => toast(t("Could not copy. Retry.")));
+            }}
+          >
+            {t("Copy Markdown")}
+          </MenuItem>
+          <MenuItem
+            onSelect={() => {
+              close();
+              const url = URL.createObjectURL(
+                new Blob([markdown()], {
+                  type: "text/markdown;charset=utf-8",
+                }),
+              );
+              const link = document.createElement("a");
+              link.href = url;
+              link.download = `${title.replace(/[\\/:*?"<>|]/g, "-") || "document"}.md`;
+              link.click();
+              setTimeout(() => URL.revokeObjectURL(url), 1000);
+            }}
+          >
+            {t("Export Markdown")}
+          </MenuItem>
+          <MenuItem
+            onSelect={() => {
+              close();
+              void print().catch(() =>
+                toast(t("Could not prepare PDF. Retry.")),
+              );
+            }}
+          >
+            {t("Print / Save as PDF")}
+          </MenuItem>
+          <p className="px-2 py-1 text-caption text-faint">
+            {t(
+              "Current document only. Attachment links are kept; child documents are excluded.",
+            )}
+          </p>
+          <div className="my-1 h-px bg-border" />
+          <div className="px-2 pb-1 pt-1 text-caption text-faint">{t("Reading width")}</div>
+          <div role="group" aria-label={t("Reading width")} className="mx-2 mb-1.5 flex rounded-md border border-border p-0.5">
+            {READING_WIDTHS.map((option) => (
+              <button
+                key={option.label}
+                type="button"
+                aria-pressed={option === nearest}
+                onClick={() => onWidth(option.width)}
+                className={`flex-1 rounded px-2 py-0.5 text-small transition-colors ${option === nearest ? "bg-elevated font-medium text-text" : "text-muted hover:text-text"}`}
+              >
+                {t(option.label)}
               </button>
-              <button disabled={!matches.length} onClick={() => find(1)}>
-                {t("Next")}
-              </button>
-              <span>
-                {matches.length ? Math.max(0, index + 1) : 0} / {matches.length}
-
-              </span>
-            </div>
+            ))}
           </div>
-        )}
-      </Menu>
-      <Menu trigger={t("Document options")} width={280}>
-        {(close) => (
-          <>
-            <MenuItem
-              onSelect={() => {
-                close();
-                void navigator.clipboard
-                  .writeText(markdown())
-                  .then(() => toast(t("Copied")))
-                  .catch(() => toast(t("Could not copy. Retry.")));
-              }}
-            >
-              {t("Copy Markdown")}
-            </MenuItem>
-            <MenuItem
-              onSelect={() => {
-                close();
-                const url = URL.createObjectURL(
-                  new Blob([markdown()], {
-                    type: "text/markdown;charset=utf-8",
-                  }),
-                );
-                const link = document.createElement("a");
-                link.href = url;
-                link.download = `${title.replace(/[\\/:*?"<>|]/g, "-") || "document"}.md`;
-                link.click();
-                setTimeout(() => URL.revokeObjectURL(url), 1000);
-              }}
-            >
-              {t("Export Markdown")}
-            </MenuItem>
-            <MenuItem
-              onSelect={() => {
-                close();
-                void print().catch(() =>
-                  toast(t("Could not prepare PDF. Retry.")),
-                );
-              }}
-            >
-              {t("Print / Save as PDF")}
-            </MenuItem>
-            <p className="px-2 py-1 text-caption text-faint">
-              {t(
-                "Current document only. Attachment links are kept; child documents are excluded.",
-              )}
-            </p>
-            <label className="block px-2 py-1">
-              {t("Reading width")}
-              <input
-                aria-label={t("Reading width")}
-                type="range"
-                min={560}
-                max={1200}
-                step={40}
-                value={width}
-                onChange={(e) => onWidth(Number(e.target.value))}
-                className="block w-full"
-              />
-            </label>
-          </>
-        )}
-      </Menu>
-    </div>
+          {children?.(close)}
+        </>
+      )}
+    </Menu>
   );
 }

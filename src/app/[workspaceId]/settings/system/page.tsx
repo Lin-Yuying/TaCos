@@ -1,3 +1,4 @@
+import { ListSkeleton } from "@/components/ui/skeleton";
 import { Suspense } from "react";
 import { connection } from "next/server";
 import { redirect } from "next/navigation";
@@ -9,7 +10,7 @@ import { SystemView } from "@/components/system-view";
 // Only a site admin who also administers this workspace may open it.
 export default function SystemPage({ params }: { params: Promise<{ workspaceId: string }> }) {
   return (
-    <Suspense fallback={<p className="p-6 text-body text-muted">Loading…</p>}>
+    <Suspense fallback={<ListSkeleton />}>
       <View params={params} />
     </Suspense>
   );

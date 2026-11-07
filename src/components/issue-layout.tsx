@@ -3,6 +3,7 @@
 import { useDetailSource } from "@/components/detail-navigation";
 import { TaskViews } from "@/components/task-views";
 import { TaskBulkBar } from "@/components/task-bulk-bar";
+import { PAGE_INSET } from "@/lib/page-chrome";
 import { DisplayMenu } from "@/components/display-menu";
 import { BatchSelection } from "@/components/ui/batch-selection";
 import dynamic from "next/dynamic";
@@ -19,7 +20,7 @@ import { IssueBoard } from "@/components/issue-board";
 import { IssueTable } from "@/components/issue-table";
 import { useUI, type IssueLayout as Layout, type TaskSelection } from "@/components/ui-context";
 import { TaskGrid } from "@/components/task-grid";
-import { TaskViewBar } from "@/components/task-view-bar";
+import { TaskViewBar, filterSummary } from "@/components/task-view-bar";
 import type { IssueWithLabels } from "@/lib/issues";
 import { BOARD_STATUS_ORDER, STATUS_ORDER } from "@/lib/constants";
 import {
@@ -35,6 +36,7 @@ import {
 import { groupTasks } from "@/lib/view-grouping";
 import { useStoredJson } from "@/lib/use-stored-json";
 import { interpolate, useT } from "@/components/i18n-context";
+import { EmptyState } from "@/components/ui/empty-state";
 import type { TaskViewDefinition, TaskViewSummary, ViewScope } from "@/lib/task-views";
 
 const TaskCalendar = dynamic(() => import("@/components/task-calendar"), { ssr: false });
@@ -79,13 +81,12 @@ function Empty() {
   const t = useT();
   const { setComposerOpen } = useUI();
   return (
-    <div className="flex flex-1 flex-col items-center justify-center gap-3 text-center">
-      <div className="text-lead font-medium text-muted">{t("No tasks found")}</div>
-      <div className="text-body text-faint">
-        {interpolate(t("Adjust your filters, or press {key} to create one."), {
-          key: <kbd className="rounded border border-border px-1 font-mono text-caption">C</kbd>,
-        })}
-      </div>
+    <EmptyState
+      title={t("No tasks found")}
+      hint={interpolate(t("Adjust your filters, or press {key} to create one."), {
+        key: <kbd className="rounded border border-border px-1 font-mono text-caption">C</kbd>,
+      })}
+    >
       <button
         type="button"
         onClick={() => setComposerOpen(true)}
@@ -93,7 +94,7 @@ function Empty() {
       >
         <Plus size={13} /> {t("New task")}
       </button>
-    </div>
+    </EmptyState>
   );
 }
 
@@ -124,6 +125,7 @@ export function IssueLayout({
   scope = "workspace",
   projectId = null,
   initialView = null,
+  phoneToolsCollapsed = false,
 }: {
   issues: IssueWithLabels[];
   workspaceId: string;
@@ -137,6 +139,8 @@ export function IssueLayout({
   projectId?: string | null;
   // The view the server resolved from ?viewId= or the scope default.
   initialView?: TaskViewSummary | null;
+  // The task list has a filter button in its phone header; other lists keep the bar open.
+  phoneToolsCollapsed?: boolean;
 }) {
   const t = useT();
   const router = useRouter();
@@ -194,6 +198,7 @@ export function IssueLayout({
     () => selected.filter((id) => shownIds.has(id)),
     [selected, shownIds]
   );
+  const [columnsSlot, setColumnsSlot] = useState<HTMLElement | null>(null);
   const selection = useMemo<TaskSelection>(
     () => ({
       mode: selecting,
@@ -310,7 +315,30 @@ export function IssueLayout({
   if (!serverQuery&&issues.length === 0) return <Empty />;
   return (
     <>
-      <div className="flex flex-wrap items-center gap-2 border-b border-border px-3 py-1">
+      {selecting ? (
+        <TaskBulkBar
+          workspaceId={workspaceId}
+          selected={selectedShown}
+          clear={() => {
+            setSelected([]);
+            setSelecting(false);
+          }}
+          onResults={(results) =>
+            setSelected(results.filter((row) => !row.ok).map((row) => row.id))
+          }
+        />
+      ) : null}
+      <TaskViewBar
+        phoneCollapsed={phoneToolsCollapsed}
+        workspaceId={workspaceId}
+        view={view}
+        onChange={setView}
+        fields={fields}
+        choices={choices}
+        issues={pageIssues}
+        manageFields={manageFields}
+        onFieldsChanged={() => router.refresh()}
+        leading={<>
         <TaskViews
           workspaceId={workspaceId}
           scope={scope}
@@ -334,6 +362,11 @@ export function IssueLayout({
           saving={savingDisplay}
           error={displayError}
         />
+          {layout === "table" && <span ref={setColumnsSlot} className="contents" />}
+        </>}
+        trailing={<>
+          {!serverQuery && shown.length !== issues.length && <span className="text-small tabular-nums text-faint">{`${shown.length} / ${issues.length}`}</span>}
+          {selecting && <BatchSelection key={queryKey+viewKey} workspaceId={workspaceId} kind="task" items={shown} loadItems={serverQuery?()=>taskViewCandidatesAction(workspaceId,serverQuery,effectiveView):undefined}/>}
         <button
           type="button"
           data-bulk-select
@@ -348,37 +381,25 @@ export function IssueLayout({
         >
           <CheckSquare size={12} /> {t("Select tasks")}
         </button>
-        <BatchSelection key={queryKey+viewKey} workspaceId={workspaceId} kind="task" items={shown} loadItems={serverQuery?()=>taskViewCandidatesAction(workspaceId,serverQuery,effectiveView):undefined}/>
-        <span className="text-small text-faint">{serverQuery?`${(remote?.page??0)*100+ (shown.length?1:0)}–${(remote?.page??0)*100+shown.length} / ${remote?.total??0}`:`${shown.length} / ${issues.length}`}</span>
-      </div>
-      {selecting ? (
-        <TaskBulkBar
-          workspaceId={workspaceId}
-          selected={selectedShown}
-          clear={() => {
-            setSelected([]);
-            setSelecting(false);
-          }}
-          onResults={(results) =>
-            setSelected(results.filter((row) => !row.ok).map((row) => row.id))
-          }
-        />
-      ) : null}
-      {serverQuery&&<div className="flex shrink-0 flex-wrap items-center gap-3 px-3 py-1 text-small"><button disabled={pending||!remote?.page} onClick={()=>void changePage((remote?.page??0)-1)}>{t("Previous")}</button><button disabled={pending||!remote||((remote.page+1)*100>=remote.total)} onClick={()=>void changePage((remote?.page??0)+1)}>{t("Next")}</button><button disabled={pending} onClick={()=>void exportView()}>{t("Export all filtered tasks")}</button>{pending&&<span>{t("Loading…")}</span>}{failure&&<span role="alert" className="text-danger">{t(failure)} <button onClick={()=>void changePage(0,true)}>{t("Refresh")}</button></span>}</div>}
-      <TaskViewBar
-        workspaceId={workspaceId}
-        view={view}
-        onChange={setView}
-        fields={fields}
-        choices={choices}
-        issues={pageIssues}
-        manageFields={manageFields}
-        onFieldsChanged={() => router.refresh()}
+        </>}
+        onExport={serverQuery ? () => void exportView() : undefined}
+        exportDisabled={pending}
       />
       {shown.length === 0 ? (
-        <div className="flex flex-1 items-center justify-center text-body text-faint">
-          {t("No tasks match this filter")}
-        </div>
+        <EmptyState
+          title={t("No tasks match this filter")}
+          hint={view.filters.length > 0 ? t("Current filters: {filters}", { filters: filterSummary(view, fields, pageIssues, t, choices) }) : undefined}
+        >
+          {view.filters.length > 0 && (
+            <button
+              type="button"
+              onClick={() => setView({ ...view, filters: [] })}
+              className="rounded-md border border-border px-2 py-1 text-small text-muted transition-colors hover:bg-elevated hover:text-text"
+            >
+              {t("Clear filters")}
+            </button>
+          )}
+        </EmptyState>
       ) : layout === "board" ? (
         <IssueBoard issues={shown} workspaceId={workspaceId} currentUserId={currentUserId} manualOrder={isManualOrder(effectiveView)} groups={groups} grouping={grouping} properties={display.properties} selection={selection} />
       ) : layout === "table" ? (
@@ -391,11 +412,23 @@ export function IssueLayout({
           onViewChange={setView}
           properties={display.properties}
           selection={selection}
+          columnsSlot={columnsSlot}
         />
       ) : layout === "calendar" ? (
         <TaskCalendar workspaceId={workspaceId} issues={shown} />
       ) : (
         <IssueTable issues={shown} groups={groups} properties={display.properties} selection={selection} />
+      )}
+      {serverQuery && (pending || failure || (remote?.total ?? 0) > 100 || (remote?.page ?? 0) > 0) && (
+        <div className={`flex min-h-10 shrink-0 flex-wrap items-center gap-2 border-t border-border py-1 text-small text-muted ${PAGE_INSET}`}>
+          {((remote?.total ?? 0) > 100 || (remote?.page ?? 0) > 0) && <>
+            <span className="tabular-nums text-faint">{`${(remote?.page ?? 0) * 100 + (shown.length ? 1 : 0)}–${(remote?.page ?? 0) * 100 + shown.length} / ${remote?.total ?? 0}`}</span>
+            <button type="button" className="rounded-md px-2 py-1 hover:bg-elevated hover:text-text disabled:opacity-50" disabled={pending || !remote?.page} onClick={() => void changePage((remote?.page ?? 0) - 1)}>{t("Previous page")}</button>
+            <button type="button" className="rounded-md px-2 py-1 hover:bg-elevated hover:text-text disabled:opacity-50" disabled={pending || !remote || (remote.page + 1) * 100 >= remote.total} onClick={() => void changePage((remote?.page ?? 0) + 1)}>{t("Next page")}</button>
+          </>}
+          {pending && <span>{t("Loading…")}</span>}
+          {failure && <span role="alert" className="text-danger">{t(failure)} <button type="button" className="underline" onClick={() => void changePage(0, true)}>{t("Refresh")}</button></span>}
+        </div>
       )}
     </>
   );

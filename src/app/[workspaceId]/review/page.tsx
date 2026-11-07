@@ -1,3 +1,5 @@
+import { ListSkeleton } from "@/components/ui/skeleton";
+import { PAGE_HEADER, PAGE_INSET, PAGE_TITLE } from "@/lib/page-chrome";
 import { Suspense } from "react";
 import { connection } from "next/server";
 import { redirect } from "next/navigation";
@@ -13,7 +15,7 @@ export default async function ReviewPage({
   params: Promise<{ workspaceId: string }>;
 }) {
   return (
-    <Suspense fallback={<div className="p-6 text-body text-muted">Loading…</div>}>
+    <Suspense fallback={<ListSkeleton />}>
       <View params={params} />
     </Suspense>
   );
@@ -28,8 +30,8 @@ async function View({ params }: { params: Promise<{ workspaceId: string }> }) {
   const issues = await listPendingReview(workspaceId);
   return (
     <>
-      <header className="flex h-12 shrink-0 items-center gap-3 border-b border-border px-4">
-        <h1 className="text-body font-semibold">{translator(await resolveLocale(user))("Review")}</h1>
+      <header className={`${PAGE_HEADER} ${PAGE_INSET}`}>
+        <h1 className={PAGE_TITLE}>{translator(await resolveLocale(user))("Review")}</h1>
         <span className="rounded-full bg-elevated px-2 py-0.5 text-caption text-muted">{issues.length}</span>
       </header>
       <ReviewView workspaceId={workspaceId} issues={issues} />

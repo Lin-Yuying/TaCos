@@ -95,7 +95,7 @@ export function WatchControl({
             : "border-border text-muted hover:border-border-strong hover:text-text"
         }`}
         trigger={
-          <span data-testid={`watch-button-${scopeType}`} aria-pressed={following}>
+          <span data-testid={`watch-button-${scopeType}`} aria-pressed={following} className="inline-flex items-center gap-1.5 whitespace-nowrap">
             {following ? (muted ? <BellOff size={12} /> : <Bell size={12} />) : <Bell size={12} />}
             {following ? t(muted ? "Muted" : "Following") : t("Follow")}
             {watchers.length > 0 && (
@@ -139,18 +139,17 @@ export function WatchControl({
                 {following ? t("Unfollow") : t("Follow")}
               </span>
             </MenuItem>
-            {following && (
-              <MenuItem
-                onSelect={() => {
-                  close();
-                  void apply(() => setWatchMutedAction(workspaceId, scopeType, scopeId, !muted));
-                }}
-              >
-                <span data-testid="watch-mute">
-                  {muted ? t("Unmute notifications") : t("Mute notifications")}
-                </span>
-              </MenuItem>
-            )}
+            <MenuItem
+              disabled={!following}
+              onSelect={() => {
+                close();
+                void apply(() => setWatchMutedAction(workspaceId, scopeType, scopeId, !muted));
+              }}
+            >
+              <span data-testid="watch-mute">
+                {muted ? t("Unmute notifications") : t("Mute notifications")}
+              </span>
+            </MenuItem>
             {!compact && (
               <p className="px-2 pb-1 pt-1 text-caption text-faint">
                 {t("Watchers get one Inbox notice per comment. @mentions still reach you when muted.")}

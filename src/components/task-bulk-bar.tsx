@@ -97,7 +97,7 @@ export function TaskBulkBar({
   }
 
   return (
-    <div data-task-bulk className="flex flex-wrap items-center gap-1.5 border-b border-border bg-elevated/30 px-3 py-1 text-small">
+    <div data-task-bulk role="toolbar" aria-label={t("Select tasks")} className="fixed bottom-5 left-1/2 max-[600px]:bottom-[72px] max-[600px]:w-[calc(100vw-32px)] z-40 flex max-w-[calc(100vw-32px)] -translate-x-1/2 flex-wrap items-center gap-1.5 rounded-[10px] border border-border bg-bg px-2 py-1.5 text-small shadow-xl">
       <span className="flex items-center gap-1 font-medium text-text">
         <CheckSquare size={12} />
         {t("{count} selected", { count: selected.length })}
@@ -257,7 +257,7 @@ export function TaskBulkBar({
           </>
         )}
       </Menu>
-      <button type="button" onClick={clear} disabled={busy} className="ml-auto flex items-center gap-1 text-faint hover:text-text disabled:opacity-40">
+      <button type="button" onClick={clear} disabled={busy} className="flex items-center gap-1 rounded-md px-2 py-1 text-muted hover:bg-elevated hover:text-text disabled:opacity-40">
         <X size={12} /> {t("Clear")}
       </button>
       {summary ? (

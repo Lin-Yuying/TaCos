@@ -305,7 +305,8 @@ export function IssueTable({
             const opened = openIssueId === issue.id;
             const checked = selection?.selected.has(issue.id) ?? false;
             return (
-              <EntityRow key={issue.id} kind="task" id={issue.id} title={issue.title}>
+              <div key={issue.id} className="max-[600px]:border-b max-[600px]:border-border">
+              <EntityRow kind="task" id={issue.id} title={issue.title}>
               <div
                 key={issue.id}
                 ref={(el) => {
@@ -318,10 +319,11 @@ export function IssueTable({
                 onFocus={() => setFocusIndex(index)}
                 onClick={() => {
                   setFocusIndex(index);
-                  openIssue(issue.id);
+                  if (selection?.mode) selection.toggle(issue.id);
+                  else openIssue(issue.id);
                 }}
                 onMouseEnter={() => setFocusIndex(index)}
-                className={`flex cursor-default items-center gap-2.5 py-[7px] text-body transition-colors ${PAGE_INSET} ${
+                className={`flex cursor-default items-center gap-2.5 py-[7px] text-body transition-colors ${PAGE_INSET} max-[600px]:min-h-11 max-[600px]:py-2.5 max-[600px]:pl-4 max-[600px]:pr-4 ${
                   focused ? "bg-row-active" : opened ? "bg-surface" : "hover:bg-elevated/40"
                 } ${opened ? "border-l-2 border-l-accent" : "border-l-2 border-l-transparent"}`}
               >
@@ -336,12 +338,17 @@ export function IssueTable({
                 {show("id") ? (
                   <span
                     title={issueRef(issue)}
-                    className="w-[124px] shrink-0 truncate font-mono text-small text-faint"
+                    className="w-[124px] shrink-0 truncate font-mono text-small text-faint max-[600px]:hidden"
                   >
                     {issueRef(issue)}
                   </span>
                 ) : null}
-                <span className="min-w-0 flex-1 truncate">{issue.title}</span>
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate">{issue.title}</span>
+                  <span suppressHydrationWarning className="hidden truncate text-small text-faint max-[600px]:block">
+                    {[show("id") ? issueRef(issue) : null, show("status") ? t(STATUS_META[issue.status].label) : null, show("dates") ? timeAgo(issue.updatedAt, locale) : null].filter(Boolean).join(" · ")}
+                  </span>
+                </span>
                 {issue.delegatedAgentId ? (
                   <span
                     title={issue.delegatedAgentName ? t("Delegated to {name}", { name: issue.delegatedAgentName }) : t("Delegated to an agent")}
@@ -350,6 +357,11 @@ export function IssueTable({
                   >
                     <Bot size={11} />
                     {issue.delegationStatus === "review" ? t("Review") : null}
+                  </span>
+                ) : null}
+                {show("assignee") && issue.assignees[0] ? (
+                  <span className="hidden shrink-0 max-[600px]:block">
+                    <AssigneeAvatar displayName={issue.assignees[0].displayName} avatar={issue.assignees[0].avatar} />
                   </span>
                 ) : null}
                 {show("project") ? (
@@ -422,7 +434,7 @@ export function IssueTable({
                     )}
                   </span>
                 ) : null}
-                <span className="flex w-[72px] shrink-0 items-center justify-end gap-1">
+                <span className="flex w-[72px] shrink-0 items-center justify-end gap-1 max-[600px]:hidden">
                   <ViaBadge via={issue.createdVia} />
                   {show("dates") ? (
                     <span suppressHydrationWarning className="whitespace-nowrap text-right text-small text-faint">
@@ -432,6 +444,7 @@ export function IssueTable({
                 </span>
               </div>
               </EntityRow>
+              </div>
             );
     }}/>
   );

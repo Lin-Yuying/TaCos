@@ -1,7 +1,9 @@
 "use client";
 
 import { useState } from "react";
-import { Bot, Plus, Trash2 } from "lucide-react";
+import { ChevronDown, Trash2, X } from "lucide-react";
+import { Modal } from "@/components/ui/modal";
+import { Menu, MenuItem } from "@/components/menu";
 import { createAgentAction, deleteAgentAction, updateAgentAction } from "@/app/agent-actions";
 import { AGENT_APPROVALS, AGENT_HARNESS_IDS } from "@/lib/ai-constants";
 import type { AgentView } from "@/lib/workspace-agents";
@@ -12,7 +14,8 @@ const BUTTON =
   "rounded-md border border-border px-2 py-1 text-small text-muted transition-colors hover:bg-elevated hover:text-text disabled:opacity-40";
 const INPUT =
   "w-full rounded-md border border-border bg-elevated/50 px-2.5 py-1.5 text-small text-text placeholder:text-faint focus:border-border-strong";
-const SELECT = "rounded-md border border-border bg-bg px-2 py-1 text-small text-text";
+const SELECT = "w-full rounded-md border border-border bg-bg px-2 py-1.5 text-small text-text";
+const FIELD = "block space-y-1 text-small text-muted";
 
 type Draft = {
   id: string | null;
@@ -124,11 +127,8 @@ export function AgentSettingsSection({
 
   return (
     <section className="space-y-3" data-testid="agent-settings">
-      <div className="flex flex-wrap items-center gap-2">
-        <h2 className="text-body font-semibold">{t("Agents")}</h2>
-        <span className="rounded-full bg-elevated px-2 py-0.5 text-caption text-faint">
-          {t("{count} agents", { count: String(agents.length) })}
-        </span>
+      <div className="flex items-center gap-2">
+        <h2 className="min-w-0 flex-1 text-body font-semibold">{t("Agents · {count}", { count: String(agents.length) })}</h2>
         <button
           type="button"
           onClick={() => {
@@ -137,47 +137,31 @@ export function AgentSettingsSection({
           }}
           disabled={!isAdmin || busy}
           data-testid="agent-create"
-          className={`ml-auto ${BUTTON}`}
+          className={BUTTON}
         >
-          <span className="flex items-center gap-1">
-            <Plus size={12} /> {t("New agent")}
-          </span>
+          {t("New agent")}
         </button>
       </div>
-      <p className="text-body leading-relaxed text-muted">
-        {t(
-          "Agents are teammates you can delegate tasks to. Shared agents are admin-managed and scoped to projects; each member also has a personal agent."
-        )}
-      </p>
       <div className="overflow-hidden rounded-lg border border-border">
         {agents.length === 0 && <p className="px-4 py-3 text-small text-faint">{t("No agents yet.")}</p>}
         {agents.map((agent, index) => (
           <div
             key={agent.id}
-            className={`flex flex-wrap items-start gap-3 px-4 py-3 ${index > 0 ? "border-t border-border" : ""}`}
+            className={`flex flex-wrap items-center gap-3 px-4 py-3 ${index > 0 ? "border-t border-border" : ""}`}
             data-testid="agent-row"
             data-agent-id={agent.id}
+            title={agent.description || undefined}
           >
-            <div className="min-w-0 flex-1 space-y-1">
+            <div className="min-w-0 flex-1 space-y-0.5">
               <div className="flex flex-wrap items-center gap-2">
-                <Bot size={13} className={agent.available ? "text-accent" : "text-faint"} />
                 <span className="text-body font-medium text-text">{agent.name}</span>
                 {agent.personal && (
                   <span className="rounded-full bg-elevated px-2 py-0.5 text-caption text-faint">{t("Personal")}</span>
                 )}
-                <span className="rounded-full bg-elevated px-2 py-0.5 font-mono text-caption text-faint">
-                  {agent.source === "api" ? "api" : agent.engine}
-                </span>
-                <span
-                  className={`rounded-full px-2 py-0.5 text-caption font-medium ${
-                    agent.available ? "bg-accent/10 text-accent" : "bg-elevated text-faint"
-                  }`}
-                >
-                  {agent.enabled ? (agent.available ? t("Available") : t("Not available")) : t("Off")}
-                </span>
               </div>
-              {agent.description && <p className="text-small text-muted">{agent.description}</p>}
               <p className="text-small text-faint">
+                {agent.source === "api" ? t("Built-in API agent") : `${t("Local harness")} · ${agent.engine}`}
+                {" · "}
                 {agent.approval === "ask"
                   ? t("Every write asks")
                   : agent.approval === "auto"
@@ -192,6 +176,13 @@ export function AgentSettingsSection({
                 <p className="text-small text-faint">{t(agent.availabilityHint)}</p>
               )}
             </div>
+            <span
+              className={`shrink-0 rounded-full px-2 py-0.5 text-caption font-medium ${
+                agent.enabled && agent.available ? "bg-accent/10 text-accent" : "bg-elevated text-faint"
+              }`}
+            >
+              {agent.enabled ? (agent.available ? t("Available") : t("Not available")) : t("Off")}
+            </span>
             <div className="flex flex-wrap items-center gap-2">
               {((isAdmin && !agent.personal) || agent.mine) && (
                 <>
@@ -212,7 +203,7 @@ export function AgentSettingsSection({
                     disabled={busy}
                     onClick={() => void remove(agent)}
                     aria-label={t("Delete {name}", { name: agent.name })}
-                    className={BUTTON}
+                    className="rounded-md p-1.5 text-danger transition-colors hover:bg-elevated disabled:opacity-40"
                   >
                     <Trash2 size={12} />
                   </button>
@@ -224,121 +215,164 @@ export function AgentSettingsSection({
       </div>
 
       {draft && (
-        <div className="space-y-2 rounded-lg border border-border p-3" data-testid="agent-form">
-          <div className="flex flex-wrap gap-2">
-            <input
-              value={draft.name}
-              onChange={(event) => setDraft({ ...draft, name: event.target.value })}
-              placeholder={t("Agent name")}
-              aria-label={t("Agent name")}
-              data-testid="agent-name"
-              className={INPUT}
-            />
-          </div>
-          <div className="flex flex-wrap gap-2">
-            <select
-              value={draft.source}
-              onChange={(event) =>
-                setDraft({
-                  ...draft,
-                  source: event.target.value as Draft["source"],
-                  engine: event.target.value === "api" ? "api" : draft.engine === "api" ? "codex" : draft.engine,
-                })
-              }
-              aria-label={t("Source")}
-              data-testid="agent-source"
-              className={SELECT}
-            >
-              <option value="harness">{t("Local harness")}</option>
-              <option value="api">{t("Built-in API agent")}</option>
-            </select>
-            {draft.source === "harness" && (
-              <select
-                value={draft.engine}
-                onChange={(event) => setDraft({ ...draft, engine: event.target.value })}
-                aria-label={t("Harness")}
-                data-testid="agent-engine"
-                className={SELECT}
-              >
-                {AGENT_HARNESS_IDS.map((id) => (
-                  <option key={id} value={id}>
-                    {id}
-                  </option>
-                ))}
-              </select>
-            )}
-            <select
-              value={draft.approval}
-              onChange={(event) => setDraft({ ...draft, approval: event.target.value })}
-              aria-label={t("Approval")}
-              data-testid="agent-approval"
-              className={SELECT}
-            >
-              {AGENT_APPROVALS.map((entry) => (
-                <option key={entry.id} value={entry.id}>
-                  {t(entry.label)}
-                </option>
-              ))}
-            </select>
-            <input
-              value={draft.model}
-              onChange={(event) => setDraft({ ...draft, model: event.target.value })}
-              placeholder={t("Model (leave empty for the default)")}
-              aria-label={t("Model")}
-              className={`${SELECT} min-w-[220px] flex-1`}
-            />
-          </div>
-          <textarea
-            value={draft.description}
-            onChange={(event) => setDraft({ ...draft, description: event.target.value })}
-            rows={2}
-            placeholder={t("What this agent is for")}
-            aria-label={t("Description")}
-            className={INPUT}
-          />
-          <fieldset className="space-y-1">
-            <legend className="text-small text-muted">{t("Projects")}</legend>
-            <label className="flex items-center gap-1.5 text-small text-text">
-              <input
-                type="checkbox"
-                checked={draft.projectIds.length === 0}
-                onChange={() => setDraft({ ...draft, projectIds: [] })}
-              />
-              {t("All projects")}
-            </label>
-            {projects.map((project) => (
-              <label key={project.id} className="flex items-center gap-1.5 text-small text-text">
+        <Modal open onClose={() => setDraft(null)} title={draft.id ? t("Edit agent") : t("New agent")} className="max-w-[480px] !p-0">
+          <div data-testid="agent-form">
+            <div className="flex items-center justify-between border-b border-border px-4 py-3">
+              <h2 className="text-lead font-semibold text-text">{draft.id ? t("Edit agent") : t("New agent")}</h2>
+              <button type="button" aria-label={t("Close")} onClick={() => setDraft(null)} className="rounded-md p-1 text-faint hover:bg-elevated hover:text-text">
+                <X size={14} />
+              </button>
+            </div>
+            <div className="space-y-3 p-4">
+              <label className={FIELD}>
+                <span>{t("Agent name")}</span>
                 <input
-                  type="checkbox"
-                  checked={draft.projectIds.includes(project.id)}
-                  onChange={(event) => {
-                    const next = event.target.checked
-                      ? [...draft.projectIds, project.id]
-                      : draft.projectIds.filter((id) => id !== project.id);
-                    setDraft({ ...draft, projectIds: next });
-                  }}
+                  value={draft.name}
+                  onChange={(event) => setDraft({ ...draft, name: event.target.value })}
+                  placeholder={t("e.g. Operations assistant")}
+                  data-testid="agent-name"
+                  className={INPUT}
                 />
-                {project.name}
               </label>
-            ))}
-          </fieldset>
-          <div className="flex gap-2">
-            <button
-              type="button"
-              onClick={() => void save()}
-              disabled={busy || !draft.name.trim()}
-              data-testid="agent-save"
-              className="rounded-md bg-accent px-3 py-1.5 text-small font-medium text-white disabled:opacity-40"
-            >
-              {busy ? t("Saving…") : t("Save")}
-            </button>
-            <button type="button" onClick={() => setDraft(null)} className={BUTTON}>
-              {t("Cancel")}
-            </button>
+              <div className={FIELD}>
+                <span id="agent-source-label">{t("Source")}</span>
+                <div role="group" aria-labelledby="agent-source-label" data-testid="agent-source" className="flex w-fit gap-px rounded-lg bg-elevated p-0.5">
+                  {(
+                    [
+                      { id: "harness", label: t("Local harness") },
+                      { id: "api", label: t("Built-in API agent") },
+                    ] as const
+                  ).map((option) => (
+                    <button
+                      key={option.id}
+                      type="button"
+                      aria-pressed={draft.source === option.id}
+                      onClick={() =>
+                        setDraft({
+                          ...draft,
+                          source: option.id,
+                          engine: option.id === "api" ? "api" : draft.engine === "api" ? "codex" : draft.engine,
+                        })
+                      }
+                      className={`rounded-md px-2.5 py-1 text-small transition-colors ${
+                        draft.source === option.id ? "bg-bg text-text shadow-sm" : "text-muted hover:text-text"
+                      }`}
+                    >
+                      {option.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              {draft.source === "harness" && (
+                <label className={FIELD}>
+                  <span>{t("Harness")}</span>
+                  <select
+                    value={draft.engine}
+                    onChange={(event) => setDraft({ ...draft, engine: event.target.value })}
+                    data-testid="agent-engine"
+                    className={SELECT}
+                  >
+                    {AGENT_HARNESS_IDS.map((id) => (
+                      <option key={id} value={id}>
+                        {id}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              )}
+              <label className={FIELD}>
+                <span>{t("Approval")}</span>
+                <select
+                  value={draft.approval}
+                  onChange={(event) => setDraft({ ...draft, approval: event.target.value })}
+                  data-testid="agent-approval"
+                  className={SELECT}
+                >
+                  {AGENT_APPROVALS.map((entry) => (
+                    <option key={entry.id} value={entry.id}>
+                      {t(entry.label)}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className={FIELD}>
+                <span>{t("Model (leave empty for the default)")}</span>
+                <input
+                  value={draft.model}
+                  onChange={(event) => setDraft({ ...draft, model: event.target.value })}
+                  className={INPUT}
+                />
+              </label>
+              <label className={FIELD}>
+                <span>{t("Description")}</span>
+                <textarea
+                  value={draft.description}
+                  onChange={(event) => setDraft({ ...draft, description: event.target.value })}
+                  rows={2}
+                  placeholder={t("What this agent is for")}
+                  className={INPUT}
+                />
+              </label>
+              <div className={FIELD}>
+                <span>{t("Projects")}</span>
+                <Menu
+                  width={260}
+                  triggerClassName={`${SELECT} flex items-center justify-between gap-2`}
+                  className="block"
+                  trigger={
+                    <>
+                      {draft.projectIds.length === 0
+                        ? t("All projects")
+                        : t("{count} projects", { count: String(draft.projectIds.length) })}
+                      <ChevronDown size={12} className="text-faint" />
+                    </>
+                  }
+                >
+                  {() => (
+                    <>
+                      <MenuItem active={draft.projectIds.length === 0} onSelect={() => setDraft({ ...draft, projectIds: [] })}>
+                        {t("All projects")}
+                      </MenuItem>
+                      {projects.map((project) => (
+                        <MenuItem
+                          key={project.id}
+                          active={draft.projectIds.includes(project.id)}
+                          onSelect={() =>
+                            setDraft({
+                              ...draft,
+                              projectIds: draft.projectIds.includes(project.id)
+                                ? draft.projectIds.filter((id) => id !== project.id)
+                                : [...draft.projectIds, project.id],
+                            })
+                          }
+                        >
+                          {project.name}
+                        </MenuItem>
+                      ))}
+                    </>
+                  )}
+                </Menu>
+              </div>
+              {error && <div className="text-small text-danger">{t(error)}</div>}
+            </div>
+            <div className="flex justify-end gap-2 border-t border-border px-4 py-3">
+              <button type="button" onClick={() => setDraft(null)} className={BUTTON}>
+                {t("Cancel")}
+              </button>
+              <button
+                type="button"
+                onClick={() => void save()}
+                disabled={busy || !draft.name.trim()}
+                data-testid="agent-save"
+                className="rounded-md bg-accent px-3 py-1.5 text-small font-medium text-white disabled:opacity-40"
+              >
+                {busy ? t("Saving…") : t("Save")}
+              </button>
+            </div>
           </div>
-        </div>
+        </Modal>
       )}
-      {error && <div className="text-small text-danger">{t(error)}</div>}
+      {!draft && error && <div className="text-small text-danger">{t(error)}</div>}
       {!isAdmin && (
         <p className="text-small text-faint">{t("Only a workspace admin can add or change shared agents.")}</p>
       )}

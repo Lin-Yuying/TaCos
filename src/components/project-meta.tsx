@@ -92,7 +92,7 @@ function MetaLabel({ label, onHide }: { label: string; onHide: () => void }) {
       onClick={onHide}
       aria-label={t("Hide {section}", { section: label.toLowerCase() })}
       title={t("Hide {section}", { section: label.toLowerCase() })}
-      className="flex w-20 shrink-0 items-center gap-1 rounded text-left text-small leading-[22px] text-faint transition-colors hover:text-muted"
+      className="flex shrink-0 items-center gap-1 rounded text-left text-small leading-[22px] text-faint transition-colors hover:text-muted"
     >
       <ChevronDown size={11} className="shrink-0" />
       {label}
@@ -174,6 +174,7 @@ export function ProjectMeta({
   const [resourceBusy, setResourceBusy] = useState(false);
   const [resourceError, setResourceError] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [personQuery, setPersonQuery] = useState("");
 
   const showProperties = !rows.hidden.includes("properties");
   const showResources = !rows.hidden.includes("resources");
@@ -303,9 +304,9 @@ export function ProjectMeta({
   if (!showProperties && !showResources) return null;
 
   return (
-    <div className="mt-3 flex min-w-0 flex-col gap-2 text-body">
+    <div className="flex min-w-0 flex-col gap-4 text-body">
       {showProperties && (
-        <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5">
+        <div className="flex flex-col gap-2">
           <MetaLabel label={t("Properties")} onHide={() => rows.toggle("properties")} />
           <div className="flex min-w-0 flex-1 flex-wrap items-center gap-x-3 gap-y-1.5">
             {lead && (
@@ -402,7 +403,18 @@ export function ProjectMeta({
               >
                 {(close) => (
                   <>
-                    {candidates.map((member) => (
+                    <div className="px-2 pb-1 pt-1 text-caption text-faint">{t("Add person")}</div>
+                    <div className="px-1 pb-1">
+                      <input
+                        autoFocus
+                        value={personQuery}
+                        onChange={(event) => setPersonQuery(event.target.value)}
+                        aria-label={t("Search members")}
+                        placeholder={t("Search members")}
+                        className="w-full rounded-md border border-border bg-transparent px-2 py-1 text-small outline-none placeholder:text-faint focus:border-border-strong"
+                      />
+                    </div>
+                    {candidates.filter((member) => member.displayName.toLowerCase().includes(personQuery.trim().toLowerCase())).map((member) => (
                       <div
                         key={member.id}
                         className="flex items-center gap-2 rounded-md px-2 py-1.5 text-body hover:bg-elevated"
@@ -441,7 +453,7 @@ export function ProjectMeta({
         </div>
       )}
       {showResources && (
-        <div className="flex flex-wrap items-start gap-x-3 gap-y-2">
+        <div className="flex flex-col gap-2">
           <MetaLabel label={t("Resources")} onHide={() => rows.toggle("resources")} />
           <div className="flex min-w-0 flex-1 flex-wrap items-center gap-1.5">
             {resources.map((resource) => {

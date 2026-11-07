@@ -1,9 +1,11 @@
 "use client";
+import { PAGE_HEADER, PAGE_INSET } from "@/lib/page-chrome";
 import { SafeImage } from "./safe-image";
 
 import { DetailNavigation } from "@/components/detail-navigation";
 import { useScrollMemory } from "@/lib/ui/scroll-memory";
-import { DocumentTools } from "@/components/document-tools";
+import { DocFindBar, DocumentTools } from "@/components/document-tools";
+import { MoveDocument } from "@/components/ui/move-document";
 import { Modal } from "@/components/ui/modal";
 import { useStoredJson } from "@/lib/use-stored-json";
 import Link from "next/link";
@@ -16,7 +18,6 @@ import {
   History,
   FileText,
   Link2,
-  ListTree,
   Lock,
   Maximize2,
   MessageSquare,
@@ -24,10 +25,11 @@ import {
   Paperclip,
   Plus,
   Sparkles,
-  Trash2,
   Users,
   Image as ImageIcon,
   Star,
+  X,
+  ArrowLeft,
 } from "lucide-react";
 import { Menu, MenuItem } from "@/components/menu";
 import type { PageContext, PageRefEntry } from "@/components/markdown";
@@ -39,7 +41,7 @@ import { DocOutlinePanel } from "@/components/doc-outline";
 import { DocShareMenu } from "@/components/doc-share";
 import { WatchControl } from "@/components/watch-control";
 import { AssigneeAvatar } from "@/components/issue-table";
-import { AiEditPanel } from "@/components/ai-assist";
+import { AiEditPanel, AiTaskDialog } from "@/components/ai-assist";
 import { DiffLines, DocUpdatesPanel } from "@/components/doc-updates";
 import { useUI } from "@/components/ui-context";
 import {
@@ -62,7 +64,7 @@ import { docOutline } from "@/lib/doc-outline";
 import { levelAllows, type PageLevel } from "@/lib/page-level";
 import type { Member } from "@/lib/issues";
 import type { PageComment } from "@/lib/page-comments";
-import type { DocPage, PageAuthor, PageRef, PageSummary } from "@/lib/pages";
+import type { DocPage, PageAuthor, PageRef, PageSummary, PageVersionChange } from "@/lib/pages";
 import { DocMentionWarning } from "@/components/doc-mention-warning";
 import { useT } from "@/components/i18n-context";
 import { mentionedMembersWithoutAccess } from "@/lib/mentions";
@@ -133,6 +135,8 @@ export function DocPageView({
   const [proposal,setProposal]=useState<{before:string;after:string}|null>(null);
   const editorRef = useRef<Editor | null>(null);
   const [activeEditor,setActiveEditor]=useState<Editor|null>(null);
+  const [finding,setFinding]=useState(false),[moving,setMoving]=useState(false),[aiTasks,setAiTasks]=useState(false);
+  const [preview,setPreview]=useState<PageVersionChange|null>(null);
   const markdown = useMemo(() => documentMarkdown(), []);
   const [recovery, setRecovery] = useDraft<{body:string;revision:number;token:string}|null>("document",page.id,null);
   const recoveryRef = useRef(recovery); recoveryRef.current = recovery;
@@ -210,7 +214,7 @@ export function DocPageView({
 
   async function useTheirs() {
     if (!conflict) return;
-    if (!(await confirm(t("Discard your unsaved text?")))) return;
+    if (!(await confirm(t("Discard your unsaved text?"), { action: t("Discard") }))) return;
     revision.current = conflict.revision;
     conflicted.current = false;
     pending.current = null;
@@ -301,7 +305,7 @@ export function DocPageView({
   async function commentAction(work:()=>Promise<{ok:boolean;data?:PageComment[];error?:string}>):Promise<boolean>{if(commentRunning.current)return false;commentRunning.current=true;setCommentBusy(true);try{const result=await work();if(!result.ok){setCommentsError(result.error??"Could not save. Retry.");return false;}if(result.data)mergeComments(result.data);setCommentsError(null);return true;}catch{setCommentsError("Could not save. Retry.");return false;}finally{commentRunning.current=false;setCommentBusy(false);}}
   async function addComment(body:string,parentId?:string){if(!body.trim())return false;const ok=await commentAction(()=>addPageCommentAction(workspaceId,page.id,{body,anchor:parentId?null:draftAnchor,parentId}));if(ok)setDraftAnchor(null);return ok;}
   async function resolveComment(id:string,resolved:boolean){await commentAction(()=>setPageCommentResolvedAction(workspaceId,page.id,id,resolved));}
-  async function removeComment(id:string){if(!await confirm(t("Delete this comment? You can restore it here.")))return;await commentAction(()=>removePageCommentAction(workspaceId,page.id,id));}
+  async function removeComment(id:string){if(!await confirm(t("Delete this comment?"), { body: t("You can restore it here."), action: t("Delete") }))return;await commentAction(()=>removePageCommentAction(workspaceId,page.id,id));}
 
   async function saveTitle() {
     const next = title.trim();
@@ -362,7 +366,7 @@ export function DocPageView({
   }
 
   async function toggleShared() {
-    if(!await confirm(t("Change sharing for this document and all its children?")))return;
+    if(!await confirm(t("Change sharing for this document and all its children?"), { action: t("Change sharing"), tone: "primary" }))return;
     const result = await setPageSharedAction(workspaceId, page.id, !shared);
     if (!result.ok) {
       setError(result.error);
@@ -373,7 +377,7 @@ export function DocPageView({
   }
 
   async function removePage() {
-    if (!(await confirm(t("Move “{title}” and everything inside it to the Trash?", { title: page.title })))) return;
+    if (!(await confirm(t("Move “{title}” to Trash?", { title: page.title }), { body: t("Child pages move with it. You can restore it from the Trash."), action: t("Move to Trash") }))) return;
     const result = await deletePageAction(workspaceId, page.id);
     if (!result.ok) {
       setError(result.error);
@@ -444,6 +448,7 @@ export function DocPageView({
   const root=useRef<HTMLDivElement>(null);
   useScrollMemory(root,`document.${page.id}`,"[data-document-scroll]",!requestedComment);
   const [compact,setCompact]=useState(Boolean(onClose));
+  const [phoneSharing,setPhoneSharing]=useState(false);
   useEffect(()=>{const observer=new ResizeObserver(([entry])=>setCompact(entry.contentRect.width<850));if(root.current)observer.observe(root.current);return()=>observer.disconnect();},[]);
   // References inside the pane open in the pane, so following one never loses the page
   // you were reading.
@@ -480,17 +485,15 @@ export function DocPageView({
 
   return (
     <div ref={root} data-document-root className="flex min-h-0 flex-1 flex-col">
-      <header className="flex h-11 shrink-0 items-center gap-2 border-b border-border px-4 text-small text-muted">
-        <DetailNavigation kind="document" id={page.id} workspaceId={workspaceId} panel={!!onClose} fallback={refs.map(ref=>ref.id)}/>
-        <span
-          className="flex shrink-0 items-center gap-1"
-          title={shared ? t("Shared with the workspace") : t("Private")}
-        >
-          {shared ? <Users size={13} /> : <Lock size={13} />}
-          {!compact && (shared ? t("Shared with the workspace") : t("Private"))}
-        </span>
-        {!compact && <span className="text-faint">·</span>}
-        <span className="flex min-w-0 flex-1 items-center gap-2">
+      <header className={`${PAGE_HEADER} ${PAGE_INSET} text-small text-muted max-[600px]:min-h-11 max-[600px]:pl-3 max-[600px]:pr-3`}>
+        {onClose ? (
+          <button type="button" onClick={onClose} aria-label={t("Back")} title={t("Back")} className="hidden size-7 shrink-0 items-center justify-center rounded-md text-muted hover:bg-elevated hover:text-text max-[600px]:flex"><ArrowLeft size={15} /></button>
+        ) : (
+          <Link href={`/${workspaceId}/docs`} aria-label={t("Back")} title={t("Back")} className="hidden size-7 shrink-0 items-center justify-center rounded-md text-muted hover:bg-elevated hover:text-text max-[600px]:flex"><ArrowLeft size={15} /></Link>
+        )}
+        <span className="contents max-[600px]:hidden"><DetailNavigation kind="document" id={page.id} workspaceId={workspaceId} panel={!!onClose} fallback={refs.map(ref=>ref.id)}/></span>
+        <h1 className="hidden min-w-0 flex-1 truncate text-lead font-semibold text-text max-[600px]:block">{title || t("Untitled")}</h1>
+        <span className="flex min-w-0 flex-1 items-center gap-2 max-[600px]:hidden">
           <nav data-doc-breadcrumb className="flex min-w-0 items-center gap-1 truncate">
             <Link href={`/${workspaceId}/docs`} className="shrink-0 hover:text-text">
               {t("Documents")}
@@ -512,6 +515,13 @@ export function DocPageView({
               </span>
             ))}
           </nav>
+          <span
+            className="flex shrink-0 items-center gap-1 rounded-full bg-elevated px-1.5 py-0.5 text-caption text-muted"
+            title={shared ? t("Shared with the workspace") : t("Private")}
+          >
+            {shared ? <Users size={11} /> : <Lock size={11} />}
+            {!compact && (shared ? t("Shared with the workspace") : t("Private"))}
+          </span>
           {/* A shared document says whose it is right where it says what it is. */}
           {author && (
             <span data-doc-author className="flex shrink-0 items-center gap-1 text-small text-muted">
@@ -525,12 +535,12 @@ export function DocPageView({
         <div className="ml-auto flex shrink-0 items-center gap-2">
           {sharing && collab.storageError && <p role="alert" className="text-small text-danger">{t(collab.storageError)}</p>}
           {collab.status === "reconnecting" && (
-            <span data-doc-reconnecting className="text-small text-faint">
-              {t("Reconnecting…")}
+            <span data-doc-reconnecting role="status" className="fixed left-1/2 top-16 z-40 -translate-x-1/2 rounded-lg border border-border bg-bg px-3 py-2 text-small text-text shadow-sm">
+              {t("Reconnecting… your changes are saved on this device")}
             </span>
           )}
           {sharing && collab.peers.length > 0 && (
-            <span data-doc-presence className="flex items-center -space-x-1">
+            <span data-doc-presence className="flex items-center -space-x-1 max-[600px]:hidden">
               {collab.peers.slice(0, 5).map((peer) => (
                 <span
                   key={peer.clientId}
@@ -544,53 +554,26 @@ export function DocPageView({
             </span>
           )}
           <span
-            className={`text-small text-faint transition-opacity duration-300 ${
+            className={`text-small text-faint transition-opacity duration-300 max-[600px]:hidden ${
               saved || sharing ? "opacity-100" : "opacity-70"
             }`}
           >
             {t(sharing ? collab.pending || collab.status === "reconnecting" ? "Offline changes are kept on this device" : "Synchronized" : saved ? "Saved" : "Unsaved changes")}
           </span>
-          <WatchControl workspaceId={workspaceId} scopeType="page" scopeId={page.id} compact />
+          <span className={phoneSharing ? "contents" : "contents max-[600px]:hidden"}><WatchControl workspaceId={workspaceId} scopeType="page" scopeId={page.id} /></span>
           <button
             type="button"
             onClick={() => setSide((open) => (open === "comments" ? null : "comments"))}
             title={t("Comments")}
             aria-label={t("Comments")}
             aria-pressed={side === "comments"}
-            className={`flex items-center gap-1 rounded-md border px-2 py-1 text-small font-medium transition-colors hover:border-border-strong hover:text-text ${
+            className={`flex items-center gap-1 rounded-md border px-2 py-1 text-small font-medium transition-colors hover:border-border-strong hover:text-text max-[600px]:hidden ${
               side === "comments" ? "border-border-strong text-text" : "border-border text-muted"
             }`}
           >
             <MessageSquare size={12} />
-            {openComments > 0 && <span data-comment-count>{openComments}</span>}
-          </button>
-          <button
-            type="button"
-            data-doc-links-toggle
-            onClick={() => setSide((open) => (open === "links" ? null : "links"))}
-            title={t("Linked from")}
-            aria-label={t("Linked from")}
-            aria-pressed={side === "links"}
-            className={`flex items-center gap-1 rounded-md border px-2 py-1 text-small font-medium transition-colors hover:border-border-strong hover:text-text ${
-              side === "links" ? "border-border-strong text-text" : "border-border text-muted"
-            }`}
-          >
-            <Link2 size={12} />
-            {!compact && t("Linked from")}
-          </button>
-          <button
-            type="button"
-            data-doc-outline-toggle
-            onClick={() => setSide((open) => (open === "outline" ? null : "outline"))}
-            title={t("Outline")}
-            aria-label={t("Outline")}
-            aria-pressed={side === "outline"}
-            className={`flex items-center gap-1 rounded-md border px-2 py-1 text-small font-medium transition-colors hover:border-border-strong hover:text-text ${
-              side === "outline" ? "border-border-strong text-text" : "border-border text-muted"
-            }`}
-          >
-            <ListTree size={12} />
-            {!compact && t("Outline")}
+            {!compact && t("Comments")}
+            {openComments > 0 && <span data-comment-count className="tabular-nums">{openComments}</span>}
           </button>
           <button
             type="button"
@@ -598,7 +581,7 @@ export function DocPageView({
             title={t("Updates")}
             aria-label={t("Updates")}
             aria-pressed={side === "updates"}
-            className={`flex items-center gap-1 rounded-md border px-2 py-1 text-small font-medium transition-colors hover:border-border-strong hover:text-text ${
+            className={`flex items-center gap-1 rounded-md border px-2 py-1 text-small font-medium transition-colors hover:border-border-strong hover:text-text max-[600px]:hidden ${
               side === "updates" ? "border-border-strong text-text" : "border-border text-muted"
             }`}
           >
@@ -611,7 +594,7 @@ export function DocPageView({
               onClick={(event) => openAi(event.currentTarget)}
               title="AI"
               aria-label="AI"
-              className="flex items-center gap-1 rounded-md border border-border px-2 py-1 text-small font-medium text-muted transition-colors hover:border-border-strong hover:text-text"
+              className="max-[600px]:hidden flex items-center gap-1 rounded-md border border-border px-2 py-1 text-small font-medium text-muted transition-colors hover:border-border-strong hover:text-text"
             >
               <Sparkles size={12} />
               {!compact && "AI"}
@@ -622,12 +605,12 @@ export function DocPageView({
             data-doc-favorite={favorite ? "on" : "off"}
             title={favorite ? t("Remove from favorites") : t("Add to favorites")}
             onClick={() => void toggleFavorite()}
-            className={`rounded p-1 transition-colors hover:bg-elevated hover:text-text ${favorite ? "text-accent" : "text-muted"}`}
+            className={`rounded p-1 transition-colors hover:bg-elevated hover:text-text max-[600px]:hidden ${favorite ? "text-accent" : "text-muted"}`}
           >
             <Star size={13} fill={favorite ? "currentColor" : "none"} />
           </button>
           {isOwner ? (
-            <DocShareMenu
+            <span className={phoneSharing ? "contents" : "contents max-[600px]:hidden"}><DocShareMenu
               workspaceId={workspaceId}
               pageId={page.id}
               ownerId={page.createdBy}
@@ -635,32 +618,54 @@ export function DocPageView({
               compact={compact}
               members={members}
               onToggleShared={toggleShared}
-            />
+            /></span>
           ) : (
             !canEdit && (
-              <span data-doc-level className="shrink-0 text-small text-faint">
+              <span data-doc-level className="shrink-0 text-small text-faint max-[600px]:hidden">
                 {t(canComment ? "Can comment" : "Can view")}
               </span>
             )
           )}
-          {isOwner && (
-            <button
-              type="button"
-              onClick={() => void removePage()}
-              aria-label={t("Delete document")}
-              title={t("Delete document")}
-              className="rounded-md p-1.5 text-muted transition-colors hover:bg-elevated hover:text-danger"
-            >
-              <Trash2 size={15} />
-            </button>
-          )}
+          <DocumentTools
+            title={title}
+            doc={doc}
+            editor={activeEditor}
+            width={readingWidth}
+            onWidth={setReadingWidth}
+            onOutline={() => setSide("outline")}
+            onLinks={() => setSide("links")}
+            onFind={() => setFinding(true)}
+          >
+            {(close) => (
+              <>
+                <div className="hidden max-[600px]:block">
+                  <div className="my-1 h-px bg-border" />
+                  <p className="px-2 py-1 text-caption text-faint">
+                    {[shared ? t("Shared with the workspace") : t("Private"), author ? (isOwner ? t("by you") : t("by {name}", { name: author.displayName })) : null, !isOwner && !canEdit ? t(canComment ? "Can comment" : "Can view") : null, t(sharing ? collab.pending || collab.status === "reconnecting" ? "Offline changes are kept on this device" : "Synchronized" : saved ? "Saved" : "Unsaved changes")].filter(Boolean).join(" · ")}
+                  </p>
+                  <MenuItem onSelect={() => { close(); setSide("comments"); }}>{t("Comments")}{openComments > 0 ? ` ${openComments}` : ""}</MenuItem>
+                  <MenuItem onSelect={() => { close(); setSide("updates"); }}>{t("Updates")}</MenuItem>
+                  {canEdit && aiReady && <MenuItem onSelect={() => { close(); setAiPanel({ x: 12, y: 56 }); }}>AI</MenuItem>}
+                  <MenuItem onSelect={() => { close(); void toggleFavorite(); }}>{favorite ? t("Remove from favorites") : t("Add to favorites")}</MenuItem>
+                  <MenuItem active={phoneSharing} onSelect={() => { close(); setPhoneSharing((open) => !open); }}>{t(isOwner ? "Share" : "Watch")}</MenuItem>
+                </div>
+                {(canEdit || isOwner) && (
+                  <>
+                    <div className="my-1 h-px bg-border" />
+                    {canEdit && <MenuItem onSelect={() => { close(); setMoving(true); }}>{t("Move document")}</MenuItem>}
+                    {isOwner && <MenuItem danger onSelect={() => { close(); void removePage(); }}>{t("Move to Trash")}</MenuItem>}
+                  </>
+                )}
+              </>
+            )}
+          </DocumentTools>
           {onToggleExpanded && (
             <button
               type="button"
               onClick={onToggleExpanded}
               title={expanded ? t("Shrink panel") : t("Expand panel")}
               aria-label={expanded ? t("Shrink panel") : t("Expand panel")}
-              className="rounded-md p-1.5 text-muted transition-colors hover:bg-elevated hover:text-text"
+              className="rounded-md p-1.5 text-muted transition-colors hover:bg-elevated hover:text-text max-[600px]:hidden"
             >
               {expanded ? <Minimize2 size={15} /> : <Maximize2 size={15} />}
             </button>
@@ -671,7 +676,7 @@ export function DocPageView({
               onClick={onClose}
               aria-label={t("Close document")}
               title={t("Close document")}
-              className="rounded-md px-1.5 py-1 text-lead leading-none text-muted transition-colors hover:bg-elevated hover:text-text"
+              className="rounded-md px-1.5 py-1 text-lead leading-none text-muted transition-colors hover:bg-elevated hover:text-text max-[600px]:hidden"
             >
               ×
             </button>
@@ -679,8 +684,20 @@ export function DocPageView({
         </div>
       </header>
 
-      <div className="border-b border-border px-3 py-1"><DocumentTools title={title} doc={doc} editor={activeEditor} width={readingWidth} onWidth={setReadingWidth}/></div>
-      <Modal open={!!proposal} title={t("Review changes")} onClose={()=>setProposal(null)}><h2 className="text-title">{t("Review changes")}</h2>{error&&<p role="alert" className="text-small text-danger">{t(error)}</p>}{proposal&&<div className="my-3 max-h-[60dvh] overflow-auto"><DiffLines before={proposal.before} after={proposal.after}/></div>}<button disabled={!canEditBody} onClick={()=>{if(!proposal||!editorRef.current?.isEditable)return;if(contentRef.current!==proposal.before){setError("The document changed. Generate the edit again before replacing it.");return;}editorRef.current.commands.setContent(markdownToDocument(markdown,proposal.after));setProposal(null);}} className="rounded border border-border px-3 py-1 text-body">{t("Apply changes")}</button></Modal>
+      {moving && <MoveDocument workspaceId={workspaceId} id={page.id} onClose={() => setMoving(false)} />}
+      <Modal open={!!proposal} title={t("Review changes")} className="max-w-[620px]" onClose={()=>setProposal(null)}>
+        <div className="flex items-center justify-between gap-2">
+          <h2 className="text-title">{t("Review changes")}</h2>
+          <button type="button" aria-label={t("Close")} title={t("Close")} onClick={()=>setProposal(null)} className="rounded p-1 text-muted hover:bg-elevated hover:text-text"><X size={14}/></button>
+        </div>
+        {error&&<p role="alert" className="mt-2 text-small text-danger">{t(error)}</p>}
+        {proposal&&<div className="my-3 max-h-[60dvh] overflow-auto rounded-lg border border-border p-3"><DiffLines before={proposal.before} after={proposal.after}/></div>}
+        <p className="text-small text-muted">{t("If the document changes in the meantime, generate the edit again.")}</p>
+        <div className="mt-3 flex justify-end gap-2">
+          <button type="button" onClick={()=>setProposal(null)} className="rounded-md border border-border px-3 py-1.5 text-small font-medium text-muted hover:border-border-strong hover:text-text">{t("Discard")}</button>
+          <button type="button" disabled={!canEditBody} onClick={()=>{if(!proposal||!editorRef.current?.isEditable)return;if(contentRef.current!==proposal.before){setError("The document changed. Generate the edit again before replacing it.");return;}editorRef.current.commands.setContent(markdownToDocument(markdown,proposal.after));setProposal(null);}} className="rounded-md bg-accent px-3 py-1.5 text-small font-medium text-white hover:bg-accent-hover disabled:opacity-40">{t("Replace document")}</button>
+        </div>
+      </Modal>
       {aiPanel && (
         <AiEditPanel
           workspaceId={workspaceId}
@@ -690,20 +707,48 @@ export function DocPageView({
             mode: "document",
             text: doc,
             allowContinue: true,
+            allowTasks: true,
             acceptLabel: doc.trim() ? t("Replace document") : t("Insert"),
           }}
           onClose={() => setAiPanel(null)}
+          onTasks={page.projectId ? () => { setAiPanel(null); setAiTasks(true); } : undefined}
           onAccept={acceptAi}
         />
       )}
 
+      {aiTasks && page.projectId && (
+        <AiTaskDialog
+          workspaceId={workspaceId}
+          projectId={page.projectId}
+          initialPrompt={t("Turn this document into tasks")}
+          context={doc}
+          onClose={() => setAiTasks(false)}
+        />
+      )}
+
       <div className="relative flex min-h-0 flex-1">
-      <div data-document-scroll className="min-w-0 flex-1 overflow-y-auto">
+      {preview && !compact && (
+        <div data-doc-version-preview className="min-w-0 flex-1 overflow-y-auto">
+          <div style={{maxWidth:readingWidth,marginInline:"auto"}} className={`w-full pb-8 pt-6 ${onClose ? "px-5" : "px-10"}`}>
+            <h1 className="mb-3 text-heading font-semibold text-text">{preview.title}</h1>
+            {preview.beforeTitle !== preview.title && (
+              <p className="pb-2 text-small text-muted">{t("Title: {before} → {after}", { before: preview.beforeTitle, after: preview.title })}</p>
+            )}
+            <DiffLines before={preview.beforeDoc} after={preview.doc} />
+          </div>
+        </div>
+      )}
+      <div data-document-scroll className={`min-w-0 flex-1 overflow-y-auto ${preview && !compact ? "hidden" : ""}`}>
+        {finding && (
+          <div className="sticky top-2 z-30 flex h-0 justify-end pr-4">
+            <div><DocFindBar editor={activeEditor} onClose={() => setFinding(false)} /></div>
+          </div>
+        )}
         {/* A pane is measured by its own width, not the window's, so the reading
             margins it would use on a full tab would leave no text at all. */}
         <div
           style={{maxWidth:readingWidth,marginInline:"auto"}}
-          className={`w-full pb-8 pt-6 ${
+          className={`w-full pb-8 pt-6 max-[600px]:px-4 max-[600px]:pt-3.5 ${
             onClose ? "px-5" : "px-10 lg:px-20 xl:px-32"
           }`}
         >
@@ -912,6 +957,7 @@ export function DocPageView({
                 placeholder={t("Write something, or type / for commands…")}
                 anchors={anchors}
                 members={members}
+                mentionWarning={shared ? null : { ownerId: page.createdBy, onShare: isOwner ? () => void toggleShared() : undefined }}
                 viewerId={viewerId}
                 activeAnchor={activeComment}
                 onComment={
@@ -980,6 +1026,7 @@ export function DocPageView({
           compact={compact}
           beforeRestore={beforeRestore}
           onRestored={restored}
+          onPreview={setPreview}
           onClose={() => setSide(null)}
         />
       )}

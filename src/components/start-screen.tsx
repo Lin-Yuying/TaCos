@@ -6,10 +6,11 @@ import { useRouter } from "next/navigation";
 import type { ReactNode } from "react";
 import { ArrowUpRight, BookOpen, Bot, FileText, FolderPlus, List, SquarePen } from "lucide-react";
 import { useUI } from "@/components/ui-context";
-import { ProjectIcon, WorkspaceMark } from "@/components/icons";
+import { ProjectIcon } from "@/components/icons";
+import { formatDate } from "@/lib/format";
 import type { Project } from "@/lib/issues";
 import type { PageSummary } from "@/lib/pages";
-import { useT } from "@/components/i18n-context";
+import { useLocale, useT } from "@/components/i18n-context";
 
 function ActionCard({
   icon,
@@ -26,9 +27,9 @@ function ActionCard({
     <button
       type="button"
       onClick={onClick}
-      className="group flex items-center gap-3 rounded-xl border border-border bg-bg px-3.5 py-3 text-left text-text transition-colors hover:border-border-strong hover:bg-elevated/50"
+      className="group flex w-full items-center gap-3 bg-bg px-3.5 py-2.5 text-left text-text transition-colors hover:border-border-strong hover:bg-elevated/50"
     >
-      <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-border bg-surface text-muted">
+      <span className="flex w-4 shrink-0 items-center justify-center text-muted">
         {icon}
       </span>
       <span className="min-w-0 flex-1">
@@ -47,11 +48,13 @@ function JumpRow({
   href,
   icon,
   title,
+  meta,
   divider,
 }: {
   href: string;
   icon: ReactNode;
   title: string;
+  meta?: string;
   divider: boolean;
 }) {
   return (
@@ -63,6 +66,7 @@ function JumpRow({
     >
       <span className="flex w-4 shrink-0 items-center justify-center text-faint">{icon}</span>
       <span className="min-w-0 flex-1 truncate">{title}</span>
+      {meta ? <span className="shrink-0 text-small text-faint" suppressHydrationWarning>{meta}</span> : null}
       <ArrowUpRight
         size={13}
         className="shrink-0 text-faint opacity-0 transition-opacity group-hover:opacity-100"
@@ -73,18 +77,15 @@ function JumpRow({
 
 export function StartScreen({
   workspaceId,
-  workspaceName,
-  workspaceIcon,
   projects,
   pages,
 }: {
   workspaceId: string;
-  workspaceName: string;
-  workspaceIcon: string | null;
   projects: Project[];
   pages: PageSummary[];
 }) {
   const t = useT();
+  const locale = useLocale();
   const modifier=usePrimaryModifier();
   const router = useRouter();
   const { setComposerOpen, setProjectComposerOpen, setPaletteOpen } = useUI();
@@ -97,17 +98,11 @@ export function StartScreen({
   return (
     <div className="flex min-h-0 flex-1 justify-center overflow-auto px-6 py-10">
       <div className="w-full max-w-[600px]">
-        <div className="mb-7 flex items-center gap-3">
-          <WorkspaceMark icon={workspaceIcon} className="h-9 w-9" />
-          <div className="min-w-0">
-            <div className="truncate text-body font-semibold text-text">{workspaceName}</div>
-            <div className="text-small text-muted">
-              {t("Nothing is open. Start something, or pick up where you left off.")}
-            </div>
-          </div>
-        </div>
+        <p className="mb-4 px-1 text-body text-muted">
+          {t("Nothing is open. Start something, or pick up where you left off.")}
+        </p>
 
-        <div className="grid grid-cols-2 gap-2">
+        <div className="divide-y divide-border overflow-hidden rounded-xl border border-border">
           <ActionCard
             icon={<SquarePen size={16} />}
             title={t("New task")}
@@ -177,6 +172,7 @@ export function StartScreen({
                     )
                   }
                   title={page.title}
+                  meta={formatDate(page.updatedAt, locale)}
                   divider={index > 0}
                 />
               ))}
@@ -184,22 +180,14 @@ export function StartScreen({
           </section>
         )}
 
-        <div className="mt-8 flex items-center gap-4 px-1 text-small text-faint">
-          <button
-            type="button"
-            onClick={() => setPaletteOpen(true)}
-            className="flex items-center gap-1.5 transition-colors hover:text-text"
-          >
-            <kbd className="rounded border border-border bg-surface px-1 py-0.5 text-caption">
-              {modifier}K
-            </kbd>
-            {t("Jump anywhere")}
-          </button>
-          <span className="flex items-center gap-1.5">
-            <kbd className="rounded border border-border bg-surface px-1 py-0.5 text-caption">C</kbd>
-            {t("New task")}
-          </span>
-        </div>
+        <button
+          type="button"
+          onClick={() => setPaletteOpen(true)}
+          className="mt-8 flex items-center gap-2 rounded-md border border-border px-2.5 py-1.5 text-small text-muted transition-colors hover:bg-elevated hover:text-text"
+        >
+          {t("Jump anywhere")}
+          <kbd className="rounded border border-border bg-surface px-1 py-0.5 text-caption">{modifier}K</kbd>
+        </button>
       </div>
     </div>
   );

@@ -1,10 +1,9 @@
 "use client";
-import Link from "next/link";
 import { safeAction } from "@/lib/ui/safe-action";
 
 import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { useRouter } from "next/navigation";
-import { ChevronRight, Copy, Check, Pencil, RefreshCw, Trash2, Upload } from "lucide-react";
+import { Copy, Check, RefreshCw, Upload } from "lucide-react";
 import {
   createApiKeyAction,
   createProjectAction,
@@ -31,25 +30,25 @@ import {
   checkHarnessUpdatesAction,
 } from "@/app/ai-actions";
 import type { AiSettingsView, ModelKeysView } from "@/lib/ai-constants";
-import { SettingsNavigation } from "@/components/settings-navigation";
+import { SettingsPanel, useSettingsPage } from "@/components/settings-shell";
 import { useUI } from "@/components/ui-context";
-import { PAGE_INSET } from "@/lib/page-chrome";
+import { SETTINGS_PAGE, SETTINGS_SCROLL } from "@/lib/page-chrome";
 import { ModelKeysSection } from "@/components/model-keys-section";
 import { AgentSettingsSection } from "@/components/agent-settings-section";
 import { AgentUsageSection } from "@/components/agent-usage-section";
+import { Switch } from "@/components/ui/switch";
 import { HarnessSubscription } from "@/components/harness-subscription";
 import type { AgentView } from "@/lib/workspace-agents";
 import type { AgentUsageSummary } from "@/lib/agent-usage";
 import { AssigneeAvatar } from "@/components/issue-table";
 import { ProjectIcon, WorkspaceMark } from "@/components/icons";
-import { WorkspaceTrashList } from "@/components/workspace-trash-list";
 import { LabelsManager } from "@/components/labels-manager";
 import { PageTemplatesManager } from "@/components/page-templates-manager";
 import { AutomationSettingsSection } from "@/components/automation-settings-section";
 import { CycleSettingsSection } from "@/components/cycle-settings-section";
 import type { AutomationSettingsView } from "@/lib/automations/store";
 import type { CycleSettings, CycleSummary } from "@/lib/planning/cycles";
-import type { ApiKeyRecord, ApiKeyScope, DeletedWorkspace, Label, Member, Project } from "@/lib/issues";
+import type { ApiKeyRecord, ApiKeyScope, Label, Member, Project } from "@/lib/issues";
 import type { HarnessSettingsView } from "@/lib/harness/types";
 import type { PageTemplate } from "@/lib/page-templates";
 import { BUILTIN_AVATARS, BUILTIN_AVATAR_LABELS, builtinAvatarId } from "@/lib/avatars";
@@ -57,7 +56,11 @@ import { formatDate, timeAgo } from "@/lib/format";
 import { LOCALES, LOCALE_LABELS, type Locale } from "@/lib/i18n";
 import { interpolate, useLocale, useT } from "@/components/i18n-context";
 
-function CopyButton({ text }: { text: string }) {
+const ROW_BUTTON =
+  "shrink-0 rounded-md border border-border px-2 py-1 text-small text-muted transition-colors hover:bg-elevated hover:text-text disabled:opacity-40";
+const ROW_BADGE = "shrink-0 rounded-full bg-elevated px-2 py-0.5 text-caption text-muted";
+
+function CopyButton({ text, label }: { text: string; label?: string }) {
   const t = useT();
   const [copied, setCopied] = useState(false);
   return (
@@ -69,10 +72,10 @@ function CopyButton({ text }: { text: string }) {
           setTimeout(() => setCopied(false), 1500);
         });
       }}
-      className="inline-flex shrink-0 items-center gap-1 rounded-md border border-border px-1.5 py-0.5 text-caption text-muted transition-colors hover:text-text"
+      className={label ? ROW_BUTTON : "inline-flex shrink-0 items-center gap-1 rounded-md border border-border px-1.5 py-0.5 text-caption text-muted transition-colors hover:text-text"}
     >
-      {copied ? <Check size={11} /> : <Copy size={11} />}
-      {t(copied ? "Copied" : "Copy")}
+      {!label && (copied ? <Check size={11} /> : <Copy size={11} />)}
+      {copied ? t("Copied") : label ?? t("Copy")}
     </button>
   );
 }
@@ -149,9 +152,7 @@ export function SettingsView({
   serverMode,
   harness,
   isOwner,
-  isInstanceAdmin,
   nextWorkspaceHref,
-  deletedWorkspaces,
   pageTemplates,
   canManagePageTemplates,
   agents,
@@ -176,9 +177,7 @@ export function SettingsView({
   serverMode: boolean;
   harness: HarnessSettingsView;
   isOwner: boolean;
-  isInstanceAdmin: boolean;
   nextWorkspaceHref: string;
-  deletedWorkspaces: DeletedWorkspace[];
   pageTemplates: PageTemplate[];
   canManagePageTemplates: boolean;
   agents: AgentView[];
@@ -192,12 +191,15 @@ export function SettingsView({
   const locale = useLocale();
   const {confirm,density,setDensity}=useUI();
   const root=useRef<HTMLDivElement>(null);
+  const settingsPage=useSettingsPage();
+  useEffect(()=>{root.current?.scrollTo({top:0});},[settingsPage]);
   const memberLocks=useRef(new Set<string>());
   const [memberBusy,setMemberBusy]=useState<string[]>([]),[memberErrors,setMemberErrors]=useState<Record<string,string>>({}),[visibilityError,setVisibilityError]=useState<string|null>(null),[visibilityBusy,setVisibilityBusy]=useState(false);
   async function memberChange(id:string,work:()=>Promise<{ok:boolean;error?:string}>){if(memberLocks.current.has(id))return;memberLocks.current.add(id);setMemberBusy([...memberLocks.current]);try{const result=await work();if(!result.ok)throw new Error(result.error);setMemberErrors(old=>{const next={...old};delete next[id];return next;});router.refresh();}catch(error){setMemberErrors(old=>({...old,[id]:error instanceof Error?error.message:"Could not save. Retry."}));}finally{memberLocks.current.delete(id);setMemberBusy([...memberLocks.current]);}}
   const isAdmin = role === "admin";
   const canCreatePermanentKey = isAdmin || isOwner;
   const [code, setCode] = useState(joinCode);
+  const [keyFormOpen, setKeyFormOpen] = useState(false);
   const [newKeyName, setNewKeyName] = useState("");
   const [newKey, setNewKey] = useState<string | null>(null);
   const [keyError, setKeyError] = useState<string | null>(null);
@@ -394,7 +396,7 @@ export function SettingsView({
 
   async function rotateKey(key: ApiKeyRecord) {
     if (rotatingKeyId) return;
-    if (!await confirm(t('Rotate key "{name}"? The old key stops working immediately.', { name: key.name }))) return;
+    if (!await confirm(t('Rotate key "{name}"?', { name: key.name }), { body: t("The old key stops working immediately."), action: t("Rotate") })) return;
     setRotatingKeyId(key.id);
     const result = await safeAction(async()=>rotateApiKeyAction(workspace.id, key.id));
     setRotatingKeyId(null);
@@ -408,7 +410,7 @@ export function SettingsView({
   }
 
   async function revokeKey(key: ApiKeyRecord) {
-    if (!await confirm(t("Revoke key \"{name}\"? Agents using it will lose access.", { name: key.name }))) return;
+    if (!await confirm(t("Revoke key \"{name}\"?", { name: key.name }), { body: t("Agents using it will lose access."), action: t("Revoke") })) return;
     try{const result=await safeAction(async()=>revokeApiKeyAction(workspace.id,key.id));if(!result.ok)setKeyError(result.error);else router.refresh();}catch{setKeyError("Could not save. Retry.");}
   }
 
@@ -444,9 +446,8 @@ export function SettingsView({
   async function removeProject(project: Project) {
     if (
       !await confirm(
-        t("Move project \"{name}\" and its issues to the Trash? You can restore it from there.", {
-          name: project.name,
-        })
+        t("Move project \"{name}\" and its tasks to the Trash?", { name: project.name }),
+        { body: t("You can restore it from there."), action: t("Move to Trash") }
       )
     )
       return;
@@ -592,34 +593,140 @@ export function SettingsView({
     : null;
 
   return (
-    <div ref={root} className={`flex-1 overflow-y-auto pb-10 pt-6 ${PAGE_INSET}`}>
-      <SettingsNavigation root={root}/><div className="space-y-10">
-        <header className="flex flex-wrap items-center gap-3">
-          <h1 className="text-lead font-semibold">{t("Workspace settings")}</h1><Link className="text-small text-muted underline" href={`/${workspace.id}/settings/storage`}>{t("Storage and recovery")}</Link>
-          {(isAdmin || isOwner) && (
-            <>
-              <Link className="text-small text-muted underline" href={`/${workspace.id}/settings/export`} data-testid="settings-export-link">
-                {t("Export")}
-              </Link>
-              <Link className="text-small text-muted underline" href={`/${workspace.id}/settings/import`} data-testid="settings-import-link">
-                {t("Import")}
-              </Link>
-            </>
-          )}
-          {isInstanceAdmin && <Link className="text-small text-muted underline" href={`/${workspace.id}/settings/system`}>{t("System")}</Link>}
-          <span className="rounded-full bg-elevated px-2 py-0.5 text-caption text-muted">
-            {workspace.name}
-          </span>
-        </header>
+    <div ref={root} className={SETTINGS_SCROLL}>
+      <div className={`max-w-[720px] ${SETTINGS_PAGE}`}>
+        <SettingsPanel id="profile" title={t("Your profile")}>
+        <section className="space-y-2.5">
+          <h2 className="text-body font-semibold">{t("Avatar")}</h2>
+          <div className="flex flex-wrap items-center gap-2.5">
+            <AssigneeAvatar displayName={currentUser.displayName} avatar={avatar} size={40} />
+            <label
+              className={`inline-flex cursor-pointer items-center gap-1 rounded-md border border-border px-2.5 py-1 text-small text-muted transition-colors hover:text-text ${
+                busy ? "pointer-events-none opacity-50" : ""
+              }`}
+            >
+              <Upload size={12} /> {avatar ? t("Change image") : t("Upload image")}
+              <input
+                type="file"
+                accept="image/png,image/jpeg,image/webp"
+                className="hidden"
+                onChange={(e) => {
+                  void uploadAvatar(e.target.files?.[0]);
+                  e.target.value = "";
+                }}
+              />
+            </label>
+            {avatar && !builtinAvatarId(avatar) && (
+              <button
+                type="button"
+                onClick={() => void clearAvatar()}
+                className="rounded-md px-2 py-1 text-small text-faint transition-colors hover:text-danger"
+              >
+                {t("Remove image")}
+              </button>
+            )}
+          </div>
+          {avatarError && <div className="text-small text-danger">{t(avatarError)}</div>}
+          <p className="text-small leading-relaxed text-faint">
+            {t("Your picture shows as a circle next to your name in issue rows, timelines and the member list. Uploaded images are cropped to a square and resized to 128×128 in the browser before being saved.")}
+          </p>
+        </section>
+        <section className="space-y-2.5">
+          <h2 className="text-body font-semibold">{t("Avatar library")}</h2>
+          <div className="flex flex-wrap gap-1.5">
+            {BUILTIN_AVATARS.map((id) => {
+              const active = builtinAvatarId(avatar) === id;
+              return (
+                <button
+                  key={id}
+                  type="button"
+                  disabled={busy}
+                  title={t(BUILTIN_AVATAR_LABELS[id])}
+                  aria-label={t(BUILTIN_AVATAR_LABELS[id])}
+                  aria-pressed={active}
+                  onClick={() => void chooseAvatar(`builtin:${id}`)}
+                  className={`rounded-full p-0.5 transition ${
+                    active ? "ring-2 ring-accent" : "hover:bg-elevated"
+                  } ${busy ? "opacity-50" : ""}`}
+                >
+                  <AssigneeAvatar
+                    displayName={t(BUILTIN_AVATAR_LABELS[id])}
+                    avatar={`builtin:${id}`}
+                    size={30}
+                  />
+                </button>
+              );
+            })}
+          </div>
+          <p className="text-small leading-relaxed text-faint">
+            {t("Every account starts with its own taco ingredient. Pick another one, or upload a picture above.")}
+          </p>
+        </section>
+        <section className="space-y-2.5">
+          <h2 className="text-body font-semibold">{t("Display name")}</h2>
+          <div className="flex items-center gap-2">
+            <input
+              value={displayName}
+              maxLength={40}
+              disabled={busy}
+              aria-label={t("Display name")}
+              onChange={(e) => setDisplayName(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") void saveDisplayName();
+              }}
+              className="min-w-0 flex-1 rounded-md border border-border bg-bg px-2.5 py-1.5 text-body text-text focus:border-border-strong focus:outline-none"
+            />
+            <button
+              type="button"
+              disabled={busy || displayName.trim() === currentUser.displayName}
+              onClick={() => void saveDisplayName()}
+              className="shrink-0 rounded-md bg-accent px-3 py-1.5 text-body font-medium text-white hover:bg-accent-hover disabled:opacity-40"
+            >
+              {t("Save")}
+            </button>
+          </div>
+          {nameError && <div className="text-small text-danger">{t(nameError)}</div>}
+          <div className="text-caption text-faint">@{currentUser.username}</div>
+        </section>
+        <section className="space-y-3"><h2 className="text-body font-semibold">{t("Display density")}</h2><div className="flex gap-1 text-small">{(["comfortable","compact"] as const).map(value=><button key={value} aria-pressed={density===value} onClick={()=>setDensity(value)} className={`rounded-md px-3 py-1 transition-colors ${density===value?"bg-elevated font-medium text-text":"text-muted hover:bg-elevated hover:text-text"}`}>{t(value==="compact"?"Compact":"Comfortable")}</button>)}</div></section>
+        <section className="space-y-3">
+          <h2 className="text-body font-semibold">{t("Language")}</h2>
+          <div>
+            <div role="radiogroup" aria-label={t("Interface language")} className="flex gap-1">
+              {LOCALES.map((code) => (
+                <button
+                  key={code}
+                  type="button"
+                  role="radio"
+                  aria-checked={locale === code}
+                  onClick={() => void chooseLocale(code)}
+                  className={`rounded-md px-3 py-1 text-small transition-colors ${
+                    locale === code
+                      ? "bg-elevated font-medium text-text"
+                      : "text-muted hover:bg-elevated hover:text-text"
+                  }`}
+                >
+                  {LOCALE_LABELS[code]}
+                </button>
+              ))}
+            </div>
+          </div>
+          {localeError && <div className="text-small text-danger">{t(localeError)}</div>}
+          <p className="text-small leading-relaxed text-faint">
+            {t("Applies to this account on every device.")} {t("Task content, documents and replies from the API or MCP server are not translated.")}
+          </p>
+        </section>
+        </SettingsPanel>
 
+        <SettingsPanel id="general" title={t("Basics and icon")}>
         <section className="space-y-3">
           <h2 className="text-body font-semibold">{t("Workspace icon")}</h2>
-          <div className="flex items-center gap-4 rounded-lg border border-border p-4">
-            <WorkspaceMark icon={icon} className="h-14 w-14" />
+          <div className="flex items-center gap-3">
+            <WorkspaceMark icon={icon} className="h-10 w-10" />
             <div className="min-w-0 flex-1">
               <div className="text-body font-medium">{workspace.name}</div>
               {isAdmin && (
-                <div className="mt-2 flex items-center gap-2">
+                <div className="mt-1.5 flex items-center gap-2">
                   <label
                     className={`inline-flex cursor-pointer items-center gap-1 rounded-md border border-border px-2 py-1 text-small text-muted transition-colors hover:text-text ${
                       busy ? "pointer-events-none opacity-50" : ""
@@ -656,128 +763,9 @@ export function SettingsView({
               : t("Only workspace admins can change this icon. Without an image, the otter is used.")}
           </p>
         </section>
+        </SettingsPanel>
 
-        <section className="space-y-3">
-          <h2 className="text-body font-semibold">{t("Your profile")}</h2>
-          <div className="flex items-center gap-4 rounded-lg border border-border p-4">
-            <AssigneeAvatar displayName={currentUser.displayName} avatar={avatar} size={56} />
-            <div className="min-w-0 flex-1">
-              <input
-                value={displayName}
-                maxLength={40}
-                disabled={busy}
-                aria-label={t("Display name")}
-                title={t("Display name")}
-                onChange={(e) => setDisplayName(e.target.value)}
-                onBlur={() => void saveDisplayName()}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter") e.currentTarget.blur();
-                }}
-                className="-ml-1.5 w-full max-w-xs rounded border border-transparent bg-transparent px-1.5 py-0.5 text-body font-medium outline-none transition-colors hover:border-border focus:border-border-strong"
-              />
-              {nameError && <div className="text-small text-danger">{t(nameError)}</div>}
-              <div className="text-caption text-faint">@{currentUser.username}</div>
-              <div className="mt-2 flex items-center gap-2">
-                <label
-                  className={`inline-flex cursor-pointer items-center gap-1 rounded-md border border-border px-2 py-1 text-small text-muted transition-colors hover:text-text ${
-                    busy ? "pointer-events-none opacity-50" : ""
-                  }`}
-                >
-                  <Upload size={12} /> {avatar ? t("Change image") : t("Upload image")}
-                  <input
-                    type="file"
-                    accept="image/png,image/jpeg,image/webp"
-                    className="hidden"
-                    onChange={(e) => {
-                      void uploadAvatar(e.target.files?.[0]);
-                      e.target.value = "";
-                    }}
-                  />
-                </label>
-                {avatar && !builtinAvatarId(avatar) && (
-                  <button
-                    type="button"
-                    onClick={() => void clearAvatar()}
-                    className="rounded-md px-2 py-1 text-small text-faint transition-colors hover:text-danger"
-                  >
-                    {t("Remove image")}
-                  </button>
-                )}
-              </div>
-              {avatarError && <div className="mt-1 text-small text-danger">{t(avatarError)}</div>}
-            </div>
-          </div>
-          <div className="rounded-lg border border-border p-4">
-            <div className="text-small font-medium text-muted">{t("Avatar library")}</div>
-            <div className="mt-0.5 text-small text-faint">
-              {t("Every account starts with its own taco ingredient. Pick another one, or upload a picture above.")}
-            </div>
-            <div className="mt-3 flex flex-wrap gap-1.5">
-              {BUILTIN_AVATARS.map((id) => {
-                const active = builtinAvatarId(avatar) === id;
-                return (
-                  <button
-                    key={id}
-                    type="button"
-                    disabled={busy}
-                    title={t(BUILTIN_AVATAR_LABELS[id])}
-                    aria-label={t(BUILTIN_AVATAR_LABELS[id])}
-                    aria-pressed={active}
-                    onClick={() => void chooseAvatar(`builtin:${id}`)}
-                    className={`rounded-full p-0.5 transition ${
-                      active ? "ring-2 ring-accent" : "hover:bg-elevated"
-                    } ${busy ? "opacity-50" : ""}`}
-                  >
-                    <AssigneeAvatar
-                      displayName={t(BUILTIN_AVATAR_LABELS[id])}
-                      avatar={`builtin:${id}`}
-                      size={30}
-                    />
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-          <p className="text-small leading-relaxed text-faint">
-            {t("Your picture shows as a circle next to your name in issue rows, timelines and the member list. Uploaded images are cropped to a square and resized to 128×128 in the browser before being saved.")}
-          </p>
-        </section>
-
-        <section className="space-y-3"><h2 className="text-body font-semibold">{t("Display density")}</h2><div className="flex gap-2 text-body">{(["comfortable","compact"] as const).map(value=><button key={value} aria-pressed={density===value} onClick={()=>setDensity(value)} className={`rounded border border-border px-3 py-1 ${density===value?"bg-elevated":""}`}>{t(value==="compact"?"Compact":"Comfortable")}</button>)}</div></section>
-        <section className="space-y-3">
-          <h2 className="text-body font-semibold">{t("Language")}</h2>
-          <div className="flex items-center gap-4 rounded-lg border border-border p-4">
-            <div className="min-w-0 flex-1">
-              <div className="text-body font-medium">{t("Interface language")}</div>
-              <p className="mt-0.5 text-small leading-relaxed text-muted">
-                {t("Applies to this account on every device.")}
-              </p>
-            </div>
-            <div role="radiogroup" aria-label={t("Interface language")} className="flex shrink-0 gap-1">
-              {LOCALES.map((code) => (
-                <button
-                  key={code}
-                  type="button"
-                  role="radio"
-                  aria-checked={locale === code}
-                  onClick={() => void chooseLocale(code)}
-                  className={`rounded-md px-3 py-1 text-small transition-colors ${
-                    locale === code
-                      ? "bg-accent/10 font-medium text-accent"
-                      : "text-muted hover:bg-elevated hover:text-text"
-                  }`}
-                >
-                  {LOCALE_LABELS[code]}
-                </button>
-              ))}
-            </div>
-          </div>
-          {localeError && <div className="text-small text-danger">{t(localeError)}</div>}
-          <p className="text-small leading-relaxed text-faint">
-            {t("Task content, documents and replies from the API or MCP server are not translated.")}
-          </p>
-        </section>
-
+        <SettingsPanel id="members" title={t("Members")}>
         <section className="space-y-3">
           <h2 className="text-body font-semibold">
             {t("Members ({count})", { count: members.length })}
@@ -810,14 +798,14 @@ export function SettingsView({
                       type="button"
                       disabled={memberBusy.includes(member.id)}
                       onClick={async () => {
-                        if (await confirm(t("Remove {name} from this workspace?", { name: member.displayName }))) {
+                        if (await confirm(t("Remove {name} from this workspace?", { name: member.displayName }), { action: t("Remove") })) {
                           void memberChange(member.id,()=>removeMemberAction(workspace.id,member.id));
                         }
                       }}
-                      className="rounded-md p-1 text-faint transition-colors hover:bg-elevated hover:text-danger"
+                      className="rounded-md border border-border px-2.5 py-1 text-small text-muted transition-colors hover:text-danger disabled:opacity-50"
                       aria-label={t("Remove {name}", { name: member.displayName })}
                     >
-                      <Trash2 size={14} />
+                      {t("Remove")}
                     </button>
                   </>
                 ) : (
@@ -829,18 +817,21 @@ export function SettingsView({
               </div>
             ))}
           </div>
-
-          <div className="space-y-2 rounded-lg border border-border bg-surface/60 p-4">
-            <div className="text-body font-medium">{t("Invite teammates")}</div>
-            <p className="text-small leading-relaxed text-muted">
+        </section>
+        <section className="space-y-2.5">
+          <h2 className="text-body font-semibold">{t("Invite teammates")}</h2>
+            <p className="text-small leading-relaxed text-faint">
               {interpolate(t("Share this join code — anyone can register at {url} and join with it."), {
                 url: <code className="font-mono text-caption">{origin}/register</code>,
               })}
             </p>
             <div className="flex items-center gap-2">
-              <code className="min-w-0 flex-1 overflow-x-auto rounded-md bg-bg px-2 py-1.5 font-mono text-body text-text">
-                {code ?? t("No active code")}
-              </code>
+              <input
+                readOnly
+                value={code ?? t("No active code")}
+                aria-label={t("Invite teammates")}
+                className="min-w-0 flex-1 rounded-md border border-border bg-bg px-2.5 py-1.5 font-mono text-body text-text focus:outline-none"
+              />
               {code && <CopyButton text={code} />}
               {isAdmin && (
                 <button
@@ -852,39 +843,32 @@ export function SettingsView({
                 </button>
               )}
             </div>
-          </div>
         </section>
+        </SettingsPanel>
 
-        <section className="space-y-3">
-          <h2 className="text-body font-semibold">{t("Task visibility")}</h2>{visibilityError&&<p role="alert" className="text-small text-danger">{t(visibilityError)}</p>}
-          <div className="flex items-center gap-4 rounded-lg border border-border p-4">
-            <div className="min-w-0 flex-1">
-              <div className="text-body font-medium">
-                {seeAll ? t("Everyone sees all tasks") : t("Members only see their projects")}
-              </div>
-              <p className="mt-0.5 text-small leading-relaxed text-muted">
-                {seeAll
-                  ? t("Every workspace member can open every project and its tasks.")
-                  : t("A member only sees tasks in projects they created or joined. Owners and admins still see everything.")}
-              </p>
-            </div>
-            <button
-              type="button"
-              role="switch"
-              aria-checked={seeAll}
-              aria-label={t("Let every member see all tasks")}
-              disabled={!isAdmin||visibilityBusy}
-              onClick={() => void toggleSeeAll(!seeAll)}
-              className={`relative h-5 w-9 shrink-0 rounded-full transition-colors disabled:opacity-40 ${
-                seeAll ? "bg-accent" : "bg-border-strong"
-              }`}
-            >
-              <span
-                className={`absolute top-0.5 h-4 w-4 rounded-full bg-white shadow transition-all ${
-                  seeAll ? "left-[18px]" : "left-0.5"
-                }`}
-              />
-            </button>
+        <SettingsPanel id="visibility" title={t("Task visibility")}>
+        <section className="space-y-2.5">
+          {visibilityError&&<p role="alert" className="text-small text-danger">{t(visibilityError)}</p>}
+          <div role="radiogroup" aria-label={t("Task visibility")} className="divide-y divide-border rounded-lg border border-border">
+            {([
+              [true, t("Everyone sees all tasks"), t("Every workspace member can open every project and its tasks.")],
+              [false, t("Members only see their projects"), t("A member only sees tasks in projects they created or joined. Owners and admins still see everything.")],
+            ] as const).map(([value, title, hint]) => (
+              <label key={String(value)} className="flex items-start gap-2.5 px-4 py-2.5">
+                <input
+                  type="radio"
+                  name="task-visibility"
+                  className="mt-1 accent-[var(--color-accent)]"
+                  checked={seeAll === value}
+                  disabled={!isAdmin || visibilityBusy}
+                  onChange={() => void toggleSeeAll(value)}
+                />
+                <span className="min-w-0">
+                  <span className="block text-body">{title}</span>
+                  <span className="block text-small leading-relaxed text-faint">{hint}</span>
+                </span>
+              </label>
+            ))}
           </div>
           <p className="text-small leading-relaxed text-faint">
             {isAdmin
@@ -892,9 +876,30 @@ export function SettingsView({
               : t("Only workspace admins can change who sees tasks.")}
           </p>
         </section>
+        </SettingsPanel>
 
+        <SettingsPanel id="projects" title={t("Projects")}>
         <section className="space-y-3">
-          <h2 className="text-body font-semibold">{t("Projects")}</h2>
+          <div className="flex items-center gap-2">
+            <input
+              value={projName}
+              onChange={(e) => setProjName(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") void addProject();
+              }}
+              placeholder={t("Project name (e.g. Mobile App)")}
+              aria-label={t("Project name (e.g. Mobile App)")}
+              className="w-full rounded-md border border-border bg-bg px-2.5 py-1.5 text-body text-text placeholder:text-faint focus:border-border-strong focus:outline-none"
+            />
+            <button
+              type="button"
+              onClick={() => void addProject()}
+              disabled={busy || !projName.trim()}
+              className="shrink-0 rounded-md bg-accent px-3 py-1.5 text-body font-medium text-white hover:bg-accent-hover disabled:opacity-40"
+            >
+              {t("Add")}
+            </button>
+          </div>
           <div className="divide-y divide-border rounded-lg border border-border">
             {projects.map((project) => {
               const editing = renaming && renaming.id === project.id ? renaming : null;
@@ -912,7 +917,7 @@ export function SettingsView({
                           if (e.key === "Escape") setRenaming(null);
                         }}
                         aria-label={t("Rename {name}", { name: project.name })}
-                        className="min-w-0 flex-1 rounded-md border border-border bg-elevated/50 px-2 py-1 text-body focus:border-border-strong"
+                        className="min-w-0 flex-1 rounded-md border border-border bg-bg px-2 py-1 text-body text-text focus:border-border-strong focus:outline-none"
                       />
                       <button
                         type="button"
@@ -924,28 +929,23 @@ export function SettingsView({
                     </>
                   ) : (
                     <>
+                      <span className="min-w-0 flex-1 truncate text-body">{project.name}</span>
                       <button
                         type="button"
                         onClick={() => setRenaming({ id: project.id, name: project.name })}
-                        title={t("Rename project")}
-                        className="group flex min-w-0 items-center gap-1.5 text-body hover:text-accent"
+                        className="shrink-0 rounded-md border border-border px-2.5 py-1 text-small text-muted transition-colors hover:text-text"
                       >
-                        <span className="truncate">{project.name}</span>
-                        <Pencil
-                          size={11}
-                          className="shrink-0 text-faint opacity-0 transition-opacity group-hover:opacity-100"
-                        />
+                        {t("Rename")}
                       </button>
                       {/* The project creator, or the workspace owner, may delete it. */}
                       {(project.createdBy === currentUser.id || isOwner) && (
                         <button
                           type="button"
                           onClick={() => void removeProject(project)}
-                          className="ml-auto rounded-md p-1 text-faint transition-colors hover:bg-elevated hover:text-danger"
+                          className="shrink-0 rounded-md px-2 py-1 text-small text-muted transition-colors hover:bg-elevated hover:text-danger"
                           aria-label={t("Move {name} to trash", { name: project.name })}
-                          title={t("Move to trash")}
                         >
-                          <Trash2 size={14} />
+                          {t("Move to Trash")}
                         </button>
                       )}
                     </>
@@ -957,39 +957,22 @@ export function SettingsView({
               <div className="p-4 text-body text-faint">{t("No projects yet.")}</div>
             )}
           </div>
-          <div className="flex items-center gap-2">
-            <input
-              value={projName}
-              onChange={(e) => setProjName(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter") void addProject();
-              }}
-              placeholder={t("Project name (e.g. Mobile App)")}
-              className="w-full rounded-md border border-border bg-elevated/50 px-2.5 py-1.5 text-body placeholder:text-faint focus:border-border-strong"
-            />
-            <button
-              type="button"
-              onClick={() => void addProject()}
-              disabled={busy || !projName.trim()}
-              className="shrink-0 rounded-md bg-accent px-3 py-1.5 text-body font-medium text-white hover:bg-accent-hover disabled:opacity-40"
-            >
-              {t("Add")}
-            </button>
-          </div>
           {projError && <div className="text-small text-danger">{t(projError)}</div>}
         </section>
+        </SettingsPanel>
 
+        <SettingsPanel id="page-templates" title={t("Page templates")}>
         <section id="page-templates" className="scroll-mt-6 space-y-3">
-          <h2 className="text-body font-semibold">{t("Page templates")}</h2>
           <PageTemplatesManager
             workspaceId={workspace.id}
             initialTemplates={pageTemplates}
             canManage={canManagePageTemplates}
           />
         </section>
+        </SettingsPanel>
 
+        <SettingsPanel id="cycles" title={t("Cycle settings")}>
         <section id="cycles" className="scroll-mt-6 space-y-3">
-          <h2 className="text-body font-semibold">{t("Cycle settings")}</h2>
           <CycleSettingsSection
             workspaceId={workspace.id}
             settings={cycleSettings}
@@ -997,9 +980,10 @@ export function SettingsView({
             isAdmin={isAdmin}
           />
         </section>
+        </SettingsPanel>
 
+        <SettingsPanel id="automations" title={t("Automations")}>
         <section id="automations" className="scroll-mt-6 space-y-3" data-testid="automation-settings">
-          <h2 className="text-body font-semibold">{t("Automations")}</h2>
           <AutomationSettingsSection
             workspaceId={workspace.id}
             currentUserId={currentUser.id}
@@ -1013,35 +997,37 @@ export function SettingsView({
             agents={agents}
           />
         </section>
+        </SettingsPanel>
 
+        <SettingsPanel id="labels" title={t("Labels")}>
         <section id="labels" className="scroll-mt-6 space-y-3">
-          <h2 className="text-body font-semibold">{t("Labels")}</h2>
           <p className="text-small leading-relaxed text-faint">
             {t("Create and delete labels for tasks in this workspace.")}
           </p>
           <LabelsManager workspaceId={workspace.id} initialLabels={labels} embedded />
         </section>
+        </SettingsPanel>
 
+        <SettingsPanel id="agent" title={t("Agent")}>
         <section className="space-y-3" data-testid="harness-settings">
-          <div className="flex flex-wrap items-center gap-2">
-            <h2 className="text-body font-semibold">{t("Harness")}</h2>
-            <span className="rounded-full bg-elevated px-2 py-0.5 text-caption text-faint">
-              {t("{count} ready", { count: String(harnessRows.filter((row) => row.enabled && row.ready).length) })}
-            </span>
+          <h2 className="text-body font-semibold">
+            {t("Harness")} · {t("{count} ready", { count: String(harnessRows.filter((row) => row.enabled && row.ready).length) })}
+          </h2>
+          <div className="flex items-start gap-3">
+            <p className="min-w-0 flex-1 text-small leading-relaxed text-faint">
+              {t("Local CLI harnesses for the Agent tab. Turn each one on or off for this workspace. The list shows version, ready state, and the last detect error.")}
+            </p>
             {isAdmin && harnessRows.some((row) => row.installed) && (
               <button
                 type="button"
                 disabled={Boolean(harnessBusy)}
                 onClick={() => void checkHarnessUpdates()}
-                className="ml-auto rounded-md border border-border px-2 py-1 text-small text-muted hover:bg-elevated disabled:opacity-40"
+                className={ROW_BUTTON}
               >
                 {harnessBusy === "check-updates" ? t("Checking…") : t("Check for updates")}
               </button>
             )}
           </div>
-          <p className="text-body leading-relaxed text-muted">
-            {t("Local CLI harnesses for the Agent tab. Turn each one on or off for this workspace. The list shows version, ready state, and the last detect error.")}
-          </p>
           {!harnessGateView.agentAllowed && (
             <div className="rounded-md border border-border bg-elevated px-3 py-2 text-small text-muted" data-testid="harness-agent-disabled">
               {t("The Agent tab is disabled. Enable at least one ready harness to use Agent.")}
@@ -1051,81 +1037,60 @@ export function SettingsView({
             {harnessRows.map((row, index) => (
               <div
                 key={row.id}
-                className={`flex flex-wrap items-start gap-3 px-4 py-3 ${
+                className={`flex flex-wrap items-center gap-3 px-4 py-3 ${
                   index > 0 ? "border-t border-border" : ""
                 }`}
               >
-                <div className="min-w-0 flex-1 space-y-1">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <span className="text-body font-medium text-text">{row.label}</span>
-                    <span className="rounded-full bg-elevated px-2 py-0.5 font-mono text-caption text-faint">
-                      {row.id}
-                    </span>
-                    <span
-                      className={`rounded-full px-2 py-0.5 text-caption font-medium ${
-                        row.ready ? "bg-accent/10 text-accent" : "bg-elevated text-faint"
-                      }`}
-                    >
-                      {row.ready ? t("Ready") : row.installed ? t("Not ready") : t("Not installed")}
-                    </span>
-                  </div>
-                  <div className="text-small text-muted">
-                    {t("Version:")} {row.version ?? "—"}
-                    {row.updateAvailable && row.latestVersion ? (
-                      <span className="ml-2 text-faint">{t("Latest:")} {row.latestVersion}</span>
-                    ) : null}
+                <div className="min-w-0 flex-1 space-y-0.5">
+                  <div className="text-body font-medium text-text">{row.label}</div>
+                  <div className="flex flex-wrap items-center gap-x-1.5 text-small text-faint" title={row.binary ?? undefined}>
+                    <span>{t("Version:")}{row.version ?? "—"}</span>
                     {row.updateAvailable ? (
-                      <span className="ml-2 rounded-full bg-accent/10 px-2 py-0.5 text-caption font-medium text-accent">
-                        {t("Update available")}
+                      <span>
+                        · {t("Update available")}
+                        {row.latestVersion ? ` (${t("Latest:")}${row.latestVersion})` : ""}
                       </span>
                     ) : null}
-                    {row.updateCheckFailed ? (
-                      <span className="ml-2 text-faint">{t("Could not check for updates")}</span>
-                    ) : null}
-                    {row.binary ? (
-                      <span className="ml-2 font-mono text-caption text-faint">{row.binary}</span>
-                    ) : null}
+                    {row.updateCheckFailed ? <span>· {t("Could not check for updates")}</span> : null}
+                    <span aria-hidden="true">·</span>
+                    <HarnessSubscription workspaceId={workspace.id} harnessId={row.id} />
                   </div>
                   {(row.error || row.hint) && (
-                    <div className="text-small text-muted">
+                    <div className="text-small text-faint">
                       {row.error ? <span className="text-danger">{t(row.error)}. </span> : null}
                       {row.hint ? t(row.hint) : null}
                     </div>
                   )}
-                  <HarnessSubscription workspaceId={workspace.id} harnessId={row.id} />
                 </div>
-                <div className="flex flex-wrap items-center gap-2">
-                  {isAdmin && !serverMode && !row.installed && (
-                    <button
-                      type="button"
-                      disabled={Boolean(harnessBusy)}
-                      onClick={() => void runHarnessRecipe(row.id, "install")}
-                      className="rounded-md border border-border px-2 py-1 text-small text-muted hover:bg-elevated disabled:opacity-40"
-                    >
-                      {harnessBusy === `${row.id}:install` ? t("Installing…") : t("Install")}
-                    </button>
-                  )}
-                  {isAdmin && !serverMode && row.installed && row.updateAvailable && (
-                    <button
-                      type="button"
-                      disabled={Boolean(harnessBusy)}
-                      onClick={() => void runHarnessRecipe(row.id, "upgrade")}
-                      className="rounded-md border border-border px-2 py-1 text-small text-muted hover:bg-elevated disabled:opacity-40"
-                    >
-                      {harnessBusy === `${row.id}:upgrade` ? t("Upgrading…") : t("Upgrade")}
-                    </button>
-                  )}
-                  <label className="flex items-center gap-2 text-small text-muted">
-                    <input
-                      type="checkbox"
-                      checked={row.enabled}
-                      disabled={!isAdmin || harnessBusy === `${row.id}` || Boolean(harnessBusy)}
-                      onChange={(e) => void toggleHarness(row.id, e.target.checked)}
-                      className="h-3.5 w-3.5 accent-[#0d0d0d]"
-                    />
-                    {row.enabled ? t("On") : t("Off")}
-                  </label>
-                </div>
+                <span className={row.ready ? "shrink-0 rounded-full bg-accent/10 px-2 py-0.5 text-caption font-medium text-accent" : ROW_BADGE}>
+                  {row.ready ? t("Ready") : row.installed ? t("Not ready") : t("Not installed")}
+                </span>
+                {isAdmin && !serverMode && !row.installed && (
+                  <button
+                    type="button"
+                    disabled={Boolean(harnessBusy)}
+                    onClick={() => void runHarnessRecipe(row.id, "install")}
+                    className={ROW_BUTTON}
+                  >
+                    {harnessBusy === `${row.id}:install` ? t("Installing…") : t("Install")}
+                  </button>
+                )}
+                {isAdmin && !serverMode && row.installed && row.updateAvailable && (
+                  <button
+                    type="button"
+                    disabled={Boolean(harnessBusy)}
+                    onClick={() => void runHarnessRecipe(row.id, "upgrade")}
+                    className={ROW_BUTTON}
+                  >
+                    {harnessBusy === `${row.id}:upgrade` ? t("Upgrading…") : t("Upgrade")}
+                  </button>
+                )}
+                <Switch
+                  checked={row.enabled}
+                  disabled={!isAdmin || harnessBusy === `${row.id}` || Boolean(harnessBusy)}
+                  onChange={(enabled) => void toggleHarness(row.id, enabled)}
+                  label={t("Turn on {name}", { name: row.label })}
+                />
               </div>
             ))}
           </div>
@@ -1135,74 +1100,70 @@ export function SettingsView({
             <p className="text-small text-faint">{t("Only a workspace admin can change harness toggles.")}</p>
           )}
         </section>
-
+        <ModelKeysSection workspaceId={workspace.id} view={modelKeys} serverMode={serverMode} />
         <AgentSettingsSection
           workspaceId={workspace.id}
           agents={agents}
           projects={projects}
           isAdmin={isAdmin}
         />
-
-        <AgentUsageSection usage={agentUsage} />
-
-        <ModelKeysSection workspaceId={workspace.id} view={modelKeys} serverMode={serverMode} />
-
-        <details className="group/advanced" data-testid="settings-advanced">
-          <summary className="flex cursor-pointer list-none items-center gap-1.5 text-body font-semibold [&::-webkit-details-marker]:hidden">
-            <ChevronRight size={14} className="text-muted transition-transform group-open/advanced:rotate-90" />
-            {t("Advanced")}
-          </summary>
-          <p className="mt-1 text-small text-faint">
-            {t("Proxy, REST API keys and MCP server. Only needed to connect other tools to TaCos or to get through a filtered network.")}
+        <section className="space-y-3">
+          <h2 className="text-body font-semibold">{t("Advanced")}</h2>
+          <p className="text-small leading-relaxed text-faint">
+            {t("Proxy, REST API keys and the MCP server. Only needed to connect other tools or when your network needs a proxy.")}
           </p>
-          <div className="mt-4 space-y-8">
+          <a href="#access" className={`inline-block ${ROW_BUTTON}`}>{t("Open advanced settings")}</a>
+        </section>
+        </SettingsPanel>
+
+        <SettingsPanel id="usage" title={t("Agent usage")}>
+        <AgentUsageSection usage={agentUsage} />
+        </SettingsPanel>
+
+        <SettingsPanel id="access" title={t("Agent access: REST and MCP")}>
+          <p className="text-small leading-relaxed text-faint">{t("Only needed to connect other tools to TaCos or to get through a filtered network.")}</p>
               {isAdmin && (
-                <div className="space-y-3 rounded-lg border border-border p-3">
-                  <label className="block space-y-1 text-small text-muted">
-                    <span>{t("Proxy (optional)")}</span>
+                <section className="space-y-3">
+                  <h2 className="text-body font-semibold">{t("Proxy (optional)")}</h2>
+                  <div className="flex items-center gap-2">
                     <input
                       value={aiProxy}
                       onChange={(e) => setAiProxy(e.target.value)}
                       placeholder="http://127.0.0.1:7890"
                       spellCheck={false}
-                      className="w-full rounded-md border border-border bg-elevated/50 px-2.5 py-1.5 font-mono text-small text-text placeholder:text-faint focus:border-border-strong"
+                      aria-label={t("Proxy (optional)")}
+                      className="min-w-0 flex-1 rounded-md border border-border bg-bg px-2.5 py-1.5 font-mono text-small text-text placeholder:text-faint"
                     />
-                    <span className="block text-small text-faint">
-                      {t("Set a local proxy when this machine needs one to reach model providers. All harnesses use it.")}
-                    </span>
-                  </label>
-                  <div className="flex flex-wrap items-center gap-3">
                     <button
                       type="button"
                       onClick={() => void saveRuntime()}
                       disabled={aiBusy}
-                      className="ml-auto rounded-md bg-accent px-3 py-1.5 text-small font-medium text-white transition-colors hover:bg-accent-hover disabled:opacity-40"
+                      className={ROW_BUTTON}
                     >
                       {aiBusy ? t("Saving…") : t("Save")}
                     </button>
                   </div>
+                  <p className="text-small text-faint">
+                    {t("Set a local proxy when this machine needs one to reach model providers. All harnesses use it.")}
+                  </p>
                   {aiError && <div className="text-small text-danger">{t(aiError)}</div>}
                   {aiNotice && <div className="text-small text-muted">{aiNotice}</div>}
-                </div>
+                </section>
               )}
             <section className="space-y-3">
-              <h2 className="text-body font-semibold">{t("Agent access — REST API keys")}</h2>
-              <p className="text-body leading-relaxed text-muted">
-                {interpolate(
-                  t(
-                    "AI agents and scripts read and write issues at {path} with a Bearer token scoped to this workspace ({key}). Agent activity is attributed in every issue timeline."
-                  ),
-                  {
-                    path: (
-                      <code className="rounded bg-elevated px-1 font-mono text-small text-text">
-                        /api/v1/*
-                      </code>
-                    ),
-                    key: workspace.key,
-                  }
-                )}
-              </p>
+              <div className="flex items-center gap-2">
+                <h2 className="min-w-0 flex-1 text-body font-semibold">{t("REST API keys")}</h2>
+                <button
+                  type="button"
+                  onClick={() => setKeyFormOpen((open) => !open)}
+                  aria-expanded={keyFormOpen}
+                  className="shrink-0 rounded-md bg-accent px-3 py-1.5 text-small font-medium text-white transition-colors hover:bg-accent-hover"
+                >
+                  {t("New key")}
+                </button>
+              </div>
 
+              {keyFormOpen && (
               <div className="space-y-3 rounded-lg border border-border p-3">
                 <div className="flex items-center gap-2">
                   <input
@@ -1318,6 +1279,7 @@ export function SettingsView({
                   )}
                 </fieldset>
               </div>
+              )}
               {keyError && <div className="text-small text-danger">{t(keyError)}</div>}
 
               {newKey && (
@@ -1347,89 +1309,100 @@ export function SettingsView({
                         ? t("Read and write")
                         : t("Read only");
                   return (
-                    <div key={key.id} className="space-y-1.5 px-4 py-3">
-                      <div className="flex flex-wrap items-center gap-2">
-                        <code className="font-mono text-small text-text">
-                          {key.keyPrefix && key.last4 ? `${key.keyPrefix}…${key.last4}` : "tac_…"}
-                        </code>
-                        <span className="text-body font-medium">{key.name}</span>
-                        <span className="rounded-full bg-elevated px-2 py-0.5 text-caption text-muted">
+                    <div
+                      key={key.id}
+                      className="flex flex-wrap items-center gap-3 px-4 py-3"
+                      title={`${key.keyPrefix && key.last4 ? `${key.keyPrefix}…${key.last4}` : "tac_…"} · ${t("created {date}", { date: formatDate(key.createdAt, locale) })}${key.lastUsedIp ? ` · ${t("Last used from {ip}", { ip: key.lastUsedIp })}` : ""}`}
+                    >
+                      <div className="min-w-0 flex-1 space-y-0.5">
+                        <div className="text-body font-medium text-text">{key.name}</div>
+                        <div className="text-small text-faint" suppressHydrationWarning>
                           {scopeLabel}
-                        </span>
-                        {key.expiresAt === null ? (
-                          <span className="rounded-full bg-elevated px-2 py-0.5 text-caption text-muted">
-                            {t("Never expires")}
-                          </span>
-                        ) : expired ? (
-                          <span className="rounded-full bg-danger/10 px-2 py-0.5 text-caption text-danger">
-                            {t("Expired {date}", { date: formatDate(key.expiresAt, locale) })}
-                          </span>
-                        ) : (
-                          <span className="rounded-full bg-elevated px-2 py-0.5 text-caption text-muted">
-                            {t("Expires {date}", { date: formatDate(key.expiresAt, locale) })}
-                          </span>
-                        )}
-                        <span className="ml-auto flex items-center gap-2">
-                          {key.revokedAt ? (
-                            <span className="rounded-full bg-elevated px-2 py-0.5 text-caption text-faint">
-                              {t("Revoked")}
-                            </span>
-                          ) : (
-                            <>
-                              <button
-                                type="button"
-                                onClick={() => void rotateKey(key)}
-                                disabled={rotatingKeyId !== null}
-                                aria-label={t("Rotate {name}", { name: key.name })}
-                                className="rounded-md border border-border px-2 py-0.5 text-small text-muted transition-colors hover:border-border-strong hover:text-text disabled:opacity-40"
-                              >
-                                {rotatingKeyId === key.id ? t("Rotating…") : t("Rotate")}
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() => void revokeKey(key)}
-                                aria-label={t("Revoke {name}", { name: key.name })}
-                                className="rounded-md border border-border px-2 py-0.5 text-small text-muted transition-colors hover:border-danger hover:text-danger"
-                              >
-                                {t("Revoke")}
-                              </button>
-                            </>
-                          )}
-                        </span>
-                      </div>
-                      <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-small text-faint">
-                        <span>
+                          {" · "}
                           {key.projectIds === null
                             ? t("All projects")
                             : key.projectIds.length === 1
                               ? t("1 project")
                               : t("{count} projects", { count: key.projectIds.length })}
-                        </span>
-                        <span>{t("created {date}", { date: formatDate(key.createdAt, locale) })}</span>
-                        <span suppressHydrationWarning>
+                          {" · "}
+                          {key.expiresAt === null
+                            ? t("Never expires")
+                            : expired
+                              ? t("Expired {date}", { date: formatDate(key.expiresAt, locale) })
+                              : t("Expires {date}", { date: formatDate(key.expiresAt, locale) })}
+                          {" · "}
                           {key.lastUsedAt
                             ? t("last used {time}", { time: timeAgo(key.lastUsedAt, locale) })
                             : t("never used")}
-                          {key.lastUsedIp && (
-                            <span
-                              aria-label={t("Last used from {ip}", { ip: key.lastUsedIp })}
-                              className="ml-1.5 font-mono text-faint"
-                            >
-                              · {key.lastUsedIp}
-                            </span>
-                          )}
-                        </span>
+                        </div>
                       </div>
+                      {key.revokedAt ? (
+                        <span className={ROW_BADGE}>{t("Revoked")}</span>
+                      ) : (
+                        <>
+                          <button
+                            type="button"
+                            onClick={() => void rotateKey(key)}
+                            disabled={rotatingKeyId !== null}
+                            aria-label={t("Rotate {name}", { name: key.name })}
+                            className={ROW_BUTTON}
+                          >
+                            {rotatingKeyId === key.id ? t("Rotating…") : t("Rotate")}
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => void revokeKey(key)}
+                            aria-label={t("Revoke {name}", { name: key.name })}
+                            className={ROW_BUTTON}
+                          >
+                            {t("Revoke")}
+                          </button>
+                        </>
+                      )}
                     </div>
                   );
                 })}
               </div>
 
+              <details className="text-small text-muted">
+                <summary className="cursor-pointer select-none text-faint hover:text-text">{t("Setup details")}</summary>
+                <div className="mt-2 space-y-3">
+              <p className="text-body leading-relaxed text-muted">
+                {interpolate(
+                  t(
+                    "AI agents and scripts read and write issues at {path} with a Bearer token scoped to this workspace ({key}). Agent activity is attributed in every issue timeline."
+                  ),
+                  {
+                    path: (
+                      <code className="rounded bg-elevated px-1 font-mono text-small text-text">
+                        /api/v1/*
+                      </code>
+                    ),
+                    key: workspace.key,
+                  }
+                )}
+              </p>
               <Snippet code={curlExample} />
+                </div>
+              </details>
             </section>
 
             <section className="space-y-3">
-              <h2 className="text-body font-semibold">{t("Agent access — MCP server")}</h2>
+              <h2 className="text-body font-semibold">{t("MCP server")}</h2>
+              <div className="flex items-center gap-3 rounded-lg border border-border px-4 py-3">
+                <span className="min-w-0 flex-1 text-body text-text">{t("Connect TaCos to tools that support MCP")}</span>
+                <CopyButton
+                  label={t("Copy config")}
+                  text={JSON.stringify(
+                    { mcpServers: { tacos: { type: "http", url: `${origin}/api/mcp`, headers: { Authorization: "Bearer tac_YOUR_KEY" } } } },
+                    null,
+                    2
+                  )}
+                />
+              </div>
+              <details className="text-small text-muted">
+                <summary className="cursor-pointer select-none text-faint hover:text-text">{t("Setup details")}</summary>
+                <div className="mt-2 space-y-3">
               <p className="text-body leading-relaxed text-muted">
                 {interpolate(
                   t(
@@ -1481,14 +1454,15 @@ export function SettingsView({
               <p className="text-small text-faint">
                 {t("The remote endpoint is stateless: every request carries the Bearer key, and the key's scopes and project allowlist apply to every tool call.")}
               </p>
+                </div>
+              </details>
             </section>
-          </div>
-        </details>
+        </SettingsPanel>
 
-        {isOwner && (
+        <SettingsPanel id="danger" title={t("Danger zone")}>
+          {isOwner && (
           <section className="space-y-3">
-            <h2 className="text-body font-semibold text-danger">{t("Danger zone")}</h2>
-            <div className="flex items-center gap-3 rounded-lg border border-danger/40 bg-danger/5 p-4">
+            <div className="flex items-center gap-3 rounded-lg border border-border px-4 py-3">
               <div className="min-w-0 flex-1">
                 <div className="text-body font-medium">{t("Delete this workspace")}</div>
                 <p className="mt-0.5 text-small leading-relaxed text-muted">
@@ -1512,11 +1486,8 @@ export function SettingsView({
               </button>
             </div>
           </section>
-        )}
-
-        {/* Scoped to workspaces this user owns, so it can render even in someone
-            else's settings page. */}
-        <WorkspaceTrashList items={deletedWorkspaces} />
+          )}
+        </SettingsPanel>
       </div>
 
       {deleteOpen && (

@@ -8,7 +8,7 @@ import { EntityRow,usePinned } from "@/components/ui/entity-row";
 import { PersonalOrder } from "@/components/personal-order";
 import { RecentDocuments } from "@/components/recent-documents";
 import Link from "next/link";
-import { tabIdentity } from "@/lib/ui/tabs";
+import { fitTabs, placeInTabs, tabHref, tabIdentity } from "@/lib/ui/tabs";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import {
   Suspense,
@@ -66,6 +66,7 @@ import { IssuePanelHost } from "@/components/issue-panel";
 import { DetailLayout } from "@/components/ui/detail-layout";
 import { DocPanelHost } from "@/components/doc-panel";
 import { UserMenu, type UserInfo } from "@/components/user-menu";
+import { PhoneNav } from "@/components/phone-nav";
 import { useUI, NOTIFICATIONS_READ } from "@/components/ui-context";
 import { DEFAULT_PROJECT_COLOR, STATUS_META, STATUS_ORDER } from "@/lib/constants";
 import type { Member, Project } from "@/lib/issues";
@@ -280,45 +281,6 @@ function SidebarNav({
     <nav data-sidebar-nav className="flex-1 overflow-y-auto px-2 py-2 text-body">
       <div className="pb-1">
         <NavItem
-          href={`/${workspaceId}/notifications`}
-          active={pathname.endsWith("/notifications")}
-          icon={<Inbox size={14} />}
-          badge={unread}
-        >
-          {t("Inbox")}
-        </NavItem>
-      </div>
-      <div className="pb-1">
-        <NavItem
-          href={`/${workspaceId}/activity`}
-          active={pathname.endsWith("/activity")}
-          icon={<Activity size={14} />}
-        >
-          {t("Activity")}
-        </NavItem>
-      </div>
-      <div className="pb-1">
-        <NavItem
-          href={`/${workspaceId}/planning`}
-          active={pathname.startsWith(`/${workspaceId}/planning`)}
-          icon={<CalendarRange size={14} />}
-          testId="nav-planning"
-        >
-          {t("Planning")}
-        </NavItem>
-      </div>
-      <div className="pb-1">
-        <NavItem
-          href={`/${workspaceId}/insights`}
-          active={pathname.startsWith(`/${workspaceId}/insights`)}
-          icon={<ChartNoAxesColumn size={14} />}
-          testId="nav-insights"
-        >
-          {t("Insights")}
-        </NavItem>
-      </div>
-      <div className="pb-1">
-        <NavItem
           href={`/${workspaceId}/search`}
           active={pathname.endsWith("/search")}
           icon={<Search size={14} />}
@@ -329,6 +291,25 @@ function SidebarNav({
           }
         >
           {t("Search")}
+        </NavItem>
+      </div>
+      <div className="pb-1">
+        <NavItem
+          href={`/${workspaceId}/notifications`}
+          active={pathname.endsWith("/notifications")}
+          icon={<Inbox size={14} />}
+          badge={unread}
+        >
+          {t("Inbox")}
+        </NavItem>
+      </div>
+      <div className="pb-1">
+        <NavItem
+          href={link({ view: "all", assignee: "me" })}
+          active={active({ view: "all", assignee: "me" })}
+          icon={<User size={14} />}
+        >
+          {t("My Tasks")}
         </NavItem>
       </div>
       <div className="pb-1">
@@ -353,12 +334,8 @@ function SidebarNav({
         />
         {open("tasks") && (
           <div className="space-y-0.5">
-            <NavItem
-              href={link({ view: "all", assignee: "me" })}
-              active={active({ view: "all", assignee: "me" })}
-              icon={<User size={14} />}
-            >
-              {t("My Tasks")}
+            <NavItem href={link({ view: "all" })} active={allTasksActive} icon={<List size={14} />}>
+              {t("All Tasks")}
             </NavItem>
             <NavItem
               href={link({ view: "open" })}
@@ -367,9 +344,6 @@ function SidebarNav({
               badge={openTasks || null}
             >
               {t("Open Tasks")}
-            </NavItem>
-            <NavItem href={link({ view: "all" })} active={allTasksActive} icon={<List size={14} />}>
-              {t("All Tasks")}
             </NavItem>
             <WorkspaceViews workspaceId={workspaceId} />
             <NavItem
@@ -521,6 +495,32 @@ function SidebarNav({
         )}
       </div>
 
+      <div className="mt-2 space-y-0.5 border-t border-border pt-2">
+        <NavItem
+          href={`/${workspaceId}/planning`}
+          active={pathname.startsWith(`/${workspaceId}/planning`)}
+          icon={<CalendarRange size={14} />}
+          testId="nav-planning"
+        >
+          {t("Planning")}
+        </NavItem>
+        <NavItem
+          href={`/${workspaceId}/activity`}
+          active={pathname.endsWith("/activity")}
+          icon={<Activity size={14} />}
+        >
+          {t("Activity")}
+        </NavItem>
+        <NavItem
+          href={`/${workspaceId}/insights`}
+          active={pathname.startsWith(`/${workspaceId}/insights`)}
+          icon={<ChartNoAxesColumn size={14} />}
+          testId="nav-insights"
+        >
+          {t("Insights")}
+        </NavItem>
+      </div>
+
       {/* Same idea as Notion's t("Customize sidebar"): sections that are useful to some
           people but clutter for everyone else can be taken out and put back here. */}
       <div className="px-1 pt-3">
@@ -640,9 +640,8 @@ function WorkspaceSwitcher({
   async function leaveWorkspace() {
     if (
       !await confirm(
-        t('Leave "{name}"? A workspace admin has to invite you back with a join code.', {
-          name: workspace.name,
-        })
+        t('Leave "{name}"?', { name: workspace.name }),
+        { body: t("A workspace admin has to invite you back with a join code."), action: t("Leave") }
       )
     )
       return;
@@ -1034,6 +1033,13 @@ function SidebarRail({
         }
       >
         <RailLink
+          href={`/${workspaceId}/search`}
+          active={pathname.endsWith("/search")}
+          label={t("Search")}
+          icon={<Search size={16} />}
+          labeled={labeled}
+        />
+        <RailLink
           href={`/${workspaceId}/notifications`}
           active={pathname.endsWith("/notifications")}
           label={t("Inbox")}
@@ -1042,33 +1048,10 @@ function SidebarRail({
           labeled={labeled}
         />
         <RailLink
-          href={`/${workspaceId}/activity`}
-          active={pathname.endsWith("/activity")}
-          label={t("Activity")}
-          icon={<Activity size={16} />}
-          labeled={labeled}
-        />
-        <RailLink
-          href={`/${workspaceId}/planning`}
-          active={pathname.startsWith(`/${workspaceId}/planning`)}
-          label={t("Planning")}
-          icon={<CalendarRange size={16} />}
-          labeled={labeled}
-          testId="nav-planning"
-        />
-        <RailLink
-          href={`/${workspaceId}/insights`}
-          active={pathname.startsWith(`/${workspaceId}/insights`)}
-          label={t("Insights")}
-          icon={<ChartNoAxesColumn size={16} />}
-          labeled={labeled}
-          testId="nav-insights"
-        />
-        <RailLink
-          href={`/${workspaceId}/search`}
-          active={pathname.endsWith("/search")}
-          label={t("Search")}
-          icon={<Search size={16} />}
+          href={`/${workspaceId}/?view=all&assignee=me`}
+          active={taskActive({ view: "all", assignee: "me" })}
+          label={t("My Tasks")}
+          icon={<User size={16} />}
           labeled={labeled}
         />
         <RailLink
@@ -1081,15 +1064,6 @@ function SidebarRail({
         />
         <RailFlyout label={t("Tasks")} icon={<LayoutList size={15} />} labeled={labeled}>
           {(close) => [
-            <RailFlyoutLink
-              key="mine"
-              href={`/${workspaceId}/?view=all&assignee=me`}
-              active={taskActive({ view: "all", assignee: "me" })}
-              icon={<User size={14} />}
-              onSelect={close}
-            >
-              {t("My Tasks")}
-            </RailFlyoutLink>,
             <RailFlyoutLink
               key="open"
               href={`/${workspaceId}/?view=open`}
@@ -1243,6 +1217,29 @@ function SidebarRail({
             }
           </RailFlyout>
         )}
+        <RailLink
+          href={`/${workspaceId}/planning`}
+          active={pathname.startsWith(`/${workspaceId}/planning`)}
+          label={t("Planning")}
+          icon={<CalendarRange size={16} />}
+          labeled={labeled}
+          testId="nav-planning"
+        />
+        <RailLink
+          href={`/${workspaceId}/activity`}
+          active={pathname.endsWith("/activity")}
+          label={t("Activity")}
+          icon={<Activity size={16} />}
+          labeled={labeled}
+        />
+        <RailLink
+          href={`/${workspaceId}/insights`}
+          active={pathname.startsWith(`/${workspaceId}/insights`)}
+          label={t("Insights")}
+          icon={<ChartNoAxesColumn size={16} />}
+          labeled={labeled}
+          testId="nav-insights"
+        />
       </nav>
       <div
         className={
@@ -1269,7 +1266,7 @@ function SidebarRail({
         />
         <RailLink
           href={`/${workspaceId}/settings`}
-          active={pathname.endsWith("/settings")}
+          active={/\/settings(\/|$)/.test(pathname)}
           label={t("Settings")}
           icon={<Settings size={16} />}
           labeled={labeled}
@@ -1300,6 +1297,8 @@ const SIDEBAR_DEFAULT = 216;
 const SIDEBAR_MIN = 180;
 const SIDEBAR_MAX = 420;
 const SIDEBAR_CONTENT_MIN = 480;
+// Below this window width the column stays an icon rail, whatever width it was left at.
+const SIDEBAR_FORCE_RAIL_BELOW = 860;
 // The rail only holds 32px targets, so 48px is enough and 44px is the floor.
 const SIDEBAR_RAIL = 48;
 const SIDEBAR_RAIL_MIN = 44;
@@ -1388,8 +1387,10 @@ function useSidebarWidth() {
     });
   }, [remember]);
 
-  const rendered=available===null?width:Math.min(width,Math.max(SIDEBAR_RAIL_MIN,available-SIDEBAR_CONTENT_MIN));
-  return { width:rendered, rail: rendered < SIDEBAR_MIN, resize, commit, toggle };
+  const rendered=available===null?width:available<SIDEBAR_FORCE_RAIL_BELOW?Math.min(width,SIDEBAR_RAIL):Math.min(width,Math.max(SIDEBAR_RAIL_MIN,available-SIDEBAR_CONTENT_MIN));
+  // Too narrow for the full sidebar: the rail is not a choice here, so nothing may change or save it.
+  const forced=available!==null&&available<SIDEBAR_FORCE_RAIL_BELOW;
+  return { width:rendered, rail: rendered < SIDEBAR_MIN, forced, resize, commit, toggle };
 }
 
 /**
@@ -1534,12 +1535,17 @@ function tabMeta(
       return { label: project.name, icon: <ProjectIcon color={project.color} icon={project.icon} size={13} /> };
     return { label: t("Project"), icon: <ProjectIcon color={DEFAULT_PROJECT_COLOR} size={13} /> };
   }
-  if (pathname.endsWith("/settings")) return { label: t("Settings"), icon: <Settings size={13} /> };
+  if (/\/settings(\/|$)/.test(pathname)) return { label: t("Settings"), icon: <Settings size={13} /> };
   if (pathname.endsWith("/agent")) return { label: t("Agent"), icon: <Bot size={13} /> };
   if (pathname.endsWith("/labels")) return { label: t("Labels"), icon: <Tag size={13} /> };
   if (pathname.endsWith("/trash")) return { label: t("Trash"), icon: <Trash2 size={13} /> };
   if (pathname.endsWith("/review")) return { label: t("Review"), icon: <ShieldCheck size={13} /> };
   if (pathname.endsWith("/help")) return { label: t("Help"), icon: <CircleHelp size={13} /> };
+  if (pathname.endsWith("/search")) return { label: t("Search"), icon: <Search size={13} /> };
+  if (pathname.startsWith(`/${workspace.id}/planning`))
+    return { label: t("Planning"), icon: <CalendarRange size={13} /> };
+  if (pathname.startsWith(`/${workspace.id}/insights`))
+    return { label: t("Insights"), icon: <ChartNoAxesColumn size={13} /> };
   if (pathname.endsWith("/activity"))
     return { label: t("Activity"), icon: <Activity size={13} /> };
   if (pathname.endsWith("/notifications"))
@@ -1554,6 +1560,9 @@ function tabMeta(
   if (pathname === `/${workspace.id}/docs`) return { label: t("Documents"), icon: <FileText size={13} /> };
   return { label: t("Tasks"), icon: <List size={13} /> };
 }
+
+const TAB_MIN_WIDTH = 96;
+const TAB_ROOM_DEFAULT = 8;
 
 function TabBar({
   workspace,
@@ -1572,13 +1581,13 @@ function TabBar({
   user: UserInfo;
   rail: boolean;
   sidebarWidth: number;
-  onToggleRail: () => void;
+  onToggleRail?: () => void;
 }) {
   const t = useT();
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
-  const { setPaletteOpen, scope } = useUI();
+  const { paletteOpen, setPaletteOpen, scope } = useUI();
   const modifier=usePrimaryModifier();
   const [recentTabs,setRecentTabs]=useStoredJson<string[]>(`tacos.tabs.closed.${scope}`,[]);
   const [fixedTabs,setFixedTabs]=useStoredJson<string[]>(`tacos.tabs.fixed.${scope}`,[]);
@@ -1588,6 +1597,12 @@ function TabBar({
   // sit next to it in the strip — a doc opened from an Overview goes back to that Overview.
   const cameFrom = useRef<string | null>(null);
   const lastKey = useRef<string | null>(null);
+  // Set while a page is being opened as a new tab instead of replacing the current one.
+  const openAsNew = useRef(false);
+  // Which tab each tab replaced when a link was followed: closing it goes back there.
+  const replacedBy = useRef(new Map<string, string>());
+  const stripRef = useRef<HTMLDivElement>(null);
+  const [tabRoom, setTabRoom] = useState(TAB_ROOM_DEFAULT);
   // Where the app sits when nothing is open. It is deliberately not a tab: the strip
   // is empty, and this page offers the ways back in.
   const startKey = `/${workspace.id}/start`;
@@ -1623,16 +1638,72 @@ function TabBar({
     // actually moved on the guard is spent, so revisiting the page later opens it again.
     if (justClosed.current !== null && current !== justClosed.current) justClosed.current = null;
     if (current === justClosed.current) return;
-    if (current === startKey) return;
-    if (tabs.includes(current)) return;
-    const existing = tabs.findIndex((key) => sameTab(key, current));
-    if (existing >= 0) {
-      setTabs(tabs.map((key, i) => (i === existing ? current : key)));
+    if (current === startKey) {
+      openAsNew.current = false;
       return;
     }
-    setTabs([...tabs, current]);
+    if (tabs.includes(current)) {
+      openAsNew.current = false;
+      return;
+    }
+    const next = placeInTabs(tabs, current, {
+      from: cameFrom.current,
+      fixed: fixedTabs,
+      newTab: openAsNew.current,
+    });
+    openAsNew.current = false;
+    const from = cameFrom.current;
+    if (from && tabs.includes(from) && !next.includes(from)) {
+      replacedBy.current.set(current, from);
+      setRecentTabs(previous=>[from,...previous.filter(item=>item!==from)].slice(0,20));
+    }
+    setTabs(next);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [current, tabs]);
+
+  // Cmd/Ctrl-click on any link in the workspace opens it in a new tab of this strip.
+  useEffect(() => {
+    const onClick = (event: MouseEvent) => {
+      if (event.defaultPrevented || event.button !== 0 || !(event.metaKey || event.ctrlKey)) return;
+      const link = (event.target as Element | null)?.closest?.("a[href]") as HTMLAnchorElement | null;
+      if (!link || link.target === "_blank") return;
+      const url = new URL(link.href);
+      if (url.origin !== window.location.origin) return;
+      if (!url.pathname.startsWith(`/${workspace.id}`)) return;
+      event.preventDefault();
+      event.stopPropagation();
+      const params = new URLSearchParams(url.search);
+      params.sort();
+      const query = params.toString();
+      const key = `${url.pathname}${query ? `?${query}` : ""}`;
+      // A link to the page already on screen places no tab, so nothing would spend the flag.
+      openAsNew.current = key !== lastKey.current;
+      router.push(`${url.pathname}${url.search}${url.hash}`);
+    };
+    document.addEventListener("click", onClick, true);
+    return () => document.removeEventListener("click", onClick, true);
+  }, [router, workspace.id]);
+
+  // The + button opens a new tab through the palette; closing the palette without a
+  // choice must not make the next ordinary link open a new tab.
+  useEffect(() => {
+    if (paletteOpen || !openAsNew.current) return;
+    const timer = setTimeout(() => {
+      openAsNew.current = false;
+    }, 3000);
+    return () => clearTimeout(timer);
+  }, [paletteOpen]);
+
+  // Tabs narrow to their minimum first; only what still does not fit moves behind +N.
+  useEffect(() => {
+    const strip = stripRef.current;
+    if (!strip) return;
+    const measure = () => setTabRoom(Math.floor(strip.clientWidth / TAB_MIN_WIDTH));
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(strip);
+    return () => observer.disconnect();
+  }, []);
 
   useEffect(() => {
     if (tabs === null) return;
@@ -1650,6 +1721,8 @@ function TabBar({
     const liveProjects = new Set(projects.map((project) => project.id));
     const livePages = new Set(pages.map((page) => page.id));
     const alive = (key: string) => {
+      // The page on screen stays: adding it back here and dropping it there would loop forever.
+      if (key === current) return true;
       const project = key.match(new RegExp(`^/${workspace.id}/projects/([^/?]+)`));
       if (project && !liveProjects.has(project[1])) return false;
       const page = key.match(new RegExp(`^/${workspace.id}/docs/([^/?]+)`));
@@ -1658,15 +1731,26 @@ function TabBar({
     };
     if (tabs.every(alive)) return;
     setTabs(tabs.filter(alive));
-  }, [tabs, projects, pages, workspace.id]);
+  }, [tabs, projects, pages, workspace.id, current]);
 
   const visible = tabs ?? [];
+  const { shown: shownTabs, hidden: hiddenTabs } = fitTabs(visible, current, tabRoom);
 
   function closeTab(key: string) {
     if(fixedTabs.includes(key))return;
     setRecentTabs(previous=>[key,...previous.filter(item=>item!==key)].slice(0,20));
     const index = visible.indexOf(key);
     const rest = visible.filter((t) => t !== key);
+    const source = replacedBy.current.get(key);
+    replacedBy.current.delete(key);
+    if (key === current && source && !rest.includes(source)) {
+      // The page this tab replaced takes its place again.
+      justClosed.current = key;
+      setRecentTabs(previous=>[key,...previous.filter(item=>item!==key&&item!==source)].slice(0,20));
+      setTabs(visible.map((item) => (item === key ? source : item)));
+      router.push(tabHref(source));
+      return;
+    }
     setTabs(rest);
     if (key !== current) return;
     justClosed.current = key;
@@ -1677,7 +1761,7 @@ function TabBar({
       cameFrom.current && cameFrom.current !== key && rest.includes(cameFrom.current)
         ? cameFrom.current
         : rest[Math.max(0, Math.min(index, rest.length - 1))];
-    router.push(back ?? startKey);
+    router.push(back ? tabHref(back) : startKey);
   }
 
   function closeMany(key:string,right:boolean) {
@@ -1717,7 +1801,7 @@ function TabBar({
         data-rail={rail ? "true" : undefined}
         className="app-windowbar-left flex shrink-0 items-center px-3"
       >
-        <button
+        {onToggleRail && <button
           type="button"
           onClick={onToggleRail}
           title={rail ? t("Expand sidebar") : t("Collapse to icons")}
@@ -1725,16 +1809,16 @@ function TabBar({
           className="shrink-0 rounded-md p-1.5 text-muted transition-colors hover:bg-elevated hover:text-text"
         >
           {rail ? <PanelLeftOpen size={16} /> : <PanelLeftClose size={16} />}
-        </button>
+        </button>}
       </div>
 
-      <div className="app-tabstrip flex min-w-0 flex-1 items-center gap-1.5 overflow-x-auto pl-1.5">
-        {visible.map((key) => {
+      <div ref={stripRef} className="app-tabstrip flex min-w-0 flex-1 items-center gap-1 overflow-hidden pl-1.5">
+        {shownTabs.map((key) => {
           const { label, icon } = tabMeta(key, workspace, projects, members, pages, t);
           const isActive = key === current;
           return (
             <ContextMenu.Root key={key}><ContextMenu.Trigger asChild><div
-              className={`app-tab group flex h-8 w-[128px] shrink-0 min-w-0 items-center gap-1.5 rounded-lg border px-2 text-small transition-colors ${
+              className={`app-tab group flex h-8 min-w-[92px] max-w-[168px] flex-1 items-center gap-1.5 rounded-lg border px-2 text-small transition-colors ${
                 isActive
                   ? "border-border bg-bg font-medium text-text shadow-[0_1px_2px_rgba(0,0,0,0.05)]"
                   : "border-transparent text-muted hover:bg-elevated/70 hover:text-text"
@@ -1742,7 +1826,7 @@ function TabBar({
             >
               <button
                 type="button"
-                onClick={() => router.push(key)}
+                onClick={() => router.push(tabHref(key))}
                 className="flex min-w-0 flex-1 items-center gap-1.5"
                 title={label}
               >
@@ -1769,13 +1853,16 @@ function TabBar({
         })}
       </div>
 
-      <Menu align="right" width={300} trigger={<span aria-label={t("Open tabs")}>▾</span>} triggerClassName="rounded px-2 py-1 text-muted">{close=><>{visible.map(key=><MenuItem key={key} onSelect={()=>{close();router.push(key);}}>{tabMeta(key,workspace,projects,members,pages,t).label}</MenuItem>)}{recentTabs.length>0&&<div className="border-t border-border px-2 py-1 text-small text-faint">{t("Recently closed")}</div>}{recentTabs.map(key=><MenuItem key={key} onSelect={()=>{close();setRecentTabs(previous=>previous.filter(item=>item!==key));router.push(key);}}>{tabMeta(key,workspace,projects,members,pages,t).label}</MenuItem>)}</>}</Menu>
+      <Menu align="right" width={300} trigger={<span aria-label={t("Open tabs")} className="tabular-nums">{hiddenTabs.length>0?`+${hiddenTabs.length}`:"▾"}</span>} triggerClassName="rounded px-2 py-1 text-small text-muted hover:bg-elevated hover:text-text">{close=><>{visible.map(key=><MenuItem key={key} onSelect={()=>{close();router.push(tabHref(key));}}>{tabMeta(key,workspace,projects,members,pages,t).label}</MenuItem>)}{recentTabs.length>0&&<div className="border-t border-border px-2 py-1 text-small text-faint">{t("Recently closed")}</div>}{recentTabs.map(key=><MenuItem key={key} onSelect={()=>{close();setRecentTabs(previous=>previous.filter(item=>item!==key));openAsNew.current=true;router.push(key);}}>{tabMeta(key,workspace,projects,members,pages,t).label}</MenuItem>)}</>}</Menu>
 
       <DesktopAppUpdateButton />
 
       <button
         type="button"
-        onClick={() => setPaletteOpen(true)}
+        onClick={() => {
+          openAsNew.current = true;
+          setPaletteOpen(true);
+        }}
         title={t("Open something ({key}K)",{key:modifier})}
         aria-label={t("Open something")}
         className="ml-1.5 shrink-0 rounded-md p-1.5 text-muted transition-colors hover:bg-elevated hover:text-text"
@@ -1865,6 +1952,7 @@ export function WorkspaceShell({
   const {
     width: sidebarWidth,
     rail,
+    forced: railForced,
     resize: resizeSidebar,
     commit: commitSidebar,
     toggle: toggleRail,
@@ -1918,6 +2006,7 @@ export function WorkspaceShell({
   return (
     <div className="flex h-full flex-col">
       <DesktopOpenFiles workspaceId={workspace.id} />
+      <div className="contents max-[600px]:hidden">
       <Suspense fallback={<div className="h-12 shrink-0 bg-surface" />}>
         <TabBar
           workspace={workspace}
@@ -1927,9 +2016,10 @@ export function WorkspaceShell({
           user={user}
           rail={rail}
           sidebarWidth={sidebarWidth}
-          onToggleRail={toggleRail}
+          onToggleRail={railForced ? undefined : toggleRail}
         />
       </Suspense>
+      </div>
 
       <div className="flex min-h-0 flex-1 bg-surface">
         {/*
@@ -1939,7 +2029,7 @@ export function WorkspaceShell({
         */}
         <aside
           style={{ width: sidebarWidth }}
-          className="relative flex shrink-0 flex-col bg-surface"
+          className="relative flex shrink-0 flex-col bg-surface max-[600px]:hidden"
         >
           {rail ? (
             <SidebarRail
@@ -2003,7 +2093,7 @@ export function WorkspaceShell({
                 </NavItem>
                 <NavItem
                   href={`/${workspace.id}/settings`}
-                  active={pathname.endsWith("/settings")}
+                  active={/\/settings(\/|$)/.test(pathname)}
                   icon={<Settings size={14} />}
                 >
                   {t("Settings")}
@@ -2013,14 +2103,14 @@ export function WorkspaceShell({
           )}
 
           {/* The handle spans both looks and resets to whichever one is on screen. */}
-          <SidebarResizer
+          {!railForced && <SidebarResizer
             width={sidebarWidth}
             min={SIDEBAR_RAIL_MIN}
             max={SIDEBAR_MAX}
             resetTo={rail ? SIDEBAR_RAIL : SIDEBAR_DEFAULT}
             onWidth={resizeSidebar}
             onDone={commitSidebar}
-          />
+          />}
         </aside>
 
         {/*
@@ -2028,7 +2118,7 @@ export function WorkspaceShell({
           grey surface, and everything you are actually working on sits in a white card
           with its own border and rounded corners, floating in a small gutter.
         */}
-        <main className="flex min-w-0 flex-1 flex-col p-2 pt-1">
+        <main className="flex min-w-0 flex-1 flex-col p-2 pt-1 max-[600px]:p-0">
           {/* The list and the issue are separate cards with a gutter, the way Linear
               splits a view from its detail pane — not one card cut by a divider. */}
           <DetailLayout detail={<><IssuePanelHost workspaceId={workspace.id} currentUserId={user.id} /><DocPanelHost workspaceId={workspace.id} /></>}>
@@ -2036,6 +2126,19 @@ export function WorkspaceShell({
           </DetailLayout>
         </main>
       </div>
+
+      <Suspense fallback={null}>
+        <PhoneNav
+          workspaceId={workspace.id}
+          switcher={<WorkspaceSwitcher workspace={workspace} workspaces={workspaces} />}
+          workspaceName={workspace.name}
+          projects={projects}
+          account={<UserMenu user={user} adminUrl={user.siteRole === "admin" ? "/admin" : workspace.role === "admin" ? `/admin/${workspace.id}` : null} />}
+          unread={unread ?? 0}
+          agentAllowed={agentAllowed}
+          hidden={hiddenSections}
+        />
+      </Suspense>
 
       <LiveRefresh workspaceId={workspace.id} />
       {inviteOpen && (

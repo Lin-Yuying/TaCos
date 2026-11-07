@@ -41,6 +41,7 @@ import {
   Users,
   Wrench,
   X,
+  List,
 } from "lucide-react";
 import { Menu, MenuItem } from "@/components/menu";
 import { useUI } from "@/components/ui-context";
@@ -80,7 +81,7 @@ import {
   type CodexModel,
 } from "@/lib/ai-constants";
 import type { AgentApproval, AgentThread, AgentThreadDetail } from "@/lib/agent-threads";
-import { interpolate, useT } from "@/components/i18n-context";
+import { interpolate, useLocale, useT } from "@/components/i18n-context";
 
 type ProjectOption = { id: string; name: string; key: string; color: string };
 
@@ -288,14 +289,14 @@ function ApprovalPanel({
           {card.params}
         </pre>
       )}
-      <div className="mt-2.5 flex flex-wrap items-center justify-end gap-2">
+      <div className="mt-2.5 flex flex-wrap items-center gap-2">
         <button
           type="button"
-          onClick={() => onAnswer(card.requestId, "decline")}
+          onClick={() => onAnswer(card.requestId, "accept")}
           disabled={busy}
-          className="rounded-md border border-border px-2.5 py-1 text-small text-muted transition-colors hover:border-border-strong hover:text-text disabled:opacity-50"
+          className="rounded-md bg-accent px-2.5 py-1 text-small font-medium text-white transition-opacity hover:opacity-90 disabled:opacity-50"
         >
-          {t("Deny")}
+          {t("Allow once")}
         </button>
         <button
           type="button"
@@ -308,11 +309,11 @@ function ApprovalPanel({
         </button>
         <button
           type="button"
-          onClick={() => onAnswer(card.requestId, "accept")}
+          onClick={() => onAnswer(card.requestId, "decline")}
           disabled={busy}
-          className="rounded-md bg-accent px-2.5 py-1 text-small font-medium text-white transition-opacity hover:opacity-90 disabled:opacity-50"
+          className="rounded-md px-2.5 py-1 text-small text-muted transition-colors hover:bg-elevated hover:text-text disabled:opacity-50"
         >
-          {t("Allow once")}
+          {t("Deny")}
         </button>
       </div>
     </div>
@@ -419,83 +420,17 @@ function modelPrefFor(
 }
 
 // Codex picks reasoning with a dot slider instead of a list; dragging snaps to a level.
-function EffortSlider({
-  levels,
-  value,
-  onChange,
-}: {
-  levels: { id: string; label: string }[];
-  value: string;
-  onChange: (id: string) => void;
-}) {
-  const t = useT();
-  const rail = useRef<HTMLDivElement>(null);
-  const index = Math.max(0, levels.findIndex((level) => level.id === value));
-  const ratio = levels.length > 1 ? index / (levels.length - 1) : 0;
-  const pickAt = (clientX: number) => {
-    const el = rail.current;
-    if (!el || levels.length < 2) return;
-    const rect = el.getBoundingClientRect();
-    const t = Math.min(1, Math.max(0, (clientX - rect.left) / rect.width));
-    const next = levels[Math.round(t * (levels.length - 1))];
-    if (next && next.id !== value) onChange(next.id);
-  };
-  const step = (delta: number) => {
-    const next = levels[Math.min(levels.length - 1, Math.max(0, index + delta))];
-    if (next && next.id !== value) onChange(next.id);
-  };
-  return (
-    <div
-      role="slider"
-      tabIndex={0}
-      aria-label={t("Reasoning effort")}
-      aria-valuemin={1}
-      aria-valuemax={levels.length}
-      aria-valuenow={index + 1}
-      aria-valuetext={levels[index]?.label}
-      className="relative mx-2 mb-2 mt-2 h-7 cursor-pointer touch-none select-none rounded-full outline-none focus-visible:ring-2 focus-visible:ring-accent/40"
-      onPointerDown={(e) => {
-        e.currentTarget.setPointerCapture(e.pointerId);
-        pickAt(e.clientX);
-      }}
-      onPointerMove={(e) => {
-        if (e.currentTarget.hasPointerCapture(e.pointerId)) pickAt(e.clientX);
-      }}
-      onKeyDown={(e) => {
-        if (e.key === "ArrowLeft" || e.key === "ArrowDown") {
-          e.preventDefault();
-          step(-1);
-        } else if (e.key === "ArrowRight" || e.key === "ArrowUp") {
-          e.preventDefault();
-          step(1);
-        }
-      }}
-    >
-      <div ref={rail} className="absolute inset-x-2.5 top-1/2 h-6 -translate-y-1/2">
-        <div className="absolute inset-0 rounded-full bg-elevated" />
-        <div className="absolute inset-y-0 left-0 rounded-full bg-accent" style={{ width: `${ratio * 100}%` }} />
-        {levels.map((level, i) => (
-          <span
-            key={level.id}
-            className={`absolute top-1/2 h-[3px] w-[3px] -translate-x-1/2 -translate-y-1/2 rounded-full ${
-              i <= index ? "bg-white/90" : "bg-faint"
-            }`}
-            style={{ left: `${(levels.length > 1 ? i / (levels.length - 1) : 0) * 100}%` }}
-          />
-        ))}
-        <span
-          className="absolute top-1/2 h-[22px] w-[22px] -translate-x-1/2 -translate-y-1/2 rounded-full bg-white shadow-[0_1px_3px_rgba(0,0,0,0.25)]"
-          style={{ left: `${ratio * 100}%` }}
-        />
-      </div>
-    </div>
-  );
-}
-
 // #79: the selected harness's plan usage, when it reports one. Codex fills this from
 // its app-server; every other harness says "not reported" rather than guessing.
+function resetDay(at: string, locale: string) {
+  const when = new Date(at);
+  const soon = when.getTime() - Date.now() < 7 * 24 * 3600 * 1000;
+  return when.toLocaleDateString(locale, soon ? { weekday: "long" } : { month: "short", day: "numeric" });
+}
+
 function ComposerSubscription({ workspaceId, engine }: { workspaceId: string; engine: AgentEngineId }) {
   const t = useT();
+  const locale = useLocale();
   const [info, setInfo] = useState<{ source: string; windows: { id: string; label: string; remainingPercent: number; resetsAt: string | null }[]; hint: string | null } | null>(null);
   useEffect(() => {
     let cancelled = false;
@@ -522,22 +457,13 @@ function ComposerSubscription({ workspaceId, engine }: { workspaceId: string; en
         .join("\n")
     : info?.hint ?? t("This harness does not report plan usage.");
   return (
-    <span
-      data-testid="composer-subscription"
-      title={title}
-      className="flex items-center gap-1 rounded-full px-2 py-1 text-caption text-faint"
-    >
-      {first ? (
-        <>
-          <span className="h-1.5 w-1.5 rounded-full bg-accent" />
-          <span className="font-variant-numeric tabular-nums">
-            {t("{percent}% left", { percent: String(Math.round(first.remainingPercent)) })}
-          </span>
-        </>
-      ) : (
-        <span>{info ? t("Plan: not reported") : t("Plan…")}</span>
-      )}
-    </span>
+    <p data-testid="composer-subscription" title={title} className="px-2 py-1 text-small tabular-nums text-faint">
+      {first
+        ? first.resetsAt
+          ? t("Plan {percent}% left, resets {when}", { percent: String(Math.round(first.remainingPercent)), when: resetDay(first.resetsAt, locale) })
+          : t("Plan {percent}% left", { percent: String(Math.round(first.remainingPercent)) })
+        : info ? t("Plan: not reported") : t("Plan…")}
+    </p>
   );
 }
 
@@ -560,7 +486,7 @@ function HarnessChip({
     <Menu
       className="shrink-0"
       width={300}
-      align="right"
+      align="left"
       triggerClassName={`flex items-center gap-1 rounded-full px-2 py-1 text-small text-text transition-colors hover:bg-elevated ${
         disabled ? "pointer-events-none opacity-50" : ""
       }`}
@@ -593,11 +519,11 @@ function HarnessChip({
 }
 
 // Long lists (OpenCode with a few providers) get a filter; short ones don't need it.
-const MODEL_SEARCH_MIN = 8;
 
 // Model and effort for the current harness. Each harness offers its own list; a harness
 // whose list could not be read runs on its own setting.
 function ModelChip({
+  workspaceId,
   engine,
   models,
   model,
@@ -605,6 +531,7 @@ function ModelChip({
   onModel,
   disabled,
 }: {
+  workspaceId: string;
   engine: AgentEngineId;
   models: CodexModel[];
   model: string;
@@ -637,8 +564,8 @@ function ModelChip({
     : models;
   return (
     <Menu
-      width={330}
-      align="right"
+      width={280}
+      align="left"
       className="min-w-0"
       triggerClassName={`flex max-w-full items-center gap-1 rounded-full px-2 py-1 text-small text-text transition-colors hover:bg-elevated ${
         disabled ? "pointer-events-none opacity-50" : ""
@@ -655,7 +582,7 @@ function ModelChip({
     >
       {() => (
         <>
-          {models.length > MODEL_SEARCH_MIN && (
+          {(
             <div className="sticky -top-1 z-10 -mx-1 -mt-1 bg-overlay px-2 pb-1 pt-2">
               <input
                 autoFocus
@@ -666,7 +593,6 @@ function ModelChip({
               />
             </div>
           )}
-          <SectionLabel>{t("Model")}</SectionLabel>
           {shown.length === 0 && <p className="px-2 py-2 text-small text-faint">{t("No matching models.")}</p>}
           {shown.map((entry) => (
             <MenuItem
@@ -687,25 +613,30 @@ function ModelChip({
           ))}
           {efforts.length > 1 && (
             <>
-              <div className="my-1 border-t border-border" />
               {/* Pinned so effort stays reachable while the model list scrolls. */}
               <div className="sticky -bottom-1 -mx-1 -mb-1 border-t border-border bg-overlay px-1 pb-1">
-                <div className="px-2 pt-2 text-center">
-                  <p className="text-lead font-semibold leading-5 text-text">{effortLabel || t("Default")}</p>
-                  <p className="mt-0.5 text-small text-muted">{modelName(picked)}</p>
+                <div className="px-2 pb-1 pt-2 text-caption text-faint">{t("Reasoning effort")}</div>
+                <div role="radiogroup" aria-label={t("Reasoning effort")} className="mx-2 mb-1 flex rounded-md bg-elevated p-0.5">
+                  {efforts.map((level) => (
+                    <button
+                      key={level.id}
+                      type="button"
+                      role="radio"
+                      aria-checked={level.id === effort}
+                      onClick={() => onModel(picked.slug, level.id)}
+                      className={`min-w-0 flex-1 truncate rounded px-1.5 py-1 text-small transition-colors ${
+                        level.id === effort ? "bg-bg text-text shadow-sm" : "text-muted hover:text-text"
+                      }`}
+                    >
+                      {level.label}
+                    </button>
+                  ))}
                 </div>
-                <EffortSlider
-                  levels={efforts}
-                  value={effort}
-                  onChange={(id) => onModel(picked.slug, id)}
-                />
-                <div className="flex justify-between px-3.5 pb-0.5 text-caption text-faint">
-                  <span>{efforts[0]?.label}</span>
-                  <span>{efforts[efforts.length - 1]?.label}</span>
-                </div>
+                <ComposerSubscription workspaceId={workspaceId} engine={engine} />
               </div>
             </>
           )}
+          {efforts.length <= 1 && <ComposerSubscription workspaceId={workspaceId} engine={engine} />}
         </>
       )}
     </Menu>
@@ -728,7 +659,7 @@ function ApprovalChip({
     <Menu
       className="shrink-0"
       width={300}
-      align="right"
+      align="left"
       triggerClassName={`flex items-center gap-1 rounded-full px-2 py-1 text-small transition-colors hover:bg-elevated ${
         value === "full" ? "text-danger" : "text-text"
       } ${disabled ? "pointer-events-none opacity-50" : ""}`}
@@ -865,9 +796,10 @@ function SkillManager({
     if (
       !await confirm(
         t(
-          'Delete the skill "{name}"? Its folder is removed from this machine, so every workspace using it loses it.',
+          'Delete the skill "{name}"?',
           { name: skillToken(skill) }
-        )
+        ),
+        { body: t("Its folder is removed from this machine, so every workspace using it loses it."), action: t("Delete") }
       )
     )
       return;
@@ -881,22 +813,15 @@ function SkillManager({
   return (
     <>
       <div className="fixed inset-0 z-50 bg-black/40" onClick={onClose} />
-      <div className="fixed inset-x-0 top-[12vh] z-[60] mx-auto flex max-h-[72vh] w-[600px] max-w-[94vw] flex-col overflow-hidden rounded-xl border border-border bg-overlay shadow-2xl shadow-black/15">
-        <div className="flex items-center justify-between border-b border-border px-4 py-2 text-small text-faint">
-          <span>
-            {interpolate(t("{skills} on this machine"), { skills: <span className="text-muted">{t("Skills")}</span> })}
-          </span>
-          <button
-            type="button"
-            onClick={onClose}
-            aria-label={t("Close")}
-            className="rounded p-1 transition-colors hover:bg-elevated hover:text-text"
-          >
-            <X size={13} />
+      <div className="fixed inset-x-0 top-[12vh] z-[60] mx-auto flex max-h-[72vh] w-[520px] max-w-[94vw] flex-col overflow-hidden rounded-xl border border-border bg-overlay shadow-2xl shadow-black/15">
+        <div className="flex items-center justify-between border-b border-border px-4 py-2.5">
+          <h2 className="text-body font-semibold text-text">{t("Manage skills")}</h2>
+          <button type="button" onClick={onClose} aria-label={t("Close")} className="rounded p-1 text-muted transition-colors hover:bg-elevated hover:text-text">
+            <X size={14} />
           </button>
         </div>
-
-        <div className="min-h-0 flex-1 overflow-y-auto p-1.5">
+        <div className="min-h-0 flex-1 space-y-3 overflow-y-auto p-4">
+        <div className="rounded-md border border-border p-1">
           {skills.length === 0 ? (
             <div className="px-2 py-3 text-small text-faint">{t("No skills found on this machine.")}</div>
           ) : (
@@ -936,53 +861,56 @@ function SkillManager({
           )}
         </div>
 
-        {canManage ? (
-          <div className="border-t border-border px-4 py-3">
-            <div className="text-caption uppercase tracking-wide text-faint">{t("New skill")}</div>
-            <div className="mt-2 grid grid-cols-2 gap-2">
-              <input
-                value={name}
-                onChange={(event) => setName(event.target.value)}
-                placeholder={t("Name, e.g. release-notes")}
-                className="min-w-0 rounded-md border border-border bg-surface px-2 py-1.5 text-body outline-none placeholder:text-faint focus:border-border-strong"
-              />
-              <input
-                value={description}
-                onChange={(event) => setDescription(event.target.value)}
-                placeholder={t("What it does, when to use it")}
-                className="min-w-0 rounded-md border border-border bg-surface px-2 py-1.5 text-body outline-none placeholder:text-faint focus:border-border-strong"
-              />
-            </div>
-            <textarea
-              value={instructions}
-              onChange={(event) => setInstructions(event.target.value)}
-              rows={4}
-              placeholder={t("Instructions the agent follows when this skill is attached (Markdown)")}
-              className="mt-2 w-full resize-none rounded-md border border-border bg-surface px-2 py-1.5 text-body leading-relaxed outline-none placeholder:text-faint focus:border-border-strong"
-            />
-            <div className="mt-2 flex items-center gap-2">
-              {error ? (
-                <span className="mr-auto min-w-0 text-small text-danger">{t(error)}</span>
-              ) : (
-                <span className="mr-auto min-w-0 truncate text-caption text-faint">
-                  {t("Saved to ~/.codex/skills/<name>/SKILL.md")}
-                </span>
-              )}
-              <button
-                type="button"
-                onClick={() => void submit()}
-                disabled={!name.trim() || !description.trim() || busy}
-                className="shrink-0 rounded-md bg-accent px-3 py-1.5 text-body font-medium text-white transition-colors hover:bg-accent-hover disabled:opacity-40"
-              >
-                {t(busy ? "Adding…" : "Add skill")}
-              </button>
-            </div>
-          </div>
-        ) : (
-          <div className="border-t border-border px-4 py-3 text-small text-faint">
-            {t("Only workspace admins can add or remove skills on this machine.")}
-          </div>
-        )}
+          {canManage && (
+            <>
+              <label className="block text-small font-medium text-text">
+                {t("Name")}
+                <input
+                  value={name}
+                  onChange={(event) => setName(event.target.value)}
+                  placeholder={t("e.g. release-notes")}
+                  className="mt-1 w-full rounded-md border border-border bg-surface px-2 py-1.5 text-body font-normal outline-none placeholder:text-faint focus:border-border-strong"
+                />
+              </label>
+              <label className="block text-small font-medium text-text">
+                {t("Purpose")}
+                <input
+                  value={description}
+                  onChange={(event) => setDescription(event.target.value)}
+                  placeholder={t("What it does, when to use it")}
+                  className="mt-1 w-full rounded-md border border-border bg-surface px-2 py-1.5 text-body font-normal outline-none placeholder:text-faint focus:border-border-strong"
+                />
+              </label>
+              <label className="block text-small font-medium text-text">
+                {t("Instructions")}
+                <textarea
+                  value={instructions}
+                  onChange={(event) => setInstructions(event.target.value)}
+                  rows={3}
+                  placeholder={t("Instructions the agent follows when this skill is attached (Markdown)")}
+                  className="mt-1 w-full resize-none rounded-md border border-border bg-surface px-2 py-1.5 text-body font-normal leading-relaxed outline-none placeholder:text-faint focus:border-border-strong"
+                />
+              </label>
+            </>
+          )}
+          <p className="text-small text-faint">{t("Skills are saved on this computer. Only workspace admins can add or delete them.")}</p>
+          {error && <p className="text-small text-danger">{t(error)}</p>}
+        </div>
+        <div className="flex justify-end gap-2 border-t border-border px-4 py-3">
+          <button type="button" onClick={onClose} className="rounded-md border border-border px-3 py-1.5 text-body text-text transition-colors hover:bg-elevated">
+            {t("Close")}
+          </button>
+          {canManage && (
+            <button
+              type="button"
+              onClick={() => void submit()}
+              disabled={!name.trim() || !description.trim() || busy}
+              className="rounded-md bg-accent px-3 py-1.5 text-body font-medium text-white transition-colors hover:bg-accent-hover disabled:opacity-50"
+            >
+              {t(busy ? "Adding…" : "Save skill")}
+            </button>
+          )}
+        </div>
       </div>
     </>
   );
@@ -1352,7 +1280,7 @@ function Composer({
           the send button never leaves it. z-10 keeps open menus above the row under the card. */}
       <div className="@container relative z-10 mt-1 px-0.5 pb-0.5">
         <div className="flex flex-wrap items-center gap-x-0.5 gap-y-1 @[340px]:flex-nowrap">
-          <button
+          {!onNew && (<button
             type="button"
             disabled={busy}
             onClick={() => fileInput.current?.click()}
@@ -1361,7 +1289,7 @@ function Composer({
             title={t("Attach files")}
           >
             <Paperclip size={15} />
-          </button>
+          </button>)}
           {onNew && (
             <Menu
               width={260}
@@ -1439,13 +1367,13 @@ function Composer({
               )}
             </Menu>
           )}
-          <div className="ml-auto flex min-w-0 flex-wrap items-center justify-end gap-0.5 whitespace-nowrap @[340px]:flex-nowrap">
+          <div className="flex min-w-0 flex-1 flex-wrap items-center gap-0.5 whitespace-nowrap @[340px]:flex-nowrap">
             {actions}
             <button
               type="button"
               onClick={() => (busy && onStop ? onStop() : submitComposer())}
               disabled={!busy && (!canSend || submitDisabled)}
-              className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[#0d0d0d] text-white transition-opacity hover:opacity-80 disabled:bg-elevated disabled:text-faint disabled:opacity-100"
+              className="ml-auto flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[#0d0d0d] text-white transition-opacity hover:opacity-80 disabled:bg-elevated disabled:text-faint disabled:opacity-100"
               aria-label={t(busy ? "Stop" : "Send")}
               title={t(busy ? "Stop" : "Send")}
             >
@@ -1605,6 +1533,7 @@ function StartComposer({
                   <ApprovalChip value={approval} onChange={onApproval} disabled={busy} />
                   <HarnessChip options={options} value={engine} onChange={onEngine} disabled={busy} />
                   <ModelChip
+                    workspaceId={workspaceId}
                     engine={engine}
                     models={models}
                     model={model}
@@ -1618,7 +1547,6 @@ function StartComposer({
             <ComposerContext>
               <ProjectChip projects={projects} value={projectId} onChange={onProject} />
               <VisibilityChip value={visibility} onChange={onVisibility} />
-              <ComposerSubscription workspaceId={workspaceId} engine={engine} />
             </ComposerContext>
           </div>
           {error && <div className="mt-2 px-2 text-small text-danger">{t(error)}</div>}
@@ -1858,7 +1786,7 @@ export function AgentWorkspace({
             ))}
           </ul>
           <Link
-            href={`/${workspaceId}/settings`}
+            href={`/${workspaceId}/settings#agent`}
             className="mt-4 inline-flex items-center gap-1.5 rounded-md bg-accent px-3 py-1.5 text-small font-medium text-white transition-opacity hover:opacity-90"
           >
             <Settings2 size={13} /> {t("Open Settings")}
@@ -1902,7 +1830,7 @@ export function AgentWorkspace({
       )}
 
       <main className="flex min-w-0 flex-1 flex-col">
-        <button className="self-start px-3 py-1 text-small text-muted" onClick={()=>{setSidebarClosed(!sidebarClosed);setDrawer(true);}}>{t(sidebarClosed?"Show conversations":"Conversations")}</button>
+        <button className="self-start px-3 py-1 text-small text-muted max-[600px]:hidden" onClick={()=>{setSidebarClosed(!sidebarClosed);setDrawer(true);}}>{t(sidebarClosed?"Show conversations":"Conversations")}</button>
         {active ? (
           // Keyed by thread so switching conversations starts from that thread's own state
           // instead of carrying the previous one's messages across.
@@ -1927,14 +1855,17 @@ export function AgentWorkspace({
           />
         ) : (
           <>
-            <header className="relative flex h-12 shrink-0 items-center justify-center px-4">
+            <header className="relative flex h-12 shrink-0 items-center justify-center px-4 max-[600px]:h-11 max-[600px]:justify-start max-[600px]:border-b max-[600px]:border-border max-[600px]:px-3">
+              <h1 className="hidden min-w-0 flex-1 truncate text-lead font-semibold max-[600px]:block">{t("New chat")}</h1>
               <button
                 type="button"
                 onClick={() => setDrawer(true)}
-                className="absolute left-2 top-2 flex h-8 w-8 items-center justify-center rounded-md text-muted transition-colors hover:bg-elevated hover:text-text @[620px]:hidden"
+                className="absolute left-2 top-2 flex h-8 w-8 items-center justify-center rounded-md text-muted transition-colors hover:bg-elevated hover:text-text @[620px]:hidden max-[600px]:static"
                 title={t("Conversations")}
+                aria-label={t("Conversations")}
               >
-                <PanelLeft size={15} />
+                <PanelLeft size={15} className="max-[600px]:hidden" />
+                <List size={15} className="hidden max-[600px]:block" />
               </button>
             </header>
             <StartComposer
@@ -2271,45 +2202,67 @@ function Conversation({
   async function changeProject(projectId:string){const result=await setAgentThreadProjectAction(workspaceId,active.id,projectId);if(!result.ok)setError(result.error);else router.refresh();}
   return (
     <div className="flex min-h-0 min-w-0 flex-1 flex-col">
-      <header className="relative flex h-12 shrink-0 items-center justify-between gap-2 px-3">
-        <div className="flex min-w-0 items-center gap-1.5 text-small text-muted">
+      <header className="relative flex h-12 shrink-0 items-center justify-between gap-2 px-3 max-[600px]:h-auto max-[600px]:min-h-11 max-[600px]:flex-wrap max-[600px]:border-b max-[600px]:border-border max-[600px]:py-2">
+        <div className="flex min-w-0 items-center gap-1.5 text-small text-muted max-[600px]:flex-1">
           <button
             type="button"
             onClick={onOpenSidebar}
-            className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-muted transition-colors hover:bg-elevated hover:text-text @[620px]:hidden"
+            className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-muted transition-colors hover:bg-elevated hover:text-text @[620px]:hidden max-[600px]:order-last"
             title={t("Conversations")}
+            aria-label={t("Conversations")}
           >
-            <PanelLeft size={15} />
+            <PanelLeft size={15} className="max-[600px]:hidden" />
+            <List size={15} className="hidden max-[600px]:block" />
           </button>
           <span
-            className="h-1.5 w-1.5 shrink-0 rounded-full"
+            className="h-1.5 w-1.5 shrink-0 rounded-full max-[600px]:hidden"
             style={{ background: active.projectColor || "var(--color-faint)" }}
           />
-          <span className="max-w-[200px] truncate font-medium text-text" title={active.title}>{active.title||t("Untitled conversation")}</span><span className="max-w-[120px] truncate">{active.projectName||t("No project")}</span>
+          <h1 className="max-w-[240px] truncate text-body font-medium text-text max-[600px]:max-w-none max-[600px]:flex-1 max-[600px]:text-lead max-[600px]:font-semibold" title={active.title}>{active.title||t("Untitled conversation")}</h1><span className="max-w-[120px] truncate max-[600px]:hidden">{active.projectName||t("No project")}</span>
           {active.contextChars > 0 && (
             <span
               data-testid="context-meter"
               title={t("About {tokens} tokens in this conversation. Long API-agent threads are summarized, not stopped.", { tokens: contextTokens.toLocaleString() })}
-              className={`shrink-0 rounded-full px-1.5 py-0.5 text-caption ${
+              className={`shrink-0 rounded-full px-1.5 py-0.5 text-caption max-[600px]:hidden ${
                 active.contextChars >= CONTEXT_COMPACT_CHARS ? "bg-accent/10 text-accent" : "bg-elevated text-faint"
               } font-variant-numeric tabular-nums`}
             >
               {t("Context ~{tokens}k", { tokens: String(Math.max(1, Math.round(contextTokens / 1000))) })}
             </span>
           )}
-          {active.visibility === "shared" && <Users size={11} className="shrink-0 text-faint" />}
-          {!active.mine && <span className="shrink-0 text-faint">· {active.createdByName}</span>}
+          {active.visibility === "shared" && <span className="shrink-0 rounded-full bg-elevated px-1.5 py-0.5 text-caption text-muted max-[600px]:hidden">{t("Shared conversations")}</span>}
+          {!active.mine && <span className="shrink-0 text-faint max-[600px]:hidden">· {active.createdByName}</span>}
         </div>
-        <div className="min-w-0 flex-1 overflow-x-auto">
+        <div className="min-w-0 flex-1 overflow-x-auto empty:hidden max-[600px]:order-last max-[600px]:flex-none max-[600px]:basis-full">
           <ThreadTaskChips workspaceId={workspaceId} threadId={active.id} busy={busy} />
         </div>
-        <div className="flex shrink-0 items-center">
-          <ThreadMenu workspaceId={workspaceId} thread={active} projects={projects}/>
+        <div className="flex shrink-0 items-center gap-1">
+          {messages.length > 0 && (
+            <button
+              type="button"
+              disabled={busy || forkBusy !== null}
+              onClick={() => void forkAt(messages[messages.length - 1].id)}
+              className="rounded-md px-2 py-1 text-small text-muted transition-colors hover:bg-elevated hover:text-text disabled:opacity-40 max-[600px]:hidden"
+            >
+              {t("Open a copy")}
+            </button>
+          )}
+          <ThreadMenu
+            workspaceId={workspaceId}
+            thread={active}
+            projects={projects}
+            phoneItems={(close) => messages.length > 0 ? (
+              <div className="hidden max-[600px]:block">
+                <MenuItem disabled={busy || forkBusy !== null} onSelect={() => { close(); void forkAt(messages[messages.length - 1].id); }}>{t("Open a copy")}</MenuItem>
+                <div className="my-1 h-px bg-border" />
+              </div>
+            ) : null}
+          />
         </div>
       </header>
 
       <div ref={chatScroll} onScroll={e=>{const element=e.currentTarget;setFollow(element.scrollHeight-element.scrollTop-element.clientHeight<80);}} className="min-h-0 flex-1 overflow-y-auto">
-        <div className="mx-auto flex w-full max-w-3xl flex-col gap-6 px-5 pb-8 pt-4">
+        <div className="mx-auto flex w-full max-w-3xl flex-col gap-6 px-5 pb-8 pt-4 max-[600px]:gap-3 max-[600px]:px-4 max-[600px]:pb-4 max-[600px]:pt-3.5">
           {messages.length === 0 && (
             <div className="pt-16 text-center">
               <h1 className="text-display font-normal leading-tight tracking-[-0.015em]">
@@ -2350,16 +2303,16 @@ function Conversation({
         </div>
       </div>
 
-      <div className="shrink-0 px-4 pb-4">
+      <div className="shrink-0 px-4 pb-4 max-[600px]:border-t max-[600px]:border-border max-[600px]:px-3 max-[600px]:py-2">
         <div className="mx-auto w-full max-w-3xl">
           {!follow&&<button className="mb-2 rounded border border-border px-3 py-1 text-small" onClick={()=>{setFollow(true);bottom.current?.scrollIntoView({block:"end"});}}>{t("Jump to latest")}</button>}
           {turnTaken && active.turnUserName && (
-            <p className="mb-2 text-center text-small text-muted" data-testid="shared-turn-lock">
+            <p className="mb-2 rounded-md border border-border bg-surface px-3 py-2 text-small text-text" data-testid="shared-turn-lock">
               {interpolate(t("{name} is using this shared chat"), { name: active.turnUserName })}
             </p>
           )}
           {error && <TurnError error={error} />}
-          {failedText!==null&&<div className="mb-2 flex gap-3 text-small"><button disabled={busy} onClick={()=>{setInput(failedText);box.current?.focus();}}>{t("Edit failed message")}</button>{failedAttachments.length>0&&<span>{failedAttachments.map(file=>file.name).join(", ")}</span>}{!failedAccepted&&<button disabled={busy} onClick={()=>void (async()=>{if(await confirm(t("Send this request again? Check the conversation first; the previous request may already have run.")))await send(failedText,failedAttachments);})()}>{t("Retry")}</button>}{failedAccepted&&<span>{t("The request started. Review its results before sending another request.")}</span>}<button onClick={()=>void navigator.clipboard.writeText(failedText).then(()=>toast(t("Copied"))).catch(()=>toast(t("Could not copy the link")))}>{t("Copy")}</button></div>}
+          {failedText!==null&&<div className="mb-2 flex gap-3 text-small"><button disabled={busy} onClick={()=>{setInput(failedText);box.current?.focus();}}>{t("Edit failed message")}</button>{failedAttachments.length>0&&<span>{failedAttachments.map(file=>file.name).join(", ")}</span>}{!failedAccepted&&<button disabled={busy} onClick={()=>void (async()=>{if(await confirm(t("Send this request again?"),{ body: t("Check the conversation first; the previous request may already have run."), action: t("Send again"), tone: "primary" }))await send(failedText,failedAttachments);})()}>{t("Retry")}</button>}{failedAccepted&&<span>{t("The request started. Review its results before sending another request.")}</span>}<button onClick={()=>void navigator.clipboard.writeText(failedText).then(()=>toast(t("Copied"))).catch(()=>toast(t("Could not copy the link")))}>{t("Copy")}</button></div>}
           <Composer
             workspaceId={workspaceId}
             value={input}
@@ -2389,6 +2342,7 @@ function Conversation({
                   disabled={busy || !active.mine}
                 />
                 <ModelChip
+                  workspaceId={workspaceId}
                   engine={engine}
                   models={modelsByEngine[engine] ?? []}
                   model={model}
@@ -2412,7 +2366,6 @@ function Conversation({
                 <span className="max-w-[170px] truncate">{active.projectName || t("No project")}</span>
               </span>
             )}
-            <ComposerSubscription workspaceId={workspaceId} engine={engine} />
           </ComposerContext>
           <p className="mt-1.5 text-center text-caption text-faint">
             {active.mine

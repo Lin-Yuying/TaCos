@@ -45,14 +45,13 @@ export function LabelsManager({
   }
 
   async function remove(label: LabelWithCount) {
-    if (!await confirm(t('Delete label "{name}"? It will be removed from all issues.', { name: label.name }))) return;
+    if (!await confirm(t('Delete label "{name}"?', { name: label.name }), { body: t("It will be removed from all issues."), action: t("Delete") })) return;
     if(busy)return;setBusy(true);try{const result=await safeAction(async()=>deleteLabelAction(workspaceId,label.id));if(!result.ok)setError(result.error);else router.refresh();}catch{setError("Could not save. Retry.");}finally{setBusy(false);}
   }
 
   const body = (
     <div className={embedded ? "space-y-6" : "mx-auto max-w-xl space-y-6"}>
-        <div className="space-y-2 rounded-lg border border-border bg-surface/60 p-4">
-          <div className="text-body font-medium">{t("New label")}</div>
+        <div className="space-y-2">
           <div className="flex items-center gap-2">
             <input
               value={name}
@@ -61,7 +60,8 @@ export function LabelsManager({
                 if (e.key === "Enter"&&!e.nativeEvent.isComposing) void submit();
               }}
               placeholder={t("Label name")}
-              className="w-full rounded-md border border-border bg-elevated/50 px-2.5 py-1.5 text-body placeholder:text-faint focus:border-border-strong"
+              aria-label={t("Label name")}
+              className="w-full rounded-md border border-border bg-bg px-2.5 py-1.5 text-body text-text placeholder:text-faint focus:border-border-strong focus:outline-none"
             />
             <button
               type="button"

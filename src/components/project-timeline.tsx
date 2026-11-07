@@ -18,6 +18,7 @@ import { useT, useLocale } from "@/components/i18n-context";
 import { useUI } from "@/components/ui-context";
 import { useDetailSource } from "@/components/detail-navigation";
 import { issueRef } from "@/lib/format";
+import { PAGE_INSET } from "@/lib/page-chrome";
 import { STATUS_META } from "@/lib/constants";
 import type { IssueWithLabels } from "@/lib/issues";
 import type { Milestone } from "@/lib/planning/milestones";
@@ -166,7 +167,7 @@ export function ProjectTimeline({
 
   async function remove() {
     if (!draft?.id) return;
-    const ok = await confirm(t("Delete this milestone? Its tasks stay in the project and lose the milestone."));
+    const ok = await confirm(t("Delete this milestone?"), { body: t("Its tasks stay in the project and lose the milestone."), action: t("Delete") });
     if (!ok) return;
     setSaving(true);
     const result = await deleteMilestoneAction(workspaceId, projectId, draft.id);
@@ -200,7 +201,7 @@ export function ProjectTimeline({
   return (
     <div className="flex min-h-0 min-w-0 flex-1 flex-col" data-testid="project-timeline">
       <div className="min-h-0 flex-1 overflow-y-auto">
-        <div className="space-y-4 px-4 py-4">
+        <div className={`space-y-4 py-4 ${PAGE_INSET}`}>
           <div className="flex flex-wrap items-center gap-2">
             <span className="flex items-center gap-1.5 text-body font-medium text-muted">
               <CalendarDays size={14} />

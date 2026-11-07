@@ -62,7 +62,7 @@ export function PlanningRoadmap({
                 aria-pressed={zoom === value}
                 data-testid={`roadmap-zoom-${value}`}
                 onClick={() => setZoom(value)}
-                className={`rounded-full px-2.5 py-1 text-small transition-colors ${
+                className={`rounded-md px-2.5 py-1 text-small transition-colors ${
                   zoom === value ? "bg-bg text-text shadow-[0_1px_2px_rgba(0,0,0,0.06)]" : "text-muted hover:text-text"
                 }`}
               >

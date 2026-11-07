@@ -143,7 +143,7 @@ export function ModelKeysSection({
     return (
       <section className="space-y-3" data-testid="model-keys-settings">{dialog}
         <h2 className="text-body font-semibold">{t("Model API")}</h2>
-        <p className="text-body leading-relaxed text-muted">
+        <p className="text-small leading-relaxed text-faint">
           {t("Your APIs stay on your own computer. Open the TaCos desktop app to add or change them.")}
         </p>
       </section>
@@ -154,40 +154,43 @@ export function ModelKeysSection({
     <section className="space-y-3" data-testid="model-keys-settings">{dialog}
       <h2 className="text-body font-semibold">{t("Model API")}</h2>
       {serverMode ? (
-        <p className="text-body leading-relaxed text-muted">
+        <p className="text-small leading-relaxed text-faint">
           {t(
             "Your own APIs, for you only. Each member fills in their own. They are saved on this computer, in a file only your account can read, not encrypted, and they never reach the server. Pi and DeepSeek Harness have no subscription, so they need an API, and DeepSeek Harness only runs on a DeepSeek address."
           )}
         </p>
       ) : (
-      <p className="text-body leading-relaxed text-muted">
+      <p className="text-small leading-relaxed text-faint">
         {t(
           "Your own APIs, for you only. Each member fills in their own. Any service that speaks the OpenAI API works, and its models appear in every harness's model menu. A harness needs something to spend: its own subscription or your API. Pi and DeepSeek Harness have no subscription, so they need an API, and DeepSeek Harness only runs on a DeepSeek address. Other members cannot see or use your API. Keys are stored encrypted and never reach the browser."
         )}
       </p>
       )}
-      {view.endpoints.map((endpoint) => (
-        <div
-          key={endpoint.id}
-          data-testid="model-endpoint"
-          className="flex flex-wrap items-center gap-x-3 gap-y-1 rounded-lg border border-border px-3 py-2.5"
-        >
-          <div className="min-w-0 flex-1">
-            <div className="text-body font-medium">{endpoint.label}</div>
-            <div className="truncate font-mono text-small text-faint">{endpoint.baseUrl}</div>
-            <div className="truncate text-small text-faint">
-              {t("{count} models", { count: endpoint.models.length })}: {endpoint.models.slice(0, 6).join(" · ")}
+      {view.endpoints.length > 0 && (
+        <div className="divide-y divide-border rounded-lg border border-border">
+          {view.endpoints.map((endpoint) => (
+            <div
+              key={endpoint.id}
+              data-testid="model-endpoint"
+              title={`${endpoint.baseUrl}\n${endpoint.models.slice(0, 6).join(" · ")}`}
+              className="flex flex-wrap items-center gap-3 px-4 py-3"
+            >
+              <div className="min-w-0 flex-1">
+                <div className="text-body font-medium">{endpoint.label}</div>
+                <div className="truncate text-small text-faint">
+                  {t("{count} models", { count: endpoint.models.length })} · <span className="font-mono">{endpoint.keyHint}</span>
+                </div>
+              </div>
+              <button type="button" onClick={() => openForm(endpoint)} disabled={busy} className={BUTTON}>
+                {t("Edit")}
+              </button>
+              <button type="button" onClick={() => void remove(endpoint)} disabled={busy} className={BUTTON}>
+                {t("Delete")}
+              </button>
             </div>
-          </div>
-          <span className="font-mono text-small text-muted">{endpoint.keyHint}</span>
-          <button type="button" onClick={() => openForm(endpoint)} disabled={busy} className={BUTTON}>
-            {t("Edit")}
-          </button>
-          <button type="button" onClick={() => void remove(endpoint)} disabled={busy} className={BUTTON}>
-            {t("Delete")}
-          </button>
+          ))}
         </div>
-      ))}
+      )}
       {formId === null ? (
         <button type="button" onClick={() => openForm()} disabled={busy} className={BUTTON}>
           {t("Add API")}

@@ -3,7 +3,6 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { CalendarRange } from "lucide-react";
 import { useT, useLocale } from "@/components/i18n-context";
 import {
   CYCLE_COOLDOWN_RANGE,
@@ -77,18 +76,14 @@ export function CycleSettingsSection({
   }
 
   return (
-    <div className="space-y-3 rounded-lg border border-border p-4" data-testid="cycle-settings">
-      <div className="flex flex-wrap items-start gap-3">
-        <span className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-elevated text-muted">
-          <CalendarRange size={16} />
-        </span>
-        <div className="min-w-0 flex-1">
-          <div className="text-body font-medium">{t("Cycles")}</div>
-          <p className="mt-0.5 text-small leading-relaxed text-muted">
+    <div className="space-y-3" data-testid="cycle-settings">
+      <div className="space-y-2.5">
+        <div>
+          <p className="text-small leading-relaxed text-faint">
             {t("Time-box work in a shared cycle. Upcoming cycles are created ahead of time; this server runs no background job, so the schedule is filled the next time someone opens Planning.")}
           </p>
         </div>
-        <label className="flex shrink-0 items-center gap-2 text-body">
+        <label className="flex items-center gap-2 text-body">
           <input
             type="checkbox"
             checked={enabled}
@@ -233,7 +228,7 @@ export function CycleSettingsSection({
         ) : (
           <span className="text-small text-faint">{t("Only workspace admins can change cycle settings.")}</span>
         )}
-        {enabled && !isAdmin && (
+        {enabled && (
           <Link href={`/${workspaceId}/planning?tab=cycles`} className={quietButton}>
             {t("Open Planning")}
           </Link>

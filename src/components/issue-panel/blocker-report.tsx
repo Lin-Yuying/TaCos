@@ -31,7 +31,7 @@ export function BlockerReport({
   return (
     <div className="space-y-2" data-testid="blocker-report">
       {reports.map((event) => (
-        <p key={event.id} className="text-small text-muted">
+        <p key={event.id} className="rounded-lg bg-elevated px-3 py-2 text-small text-muted">
           <span className="font-medium text-text">{actorName(event, t)}</span>{" "}
           {typeof event.data.body === "string" && event.data.body
             ? t("reported a blocker: {text}", { text: event.data.body })

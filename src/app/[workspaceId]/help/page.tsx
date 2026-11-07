@@ -1,8 +1,10 @@
+import { ListSkeleton } from "@/components/ui/skeleton";
 import { Suspense } from "react";
 import { connection } from "next/server";
 import { redirect } from "next/navigation";
 import { getSessionUser, requireWorkspace } from "@/lib/auth";
 import { Markdown } from "@/components/markdown";
+import { translator } from "@/lib/i18n";
 import { resolveLocale } from "@/lib/locale";
 
 const GUIDE = `# Markdown
@@ -185,7 +187,7 @@ TaCos 读写的是 Markdown 文件，不是 Notion API 文档。下面这些在 
 
 export default function HelpPage({ params }: { params: Promise<{ workspaceId: string }> }) {
   return (
-    <Suspense fallback={<div className="p-6 text-body text-muted">Loading…</div>}>
+    <Suspense fallback={<ListSkeleton />}>
       <HelpContent params={params} />
     </Suspense>
   );
@@ -198,11 +200,34 @@ async function HelpContent({ params }: { params: Promise<{ workspaceId: string }
   if (!user) redirect("/login");
   await requireWorkspace(workspaceId);
 
+  const locale = await resolveLocale(user);
+  const zh = locale === "zh";
+  const parts = (zh ? GUIDE_ZH : GUIDE).split(/\n(?=## )/);
   return (
-    <div className="flex-1 overflow-y-auto">
-      <div className="w-full px-10 pb-8 pt-6 lg:px-20 xl:px-32">
-        <Markdown source={(await resolveLocale(user)) === "zh" ? GUIDE_ZH : GUIDE} />
-      </div>
+    <div className="flex min-h-0 min-w-0 flex-1 max-[760px]:flex-col">
+      <nav
+        aria-label={translator(locale)("Help contents")}
+        className="flex w-[216px] shrink-0 flex-col gap-px overflow-auto border-r border-border px-2 py-3 max-[760px]:w-full max-[760px]:flex-row max-[760px]:border-b max-[760px]:border-r-0"
+      >
+        {parts.slice(1).map((part, index) => (
+          <a
+            key={index}
+            href={`#help-${index + 1}`}
+            className="flex min-h-7 shrink-0 items-center rounded-md px-2 text-small text-muted transition-colors hover:bg-elevated hover:text-text max-[760px]:whitespace-nowrap"
+          >
+            {part.slice(3, part.indexOf("\n"))}
+          </a>
+        ))}
+      </nav>
+      <article className="min-h-0 min-w-0 flex-1 overflow-y-auto px-5 pb-8 pt-6">
+        <div className="max-w-[720px]">
+          {parts.map((part, index) => (
+            <section key={index} id={`help-${index}`}>
+              <Markdown source={part} />
+            </section>
+          ))}
+        </div>
+      </article>
     </div>
   );
 }

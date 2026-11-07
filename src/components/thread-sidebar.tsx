@@ -2,6 +2,7 @@
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
+import { PanelLeftClose } from "lucide-react";
 import { ThreadMenu } from "@/components/thread-menu";
 import { useUI } from "@/components/ui-context";
 import { useT } from "@/components/i18n-context";
@@ -31,7 +32,7 @@ export function ThreadSidebar({
   const t = useT(),
     router = useRouter(),
     { scope, toast } = useUI();
-  const [width, setWidth] = useStoredJson(`tacos.agent.sidebar.${scope}`, 248),
+  const [width, setWidth] = useStoredJson(`tacos.agent.sidebar.${scope}`, 232),
     [query, setQuery] = useState(""),
     [older, setOlder] = useState<AgentThread[]>([]),
     [historyOffset, setHistoryOffset] = useState<number | null>(0),
@@ -155,10 +156,11 @@ export function ThreadSidebar({
             );
           onNavigate?.();
         }}
-        className={`block truncate rounded px-2 py-1.5 text-body ${thread.id === activeId ? "bg-elevated font-medium" : "text-muted"}`}
+        className={`flex items-center gap-1.5 rounded px-2 py-1.5 text-body ${thread.id === activeId ? "bg-elevated font-medium" : "text-muted"}`}
       >
-        {thread.unread ? "● " : ""}
-        {thread.title || t("New conversation")}
+        {thread.unread && <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-accent" />}
+        <span className="min-w-0 flex-1 truncate">{thread.title || t("New conversation")}</span>
+        {thread.projectName && <span className="max-w-[40%] shrink-0 truncate text-caption font-normal text-faint">{thread.projectName}</span>}
       </Link>
     </ThreadMenu>
   );
@@ -169,13 +171,23 @@ export function ThreadSidebar({
       }}
       className={`relative h-full shrink-0 flex-col border-r border-border bg-surface ${variant === "drawer" ? "flex" : "hidden @[620px]:flex"}`}
     >
-      <div className="flex items-center gap-2 p-3 text-body">
-        <strong className="flex-1">{t("Conversations")}</strong>
+      <div className="flex items-center gap-1.5 p-2">
+        <Link
+          data-testid="agent-new-chat"
+          href={`/${workspaceId}/agent`}
+          onClick={onNavigate}
+          className="flex h-[30px] min-w-0 flex-1 items-center justify-center rounded-md border border-border bg-bg text-small font-medium text-text transition-colors hover:bg-elevated"
+        >
+          {t("New conversation")}
+        </Link>
         <button
+          type="button"
           onClick={onCollapse ?? onNavigate}
           aria-label={t("Collapse conversations")}
+          title={t("Collapse conversations")}
+          className="flex h-[30px] w-[30px] shrink-0 items-center justify-center rounded-md text-muted transition-colors hover:bg-elevated hover:text-text"
         >
-          ←
+          <PanelLeftClose size={15} />
         </button>
       </div>
       <input
@@ -186,15 +198,8 @@ export function ThreadSidebar({
           setQuery(e.target.value);
           setError(null);
         }}
-        className="mx-2 mb-2 rounded border border-border bg-bg px-2 py-1 text-small"
+        className="mx-2 mb-1 rounded-md border border-border bg-bg px-2 py-1 text-small placeholder:text-faint"
       />
-      <Link data-testid="agent-new-chat"
-        href={`/${workspaceId}/agent`}
-        onClick={onNavigate}
-        className="px-4 py-2 text-body"
-      >
-        ＋ {t("New chat")}
-      </Link>
       <nav className="min-h-0 flex-1 overflow-auto px-2 pb-3">
         {error && (
           <p role="alert" className="text-small text-danger">
@@ -231,34 +236,21 @@ export function ThreadSidebar({
           <>
             {pinned.length > 0 && (
               <>
-                <p className="px-2 pt-2 text-small text-faint">{t("Pinned")}</p>
+                <h4 className="px-2 pb-1 pt-3 text-caption font-medium text-faint">{t("Pinned")}</h4>
                 {pinned.map(row)}
               </>
             )}
-            {[
-              ...projects,
-              ...[...new Set(all.map((thread) => thread.projectId))]
-                .filter(
-                  (id) => id && !projects.some((project) => project.id === id),
-                )
-                .map((id) => ({
-                  id,
-                  name:
-                    all.find((thread) => thread.projectId === id)
-                      ?.projectName || t("Project"),
-                })),
-              { id: "", name: t("No project") },
-            ].map((project) => {
+            {(["shared", "private"] as const).map((visibility) => {
               const items = all.filter(
-                (thread) => thread.projectId === project.id && !thread.pinnedAt,
+                (thread) => thread.visibility === visibility && !thread.pinnedAt,
               );
               return items.length ? (
-                <details open key={project.id}>
-                  <summary className="cursor-pointer px-2 py-2 text-small text-faint">
-                    {project.name}
-                  </summary>
+                <div key={visibility}>
+                  <h4 className="px-2 pb-1 pt-3 text-caption font-medium text-faint">
+                    {t(visibility === "shared" ? "Shared conversations" : "Private conversations")}
+                  </h4>
                   {items.map(row)}
-                </details>
+                </div>
               ) : null;
             })}
             {historyOffset !== null && (
@@ -281,7 +273,7 @@ export function ThreadSidebar({
           aria-valuenow={width}
           aria-label={t("Resize conversations")}
           className="absolute inset-y-0 -right-1 z-10 w-2 cursor-col-resize touch-none hover:bg-accent/20"
-          onDoubleClick={() => setWidth(248)}
+          onDoubleClick={() => setWidth(232)}
           onKeyDown={(e) => {
             if (e.key === "ArrowLeft" || e.key === "ArrowRight") {
               e.preventDefault();

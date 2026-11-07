@@ -1,3 +1,4 @@
+import { ListSkeleton } from "@/components/ui/skeleton";
 import { Suspense } from "react";
 import Link from "next/link";
 import { connection } from "next/server";
@@ -52,7 +53,7 @@ export default function ExportSettingsPage({
   params: Promise<{ workspaceId: string }>;
 }) {
   return (
-    <Suspense fallback={<p className="p-6">Loading…</p>}>
+    <Suspense fallback={<ListSkeleton />}>
       <View params={params} />
     </Suspense>
   );
