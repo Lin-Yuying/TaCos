@@ -1255,3 +1255,33 @@ export const initiativeLabels = sqliteTable(
   (t) => [primaryKey({ columns: [t.initiativeId, t.labelId] })]
 );
 
+// U-12: one row per verified backup attempt. Paths point at directories under the backup
+// root; the manifest in each directory is what restore trusts.
+export const backupRuns = sqliteTable(
+  "backup_runs",
+  {
+    id: text("id").primaryKey(),
+    // manual | scheduled | pre_upgrade | safety | restore
+    kind: text("kind").notNull(),
+    // running | completed | failed
+    status: text("status").notNull(),
+    path: text("path").notNull().default(""),
+    version: text("version").notNull().default(""),
+    integrity: text("integrity").notNull().default(""),
+    dbBytes: integer("db_bytes").notNull().default(0),
+    uploadsBytes: integer("uploads_bytes").notNull().default(0),
+    sha256: text("sha256"),
+    error: text("error"),
+    startedAt: text("started_at").notNull(),
+    finishedAt: text("finished_at"),
+  },
+  (t) => [index("backup_runs_started_idx").on(t.startedAt)]
+);
+
+// Instance-wide operations settings that must survive a restart, e.g. backup retention.
+export const opsSettings = sqliteTable("ops_settings", {
+  key: text("key").primaryKey(),
+  value: text("value").notNull(),
+  updatedAt: text("updated_at").notNull(),
+});
+

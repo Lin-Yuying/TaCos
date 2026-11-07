@@ -12,7 +12,7 @@ import { Modal } from "@/components/ui/modal";
  * Distinct from Settings › Harness CLI update control.
  */
 
-type AppUpdateStatus = {
+export type AppUpdateStatus = {
   enabled: boolean;
   state: string;
   currentVersion: string;
@@ -21,6 +21,11 @@ type AppUpdateStatus = {
   error: string | null;
   stage?: string | null;
   cancelable?: boolean;
+  // U-12: stable channel only; null unsigned means "not known here" (web build).
+  channel?: "stable" | string;
+  releaseNotes?: string | null;
+  releaseDate?: string | null;
+  unsigned?: boolean | null;
 };
 
 export type AppUpdateApi = {
@@ -259,6 +264,16 @@ export function DesktopAppUpdateButton() {
         <div className="p-1">
           <h2 className="text-title font-semibold text-text">{COPY.busyTitle}</h2>
           <p className="mt-2 text-body text-muted">{COPY.busyBody}</p>
+          {status?.unsigned === true && (
+            <p className="mt-2 rounded-md border border-update-border bg-update-bg px-2 py-1 text-small text-update-text">
+              未签名版本：更新会打开 GitHub 下载页，由你手动安装。
+            </p>
+          )}
+          {status?.releaseNotes && (
+            <p className="mt-2 max-h-24 overflow-auto whitespace-pre-wrap text-small text-muted">
+              {status.releaseNotes.slice(0, 600)}
+            </p>
+          )}
           <div className="mt-5 flex flex-col gap-2">
             <button
               type="button"

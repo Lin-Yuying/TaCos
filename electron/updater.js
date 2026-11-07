@@ -80,8 +80,25 @@ function copy(text) {
 
 /** Override for tests: null = probe, true/false = forced. */
 let trustedSignatureOverride = null;
+// The signature probe runs codesign / PowerShell once per process, not on every broadcast.
+let trustedSignature = null;
+
+/** U-12: plain text release notes from electron-updater's string or array shape. */
+function releaseNotesText(info) {
+  const notes = info && info.releaseNotes;
+  const text = typeof notes === "string"
+    ? notes
+    : Array.isArray(notes)
+      ? notes.map((entry) => (entry && typeof entry.note === "string" ? entry.note : "")).join("\n")
+      : "";
+  return text
+    ? text.replace(/<[^>]+>/g, " ").replace(/[ \t]+/g, " ").replace(/\n{3,}/g, "\n\n").trim().slice(0, 4000)
+    : null;
+}
 
 function snapshot() {
+  // v1 ships the stable channel only (decision 1).
+  if (trustedSignature === null && status.enabled) trustedSignature = hasTrustedAppSignature();
   return {
     enabled: status.enabled,
     state: status.state,
@@ -89,6 +106,11 @@ function snapshot() {
     availableVersion: status.availableVersion,
     progress: status.progress,
     stage: status.stage,
+    channel: "stable",
+    releaseNotes: status.releaseNotes || null,
+    releaseDate: status.releaseDate || null,
+    // null = not a packaged desktop build; false = an unsigned/ad-hoc build.
+    unsigned: status.enabled ? !trustedSignature : null,
     // Only the macOS self-install preparation can be cancelled for real; the
     // electron-updater download keeps running, so the pill hides the X then.
     cancelable: Boolean(preparationAbort),
@@ -142,7 +164,7 @@ async function runCheck(reason) {
     return await autoUpdater.checkForUpdates();
   } catch (err) {
     const message = err && err.message ? err.message : String(err);
-    setStatus({ state: "error", error: message });
+    setStatus({ state: "error", stage: "check", error: message });
     log(`app update check failed: ${message}`);
     return null;
   } finally {
@@ -165,7 +187,7 @@ async function maybeDownload() {
   } catch (err) {
     const message = err && err.message ? err.message : String(err);
     installRequested = false;
-    setStatus(err?.name==="AbortError"?{state:"available",progress:null,stage:null,error:null}:{state:"error",stage:null,error:message});
+    setStatus(err?.name==="AbortError"?{state:"available",progress:null,stage:null,error:null}:{state:"error",stage:"download",error:message});
     log(`app update download failed: ${message}`);
   } finally {
     downloadInFlight = false;
@@ -282,6 +304,7 @@ function stopSchedule() {
 
 function setTrustedSignatureForTests(value) {
   trustedSignatureOverride = value;
+  trustedSignature = null;
 }
 
 /**
@@ -642,6 +665,9 @@ function bindUpdaterEvents(updater) {
     setStatus({
       state: "available",
       availableVersion: info && info.version ? info.version : null,
+      releaseNotes: releaseNotesText(info),
+      releaseDate: info && info.releaseDate ? String(info.releaseDate) : null,
+      stage: null,
       error: null,
     });
     // Background download for scheduled and manual checks (H-DESKTOP-UPDATE-04).
@@ -662,6 +688,7 @@ function bindUpdaterEvents(updater) {
   updater.on("error", (err) => {
     setStatus({
       state: "error",
+      stage: status.state === "downloading" ? "download" : "check",
       error: err && err.message ? err.message : String(err),
     });
   });
