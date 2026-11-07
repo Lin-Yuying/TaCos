@@ -446,35 +446,33 @@ function SidebarNav({
         )}
       </div>
 
-      <div>
-        <SectionHeader label={t("Workspace")} open={open("workspace")} onToggle={() => toggleSection("workspace")} />
-        {open("workspace") && (
-          <div className="space-y-0.5">
-            {shows("planning") && <NavItem
-              href={`/${workspaceId}/planning`}
-              active={pathname.startsWith(`/${workspaceId}/planning`)}
-              icon={<CalendarRange size={16} />}
-              testId="nav-planning"
-            >
-              {t("Planning")}
-            </NavItem>}
-            {shows("activity") && <NavItem
-              href={`/${workspaceId}/activity`}
-              active={pathname.endsWith("/activity")}
-              icon={<Activity size={16} />}
-            >
-              {t("Activity")}
-            </NavItem>}
-            {shows("insights") && <NavItem
-              href={`/${workspaceId}/insights`}
-              active={pathname.startsWith(`/${workspaceId}/insights`)}
-              icon={<ChartNoAxesColumn size={16} />}
-              testId="nav-insights"
-            >
-              {t("Insights")}
-            </NavItem>}
-          </div>
-        )}
+      {/* The planning, activity and insights pages keep a labelled group in the design
+          canvas, but a sidebar group must not be called "Workspace" (the task group was
+          renamed to "Tasks" for the same reason); the group stays unlabelled. */}
+      <div className="mt-2 space-y-0.5 border-t border-border pt-2">
+        {shows("planning") && <NavItem
+          href={`/${workspaceId}/planning`}
+          active={pathname.startsWith(`/${workspaceId}/planning`)}
+          icon={<CalendarRange size={16} />}
+          testId="nav-planning"
+        >
+          {t("Planning")}
+        </NavItem>}
+        {shows("activity") && <NavItem
+          href={`/${workspaceId}/activity`}
+          active={pathname.endsWith("/activity")}
+          icon={<Activity size={16} />}
+        >
+          {t("Activity")}
+        </NavItem>}
+        {shows("insights") && <NavItem
+          href={`/${workspaceId}/insights`}
+          active={pathname.startsWith(`/${workspaceId}/insights`)}
+          icon={<ChartNoAxesColumn size={16} />}
+          testId="nav-insights"
+        >
+          {t("Insights")}
+        </NavItem>}
       </div>
     </nav>
   );
@@ -2045,8 +2043,8 @@ export function WorkspaceShell({
                     </span>
                   ))}
                 </Link>
-                <Link href={`/${workspace.id}/trash`} aria-label={t("Trash")} title={t("Trash")} className={ICON_BTN}><Trash2 size={16} /></Link>
                 {!hiddenSections.includes("help") && <Link href={`/${workspace.id}/help`} aria-label={t("Help")} title={t("Help")} className={ICON_BTN}><CircleHelp size={16} /></Link>}
+                <Link href={`/${workspace.id}/trash`} aria-label={t("Trash")} title={t("Trash")} className={ICON_BTN}><Trash2 size={16} /></Link>
                 <Link href={`/${workspace.id}/settings`} aria-label={t("Settings")} title={t("Settings")} className={ICON_BTN}><Settings size={16} /></Link>
               </div>
             </>
