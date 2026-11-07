@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { PAGE_INSET, PAGE_TITLE } from "@/lib/page-chrome";
 import Link from "next/link";
 import { ArrowUpRight, FileText, Lock, Search, Users, X } from "lucide-react";
 import { IssueLayout, LayoutToggle } from "@/components/issue-layout";
@@ -56,17 +57,17 @@ export function PersonPage({
 
   return (
     <div className="flex min-h-0 min-w-0 flex-1 flex-col">
-      <header className="shrink-0 border-b border-border px-4 pb-2 pt-3">
-        <div className="flex items-center gap-2.5">
+      <header className={`shrink-0 border-b border-border pb-2 ${PAGE_INSET}`}>
+        <div className="flex min-h-[52px] items-center gap-2.5">
           <AssigneeAvatar displayName={person.displayName} avatar={person.avatar} size={26} />
-          <h1 className="truncate text-heading font-semibold tracking-tight">
+          <h1 className={PAGE_TITLE}>
             {person.displayName}
           </h1>
           <span className="shrink-0 rounded-full bg-elevated px-2 py-0.5 text-caption text-muted">
             {t(workspaceRole)}
           </span>
         </div>
-        <nav className="mt-2 flex items-center gap-1.5">
+        <nav className="flex items-center gap-1.5">
           {tabs.map((item) => {
             const active = item.key === tab;
             return (

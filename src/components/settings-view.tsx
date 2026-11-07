@@ -33,7 +33,7 @@ import {
 import type { AiSettingsView, ModelKeysView } from "@/lib/ai-constants";
 import { SettingsNavigation } from "@/components/settings-navigation";
 import { useUI } from "@/components/ui-context";
-import { PAGE_INSET } from "@/lib/page-chrome";
+import { PAGE_INSET, PAGE_TITLE } from "@/lib/page-chrome";
 import { ModelKeysSection } from "@/components/model-keys-section";
 import { AgentSettingsSection } from "@/components/agent-settings-section";
 import { AgentUsageSection } from "@/components/agent-usage-section";
@@ -595,7 +595,7 @@ export function SettingsView({
     <div ref={root} className={`flex-1 overflow-y-auto pb-10 pt-6 ${PAGE_INSET}`}>
       <SettingsNavigation root={root}/><div className="space-y-10">
         <header className="flex flex-wrap items-center gap-3">
-          <h1 className="text-lead font-semibold">{t("Workspace settings")}</h1><Link className="text-small text-muted underline" href={`/${workspace.id}/settings/storage`}>{t("Storage and recovery")}</Link>
+          <h1 className={PAGE_TITLE}>{t("Workspace settings")}</h1><Link className="text-small text-muted underline" href={`/${workspace.id}/settings/storage`}>{t("Storage and recovery")}</Link>
           {(isAdmin || isOwner) && (
             <>
               <Link className="text-small text-muted underline" href={`/${workspace.id}/settings/export`} data-testid="settings-export-link">

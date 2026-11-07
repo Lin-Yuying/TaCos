@@ -19,7 +19,7 @@ import { useT, useLocale } from "@/components/i18n-context";
 import { useUI } from "@/components/ui-context";
 import { useDetailSource } from "@/components/detail-navigation";
 import { issueRef } from "@/lib/format";
-import { PAGE_INSET } from "@/lib/page-chrome";
+import { PAGE_HEADER, PAGE_INSET, PAGE_TITLE } from "@/lib/page-chrome";
 import {
   CYCLE_START_DAYS,
   CYCLE_STATUSES,
@@ -96,9 +96,9 @@ export function PlanningView({
   return (
     <div className="flex min-h-0 min-w-0 flex-1 flex-col" data-testid="planning-page">
       <header
-        className={`flex min-h-12 shrink-0 flex-wrap items-center gap-x-3 gap-y-1.5 border-b border-border py-2 ${PAGE_INSET}`}
+        className={`${PAGE_HEADER} ${PAGE_INSET}`}
       >
-        <h1 className="text-body font-semibold">{t("Planning")}</h1>
+        <h1 className={PAGE_TITLE}>{t("Planning")}</h1>
         <nav aria-label={t("Planning sections")} className="flex items-center gap-0.5">
           {TABS.map(({ key, label, icon: Icon }) => (
             <Link

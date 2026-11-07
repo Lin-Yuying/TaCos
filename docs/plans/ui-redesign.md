@@ -10,7 +10,7 @@ State per item: `todo`, `pass` (commit plus cheap checks: `npx tsc --noEmit`, `n
 | --- | --- | --- | --- |
 | 1 | Sidebar grouping | Sidebar, CustomizeSidebar, UserMenu, WorkspaceMenu, RailCollapsed | pass |
 | 2 | Tabs: sidebar replaces the current tab, tabs shrink, +N overflow | Tabs, TabMenu | pass |
-| 3 | Shared page frame: 52px header, 20px gutter, one primary action | every page | todo |
+| 3 | Shared page frame: 52px header, 20px gutter, one primary action | every page | pass |
 | 4 | Task toolbar: at most two rows, one Select entry, export under More, pagination only when needed, Previous/Next copy | Main, TasksList, TasksTable, TasksCalendar, DisplayMenu, FilterSort, SaveView, FieldManager, PersonalOrder | todo |
 | 5 | Board: empty hint on top, one scroll layer | Main | todo |
 | 6 | Task grid: column menu, cell editing | GridColumn, GridCell | todo |

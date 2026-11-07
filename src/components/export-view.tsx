@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { PAGE_TITLE } from "@/lib/page-chrome";
 import { useEffect, useState } from "react";
 import { useT } from "./i18n-context";
 import { timeAgo } from "@/lib/format";
@@ -102,7 +103,7 @@ export function ExportView({
     <div className="min-w-0 flex-1 overflow-auto p-6" data-testid="export-page">
       <div className="mx-auto max-w-3xl space-y-8">
         <header className="flex flex-wrap items-center gap-3">
-          <h1 className="text-heading font-semibold">{t("Export workspace")}</h1>
+          <h1 className={PAGE_TITLE}>{t("Export workspace")}</h1>
           <Link className="ml-auto text-small text-muted underline" href={`/${workspaceId}/settings`}>
             {t("Settings")}
           </Link>

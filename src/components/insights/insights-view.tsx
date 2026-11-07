@@ -6,7 +6,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { Copy, Download, RotateCcw, Save } from "lucide-react";
 import { useT } from "@/components/i18n-context";
 import { useDetailSource } from "@/components/detail-navigation";
-import { PAGE_INSET } from "@/lib/page-chrome";
+import { PAGE_HEADER, PAGE_INSET, PAGE_TITLE } from "@/lib/page-chrome";
 import {
   formatInsightDays,
   formatInsightHours,
@@ -123,9 +123,9 @@ export function InsightsView({
   return (
     <div className="flex min-h-0 min-w-0 flex-1 flex-col" data-testid="insights-page">
       <header
-        className={`flex min-h-12 shrink-0 flex-wrap items-center gap-x-3 gap-y-1.5 border-b border-border py-2 ${PAGE_INSET}`}
+        className={`${PAGE_HEADER} ${PAGE_INSET}`}
       >
-        <h1 className="text-body font-semibold">{t("Insights")}</h1>
+        <h1 className={PAGE_TITLE}>{t("Insights")}</h1>
         <span className="rounded-full bg-elevated px-2 py-0.5 text-caption text-faint">
           {filters.from} – {filters.to}
         </span>

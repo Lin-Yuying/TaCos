@@ -100,12 +100,10 @@ export function ListHeader({
   };
 
   return (
-    <header className={`flex h-12 shrink-0 items-center gap-2 overflow-hidden border-b border-border ${PAGE_INSET}`}>
-      {/* The title hangs from the same 52px column as the project page's "All tasks",
-          so switching between the two lists doesn't shift the heading sideways. */}
+    <header className={`flex min-h-[52px] shrink-0 items-center gap-2 overflow-hidden border-b border-border ${PAGE_INSET}`}>
       {/* Shrinks last: the person's name and the count stay readable while the search
           field gives up width as the detail panel eats into the list. */}
-      <h1 className="min-w-[72px] shrink-[0.25] truncate text-body font-semibold">{heading}</h1>
+      <h1 className="min-w-[72px] shrink-[0.25] truncate text-lead font-semibold">{heading}</h1>
       <span className="shrink-0 rounded-full bg-elevated px-2 py-0.5 text-caption text-muted">
         {count}
       </span>

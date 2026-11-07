@@ -19,7 +19,7 @@ import { useUI } from "@/components/ui-context";
 import type { PageMetadata } from "@/lib/pages";
 import type { UnresolvedPageLink } from "@/lib/page-links";
 import { useT } from "@/components/i18n-context";
-import { PAGE_INSET } from "@/lib/page-chrome";
+import { PAGE_INSET, PAGE_TITLE } from "@/lib/page-chrome";
 
 const MARKDOWN_FILE = /\.(md|markdown|mdx|txt)$/i;
 
@@ -135,7 +135,7 @@ export function DocsIndex({
       <div className={`w-full py-6 ${PAGE_INSET}`}>
         <div className="flex items-center justify-between gap-3">
           <div>
-            <h1 className="text-heading font-semibold tracking-tight">{t("Documents")}</h1>
+            <h1 className={PAGE_TITLE}>{t("Documents")}</h1>
             <p className="mt-0.5 text-small text-muted">
               {t("Markdown documents stored with your TaCos data. Private until you share them.")}
             </p>

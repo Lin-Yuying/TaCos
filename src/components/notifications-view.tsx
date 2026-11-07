@@ -29,7 +29,7 @@ import type {
 import { parseLegacyNotificationBody, type NotificationData } from "@/lib/notification-data";
 import { timeAgo } from "@/lib/format";
 import { useLocale, useT } from "@/components/i18n-context";
-import { PAGE_INSET } from "@/lib/page-chrome";
+import { PAGE_HEADER, PAGE_INSET, PAGE_TITLE } from "@/lib/page-chrome";
 
 type EventGroup = { id: string; label: string };
 type Props = {
@@ -468,8 +468,8 @@ export function NotificationsView({
 
   return (
     <div className="flex-1 overflow-y-auto">
-      <header className={`flex h-12 shrink-0 items-center gap-3 border-b border-border ${PAGE_INSET}`}>
-        <h1 className="text-body font-semibold">{t("Inbox")}</h1>
+      <header className={`${PAGE_HEADER} ${PAGE_INSET}`}>
+        <h1 className={PAGE_TITLE}>{t("Inbox")}</h1>
         <span className="rounded-full bg-elevated px-2 py-0.5 text-caption text-muted">
           {t("{count} unread", { count: counts.unread })}
         </span>

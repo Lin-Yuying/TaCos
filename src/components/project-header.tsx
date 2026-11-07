@@ -1,6 +1,7 @@
 "use client";
 
 import type { ReactNode } from "react";
+import { PAGE_INSET, PAGE_TITLE } from "@/lib/page-chrome";
 import { Star } from "lucide-react";
 import { ProjectIcon } from "@/components/icons";
 import { Menu } from "@/components/menu";
@@ -59,10 +60,10 @@ export function ProjectHeader({
   const workspaceId = useParams<{ workspaceId: string }>().workspaceId;
   const mark = <ProjectIcon color={project.color} icon={project.icon} size={22} />;
   return (
-    <header className="shrink-0 border-b border-border px-4 pb-3 pt-3">
+    <header className={`shrink-0 border-b border-border pb-3 ${PAGE_INSET}`}>
       {/* Every header row hangs from the card's own gutter, so the pills and the
           properties line up under the icon rather than one column in. */}
-      <div className="flex items-center gap-2.5">
+      <div className="flex min-h-[52px] items-center gap-2.5">
         {canPickIcon ? (
           <Menu
             width={232}
@@ -104,7 +105,7 @@ export function ProjectHeader({
         ) : (
           <span className="shrink-0 p-0.5">{mark}</span>
         )}
-        <h1 className="truncate text-heading font-semibold tracking-tight">{project.name}</h1>
+        <h1 className={PAGE_TITLE}>{project.name}</h1>
         <WatchControl workspaceId={workspaceId} scopeType="project" scopeId={project.id} compact />
         <button
           type="button"

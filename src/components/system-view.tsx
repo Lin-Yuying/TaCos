@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { PAGE_TITLE } from "@/lib/page-chrome";
 import { useState } from "react";
 import { Download, RefreshCw } from "lucide-react";
 import { systemSnapshotAction } from "@/app/ops-actions";
@@ -169,7 +170,7 @@ export function SystemView({
       <div className="mx-auto max-w-5xl space-y-8">
         <header className="flex flex-wrap items-center gap-3">
           <div className="min-w-0">
-            <h1 className="text-heading font-semibold">{t("System")}</h1>
+            <h1 className={PAGE_TITLE}>{t("System")}</h1>
             <p className="text-small text-muted">{t("Instance health, backups, updates and runners.")}</p>
           </div>
           <span

@@ -13,7 +13,7 @@ import type { Locale, Translate } from "@/lib/i18n";
 import type { ActivityObjectType, ActivityScope, WorkspaceActivityItem, WorkspaceActivityPage } from "@/lib/activity";
 import type { Member } from "@/lib/issues";
 import { useLocale, useT } from "@/components/i18n-context";
-import { PAGE_INSET } from "@/lib/page-chrome";
+import { PAGE_INSET, PAGE_TITLE } from "@/lib/page-chrome";
 
 type ProjectOption = { id: string; name: string; color: string; icon: string | null };
 
@@ -275,7 +275,7 @@ export function ActivityView({
     <div className={`flex-1 overflow-y-auto pb-10 pt-6 ${PAGE_INSET}`} data-testid="activity-feed">
       <div className="space-y-4">
         <div className="flex flex-wrap items-baseline gap-2">
-          <h1 className="text-heading font-semibold tracking-tight">{t("Activity")}</h1>
+          <h1 className={PAGE_TITLE}>{t("Activity")}</h1>
           <span className="text-body text-muted">
             {t("Everything that changed in this workspace. Inbox is for notices that need you.")}
           </span>

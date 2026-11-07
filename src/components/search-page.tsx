@@ -9,6 +9,7 @@ import {
   type KeyboardEvent,
 } from "react";
 import { useRouter } from "next/navigation";
+import { PAGE_TITLE } from "@/lib/page-chrome";
 import { Search, X } from "lucide-react";
 import { usePrimaryModifier } from "@/lib/ui/platform";
 import { useT, useLocale } from "@/components/i18n-context";
@@ -257,7 +258,7 @@ export function SearchPageView({
     >
       <div className="mx-auto w-full max-w-5xl px-4 py-5 @2xl:px-8 @4xl:px-12">
         <div className="flex flex-wrap items-baseline justify-between gap-2">
-          <h1 className="text-title font-semibold tracking-tight">{t("Search")}</h1>
+          <h1 className={PAGE_TITLE}>{t("Search")}</h1>
           <p className="hidden items-center gap-2 text-caption text-faint @2xl:flex">
             <span>
               <kbd className="rounded border border-border bg-elevated px-1 font-mono">/</kbd>{" "}
