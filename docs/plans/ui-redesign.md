@@ -33,7 +33,7 @@ State per item: `todo`, `pass` (commit plus cheap checks: `npx tsc --noEmit`, `n
 | 23 | Planning: roadmap and initiatives | Roadmap, Initiatives, InitiativeEdit | pass |
 | 24 | Insights: four stats, one filter row, chart/table toggle | Insights | pass |
 | 25 | Settings shell: grouped left navigation, Storage, Export, Import and System inside it | SettingsNav, Storage, ExportPage, ImportPage, ImportPreview, System | pass |
-| 26 | Settings: profile, general, members, visibility, projects | SettingsProfile, SettingsGeneral, SettingsMembers, Invite, SettingsVisibility, SettingsProjects | todo |
+| 26 | Settings: profile, general, members, visibility, projects | SettingsProfile, SettingsGeneral, SettingsMembers, Invite, SettingsVisibility, SettingsProjects | pass |
 | 27 | Settings: templates, cycles, automation, labels | SettingsTemplates, SettingsCycles, SettingsAutomation, RuleEdit, SettingsLabels | todo |
 | 28 | Settings: Agent, usage, access, danger | SettingsAgent, AgentEdit, SettingsUsage, SettingsAccess, SettingsDanger | todo |
 | 29 | Trash and Help | Trash, Help | todo |

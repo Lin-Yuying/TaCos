@@ -3,7 +3,7 @@ import { safeAction } from "@/lib/ui/safe-action";
 
 import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { useRouter } from "next/navigation";
-import { Copy, Check, Pencil, RefreshCw, Trash2, Upload } from "lucide-react";
+import { Copy, Check, RefreshCw, Trash2, Upload } from "lucide-react";
 import {
   createApiKeyAction,
   createProjectAction,
@@ -593,103 +593,104 @@ export function SettingsView({
   return (
     <div ref={root} className={SETTINGS_SCROLL}>
       <div className={`max-w-[720px] ${SETTINGS_PAGE}`}>
-        <SettingsPanel id="profile" title={t("Profile and display")}>
-        <section className="space-y-3">
-          <h2 className="text-body font-semibold">{t("Your profile")}</h2>
-          <div className="flex items-center gap-4 rounded-lg border border-border p-4">
-            <AssigneeAvatar displayName={currentUser.displayName} avatar={avatar} size={56} />
-            <div className="min-w-0 flex-1">
+        <SettingsPanel id="profile" title={t("Your profile")}>
+        <section className="space-y-2.5">
+          <h2 className="text-body font-semibold">{t("Avatar")}</h2>
+          <div className="flex flex-wrap items-center gap-2.5">
+            <AssigneeAvatar displayName={currentUser.displayName} avatar={avatar} size={40} />
+            <label
+              className={`inline-flex cursor-pointer items-center gap-1 rounded-md border border-border px-2.5 py-1 text-small text-muted transition-colors hover:text-text ${
+                busy ? "pointer-events-none opacity-50" : ""
+              }`}
+            >
+              <Upload size={12} /> {avatar ? t("Change image") : t("Upload image")}
               <input
-                value={displayName}
-                maxLength={40}
-                disabled={busy}
-                aria-label={t("Display name")}
-                title={t("Display name")}
-                onChange={(e) => setDisplayName(e.target.value)}
-                onBlur={() => void saveDisplayName()}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter") e.currentTarget.blur();
+                type="file"
+                accept="image/png,image/jpeg,image/webp"
+                className="hidden"
+                onChange={(e) => {
+                  void uploadAvatar(e.target.files?.[0]);
+                  e.target.value = "";
                 }}
-                className="-ml-1.5 w-full max-w-xs rounded border border-transparent bg-transparent px-1.5 py-0.5 text-body font-medium outline-none transition-colors hover:border-border focus:border-border-strong"
               />
-              {nameError && <div className="text-small text-danger">{t(nameError)}</div>}
-              <div className="text-caption text-faint">@{currentUser.username}</div>
-              <div className="mt-2 flex items-center gap-2">
-                <label
-                  className={`inline-flex cursor-pointer items-center gap-1 rounded-md border border-border px-2 py-1 text-small text-muted transition-colors hover:text-text ${
-                    busy ? "pointer-events-none opacity-50" : ""
-                  }`}
-                >
-                  <Upload size={12} /> {avatar ? t("Change image") : t("Upload image")}
-                  <input
-                    type="file"
-                    accept="image/png,image/jpeg,image/webp"
-                    className="hidden"
-                    onChange={(e) => {
-                      void uploadAvatar(e.target.files?.[0]);
-                      e.target.value = "";
-                    }}
-                  />
-                </label>
-                {avatar && !builtinAvatarId(avatar) && (
-                  <button
-                    type="button"
-                    onClick={() => void clearAvatar()}
-                    className="rounded-md px-2 py-1 text-small text-faint transition-colors hover:text-danger"
-                  >
-                    {t("Remove image")}
-                  </button>
-                )}
-              </div>
-              {avatarError && <div className="mt-1 text-small text-danger">{t(avatarError)}</div>}
-            </div>
+            </label>
+            {avatar && !builtinAvatarId(avatar) && (
+              <button
+                type="button"
+                onClick={() => void clearAvatar()}
+                className="rounded-md px-2 py-1 text-small text-faint transition-colors hover:text-danger"
+              >
+                {t("Remove image")}
+              </button>
+            )}
           </div>
-          <div className="rounded-lg border border-border p-4">
-            <div className="text-small font-medium text-muted">{t("Avatar library")}</div>
-            <div className="mt-0.5 text-small text-faint">
-              {t("Every account starts with its own taco ingredient. Pick another one, or upload a picture above.")}
-            </div>
-            <div className="mt-3 flex flex-wrap gap-1.5">
-              {BUILTIN_AVATARS.map((id) => {
-                const active = builtinAvatarId(avatar) === id;
-                return (
-                  <button
-                    key={id}
-                    type="button"
-                    disabled={busy}
-                    title={t(BUILTIN_AVATAR_LABELS[id])}
-                    aria-label={t(BUILTIN_AVATAR_LABELS[id])}
-                    aria-pressed={active}
-                    onClick={() => void chooseAvatar(`builtin:${id}`)}
-                    className={`rounded-full p-0.5 transition ${
-                      active ? "ring-2 ring-accent" : "hover:bg-elevated"
-                    } ${busy ? "opacity-50" : ""}`}
-                  >
-                    <AssigneeAvatar
-                      displayName={t(BUILTIN_AVATAR_LABELS[id])}
-                      avatar={`builtin:${id}`}
-                      size={30}
-                    />
-                  </button>
-                );
-              })}
-            </div>
-          </div>
+          {avatarError && <div className="text-small text-danger">{t(avatarError)}</div>}
           <p className="text-small leading-relaxed text-faint">
             {t("Your picture shows as a circle next to your name in issue rows, timelines and the member list. Uploaded images are cropped to a square and resized to 128×128 in the browser before being saved.")}
           </p>
         </section>
-        <section className="space-y-3"><h2 className="text-body font-semibold">{t("Display density")}</h2><div className="flex gap-2 text-body">{(["comfortable","compact"] as const).map(value=><button key={value} aria-pressed={density===value} onClick={()=>setDensity(value)} className={`rounded border border-border px-3 py-1 ${density===value?"bg-elevated":""}`}>{t(value==="compact"?"Compact":"Comfortable")}</button>)}</div></section>
+        <section className="space-y-2.5">
+          <h2 className="text-body font-semibold">{t("Avatar library")}</h2>
+          <div className="flex flex-wrap gap-1.5">
+            {BUILTIN_AVATARS.map((id) => {
+              const active = builtinAvatarId(avatar) === id;
+              return (
+                <button
+                  key={id}
+                  type="button"
+                  disabled={busy}
+                  title={t(BUILTIN_AVATAR_LABELS[id])}
+                  aria-label={t(BUILTIN_AVATAR_LABELS[id])}
+                  aria-pressed={active}
+                  onClick={() => void chooseAvatar(`builtin:${id}`)}
+                  className={`rounded-full p-0.5 transition ${
+                    active ? "ring-2 ring-accent" : "hover:bg-elevated"
+                  } ${busy ? "opacity-50" : ""}`}
+                >
+                  <AssigneeAvatar
+                    displayName={t(BUILTIN_AVATAR_LABELS[id])}
+                    avatar={`builtin:${id}`}
+                    size={30}
+                  />
+                </button>
+              );
+            })}
+          </div>
+          <p className="text-small leading-relaxed text-faint">
+            {t("Every account starts with its own taco ingredient. Pick another one, or upload a picture above.")}
+          </p>
+        </section>
+        <section className="space-y-2.5">
+          <h2 className="text-body font-semibold">{t("Display name")}</h2>
+          <div className="flex items-center gap-2">
+            <input
+              value={displayName}
+              maxLength={40}
+              disabled={busy}
+              aria-label={t("Display name")}
+              onChange={(e) => setDisplayName(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") void saveDisplayName();
+              }}
+              className="min-w-0 flex-1 rounded-md border border-border bg-bg px-2.5 py-1.5 text-body text-text focus:border-border-strong focus:outline-none"
+            />
+            <button
+              type="button"
+              disabled={busy || displayName.trim() === currentUser.displayName}
+              onClick={() => void saveDisplayName()}
+              className="shrink-0 rounded-md bg-accent px-3 py-1.5 text-body font-medium text-white hover:bg-accent-hover disabled:opacity-40"
+            >
+              {t("Save")}
+            </button>
+          </div>
+          {nameError && <div className="text-small text-danger">{t(nameError)}</div>}
+          <div className="text-caption text-faint">@{currentUser.username}</div>
+        </section>
+        <section className="space-y-3"><h2 className="text-body font-semibold">{t("Display density")}</h2><div className="flex gap-1 text-small">{(["comfortable","compact"] as const).map(value=><button key={value} aria-pressed={density===value} onClick={()=>setDensity(value)} className={`rounded-md px-3 py-1 transition-colors ${density===value?"bg-elevated font-medium text-text":"text-muted hover:bg-elevated hover:text-text"}`}>{t(value==="compact"?"Compact":"Comfortable")}</button>)}</div></section>
         <section className="space-y-3">
           <h2 className="text-body font-semibold">{t("Language")}</h2>
-          <div className="flex items-center gap-4 rounded-lg border border-border p-4">
-            <div className="min-w-0 flex-1">
-              <div className="text-body font-medium">{t("Interface language")}</div>
-              <p className="mt-0.5 text-small leading-relaxed text-muted">
-                {t("Applies to this account on every device.")}
-              </p>
-            </div>
-            <div role="radiogroup" aria-label={t("Interface language")} className="flex shrink-0 gap-1">
+          <div>
+            <div role="radiogroup" aria-label={t("Interface language")} className="flex gap-1">
               {LOCALES.map((code) => (
                 <button
                   key={code}
@@ -699,7 +700,7 @@ export function SettingsView({
                   onClick={() => void chooseLocale(code)}
                   className={`rounded-md px-3 py-1 text-small transition-colors ${
                     locale === code
-                      ? "bg-accent/10 font-medium text-accent"
+                      ? "bg-elevated font-medium text-text"
                       : "text-muted hover:bg-elevated hover:text-text"
                   }`}
                 >
@@ -710,7 +711,7 @@ export function SettingsView({
           </div>
           {localeError && <div className="text-small text-danger">{t(localeError)}</div>}
           <p className="text-small leading-relaxed text-faint">
-            {t("Task content, documents and replies from the API or MCP server are not translated.")}
+            {t("Applies to this account on every device.")} {t("Task content, documents and replies from the API or MCP server are not translated.")}
           </p>
         </section>
         </SettingsPanel>
@@ -718,12 +719,12 @@ export function SettingsView({
         <SettingsPanel id="general" title={t("Basics and icon")}>
         <section className="space-y-3">
           <h2 className="text-body font-semibold">{t("Workspace icon")}</h2>
-          <div className="flex items-center gap-4 rounded-lg border border-border p-4">
-            <WorkspaceMark icon={icon} className="h-14 w-14" />
+          <div className="flex items-center gap-3">
+            <WorkspaceMark icon={icon} className="h-10 w-10" />
             <div className="min-w-0 flex-1">
               <div className="text-body font-medium">{workspace.name}</div>
               {isAdmin && (
-                <div className="mt-2 flex items-center gap-2">
+                <div className="mt-1.5 flex items-center gap-2">
                   <label
                     className={`inline-flex cursor-pointer items-center gap-1 rounded-md border border-border px-2 py-1 text-small text-muted transition-colors hover:text-text ${
                       busy ? "pointer-events-none opacity-50" : ""
@@ -799,10 +800,10 @@ export function SettingsView({
                           void memberChange(member.id,()=>removeMemberAction(workspace.id,member.id));
                         }
                       }}
-                      className="rounded-md p-1 text-faint transition-colors hover:bg-elevated hover:text-danger"
+                      className="rounded-md border border-border px-2.5 py-1 text-small text-muted transition-colors hover:text-danger disabled:opacity-50"
                       aria-label={t("Remove {name}", { name: member.displayName })}
                     >
-                      <Trash2 size={14} />
+                      {t("Remove")}
                     </button>
                   </>
                 ) : (
@@ -814,18 +815,21 @@ export function SettingsView({
               </div>
             ))}
           </div>
-
-          <div className="space-y-2 rounded-lg border border-border bg-surface/60 p-4">
-            <div className="text-body font-medium">{t("Invite teammates")}</div>
-            <p className="text-small leading-relaxed text-muted">
+        </section>
+        <section className="space-y-2.5">
+          <h2 className="text-body font-semibold">{t("Invite teammates")}</h2>
+            <p className="text-small leading-relaxed text-faint">
               {interpolate(t("Share this join code — anyone can register at {url} and join with it."), {
                 url: <code className="font-mono text-caption">{origin}/register</code>,
               })}
             </p>
             <div className="flex items-center gap-2">
-              <code className="min-w-0 flex-1 overflow-x-auto rounded-md bg-bg px-2 py-1.5 font-mono text-body text-text">
-                {code ?? t("No active code")}
-              </code>
+              <input
+                readOnly
+                value={code ?? t("No active code")}
+                aria-label={t("Invite teammates")}
+                className="min-w-0 flex-1 rounded-md border border-border bg-bg px-2.5 py-1.5 font-mono text-body text-text focus:outline-none"
+              />
               {code && <CopyButton text={code} />}
               {isAdmin && (
                 <button
@@ -837,41 +841,32 @@ export function SettingsView({
                 </button>
               )}
             </div>
-          </div>
         </section>
         </SettingsPanel>
 
         <SettingsPanel id="visibility" title={t("Task visibility")}>
-        <section className="space-y-3">
-          <h2 className="text-body font-semibold">{t("Task visibility")}</h2>{visibilityError&&<p role="alert" className="text-small text-danger">{t(visibilityError)}</p>}
-          <div className="flex items-center gap-4 rounded-lg border border-border p-4">
-            <div className="min-w-0 flex-1">
-              <div className="text-body font-medium">
-                {seeAll ? t("Everyone sees all tasks") : t("Members only see their projects")}
-              </div>
-              <p className="mt-0.5 text-small leading-relaxed text-muted">
-                {seeAll
-                  ? t("Every workspace member can open every project and its tasks.")
-                  : t("A member only sees tasks in projects they created or joined. Owners and admins still see everything.")}
-              </p>
-            </div>
-            <button
-              type="button"
-              role="switch"
-              aria-checked={seeAll}
-              aria-label={t("Let every member see all tasks")}
-              disabled={!isAdmin||visibilityBusy}
-              onClick={() => void toggleSeeAll(!seeAll)}
-              className={`relative h-5 w-9 shrink-0 rounded-full transition-colors disabled:opacity-40 ${
-                seeAll ? "bg-accent" : "bg-border-strong"
-              }`}
-            >
-              <span
-                className={`absolute top-0.5 h-4 w-4 rounded-full bg-white shadow transition-all ${
-                  seeAll ? "left-[18px]" : "left-0.5"
-                }`}
-              />
-            </button>
+        <section className="space-y-2.5">
+          {visibilityError&&<p role="alert" className="text-small text-danger">{t(visibilityError)}</p>}
+          <div role="radiogroup" aria-label={t("Task visibility")} className="divide-y divide-border rounded-lg border border-border">
+            {([
+              [true, t("Everyone sees all tasks"), t("Every workspace member can open every project and its tasks.")],
+              [false, t("Members only see their projects"), t("A member only sees tasks in projects they created or joined. Owners and admins still see everything.")],
+            ] as const).map(([value, title, hint]) => (
+              <label key={String(value)} className="flex items-start gap-2.5 px-4 py-2.5">
+                <input
+                  type="radio"
+                  name="task-visibility"
+                  className="mt-1 accent-[var(--color-accent)]"
+                  checked={seeAll === value}
+                  disabled={!isAdmin || visibilityBusy}
+                  onChange={() => void toggleSeeAll(value)}
+                />
+                <span className="min-w-0">
+                  <span className="block text-body">{title}</span>
+                  <span className="block text-small leading-relaxed text-faint">{hint}</span>
+                </span>
+              </label>
+            ))}
           </div>
           <p className="text-small leading-relaxed text-faint">
             {isAdmin
@@ -883,7 +878,26 @@ export function SettingsView({
 
         <SettingsPanel id="projects" title={t("Projects")}>
         <section className="space-y-3">
-          <h2 className="text-body font-semibold">{t("Projects")}</h2>
+          <div className="flex items-center gap-2">
+            <input
+              value={projName}
+              onChange={(e) => setProjName(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") void addProject();
+              }}
+              placeholder={t("Project name (e.g. Mobile App)")}
+              aria-label={t("Project name (e.g. Mobile App)")}
+              className="w-full rounded-md border border-border bg-bg px-2.5 py-1.5 text-body text-text placeholder:text-faint focus:border-border-strong focus:outline-none"
+            />
+            <button
+              type="button"
+              onClick={() => void addProject()}
+              disabled={busy || !projName.trim()}
+              className="shrink-0 rounded-md bg-accent px-3 py-1.5 text-body font-medium text-white hover:bg-accent-hover disabled:opacity-40"
+            >
+              {t("Add")}
+            </button>
+          </div>
           <div className="divide-y divide-border rounded-lg border border-border">
             {projects.map((project) => {
               const editing = renaming && renaming.id === project.id ? renaming : null;
@@ -901,7 +915,7 @@ export function SettingsView({
                           if (e.key === "Escape") setRenaming(null);
                         }}
                         aria-label={t("Rename {name}", { name: project.name })}
-                        className="min-w-0 flex-1 rounded-md border border-border bg-elevated/50 px-2 py-1 text-body focus:border-border-strong"
+                        className="min-w-0 flex-1 rounded-md border border-border bg-bg px-2 py-1 text-body text-text focus:border-border-strong focus:outline-none"
                       />
                       <button
                         type="button"
@@ -913,28 +927,23 @@ export function SettingsView({
                     </>
                   ) : (
                     <>
+                      <span className="min-w-0 flex-1 truncate text-body">{project.name}</span>
                       <button
                         type="button"
                         onClick={() => setRenaming({ id: project.id, name: project.name })}
-                        title={t("Rename project")}
-                        className="group flex min-w-0 items-center gap-1.5 text-body hover:text-accent"
+                        className="shrink-0 rounded-md border border-border px-2.5 py-1 text-small text-muted transition-colors hover:text-text"
                       >
-                        <span className="truncate">{project.name}</span>
-                        <Pencil
-                          size={11}
-                          className="shrink-0 text-faint opacity-0 transition-opacity group-hover:opacity-100"
-                        />
+                        {t("Rename")}
                       </button>
                       {/* The project creator, or the workspace owner, may delete it. */}
                       {(project.createdBy === currentUser.id || isOwner) && (
                         <button
                           type="button"
                           onClick={() => void removeProject(project)}
-                          className="ml-auto rounded-md p-1 text-faint transition-colors hover:bg-elevated hover:text-danger"
+                          className="shrink-0 rounded-md px-2 py-1 text-small text-muted transition-colors hover:bg-elevated hover:text-danger"
                           aria-label={t("Move {name} to trash", { name: project.name })}
-                          title={t("Move to trash")}
                         >
-                          <Trash2 size={14} />
+                          {t("Move to trash")}
                         </button>
                       )}
                     </>
@@ -945,25 +954,6 @@ export function SettingsView({
             {projects.length === 0 && (
               <div className="p-4 text-body text-faint">{t("No projects yet.")}</div>
             )}
-          </div>
-          <div className="flex items-center gap-2">
-            <input
-              value={projName}
-              onChange={(e) => setProjName(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter") void addProject();
-              }}
-              placeholder={t("Project name (e.g. Mobile App)")}
-              className="w-full rounded-md border border-border bg-elevated/50 px-2.5 py-1.5 text-body placeholder:text-faint focus:border-border-strong"
-            />
-            <button
-              type="button"
-              onClick={() => void addProject()}
-              disabled={busy || !projName.trim()}
-              className="shrink-0 rounded-md bg-accent px-3 py-1.5 text-body font-medium text-white hover:bg-accent-hover disabled:opacity-40"
-            >
-              {t("Add")}
-            </button>
           </div>
           {projError && <div className="text-small text-danger">{t(projError)}</div>}
         </section>

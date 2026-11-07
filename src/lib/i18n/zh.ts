@@ -2,6 +2,7 @@
 // `{name}` placeholders must survive translation unchanged. Grouped by the file that
 // first uses a string; `npm run i18n:check` lists keys used in code but missing here.
 const zh: Record<string, string> = {
+  "Avatar": "头像",
   "Profile and display": "个人资料与显示",
   "Basics and icon": "基本信息与图标",
   "Harness and model API": "Harness 与模型 API",
