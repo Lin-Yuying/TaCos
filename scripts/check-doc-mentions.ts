@@ -1,6 +1,6 @@
 /**
- * docs/plans/team-2.3.md item 8: @ on a private page warns for members who cannot read it;
- * a self @ in the document or a comment sends a doc_mentioned notice.
+ * U-11: @ on a private page warns for members who cannot read it, and a self @ in the
+ * document or a comment does not notify the author.
  *   node --import tsx scripts/check-doc-mentions.ts
  */
 import fs from "node:fs";
@@ -59,13 +59,16 @@ async function main() {
   const page = await lib.createPage(ws, "a", { title: "Private", doc: "draft" });
   await lib.updatePage(ws, page.id, "a", { doc: "please @ann read this" });
   let ann = await listNotifications(ws, "a");
-  assert(ann.some((n) => n.type === "doc_mentioned" && n.pageId === page.id), "a self @ in the document notifies");
+  assert(
+    ann.every((n) => !(n.type === "doc_mentioned" && n.pageId === page.id)),
+    "a self @ in the document does not notify the author"
+  );
 
   await comments.addPageComment(ws, page.id, "a", { body: "@ann in a comment" });
   ann = await listNotifications(ws, "a");
   assert(
-    ann.filter((n) => n.type === "doc_mentioned" && n.pageId === page.id).length === 2,
-    "a self @ in a comment also notifies"
+    ann.every((n) => !(n.type === "doc_mentioned" && n.pageId === page.id)),
+    "a self @ in a comment does not notify the author"
   );
 
   assert(

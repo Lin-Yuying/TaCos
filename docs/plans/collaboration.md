@@ -1,7 +1,9 @@
 # U-11: Collaboration depth
 
-Status: plan for a future PR. No implementation started. Written 2026-11-06
-(loop round 3). Complements #78 (Inbox) and #80 (integrations).
+Status: implemented on `feat/collaboration` (2026-11-06, loop round 3). Four commits:
+comments, follow/watchers, Activity + review threads, checks/docs. Browser E2E and the
+UI-gate screenshots are run by the Lead before merge. Complements #78 (Inbox) and #80
+(integrations).
 
 ## Why
 
@@ -156,6 +158,40 @@ edit/delete history + a place (activity/inbox) that surfaces changes.
 8. **UI gate:** wireframe/screenshot review before final polish; Activity vs
    Inbox must read differently, the task comment composer must not become
    heavy, and 1440/1100 screenshots are required for acceptance.
+
+## Implementation (2026-11-06)
+
+- **Comments:** `comments.parent_id` (one reply level; a reply to a reply is refused),
+  `edited_at`, `deleted_at`, `resolved_at`, `review_state`, `via`, and a
+  `comment_reactions` table with the fixed set `👍 ❤️ 🎉 👀 🙌`. The task panel renders a
+  single reply level with a quoted parent, edit/delete/restore, resolve/reopen, reactions
+  and tombstones. Edits and deletes write `comment_edited`, `comment_deleted`,
+  `comment_restored`, `comment_resolved` and `comment_reopened` events.
+- **Follow:** one `watchers` table (`issue | project | page`, `source`, `muted`). Auto-follow
+  on create, assign, mention and comment, plus explicit Follow/Unfollow and a watcher list
+  with mute on task, project and document headers. The bootstrap migration copies the old
+  creator/assignee audience once (`u11_watchers_v1`), so a later Unfollow survives restarts.
+  Task and document comment notices read the watcher set, dedupe watcher + mention + reply
+  per person, and never notify the actor. Claim notices use the same audience.
+- **Activity:** `events` gained `workspace_id`, `object_type`, `object_id`, `project_id`,
+  `page_id`, `owner_id` and `visibility` (`workspace | project | private`). `/activity`
+  offers All / My activity / Following plus object type, project and person filters,
+  keyset pagination, deep links and the same project/document visibility rules as the
+  rest of the app. Page and project events are recorded from their business layer.
+- **Review:** Request changes / Approve posts one `review_state`-marked task comment,
+  records `review_approved` / `review_rejected`, sends one `review_decision` Inbox notice
+  to the publisher, and updates the task panel's displayed review state. Approving a
+  pending agent task clears the publish gate; Request changes keeps it in the review
+  queue. The queue links to the task thread and its newest review comment; Inbox gained a
+  Reviews tab and a link to the queue.
+- **Checks:** `check-task-comments.ts`, `check-watchers.ts`, `check-activity-feed.ts`,
+  `check-review-threads.ts`.
+
+### Not tested here
+
+Real browser E2E, the 1440/1100 screenshots required by the UI gate, and visual review of
+the task panel, watcher menu, Activity page and Review row. The Lead runs those before
+merge.
 
 ## Dependencies
 

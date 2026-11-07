@@ -174,4 +174,4 @@ blocker (host, command, expected credential) and do not fake success.
 | #79 Agent runtime | merged | #90 | 128/128 checks; browser E2E: API agent delegation, review/approve, usage; 1440/1100 shots |
 | #80 internal automations | merged | #91 | 130/130 checks, template rule + dry-run + real run E2E, screenshots |
 | U-10 search | merged | #92 | 132/132 checks, Edge E2E search/palette, 1440/1100/640 screenshots |
-| U-11 collaboration | next | — | — |
+| U-11 collaboration | implemented on `feat/collaboration` | — | four commits; 136/136 harness checks, build, tsc, i18n; browser E2E + 1440/1100 screenshots pending Lead |

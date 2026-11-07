@@ -278,6 +278,36 @@ Desktop binaries are not code-signed. On Windows 11, Smart App Control blocks un
 - Tasks carry a numeric `estimate` (nullable). The task panel and composer edit it, and
   the REST/MCP task fields accept it for planning work.
 
+## Collaboration: comments, follow and Activity
+
+- **Task comments** thread one level: a reply quotes its parent instead of indenting
+  forever. Authors can edit, delete and restore their own comments; the task creator can
+  delete any comment. Edit and delete are recorded in the task's changelog. Each thread
+  can be resolved and reopened, and comments take one of five fixed reactions. Comments
+  stay Markdown, and the composer is still the two-line `@` box with Cmd/Ctrl+Enter.
+- **Follow / Unfollow** works on a task, project or document. Creators, assignees, people
+  mentioned and people who comment follow automatically; the watcher menu lists everyone
+  following and why. **Mute notifications** keeps the follow but stops comment notices;
+  an explicit `@mention` still arrives. Existing creator/assignee audiences are migrated
+  into the watcher set once, so unsubscribing is not undone by the next server start.
+- **Inbox dedupe**: one comment produces at most one Inbox row per person, whether they
+  follow, are mentioned or are being replied to. The actor never receives a notice about
+  their own action. Mutes from **Inbox → settings** still apply.
+- **Activity** (`/activity`, sidebar under Inbox) is the read-only workspace timeline:
+  task, document and project changes, newest first, with **All / My activity /
+  Following** scopes and object type, project and person filters. It obeys task/project
+  and document visibility, paginates with keyset cursors, and links every row back to its
+  task, document or project. It is deliberately separate from the Inbox: Activity says
+  what happened, Inbox says what needs you.
+- **Review threads** reuse task comments. **Request changes** and **Approve** post one
+  marked comment, move the task's review state, land in the changelog and send an Inbox
+  review notice to the publisher. Approval of an agent-published task clears its review
+  gate; Request changes keeps a pending task in the review queue. The review queue links
+  to the task's thread and to its newest review comment.
+
+Checks: `check-task-comments.ts`, `check-watchers.ts`, `check-activity-feed.ts` and
+`check-review-threads.ts` run under `npm run check:harness`.
+
 ## Documents, links and page templates
 
 - Type `[[` in a document to open the page picker; **Link a page** does the same from the
