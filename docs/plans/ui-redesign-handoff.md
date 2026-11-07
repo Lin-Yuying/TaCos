@@ -17,7 +17,7 @@
 
 - 已比对：Inbox、Review、Planning、Insights、Main、TasksList、Start、Trash、DocsIndex、SearchLanding、Activity、Agent（空白状态）、Help。
 - 未比对：其余 Settings 页、Login、Register、NotFound、ExportPage、ImportPage、System、Admin、AdminWs、弹窗、菜单、文档页、项目页、桌面端和错误状态画板。
-- 未运行：`next build`、33 个端到端流程、Electron 验证。`check:harness` 未跑完，截至 2026-11-07 有 118 项通过、2 项失败。
+- 未运行：33 个端到端流程、Electron 验证。`check:harness`（150/150 通过）和 `next build` 已完成，见第 8、9 项。
 
 ## 剩余工作
 
@@ -28,8 +28,8 @@
 5. 比对 Search 的最近搜索和最近打开。
 6. 种入未解析链接和已删除工作区后，比对 DocsIndex 和 Trash 下半部分。
 7. 逐张比对“未比对”列出的画板，修复差异。
-8. 修复 `check-agents-md.ts` 和 `check-desktop-updater-entry.ts` 的失败，再运行 `npm run check:harness`，确认其余检查。失败时修代码，不放宽检查。
-   - `check-agents-md.ts`：`Sidebar must use "Tasks", not "Workspace" as a group`。
-   - `check-desktop-updater-entry.ts`：`a narrow list column needs a view menu instead of losing the filters`。
-9. 用全新数据目录运行 `npm run build`。
+8. 已完成 2026-11-07：`check-agents-md.ts` 和 `check-desktop-updater-entry.ts` 通过，`npm run check:harness` 150/150 通过。
+   - `check-agents-md.ts`：侧边栏的规划/动态/洞察组去掉“工作区”分组标题（设计稿有这个标题，检查禁止，作为与设计稿的已知差异保留现有做法）；底栏图标顺序改为 Help、Trash、Settings（这条失败原先被上一条挡住）。
+   - `check-desktop-updater-entry.ts`：原断言写死了改版前的 640px 断点。改版把快速视图的断点移到 860px，否则 640–860 宽的列表列会把“新建任务”裁掉（实测 134px），所以断言的期望断点改为 860px。检查的保证不变：快速视图消失处必须由“视图”菜单接替；其余断言没有放宽。
+9. 已完成 2026-11-07：用全新临时数据目录（`mktemp -d /private/tmp/tacos-build.XXXXXX`，`TACOS_SEED_DEMO=0`）运行 `npm run build`，退出码 0。
 10. 把比对结果写回 ui-redesign.md 表格，只有并排看过的项才写 pass。
