@@ -1,3 +1,4 @@
+import { ListSkeleton } from "@/components/ui/skeleton";
 import fs from "node:fs";
 import path from "node:path";
 import { isServerMode } from "@/lib/server-mode";
@@ -29,7 +30,7 @@ export default async function SettingsPage({
   params: Promise<{ workspaceId: string }>;
 }) {
   return (
-    <Suspense fallback={<div className="p-6 text-body text-muted">Loading…</div>}>
+    <Suspense fallback={<ListSkeleton />}>
       <View params={params} />
     </Suspense>
   );

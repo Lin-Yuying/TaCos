@@ -525,8 +525,8 @@ export function DocPageView({
         <div className="ml-auto flex shrink-0 items-center gap-2">
           {sharing && collab.storageError && <p role="alert" className="text-small text-danger">{t(collab.storageError)}</p>}
           {collab.status === "reconnecting" && (
-            <span data-doc-reconnecting className="text-small text-faint">
-              {t("Reconnecting…")}
+            <span data-doc-reconnecting role="status" className="fixed left-1/2 top-16 z-40 -translate-x-1/2 rounded-lg border border-border bg-bg px-3 py-2 text-small text-text shadow-sm">
+              {t("Reconnecting… your changes are saved on this device")}
             </span>
           )}
           {sharing && collab.peers.length > 0 && (

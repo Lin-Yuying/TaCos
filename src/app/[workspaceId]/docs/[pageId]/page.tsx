@@ -1,3 +1,4 @@
+import { DocSkeleton } from "@/components/ui/skeleton";
 import { Suspense } from "react";
 import { connection } from "next/server";
 import { notFound, redirect } from "next/navigation";
@@ -21,7 +22,7 @@ export default function DocPageRoute({
   params: Promise<{ workspaceId: string; pageId: string }>;
 }) {
   return (
-    <Suspense fallback={<div className="p-6 text-body text-muted">Loading…</div>}>
+    <Suspense fallback={<DocSkeleton />}>
       <DocContent params={params} />
     </Suspense>
   );

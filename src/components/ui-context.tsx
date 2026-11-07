@@ -14,7 +14,7 @@ import { listPinsAction } from "@/app/entity-actions";
 import { PERSONAL_STATE_CHANGED, type PersonalPin } from "@/lib/ui/entity-actions";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { exportLocalDrafts, useStoredJson } from "@/lib/use-stored-json";
-import { Modal } from "@/components/ui/modal";
+import { ConfirmDialog } from "@/components/ui/confirmation";
 import { useT } from "@/components/i18n-context";
 import type { Priority, Status } from "@/lib/constants";
 
@@ -294,22 +294,16 @@ export function UIProvider({
       }}
     >
       {children}
-      <Modal open={!!confirmation} title={t("Confirm")} onClose={() => { confirmation?.resolve(false); setConfirmation(null); }}>
-        <p className="text-body text-text">{confirmation?.message}</p>
-        <div className="mt-4 flex justify-end gap-3">
-          <button autoFocus onClick={() => { confirmation?.resolve(false); setConfirmation(null); }}>{t("Cancel")}</button>
-          <button className="rounded bg-danger px-3 py-1.5 text-body text-white" onClick={() => { confirmation?.resolve(true); setConfirmation(null); }}>{t("Confirm")}</button>
-        </div>
-      </Modal>
+      <ConfirmDialog message={confirmation?.message ?? null} onFinish={(ok) => { confirmation?.resolve(ok); setConfirmation(null); }} />
       <div className="pointer-events-none fixed bottom-6 left-1/2 z-50 flex -translate-x-1/2 flex-col items-center gap-1.5">
         {toasts.map((entry) => (
           <div
             key={entry.id}
             role="status"
-            className="rounded-lg bg-text px-3.5 py-2 text-small font-medium text-bg shadow-[0_6px_20px_rgba(0,0,0,0.18)]"
+            className="flex items-center gap-2.5 rounded-lg bg-text py-1.5 pl-3 pr-2 text-small font-medium text-bg shadow-[0_6px_20px_rgba(0,0,0,0.18)]"
           >
             {entry.message}
-            {entry.action && <button className="pointer-events-auto ml-3 underline" onClick={() => { void entry.action!.run(); setToasts((all) => all.filter((item) => item.id !== entry.id)); }}>{entry.action.label}</button>}
+            {entry.action && <button className="pointer-events-auto rounded bg-bg/15 px-2 py-0.5 font-medium" onClick={() => { void entry.action!.run(); setToasts((all) => all.filter((item) => item.id !== entry.id)); }}>{entry.action.label}</button>}
           </div>
         ))}
       </div>

@@ -18,6 +18,7 @@ import { formatDate, issueRef } from "@/lib/format";
 import type { TrashedIssue, TrashedProject } from "@/lib/issues";
 import type { TrashedPage } from "@/lib/pages";
 import { useLocale, useT } from "@/components/i18n-context";
+import { EmptyState } from "@/components/ui/empty-state";
 import { PAGE_HEADER, PAGE_LEFT, PAGE_RIGHT, PAGE_TITLE } from "@/lib/page-chrome";
 import { WorkspaceTrashList } from "@/components/workspace-trash-list";
 
@@ -107,9 +108,7 @@ export function TrashView({
           )}
         </p>
         {empty && (
-          <div className={`text-body text-faint ${PAGE_LEFT} ${PAGE_RIGHT}`}>
-            {t("Trash is empty.")}
-          </div>
+          <EmptyState title={t("Trash is empty.")} />
         )}
         {issues.length > 0 && (tab === "all" || tab === "tasks") && (
           <div className="divide-y divide-border border-y border-border">

@@ -1,3 +1,4 @@
+import { ListSkeleton } from "@/components/ui/skeleton";
 import { Suspense } from "react";
 import { connection } from "next/server";
 import { redirect } from "next/navigation";
@@ -9,7 +10,7 @@ import { StartScreen } from "@/components/start-screen";
 // Shown when no tab is open; it is not itself a tab, so closing the last tab lands here.
 export default function StartPage({ params }: { params: Promise<{ workspaceId: string }> }) {
   return (
-    <Suspense fallback={<div className="p-6 text-body text-muted">Loading…</div>}>
+    <Suspense fallback={<ListSkeleton />}>
       <StartContent params={params} />
     </Suspense>
   );

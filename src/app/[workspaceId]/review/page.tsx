@@ -1,3 +1,4 @@
+import { ListSkeleton } from "@/components/ui/skeleton";
 import { PAGE_HEADER, PAGE_INSET, PAGE_TITLE } from "@/lib/page-chrome";
 import { Suspense } from "react";
 import { connection } from "next/server";
@@ -14,7 +15,7 @@ export default async function ReviewPage({
   params: Promise<{ workspaceId: string }>;
 }) {
   return (
-    <Suspense fallback={<div className="p-6 text-body text-muted">Loading…</div>}>
+    <Suspense fallback={<ListSkeleton />}>
       <View params={params} />
     </Suspense>
   );

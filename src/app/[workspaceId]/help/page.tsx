@@ -1,3 +1,4 @@
+import { ListSkeleton } from "@/components/ui/skeleton";
 import { Suspense } from "react";
 import { connection } from "next/server";
 import { redirect } from "next/navigation";
@@ -186,7 +187,7 @@ TaCos 读写的是 Markdown 文件，不是 Notion API 文档。下面这些在 
 
 export default function HelpPage({ params }: { params: Promise<{ workspaceId: string }> }) {
   return (
-    <Suspense fallback={<div className="p-6 text-body text-muted">Loading…</div>}>
+    <Suspense fallback={<ListSkeleton />}>
       <HelpContent params={params} />
     </Suspense>
   );

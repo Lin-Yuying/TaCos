@@ -36,6 +36,7 @@ import {
 import { groupTasks } from "@/lib/view-grouping";
 import { useStoredJson } from "@/lib/use-stored-json";
 import { interpolate, useT } from "@/components/i18n-context";
+import { EmptyState } from "@/components/ui/empty-state";
 import type { TaskViewDefinition, TaskViewSummary, ViewScope } from "@/lib/task-views";
 
 const TaskCalendar = dynamic(() => import("@/components/task-calendar"), { ssr: false });
@@ -80,13 +81,12 @@ function Empty() {
   const t = useT();
   const { setComposerOpen } = useUI();
   return (
-    <div className="flex flex-1 flex-col items-center justify-center gap-3 text-center">
-      <div className="text-lead font-medium text-muted">{t("No tasks found")}</div>
-      <div className="text-body text-faint">
-        {interpolate(t("Adjust your filters, or press {key} to create one."), {
-          key: <kbd className="rounded border border-border px-1 font-mono text-caption">C</kbd>,
-        })}
-      </div>
+    <EmptyState
+      title={t("No tasks found")}
+      hint={interpolate(t("Adjust your filters, or press {key} to create one."), {
+        key: <kbd className="rounded border border-border px-1 font-mono text-caption">C</kbd>,
+      })}
+    >
       <button
         type="button"
         onClick={() => setComposerOpen(true)}
@@ -94,7 +94,7 @@ function Empty() {
       >
         <Plus size={13} /> {t("New task")}
       </button>
-    </div>
+    </EmptyState>
   );
 }
 
@@ -382,9 +382,7 @@ export function IssueLayout({
         exportDisabled={pending}
       />
       {shown.length === 0 ? (
-        <div className="flex flex-1 items-center justify-center text-body text-faint">
-          {t("No tasks match this filter")}
-        </div>
+        <EmptyState title={t("No tasks match this filter")} />
       ) : layout === "board" ? (
         <IssueBoard issues={shown} workspaceId={workspaceId} currentUserId={currentUserId} manualOrder={isManualOrder(effectiveView)} groups={groups} grouping={grouping} properties={display.properties} selection={selection} />
       ) : layout === "table" ? (

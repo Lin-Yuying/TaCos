@@ -12,6 +12,7 @@ import { useRouter } from "next/navigation";
 import { PAGE_INSET } from "@/lib/page-chrome";
 import { Search, X } from "lucide-react";
 import { useT, useLocale } from "@/components/i18n-context";
+import { EmptyState } from "@/components/ui/empty-state";
 import { useUI } from "@/components/ui-context";
 import { SearchHitLabel, SearchKindIcon } from "@/components/search-result";
 import { useSearchRecents, type RecentItem } from "@/lib/search-recents";
@@ -483,15 +484,13 @@ export function SearchPageView({
           ) : !result && loading ? (
             <SearchSkeleton />
           ) : result && result.hits.length === 0 && !loading ? (
-            <div data-testid="search-empty" className="py-10 text-center">
-              <p className="text-body text-text">
-                {t("No results for “{query}”", { query: query.trim() })}
-              </p>
-              <p className="mt-1 text-small text-faint">
-                {hasFilters
+            <div data-testid="search-empty">
+              <EmptyState
+                title={t("No results for “{query}”", { query: query.trim() })}
+                hint={hasFilters
                   ? t("Clear filters or try a different term.")
                   : t("Try a shorter term, or check the spelling.")}
-              </p>
+              />
               {hasFilters && (
                 <button
                   type="button"

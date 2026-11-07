@@ -2,6 +2,13 @@
 // `{name}` placeholders must survive translation unchanged. Grouped by the file that
 // first uses a string; `npm run i18n:check` lists keys used in code but missing here.
 const zh: Record<string, string> = {
+  "This page could not be found": "找不到这个页面",
+  "It may have been deleted, the link may be wrong, or it may not be shared with you.": "它可能已被删除、链接有误，或没有共享给你。",
+  "It may have been deleted, or the link may be wrong.": "它可能已被删除，或链接有误。",
+  "Back to Start": "回到开始页",
+  "Open Trash": "查看回收站",
+  "Your inbox is empty": "收件箱是空的",
+  "Reconnecting… your changes are saved on this device": "正在重新连接…你的修改已保存在这台设备上",
   "Workspace admin": "工作区管理",
   "Change join code": "更换邀请码",
   "Use a different account": "换一个账户",

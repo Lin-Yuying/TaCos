@@ -1,3 +1,4 @@
+import { ListSkeleton } from "@/components/ui/skeleton";
 import { Suspense } from "react";
 import { connection } from "next/server";
 import { redirect } from "next/navigation";
@@ -12,7 +13,7 @@ export default async function TrashPage({
   params: Promise<{ workspaceId: string }>;
 }) {
   return (
-    <Suspense fallback={<div className="p-6 text-body text-muted">Loading…</div>}>
+    <Suspense fallback={<ListSkeleton />}>
       <View params={params} />
     </Suspense>
   );

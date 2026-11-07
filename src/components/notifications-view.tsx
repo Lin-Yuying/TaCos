@@ -30,6 +30,7 @@ import type {
 import { parseLegacyNotificationBody, type NotificationData } from "@/lib/notification-data";
 import { timeAgo } from "@/lib/format";
 import { useLocale, useT } from "@/components/i18n-context";
+import { EmptyState } from "@/components/ui/empty-state";
 import { PAGE_HEADER, PAGE_INSET, PAGE_TITLE } from "@/lib/page-chrome";
 
 type EventGroup = { id: string; label: string };
@@ -588,9 +589,10 @@ export function NotificationsView({
 
       <div className={`divide-y divide-border pb-8 ${PAGE_INSET}`}>
         {items.length === 0 && (
-          <div className="p-6 text-body text-faint">
-            {initialQuery ? t("No notifications match this search.") : t("Nothing yet — you'll see mentions, assignments, and comments here.")}
-          </div>
+          <EmptyState
+            title={initialQuery ? t("No notifications match this search.") : t("Your inbox is empty")}
+            hint={initialQuery ? undefined : t("Nothing yet — you'll see mentions, assignments, and comments here.")}
+          />
         )}
         {groups.map((group) => {
           const head = group.rows[0];
