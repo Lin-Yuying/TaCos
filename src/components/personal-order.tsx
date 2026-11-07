@@ -102,7 +102,7 @@ export function PersonalOrder({
         <button
           disabled={busy}
           onClick={() => void save()}
-          className="rounded border border-border px-3 py-1 text-body"
+          className="inline-flex items-center justify-center gap-1.5 whitespace-nowrap h-[30px] rounded-lg px-2.5 text-small border border-border bg-bg text-text hover:bg-active"
         >
           {t("Save")}
         </button>

@@ -278,7 +278,7 @@ export function DesktopAppUpdateButton() {
           <button
             type="button"
             onClick={() => setConfirmOpen(false)}
-            className="rounded-md border border-border px-3 py-1.5 text-small text-muted transition-colors hover:text-text"
+            className="inline-flex items-center justify-center gap-1.5 whitespace-nowrap h-[30px] rounded-lg px-2.5 text-small border border-border transition-colors bg-bg text-text hover:bg-active"
           >
             {COPY.busyCancel}
           </button>

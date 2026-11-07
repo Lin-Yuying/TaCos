@@ -121,7 +121,7 @@ export function PageTemplatesManager({
                   data-template-edit
                   onClick={() => beginEdit(template)}
                   aria-label={t("Edit template {name}", { name: template.name })}
-                  className="rounded-md border border-border px-2.5 py-1 text-small text-muted transition-colors hover:text-text"
+                  className="inline-flex items-center justify-center gap-1.5 whitespace-nowrap h-[30px] rounded-lg px-2.5 text-small border border-border transition-colors bg-bg text-text hover:bg-active"
                 >
                   {t("Edit")}
                 </button>
@@ -155,7 +155,7 @@ export function PageTemplatesManager({
                 data-template-name
                 value={draft.name}
                 onChange={(event) => setDraft({ ...draft, name: event.target.value })}
-                                className="w-full rounded-md border border-border bg-bg px-2.5 py-1.5 text-body text-text placeholder:text-faint focus:border-border-strong"
+                                className="h-[34px] rounded-lg px-2.5 w-full border border-border-strong bg-bg text-body text-text placeholder:text-faint focus:border-border-strong"
               />
             </label>
             <label className="space-y-1 text-small text-muted">
@@ -166,7 +166,7 @@ export function PageTemplatesManager({
                 onChange={(event) => setDraft({ ...draft, icon: event.target.value })}
                 aria-label={t("Template icon")}
                 maxLength={8}
-                className="w-full rounded-md border border-border bg-bg px-2 py-1.5 text-center text-body text-text focus:border-border-strong"
+                className="h-[34px] rounded-lg px-2.5 w-full border border-border-strong bg-bg text-center text-body text-text focus:border-border-strong"
               />
             </label>
           </div>
@@ -177,7 +177,7 @@ export function PageTemplatesManager({
               value={draft.title}
               onChange={(event) => setDraft({ ...draft, title: event.target.value })}
               placeholder={t("{date} weekly report")}
-              className="w-full rounded-md border border-border bg-bg px-2.5 py-1.5 text-body text-text placeholder:text-faint focus:border-border-strong"
+              className="h-[34px] rounded-lg px-2.5 w-full border border-border-strong bg-bg text-body text-text placeholder:text-faint focus:border-border-strong"
             />
           </label>
           <label className="block space-y-1 text-small text-muted">
@@ -187,7 +187,7 @@ export function PageTemplatesManager({
               value={draft.doc}
               onChange={(event) => setDraft({ ...draft, doc: event.target.value })}
               rows={5}
-              className="w-full resize-y rounded-md border border-border bg-bg px-2.5 py-1.5 font-mono text-small text-text placeholder:text-faint focus:border-border-strong"
+              className="w-full resize-y rounded-lg border border-border-strong bg-bg px-2.5 py-1.5 text-small text-text placeholder:text-faint focus:border-border-strong"
             />
             <span className="block text-small text-faint">{t("Markdown with {date}, {author} and {project}.")}</span>
           </label>
@@ -197,7 +197,7 @@ export function PageTemplatesManager({
               data-template-save
               disabled={busy || !draft.name.trim() || !draft.title.trim()}
               onClick={() => void save()}
-              className="rounded-md bg-accent px-3 py-1.5 text-body font-medium text-white hover:bg-accent-hover disabled:opacity-40"
+              className="inline-flex items-center justify-center gap-1.5 whitespace-nowrap h-[30px] rounded-lg px-2.5 text-small bg-accent font-medium text-white hover:bg-accent-hover disabled:opacity-40"
             >
               {t("Save template")}
             </button>
@@ -205,7 +205,7 @@ export function PageTemplatesManager({
               <button
                 type="button"
                 onClick={cancelEdit}
-                className="rounded-md border border-border px-3 py-1.5 text-body text-muted hover:border-border-strong hover:text-text"
+                className="inline-flex items-center justify-center gap-1.5 whitespace-nowrap h-[30px] rounded-lg px-2.5 text-small border border-border bg-bg text-text hover:bg-active"
               >
                 {t("Cancel")}
               </button>

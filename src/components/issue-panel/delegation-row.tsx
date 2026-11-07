@@ -143,13 +143,13 @@ export function DelegationRow({
             {statusLabel(t, shownStatus)}
           </span>
           {run?.source && (
-            <span className="rounded-full bg-elevated px-1.5 py-0.5 text-caption" data-testid="delegation-source">
+            <span className="inline-flex h-[18px] items-center rounded-[5px] px-1.5 whitespace-nowrap bg-elevated text-caption" data-testid="delegation-source">
               {run.source === "api" ? t("Built-in API agent") : t("Desktop runner")}
               {run.fallback ? ` · ${t("fallback from runner")}` : ""}
             </span>
           )}
           {run?.subscription && (
-            <span className="rounded-full bg-elevated px-1.5 py-0.5 text-caption text-faint" data-testid="delegation-subscription">
+            <span className="inline-flex h-[18px] items-center rounded-[5px] px-1.5 whitespace-nowrap bg-elevated text-caption text-faint" data-testid="delegation-subscription">
               {run.subscription.windows[0]
                 ? t("{percent}% plan left", {
                     percent: String(Math.round(run.subscription.windows[0].remainingPercent)),
@@ -262,7 +262,7 @@ export function DelegationRow({
             rows={2}
             aria-label={t("What should change?")}
             placeholder={t("What should change?")}
-            className="resize-y rounded-md border border-border bg-bg px-2 py-1 text-small text-text"
+            className="resize-y rounded-lg border border-border-strong bg-bg px-2 py-1 text-small text-text"
           />
           <button
             type="button"
@@ -341,7 +341,7 @@ export function DelegationRow({
             rows={2}
             aria-label={t("Anything the agent should know (optional)")}
             placeholder={t("Anything the agent should know (optional)")}
-            className="resize-y rounded-md border border-border bg-bg px-2 py-1 text-small text-text"
+            className="resize-y rounded-lg border border-border-strong bg-bg px-2 py-1 text-small text-text"
           />
           <div className="flex gap-1.5">
             <button

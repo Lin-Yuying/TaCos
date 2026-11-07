@@ -11,7 +11,7 @@ export function NotFoundText() {
       title={t("This page could not be found")}
       hint={t("It may have been deleted, or the link may be wrong.")}
     >
-      <Link href="/" className="rounded-md bg-accent px-3 py-1.5 text-small font-medium text-white transition-colors hover:bg-accent-hover">
+      <Link href="/" className="inline-flex items-center justify-center gap-1.5 whitespace-nowrap h-[30px] rounded-lg px-2.5 text-small bg-accent font-medium text-white transition-colors hover:bg-accent-hover">
         {t("Go home")}
       </Link>
     </EmptyState>

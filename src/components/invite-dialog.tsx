@@ -85,12 +85,12 @@ export function InviteDialog({
                 aria-label={t("Invite link")}
                 value={link}
                 data-testid="invite-link"
-                className="min-w-0 flex-1 rounded-md border border-border bg-bg px-2 py-1.5 text-small text-text outline-none"
+                className="h-[34px] rounded-lg px-2.5 min-w-0 flex-1 border border-border-strong bg-bg text-text outline-none text-body"
               />
               <button
                 type="button"
                 onClick={() => void copy("link")}
-                className="shrink-0 rounded-md bg-accent px-3 py-1.5 text-small font-medium text-white transition-colors hover:bg-accent-hover"
+                className="inline-flex items-center justify-center gap-1.5 whitespace-nowrap h-[30px] rounded-lg px-2.5 text-small shrink-0 bg-accent font-medium text-white transition-colors hover:bg-accent-hover"
               >
                 {copied === "link" ? t("Copied") : t("Copy link")}
               </button>
@@ -104,13 +104,13 @@ export function InviteDialog({
               readOnly
               aria-label={t("Join code")}
               value={joinCode ?? t("No active code")}
-              className="min-w-0 flex-1 rounded-md border border-border bg-bg px-2 py-1.5 text-body tracking-wide text-text outline-none"
+              className="h-[34px] rounded-lg px-2.5 min-w-0 flex-1 border border-border-strong bg-bg text-body tracking-wide text-text outline-none"
             />
             {joinCode && (
               <button
                 type="button"
                 onClick={() => void copy("code")}
-                className="shrink-0 rounded-md border border-border px-3 py-1.5 text-small text-muted transition-colors hover:border-border-strong hover:text-text"
+                className="inline-flex items-center justify-center gap-1.5 whitespace-nowrap h-[30px] rounded-lg px-2.5 text-small shrink-0 border border-border transition-colors bg-bg text-text hover:bg-active"
               >
                 {copied === "code" ? t("Copied") : t("Copy")}
               </button>
@@ -133,12 +133,12 @@ export function InviteDialog({
                 onChange={(e) => setWho(e.target.value)}
                 aria-label={t("User name")}
                 placeholder={t("User name")}
-                className="min-w-0 flex-1 rounded-md border border-border bg-bg px-2 py-1.5 text-body text-text outline-none focus:border-border-strong"
+                className="h-[34px] rounded-lg px-2.5 min-w-0 flex-1 border border-border-strong bg-bg text-body text-text outline-none focus:border-border-strong"
               />
               <button
                 type="submit"
                 disabled={inviteBusy || !who.trim()}
-                className="shrink-0 rounded-md border border-border px-3 py-1.5 text-small text-muted transition-colors hover:border-border-strong hover:text-text disabled:opacity-50"
+                className="inline-flex items-center justify-center gap-1.5 whitespace-nowrap h-[30px] rounded-lg px-2.5 text-small shrink-0 border border-border transition-colors disabled:opacity-50 bg-bg text-text hover:bg-active"
               >
                 {t("Add")}
               </button>

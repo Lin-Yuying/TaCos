@@ -122,7 +122,7 @@ export function TaskGrid({
         id: "ref",
         header: t("ID"),
         size: 110,
-        cell: ({ row }) => <span className="truncate font-mono text-small text-faint">{issueRef(row.original)}</span>,
+        cell: ({ row }) => <span className="truncate text-small text-faint">{issueRef(row.original)}</span>,
       }),
       column.accessor("title", {
         id: "title",

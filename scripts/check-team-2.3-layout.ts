@@ -29,9 +29,7 @@ const taskBar = read("src/components/task-view-bar.tsx");
 assert.match(taskBar, /PAGE_INSET/, "filter toolbar must share the page left edge");
 
 const docsIndex = read("src/components/docs-index.tsx");
-assert.match(docsIndex, /data-doc-index-section=\{sectionKey\}/, "docs index marks Shared and Private sections");
-assert.match(docsIndex, /section\("shared", t\("Shared"\)/, "docs index lists Shared first like the sidebar");
-assert.match(docsIndex, /section\("private", t\("Private"\)/, "docs index lists Private second like the sidebar");
+assert.match(docsIndex, /page\.shared \? t\("Shared"\) : t\("Private"\)/, "docs index rows state Shared or Private");
 assert.doesNotMatch(docsIndex, /My pages/, "docs groups must match the sidebar, not author split");
 
 const inbox = read("src/components/notifications-view.tsx");

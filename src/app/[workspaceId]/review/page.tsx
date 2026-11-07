@@ -32,7 +32,7 @@ async function View({ params }: { params: Promise<{ workspaceId: string }> }) {
     <>
       <header className={`${PAGE_HEADER} ${PAGE_INSET}`}>
         <h1 className={PAGE_TITLE}>{translator(await resolveLocale(user))("Review")}</h1>
-        <span className="rounded-full bg-elevated px-2 py-0.5 text-caption text-muted">{issues.length}</span>
+        <span className="text-small text-faint">{issues.length}</span>
       </header>
       <ReviewView workspaceId={workspaceId} issues={issues} />
     </>

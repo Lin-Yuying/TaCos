@@ -214,7 +214,7 @@ export function ImportView({
               type="button"
               onClick={() => folderInput.current?.click()}
               data-testid="import-folder"
-              className="rounded-md border border-border px-3 py-1.5 text-body"
+              className="inline-flex items-center justify-center gap-1.5 whitespace-nowrap h-[30px] rounded-lg px-2.5 text-small border border-border bg-bg text-text hover:bg-active"
             >
               {t("Choose Markdown folder")}
             </button>
@@ -254,7 +254,7 @@ export function ImportView({
               maxLength={120}
               placeholder={t("Taken from the file if left empty")}
               data-testid="import-workspace-name"
-              className="w-full rounded border border-border bg-bg px-2.5 py-1.5 text-body"
+              className="h-[34px] rounded-lg px-2.5 w-full border border-border-strong bg-bg text-body"
             />
           </label>
           <label className="flex items-center gap-2 text-body">
@@ -278,7 +278,7 @@ export function ImportView({
             onClick={() => void previewImport()}
             disabled={busy || (!file && folderFiles.length === 0)}
             data-testid="import-preview-button"
-            className="block rounded-md border border-border px-3 py-1.5 text-body text-text transition-colors hover:bg-elevated disabled:opacity-40"
+            className="inline-flex items-center justify-center gap-1.5 whitespace-nowrap h-[30px] rounded-lg px-2.5 text-small border border-border text-text transition-colors disabled:opacity-40 bg-bg hover:bg-active"
           >
             {busy && !job ? t("Reading…") : t("Preview import")}
           </button>
@@ -374,7 +374,7 @@ export function ImportView({
                 onClick={() => void applyImport()}
                 disabled={busy || Boolean(preview.duplicateWorkspaceId)}
                 data-testid="import-confirm"
-                className="rounded-md bg-accent px-3 py-1.5 text-body font-medium text-white disabled:opacity-40"
+                className="inline-flex items-center justify-center gap-1.5 whitespace-nowrap h-[30px] rounded-lg px-2.5 text-small bg-accent font-medium text-white disabled:opacity-40 hover:bg-accent-hover"
               >
                 {t("Import into a new workspace")}
               </button>
@@ -385,7 +385,7 @@ export function ImportView({
                   setWorkspaceName("");
                 }}
                 disabled={busy}
-                className="rounded-md border border-border px-3 py-1.5 text-body"
+                className="inline-flex items-center justify-center gap-1.5 whitespace-nowrap h-[30px] rounded-lg px-2.5 text-small border border-border bg-bg text-text hover:bg-active"
               >
                 {t("Choose another file")}
               </button>
@@ -418,7 +418,7 @@ export function ImportView({
                 <Link
                   href={`/${job.targetWorkspaceId ?? target?.id ?? ""}`}
                   data-testid="import-result-link"
-                  className="rounded-md border border-border px-3 py-1.5 text-body font-medium text-accent"
+                  className="inline-flex items-center justify-center gap-1.5 whitespace-nowrap h-[30px] rounded-lg px-2.5 text-small border border-border font-medium text-accent bg-bg text-text hover:bg-active"
                 >
                   {t("Open workspace")}
                 </Link>

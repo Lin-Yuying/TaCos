@@ -17,7 +17,7 @@ export function LoadError({ title, hint, error, onRetry, testId, retryTestId }: 
           type="button"
           onClick={onRetry}
           data-testid={retryTestId}
-          className="rounded-md bg-accent px-3 py-1.5 text-small font-medium text-white transition-colors hover:bg-accent-hover"
+          className="inline-flex items-center justify-center gap-1.5 whitespace-nowrap h-[30px] rounded-lg px-2.5 text-small bg-accent font-medium text-white transition-colors hover:bg-accent-hover"
         >
           {t("Retry")}
         </button>

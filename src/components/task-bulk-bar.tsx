@@ -218,14 +218,14 @@ export function TaskBulkBar({
               aria-label={t("Due date")}
               value={due}
               onChange={(event) => setDue(event.target.value)}
-              className="w-full rounded border border-border bg-bg px-1 py-0.5 text-small text-text"
+              className="h-[34px] rounded-lg px-2.5 w-full border border-border-strong bg-bg text-text text-body"
             />
             <div className="flex gap-2">
               <button
                 type="button"
                 disabled={!due || busy}
                 onClick={() => void apply({ dueDate: due })}
-                className="rounded border border-border px-2 py-0.5 text-small disabled:opacity-40"
+                className="inline-flex items-center justify-center gap-1.5 whitespace-nowrap h-[30px] rounded-lg px-2.5 text-small border border-border disabled:opacity-40 bg-bg text-text hover:bg-active"
               >
                 {t("Apply")}
               </button>

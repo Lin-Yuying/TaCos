@@ -55,6 +55,7 @@ export type WorkspaceActivityItem = {
   projectId: string | null;
   projectName: string | null;
   projectColor: string | null;
+  projectIcon: string | null;
   title: string;
   identifier: string | null;
   actor: { id: string; displayName: string; avatar: string | null } | null;
@@ -209,7 +210,7 @@ async function hydrate(rows: (typeof events.$inferSelect)[]): Promise<WorkspaceA
       ? db.select({ id: pages.id, title: pages.title, projectId: pages.projectId }).from(pages).where(inArray(pages.id, pageIds))
       : Promise.resolve([]),
     projectIds.length
-      ? db.select({ id: projects.id, name: projects.name, color: projects.color }).from(projects).where(inArray(projects.id, projectIds))
+      ? db.select({ id: projects.id, name: projects.name, color: projects.color, icon: projects.icon }).from(projects).where(inArray(projects.id, projectIds))
       : Promise.resolve([]),
     actorIds.length
       ? db
@@ -219,7 +220,7 @@ async function hydrate(rows: (typeof events.$inferSelect)[]): Promise<WorkspaceA
       : Promise.resolve([]),
     projectIdsForNames.length
       ? db
-          .select({ id: projects.id, name: projects.name, color: projects.color })
+          .select({ id: projects.id, name: projects.name, color: projects.color, icon: projects.icon })
           .from(projects)
           .where(inArray(projects.id, projectIdsForNames))
       : Promise.resolve([]),
@@ -255,6 +256,7 @@ async function hydrate(rows: (typeof events.$inferSelect)[]): Promise<WorkspaceA
       projectId: row.projectId ?? issue?.projectId ?? page?.projectId ?? project?.id ?? null,
       projectName: projectMeta?.name ?? null,
       projectColor: projectMeta?.color ?? null,
+      projectIcon: projectMeta?.icon ?? null,
       title,
       identifier: issue?.identifier ?? null,
       actor: actor

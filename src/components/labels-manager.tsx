@@ -61,13 +61,13 @@ export function LabelsManager({
               }}
               placeholder={t("Label name")}
               aria-label={t("Label name")}
-              className="w-full rounded-md border border-border bg-bg px-2.5 py-1.5 text-body text-text placeholder:text-faint focus:border-border-strong focus:outline-none"
+              className="h-[34px] rounded-lg px-2.5 w-full border border-border-strong bg-bg text-body text-text placeholder:text-faint focus:border-border-strong focus:outline-none"
             />
             <button
               type="button"
               onClick={() => void submit()}
               disabled={!name.trim() || busy}
-              className="shrink-0 rounded-md bg-accent px-3 py-1.5 text-body font-medium text-white hover:bg-accent-hover disabled:opacity-40"
+              className="inline-flex items-center justify-center gap-1.5 whitespace-nowrap h-[30px] rounded-lg px-2.5 text-small shrink-0 bg-accent font-medium text-white hover:bg-accent-hover disabled:opacity-40"
             >
               {t("Add")}
             </button>

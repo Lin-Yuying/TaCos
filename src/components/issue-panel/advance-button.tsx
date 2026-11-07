@@ -57,7 +57,7 @@ export function AdvanceButton({
       disabled={busy}
       onClick={open}
       data-testid="advance-button"
-      className="flex w-fit items-center gap-1.5 rounded-md border border-border px-2 py-1 text-small text-muted transition-colors hover:bg-elevated hover:text-text disabled:opacity-50"
+      className="inline-flex items-center justify-center gap-1.5 whitespace-nowrap h-[30px] rounded-lg px-2.5 text-small w-fit border border-border transition-colors disabled:opacity-50 bg-bg text-text hover:bg-active"
     >
       <Bot size={13} />
       {busy ? t("Opening chat…") : t("Work on it in chat")}

@@ -117,7 +117,7 @@ export function AdminConsole({
       <header className="app-titlebar flex h-12 shrink-0 items-center gap-2 border-b border-border px-4">
         <OtterMark className="h-6 w-6" />
         <h1 className="text-lead font-semibold">{t("Admin console")}</h1>
-        <span className="inline-flex items-center gap-1 rounded-full bg-elevated px-2 py-0.5 text-caption text-muted">
+        <span className="inline-flex h-[18px] items-center rounded-[5px] px-1.5 whitespace-nowrap gap-1 bg-elevated text-caption text-muted">
           <ShieldCheck size={11} /> {t("site admin")}
         </span>
         <Link
@@ -180,7 +180,7 @@ export function AdminConsole({
                               else router.refresh();
                             });
                           }}
-                          className="rounded-md border border-border bg-elevated px-1.5 py-1 text-small text-muted disabled:opacity-50"
+                          className="h-[26px] rounded-[7px] px-2 border border-border bg-elevated text-small text-muted disabled:opacity-50"
                           title={t(
                             isBuiltIn
                               ? "The built-in superuser always keeps site admin"
@@ -308,7 +308,7 @@ export function AdminConsole({
                 type="button"
                 disabled={busy || !form.username.trim() || form.password.length < 8}
                 onClick={() => void createMember()}
-                className="shrink-0 rounded-md bg-accent px-3 py-1.5 text-small font-medium text-white transition-colors hover:bg-accent-hover disabled:opacity-50"
+                className="inline-flex items-center justify-center gap-1.5 whitespace-nowrap h-[30px] rounded-lg px-2.5 text-small shrink-0 bg-accent font-medium text-white transition-colors hover:bg-accent-hover disabled:opacity-50"
               >
                 {t("Create")}
               </button>

@@ -13,7 +13,8 @@ import { createPageAction, deletePageAction, restorePageAction, togglePageFavori
 import { announceDocsDeleted } from "@/components/tab-events";
 import { ENTITY_RENAMED, PERSONAL_STATE_CHANGED, entityHref, type EntityKind, type EntityCapabilities } from "@/lib/ui/entity-actions";
 
-export function EntityRow({ kind, id, title, children }: { kind: EntityKind; id: string; title: string; children: ReactNode }) {
+// placement: "reserve" keeps room for the actions button, "overlay" and "corner" show it over the row on hover.
+export function EntityRow({ kind, id, title, children, placement = "reserve" }: { kind: EntityKind; id: string; title: string; children: ReactNode; placement?: "reserve" | "overlay" | "corner" }) {
   const { workspaceId } = useParams<{workspaceId: string}>();
   const { confirm, toast } = useUIActions();
   const { keys } = usePins();
@@ -78,8 +79,8 @@ export function EntityRow({ kind, id, title, children }: { kind: EntityKind; id:
         e.stopPropagation(); if (e.nativeEvent.isComposing || e.nativeEvent.keyCode === 229) return;
         if (e.key === "Enter") { e.preventDefault(); void save(); }
         if (e.key === "Escape") { setEditing(false); setError(null); }
-      }} className="min-w-0 flex-1 rounded border border-border bg-bg px-2 py-1 text-body"/><button disabled={busy} onClick={() => void save()} className="text-small">{t(busy ? "Saving…" : "Save")}</button><button disabled={busy} onClick={() => {setEditing(false);setError(null);}} className="text-small">{t("Cancel")}</button></div> : <div className="pr-8">{children}</div>}
-      {!editing && <div className="absolute right-0 top-1/2 -translate-y-1/2" onClick={(e) => e.stopPropagation()}>
+      }} className="h-[34px] rounded-lg px-2.5 min-w-0 flex-1 border border-border-strong bg-bg text-body"/><button disabled={busy} onClick={() => void save()} className="text-small">{t(busy ? "Saving…" : "Save")}</button><button disabled={busy} onClick={() => {setEditing(false);setError(null);}} className="text-small">{t("Cancel")}</button></div> : <div className={placement === "reserve" ? "pr-8" : ""}>{children}</div>}
+      {!editing && <div className={`absolute opacity-0 transition-opacity focus-within:opacity-100 group-hover/entity:opacity-100 has-[[aria-expanded=true]]:opacity-100 [@media(hover:none)]:opacity-100 ${placement === "corner" ? "right-1 top-1 rounded-md bg-bg" : "right-0.5 top-1/2 -translate-y-1/2"}`} onClick={(e) => e.stopPropagation()}>
         <Menu onOpenChange={(open) => {if(open) void inspect();}} width={240} triggerClassName="flex h-7 w-7 items-center justify-center rounded text-faint hover:bg-elevated focus-visible:text-text" trigger={<span aria-label={t("More actions")}><MoreHorizontal size={14}/></span>}>
           {(close) => <>{!cap && <p className="p-2 text-small text-faint">{t("Loading…")}</p>}{actions.map((action) => <Fragment key={action.label}>{action.danger&&<div className="my-1 h-px bg-border"/>}<MenuItem disabled={action.disabled} danger={action.danger} onSelect={() => {close();void action.run();}}>{action.label}</MenuItem></Fragment>)}</>}
         </Menu>

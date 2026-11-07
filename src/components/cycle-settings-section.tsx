@@ -220,7 +220,7 @@ export function CycleSettingsSection({
             type="button"
             onClick={save}
             disabled={saving}
-            className="rounded-md bg-accent px-3 py-1.5 text-body font-medium text-white transition-colors hover:bg-accent-hover disabled:opacity-50"
+            className="inline-flex items-center justify-center gap-1.5 whitespace-nowrap h-[30px] rounded-lg px-2.5 text-small bg-accent font-medium text-white transition-colors hover:bg-accent-hover disabled:opacity-50"
             data-testid="cycle-save"
           >
             {saving ? t("Saving…") : t("Save cycles")}

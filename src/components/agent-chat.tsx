@@ -43,6 +43,7 @@ import {
   X,
   List,
 } from "lucide-react";
+import { ProjectIcon } from "@/components/icons";
 import { Menu, MenuItem } from "@/components/menu";
 import { useUI } from "@/components/ui-context";
 import { ThreadTaskChips } from "@/components/thread-task-chips";
@@ -83,7 +84,7 @@ import {
 import type { AgentApproval, AgentThread, AgentThreadDetail } from "@/lib/agent-threads";
 import { interpolate, useLocale, useT } from "@/components/i18n-context";
 
-type ProjectOption = { id: string; name: string; key: string; color: string };
+type ProjectOption = { id: string; name: string; key: string; color: string; icon?: string | null };
 
 type UiMessage = {
   id: string;
@@ -278,7 +279,7 @@ function ApprovalPanel({
       <div className="flex items-center gap-2 text-small font-medium">
         <Lock size={13} />
         {t("Permission needed")}
-        <span className="ml-auto rounded-full border border-border bg-bg px-2 py-0.5 font-mono text-caption text-muted">
+        <span className="inline-flex h-[18px] items-center rounded-[5px] px-1.5 whitespace-nowrap ml-auto border border-border bg-bg font-mono text-caption text-muted">
           {card.tool}
         </span>
       </div>
@@ -294,7 +295,7 @@ function ApprovalPanel({
           type="button"
           onClick={() => onAnswer(card.requestId, "accept")}
           disabled={busy}
-          className="rounded-md bg-accent px-2.5 py-1 text-small font-medium text-white transition-opacity hover:opacity-90 disabled:opacity-50"
+          className="inline-flex items-center justify-center gap-1.5 whitespace-nowrap h-[30px] rounded-lg px-2.5 text-small bg-accent font-medium text-white disabled:opacity-50 hover:bg-accent-hover"
         >
           {t("Allow once")}
         </button>
@@ -303,7 +304,7 @@ function ApprovalPanel({
           onClick={() => onAnswer(card.requestId, "accept-turn")}
           disabled={busy}
           title={t("Stop asking for the rest of this turn")}
-          className="rounded-md border border-border px-2.5 py-1 text-small text-muted transition-colors hover:border-border-strong hover:text-text disabled:opacity-50"
+          className="inline-flex items-center justify-center gap-1.5 whitespace-nowrap h-[30px] rounded-lg px-2.5 text-small border border-border transition-colors disabled:opacity-50 bg-bg text-text hover:bg-active"
         >
           {t("Allow for this turn")}
         </button>
@@ -360,7 +361,7 @@ function ProjectChip({
                 onChange(project.id);
               }}
             >
-              <span className="h-2 w-2 shrink-0 rounded-full" style={{ background: project.color }} />
+              <ProjectIcon color={project.color} icon={project.icon} size={13} />
               <span className="min-w-0 flex-1 truncate text-left">{project.name}</span>
             </MenuItem>
           ))}
@@ -589,7 +590,7 @@ function ModelChip({
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
                 placeholder={t("Search models")}
-                className="w-full rounded-md border border-border bg-transparent px-2 py-1 text-small outline-none placeholder:text-faint focus:border-border-strong"
+                className="h-[34px] rounded-lg px-2.5 w-full border border-border-strong bg-transparent outline-none placeholder:text-faint focus:border-border-strong text-body"
               />
             </div>
           )}
@@ -707,7 +708,7 @@ function VisibilityChip({
       type="button"
       onClick={() => onChange(value === "shared" ? "private" : "shared")}
       title={t(value === "shared" ? "Anyone in this workspace can open it" : "Only you can open it")}
-      className="flex items-center gap-1.5 rounded-full px-2 py-1 text-small text-text transition-colors hover:bg-elevated"
+      className="flex items-center gap-1.5 rounded-lg px-2 py-1 text-small text-text transition-colors hover:bg-elevated"
     >
       <Icon size={12} /> {t(value === "shared" ? "Shared" : "Private")}
     </button>
@@ -869,7 +870,7 @@ function SkillManager({
                   value={name}
                   onChange={(event) => setName(event.target.value)}
                   placeholder={t("e.g. release-notes")}
-                  className="mt-1 w-full rounded-md border border-border bg-surface px-2 py-1.5 text-body font-normal outline-none placeholder:text-faint focus:border-border-strong"
+                  className="h-[34px] rounded-lg px-2.5 mt-1 w-full border border-border-strong bg-surface text-body font-normal outline-none placeholder:text-faint focus:border-border-strong"
                 />
               </label>
               <label className="block text-small font-medium text-text">
@@ -878,7 +879,7 @@ function SkillManager({
                   value={description}
                   onChange={(event) => setDescription(event.target.value)}
                   placeholder={t("What it does, when to use it")}
-                  className="mt-1 w-full rounded-md border border-border bg-surface px-2 py-1.5 text-body font-normal outline-none placeholder:text-faint focus:border-border-strong"
+                  className="h-[34px] rounded-lg px-2.5 mt-1 w-full border border-border-strong bg-surface text-body font-normal outline-none placeholder:text-faint focus:border-border-strong"
                 />
               </label>
               <label className="block text-small font-medium text-text">
@@ -888,7 +889,7 @@ function SkillManager({
                   onChange={(event) => setInstructions(event.target.value)}
                   rows={3}
                   placeholder={t("Instructions the agent follows when this skill is attached (Markdown)")}
-                  className="mt-1 w-full resize-none rounded-md border border-border bg-surface px-2 py-1.5 text-body font-normal leading-relaxed outline-none placeholder:text-faint focus:border-border-strong"
+                  className="mt-1 w-full resize-none rounded-lg border border-border-strong bg-surface px-2 py-1.5 text-body font-normal leading-relaxed outline-none placeholder:text-faint focus:border-border-strong"
                 />
               </label>
             </>
@@ -897,7 +898,7 @@ function SkillManager({
           {error && <p className="text-small text-danger">{t(error)}</p>}
         </div>
         <div className="flex justify-end gap-2 border-t border-border px-4 py-3">
-          <button type="button" onClick={onClose} className="rounded-md border border-border px-3 py-1.5 text-body text-text transition-colors hover:bg-elevated">
+          <button type="button" onClick={onClose} className="inline-flex items-center justify-center gap-1.5 whitespace-nowrap h-[30px] rounded-lg px-2.5 text-small border border-border text-text transition-colors bg-bg hover:bg-active">
             {t("Close")}
           </button>
           {canManage && (
@@ -905,7 +906,7 @@ function SkillManager({
               type="button"
               onClick={() => void submit()}
               disabled={!name.trim() || !description.trim() || busy}
-              className="rounded-md bg-accent px-3 py-1.5 text-body font-medium text-white transition-colors hover:bg-accent-hover disabled:opacity-50"
+              className="inline-flex items-center justify-center gap-1.5 whitespace-nowrap h-[30px] rounded-lg px-2.5 text-small bg-accent font-medium text-white transition-colors hover:bg-accent-hover disabled:opacity-50"
             >
               {t(busy ? "Adding…" : "Save skill")}
             </button>
@@ -933,7 +934,7 @@ function UserMessageBody({ content, bubbleClass }: { content: string; bubbleClas
               <a
                 key={file.id}
                 href={`/api/files/${file.id}`}
-                className="flex max-w-[220px] items-center gap-1 rounded-full border border-border bg-elevated px-2 py-0.5 text-small text-muted hover:text-text"
+                className="inline-flex items-center justify-center gap-1.5 whitespace-nowrap h-[30px] rounded-lg px-2.5 text-small max-w-[220px] border border-border bg-elevated bg-bg text-text hover:bg-active"
               >
                 <FileText size={14} className="shrink-0 text-faint" />
                 <span className="truncate">{file.name}</span>
@@ -1556,7 +1557,7 @@ function StartComposer({
                 key={suggestion}
                 type="button"
                 onClick={() => setText(t(suggestion))}
-                className="rounded-full border border-border px-3 py-1 text-small text-muted transition-colors hover:bg-elevated hover:text-text"
+                className="inline-flex items-center justify-center gap-1.5 whitespace-nowrap h-[30px] rounded-lg px-2.5 text-small border border-border transition-colors bg-bg text-text hover:bg-active"
               >
                 {t(suggestion)}
               </button>
@@ -1787,7 +1788,7 @@ export function AgentWorkspace({
           </ul>
           <Link
             href={`/${workspaceId}/settings#agent`}
-            className="mt-4 inline-flex items-center gap-1.5 rounded-md bg-accent px-3 py-1.5 text-small font-medium text-white transition-opacity hover:opacity-90"
+            className="inline-flex items-center justify-center gap-1.5 whitespace-nowrap h-[30px] rounded-lg px-2.5 text-small mt-4 bg-accent font-medium text-white hover:bg-accent-hover"
           >
             <Settings2 size={13} /> {t("Open Settings")}
           </Link>
@@ -1830,7 +1831,7 @@ export function AgentWorkspace({
       )}
 
       <main className="flex min-w-0 flex-1 flex-col">
-        <button className="self-start px-3 py-1 text-small text-muted max-[600px]:hidden" onClick={()=>{setSidebarClosed(!sidebarClosed);setDrawer(true);}}>{t(sidebarClosed?"Show conversations":"Conversations")}</button>
+        {sidebarClosed&&<button className="self-start px-3 py-1 text-small text-muted max-[600px]:hidden" onClick={()=>{setSidebarClosed(false);setDrawer(true);}}>{t("Show conversations")}</button>}
         {active ? (
           // Keyed by thread so switching conversations starts from that thread's own state
           // instead of carrying the previous one's messages across.
@@ -2214,23 +2215,22 @@ function Conversation({
             <PanelLeft size={15} className="max-[600px]:hidden" />
             <List size={15} className="hidden max-[600px]:block" />
           </button>
-          <span
-            className="h-1.5 w-1.5 shrink-0 rounded-full max-[600px]:hidden"
-            style={{ background: active.projectColor || "var(--color-faint)" }}
-          />
+          <span className="flex shrink-0 max-[600px]:hidden">
+            <ProjectIcon color={active.projectColor || "var(--color-faint)"} icon={active.projectIcon} size={14} />
+          </span>
           <h1 className="max-w-[240px] truncate text-body font-medium text-text max-[600px]:max-w-none max-[600px]:flex-1 max-[600px]:text-lead max-[600px]:font-semibold" title={active.title}>{active.title||t("Untitled conversation")}</h1><span className="max-w-[120px] truncate max-[600px]:hidden">{active.projectName||t("No project")}</span>
           {active.contextChars > 0 && (
             <span
               data-testid="context-meter"
               title={t("About {tokens} tokens in this conversation. Long API-agent threads are summarized, not stopped.", { tokens: contextTokens.toLocaleString() })}
-              className={`shrink-0 rounded-full px-1.5 py-0.5 text-caption max-[600px]:hidden ${
+              className={`inline-flex h-[18px] items-center rounded-[5px] px-1.5 whitespace-nowrap shrink-0 text-caption max-[600px]:hidden font-variant-numeric tabular-nums ${
                 active.contextChars >= CONTEXT_COMPACT_CHARS ? "bg-accent/10 text-accent" : "bg-elevated text-faint"
-              } font-variant-numeric tabular-nums`}
+              }`}
             >
               {t("Context ~{tokens}k", { tokens: String(Math.max(1, Math.round(contextTokens / 1000))) })}
             </span>
           )}
-          {active.visibility === "shared" && <span className="shrink-0 rounded-full bg-elevated px-1.5 py-0.5 text-caption text-muted max-[600px]:hidden">{t("Shared conversations")}</span>}
+          {active.visibility === "shared" && <span className="inline-flex h-[18px] items-center rounded-[5px] px-1.5 whitespace-nowrap shrink-0 bg-elevated text-caption text-muted max-[600px]:hidden">{t("Shared conversations")}</span>}
           {!active.mine && <span className="shrink-0 text-faint max-[600px]:hidden">· {active.createdByName}</span>}
         </div>
         <div className="min-w-0 flex-1 overflow-x-auto empty:hidden max-[600px]:order-last max-[600px]:flex-none max-[600px]:basis-full">
@@ -2279,7 +2279,7 @@ function Conversation({
                     key={suggestion}
                     type="button"
                     onClick={() => void send(suggestion)}
-                    className="rounded-full border border-border px-3 py-1 text-small text-muted transition-colors hover:bg-elevated hover:text-text"
+                    className="inline-flex items-center justify-center gap-1.5 whitespace-nowrap h-[30px] rounded-lg px-2.5 text-small border border-border transition-colors bg-bg text-text hover:bg-active"
                   >
                     {t(suggestion)}
                   </button>
@@ -2305,7 +2305,7 @@ function Conversation({
 
       <div className="shrink-0 px-4 pb-4 max-[600px]:border-t max-[600px]:border-border max-[600px]:px-3 max-[600px]:py-2">
         <div className="mx-auto w-full max-w-3xl">
-          {!follow&&<button className="mb-2 rounded border border-border px-3 py-1 text-small" onClick={()=>{setFollow(true);bottom.current?.scrollIntoView({block:"end"});}}>{t("Jump to latest")}</button>}
+          {!follow&&<button className="inline-flex items-center justify-center gap-1.5 whitespace-nowrap h-[30px] rounded-lg px-2.5 text-small mb-2 border border-border bg-bg text-text hover:bg-active" onClick={()=>{setFollow(true);bottom.current?.scrollIntoView({block:"end"});}}>{t("Jump to latest")}</button>}
           {turnTaken && active.turnUserName && (
             <p className="mb-2 rounded-md border border-border bg-surface px-3 py-2 text-small text-text" data-testid="shared-turn-lock">
               {interpolate(t("{name} is using this shared chat"), { name: active.turnUserName })}

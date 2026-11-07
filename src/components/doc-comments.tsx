@@ -144,7 +144,7 @@ export function DocCommentsPanel({
           <p className="mt-1 text-small text-faint">{t("The quoted text has changed.")}</p>
         )}
         <div className="mt-1 text-body leading-relaxed text-text">
-          {comment.deletedAt?<p className="text-muted">{t("Deleted comment")}</p>:editId===comment.id?<div onClick={e=>e.stopPropagation()}><textarea disabled={pending} aria-label={t("Edit comment")} value={editBody} onChange={e=>setEditBody(e.target.value)} className="w-full rounded border border-border bg-bg p-2"/><div className="flex gap-3 text-small"><button disabled={pending} onClick={()=>void change(()=>editPageCommentAction(workspaceId,pageId,comment.id,editBody))}>{t("Save")}</button><button onClick={()=>setEditId(null)}>{t("Cancel")}</button></div></div>:comment.bodyLoaded?<Markdown source={comment.body} />:<span className="text-muted">{t("Loading…")}</span>}
+          {comment.deletedAt?<p className="text-muted">{t("Deleted comment")}</p>:editId===comment.id?<div onClick={e=>e.stopPropagation()}><textarea disabled={pending} aria-label={t("Edit comment")} value={editBody} onChange={e=>setEditBody(e.target.value)} className="w-full rounded-lg border border-border-strong bg-bg p-2"/><div className="flex gap-3 text-small"><button disabled={pending} onClick={()=>void change(()=>editPageCommentAction(workspaceId,pageId,comment.id,editBody))}>{t("Save")}</button><button onClick={()=>setEditId(null)}>{t("Cancel")}</button></div></div>:comment.bodyLoaded?<Markdown source={comment.body} />:<span className="text-muted">{t("Loading…")}</span>}
           {comment.editedAt&&!comment.deletedAt&&<span className="text-caption text-faint">{t("Edited")}</span>}
         </div>
         {canComment && !comment.deletedAt && (

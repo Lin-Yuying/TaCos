@@ -151,7 +151,7 @@ export function MilestonePanel({ rows }: { rows: InsightMilestoneRow[] }) {
             <tr key={row.id} className="border-t border-border" data-testid={`insight-milestone-${row.id}`}>
               <td className="py-1.5 pr-2">
                 <div className="flex min-w-0 items-center gap-1.5">
-                  <ProjectIcon color={row.projectColor} size={12} />
+                  <ProjectIcon color={row.projectColor} icon={row.projectIcon} size={12} />
                   <span className="min-w-0">
                     <span className="block truncate text-text">{row.name}</span>
                     <span className="block truncate text-caption text-faint">{row.projectName}</span>
@@ -248,7 +248,7 @@ export function AgentPanel({ panel }: { panel: InsightAgentPanel }) {
       {panel.byModel.length > 0 ? (
         <div className="flex flex-wrap gap-1.5" data-testid="insight-agent-models">
           {panel.byModel.map((row) => (
-            <span key={`${row.engine}|${row.model}`} className="rounded-full border border-border px-2 py-0.5 text-caption text-muted">
+            <span key={`${row.engine}|${row.model}`} className="inline-flex h-[18px] items-center rounded-[5px] px-1.5 whitespace-nowrap border border-border text-caption text-muted">
               {row.engine} · {row.model} · {formatTokens(row.totalTokens)}
             </span>
           ))}
@@ -398,7 +398,7 @@ export function TaskTable({
                     onClick={() => onPickProject(row.projectId)}
                     className="inline-flex max-w-[160px] items-center gap-1 text-left text-muted hover:text-text"
                   >
-                    <ProjectIcon color={row.projectColor} size={11} />
+                    <ProjectIcon color={row.projectColor} icon={row.projectIcon} size={11} />
                     <span className="truncate">{row.projectName}</span>
                   </button>
                 </td>

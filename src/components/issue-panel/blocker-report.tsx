@@ -62,7 +62,7 @@ export function BlockerReport({
               type="button"
               disabled={!body.trim() || busy}
               onClick={() => void submit()}
-              className="rounded-md bg-accent px-2.5 py-1 text-small font-medium text-white transition-colors hover:bg-accent-hover disabled:opacity-40"
+              className="inline-flex items-center justify-center gap-1.5 whitespace-nowrap h-[30px] rounded-lg px-2.5 text-small bg-accent font-medium text-white transition-colors hover:bg-accent-hover disabled:opacity-40"
             >
               {t("Report")}
             </button>

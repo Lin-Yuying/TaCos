@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { BellOff, Check, ChevronDown, ChevronRight, Clock, MoreHorizontal, Search, Settings2, X } from "lucide-react";
+import { Bell, Check, ChevronDown, ChevronRight, Clock, MoreHorizontal, Search, X } from "lucide-react";
 import { AssigneeAvatar } from "@/components/issue-table";
 import { useUI, NOTIFICATIONS_READ } from "@/components/ui-context";
 import { Menu, MenuItem } from "@/components/menu";
@@ -32,7 +32,7 @@ import { parseLegacyNotificationBody, type NotificationData } from "@/lib/notifi
 import { timeAgo } from "@/lib/format";
 import { useLocale, useT } from "@/components/i18n-context";
 import { EmptyState } from "@/components/ui/empty-state";
-import { PAGE_HEADER, PAGE_INSET, PAGE_TITLE } from "@/lib/page-chrome";
+import { BTN, BTN_GHOST, FILTER_BAR, ICON_BTN, LINE, LINE_SUB, PAGE_HEADER, PAGE_INSET, PAGE_TITLE, SEARCH_FIELD, SEGMENTED, segment } from "@/lib/page-chrome";
 
 type EventGroup = { id: string; label: string };
 type Props = {
@@ -475,7 +475,7 @@ export function NotificationsView({
     <div className="flex-1 overflow-y-auto">
       <header className={`${PAGE_HEADER} ${PAGE_INSET} max-[600px]:min-h-11 max-[600px]:pl-3 max-[600px]:pr-3`}>
         <h1 className={`${PAGE_TITLE} max-[600px]:flex-1`}>{t("Inbox")}</h1>
-        <span className="rounded-full bg-elevated px-2 py-0.5 text-caption text-muted tabular-nums max-[600px]:bg-transparent max-[600px]:px-0 max-[600px]:text-small">
+        <span className="tabular-nums text-small text-faint">
           {t("{count} unread", { count: counts.unread })}
         </span>
         <div className="hidden max-[600px]:block">
@@ -504,7 +504,7 @@ export function NotificationsView({
             type="button"
             onClick={() => void markAll()}
             disabled={counts.unread === 0 || busySet.has("all")}
-            className="rounded-md border border-border px-2.5 py-1 text-small text-muted transition-colors hover:text-text disabled:opacity-40"
+            className={BTN}
           >
             {t("Mark all read")}
           </button>
@@ -513,7 +513,7 @@ export function NotificationsView({
               type="button"
               onClick={() => void clearAll()}
               disabled={busySet.has("all")}
-              className="rounded-md border border-border px-2.5 py-1 text-small text-muted transition-colors hover:border-danger/40 hover:text-danger disabled:opacity-40"
+              className="inline-flex items-center justify-center gap-1.5 whitespace-nowrap h-[30px] rounded-lg px-2.5 text-small border border-border transition-colors hover:border-danger/40 hover:text-danger disabled:opacity-40 bg-bg text-text hover:bg-active"
             >
               {t("Clear all")}
             </button>
@@ -522,45 +522,46 @@ export function NotificationsView({
             type="button"
             onClick={() => setPrefsOpen((open) => !open)}
             aria-label={t("Notification preferences")}
-            className={`rounded-md border px-2 py-1 text-small transition-colors ${prefsOpen ? "border-border-strong text-text" : "border-border text-muted hover:text-text"}`}
+            aria-pressed={prefsOpen}
+            className={`${ICON_BTN} ${prefsOpen ? "bg-elevated text-text" : ""}`}
           >
-            <Settings2 size={14} />
+            <Bell size={14} />
           </button>
           <button
             type="button"
             onClick={() => setMutedOpen(true)}
             aria-label={t("Muted tasks and documents")}
             data-inbox-muted-open
-            className="rounded-md border border-border px-2 py-1 text-small text-muted transition-colors hover:text-text"
+            className={ICON_BTN}
           >
-            <BellOff size={14} />
+            <MoreHorizontal size={14} />
           </button>
         </div>
       </header>
 
-      <div className={`flex flex-wrap items-center gap-1 border-b border-border py-2 ${PAGE_INSET} max-[600px]:flex-nowrap max-[600px]:overflow-x-auto max-[600px]:pl-3 max-[600px]:pr-3`} data-inbox-tabs>
+      <div className={`${FILTER_BAR} max-[600px]:flex-nowrap max-[600px]:overflow-x-auto max-[600px]:px-3`} data-inbox-tabs>
+        <div className={SEGMENTED} role="group">
         {TABS.map((entry) => (
           <button
             key={entry.id}
             type="button"
             onClick={() => goTab(entry.id)}
             data-testid={`inbox-tab-${entry.id}`}
-            className={`flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-md px-2.5 py-1 text-small transition-colors ${
-              tab === entry.id ? "bg-elevated font-medium text-text" : "text-muted hover:text-text"
-            }`}
+            className={segment(tab === entry.id)}
           >
-            {t(entry.label)}
-            <span className="text-caption text-faint">{counts[entry.key]}</span>
+            {t(entry.label)} {counts[entry.key]}
           </button>
         ))}
+        </div>
         <div className="ml-auto max-[600px]:hidden">
-          <form onSubmit={submitSearch} className="relative flex items-center">
-            <Search size={13} className="pointer-events-none absolute left-2 text-faint" />
+          <form onSubmit={submitSearch} className={`${SEARCH_FIELD} w-52`}>
+            <Search size={13} className="shrink-0 text-faint" />
             <input
               value={query}
               onChange={(event) => setQuery(event.target.value)}
               placeholder={t("Search notifications…")}
-              className="h-8 w-48 rounded-md border border-border bg-elevated/40 pl-7 pr-2 text-small text-text placeholder:text-faint focus:border-border-strong"
+              aria-label={t("Search notifications…")}
+              className="min-w-0 flex-1 bg-transparent text-small text-text placeholder:text-faint"
             />
           </form>
         </div>
@@ -573,7 +574,7 @@ export function NotificationsView({
             value={query}
             onChange={(event) => setQuery(event.target.value)}
             placeholder={t("Search notifications…")}
-            className="h-8 w-full rounded-md border border-border bg-elevated/40 pl-7 pr-2 text-small text-text placeholder:text-faint focus:border-border-strong"
+            className="h-[34px] rounded-lg px-2.5 h-8 w-full border border-border-strong bg-elevated/40 pl-7 pr-2 text-text placeholder:text-faint focus:border-border-strong text-body"
           />
         </form>
       )}
@@ -613,7 +614,7 @@ export function NotificationsView({
                 const item = items.find((row) => row.id === snoozing);
                 if (item) void snooze(item, preset.at);
               }}
-              className="rounded-full border border-border px-2 py-0.5 text-caption text-muted hover:text-text"
+              className="inline-flex items-center justify-center gap-1.5 whitespace-nowrap h-[30px] rounded-lg px-2.5 text-small border border-border bg-bg text-text hover:bg-active"
             >
               {preset.label}
             </button>
@@ -622,7 +623,7 @@ export function NotificationsView({
         </div>
       )}
 
-      <div className={`divide-y divide-border pb-8 ${PAGE_INSET} max-[600px]:pl-4 max-[600px]:pr-4`}>
+      <div>
         {items.length === 0 && (
           <EmptyState
             title={initialQuery ? t("No notifications match this search.") : t("Your inbox is empty")}
@@ -638,25 +639,28 @@ export function NotificationsView({
               <button
                 type="button"
                 onClick={() => setExpanded((old) => ({ ...old, [group.key]: !open }))}
-                className="flex w-full items-center gap-2 py-2.5 text-left"
+                className={`${LINE} w-full text-left`}
               >
                 {open ? <ChevronDown size={13} className="text-faint" /> : <ChevronRight size={13} className="text-faint" />}
                 <span className="h-1.5 w-1.5 shrink-0 rounded-full" style={{ background: group.rows.some((row) => row.state === "unread") ? "var(--color-accent)" : "transparent" }} />
-                <span className="min-w-0 flex-1 truncate text-small text-text">{sentence(head, t)}</span>
+                <span className="flex size-[22px] shrink-0 items-center justify-center">
+                  {dataFor(head).actorName && <AssigneeAvatar displayName={dataFor(head).actorName ?? ""} size={22} />}
+                </span>
+                <span className="min-w-0 flex-1 truncate">{sentence(head, t)}</span>
                 <span className="hidden min-w-0 max-w-[35%] truncate text-caption text-faint @min-[640px]:block">{groupTitle(head, t)}</span>
-                <span className="rounded-full bg-elevated px-1.5 py-0.5 text-caption text-muted">{group.rows.length}</span>
+                <span className="inline-flex h-[18px] items-center rounded-[5px] px-1.5 whitespace-nowrap bg-elevated text-caption text-muted">{group.rows.length}</span>
               </button>
               {open && group.rows.map((item) => renderRow(item))}
             </div>
           );
         })}
         {nextCursor && (
-          <div className="pt-4">
+          <div className={`pt-4 ${PAGE_INSET}`}>
             <button
               type="button"
               onClick={() => void loadMore()}
               disabled={loadingMore}
-              className="rounded-md border border-border px-3 py-1.5 text-small text-muted hover:text-text disabled:opacity-40"
+              className="inline-flex items-center justify-center gap-1.5 whitespace-nowrap h-[30px] rounded-lg px-2.5 text-small border border-border disabled:opacity-40 bg-bg text-text hover:bg-active"
             >
               {loadingMore ? t("Loading…") : t("Load more")}
             </button>
@@ -664,12 +668,12 @@ export function NotificationsView({
         )}
       </div>
 
-      <div className={`flex flex-wrap items-center gap-2 border-t border-border py-3 text-small text-faint ${PAGE_INSET} max-[600px]:hidden`}>
+      <div className={`flex min-h-11 flex-wrap items-center gap-2.5 py-2 text-small text-faint ${PAGE_INSET} max-[600px]:hidden`}>
         <span>{t("Notifications are kept for 90 days.")}</span>
         <Link
           href={`/${workspaceId}/review`}
           data-testid="inbox-review-queue-link"
-          className="ml-auto rounded-md px-2 py-1 text-muted transition-colors hover:bg-elevated hover:text-text"
+          className={`${BTN_GHOST} ml-auto`}
         >
           {t("Open the review queue")}
         </Link>
@@ -688,7 +692,7 @@ export function NotificationsView({
               mutes.map((muteRow) => (
                 <div key={`${muteRow.scopeType}:${muteRow.scopeId}`} className="flex items-center gap-2 px-4 py-2">
                   <span className="min-w-0 flex-1 truncate text-body text-text">{muteRow.label || muteRow.scopeId}</span>
-                  <button type="button" onClick={() => void unmute(muteRow)} className="shrink-0 rounded-md border border-border px-2 py-1 text-small text-muted transition-colors hover:text-text">{t("Unmute")}</button>
+                  <button type="button" onClick={() => void unmute(muteRow)} className="inline-flex items-center justify-center gap-1.5 whitespace-nowrap h-[30px] rounded-lg px-2.5 text-small shrink-0 border border-border transition-colors bg-bg text-text hover:bg-active">{t("Unmute")}</button>
                 </div>
               ))
             )}
@@ -729,7 +733,7 @@ export function NotificationsView({
       <div
         key={item.id}
         data-inbox-read={unread ? "false" : "true"}
-        className={`group flex items-start gap-2 py-2.5 transition-colors max-[600px]:min-h-11 ${isSelected ? "bg-elevated/60" : "hover:bg-elevated/40"}`}
+        className={`group ${LINE} ${isSelected ? "bg-active" : ""}`}
       >
         <button
           type="button"
@@ -739,28 +743,26 @@ export function NotificationsView({
             event.stopPropagation();
             void toggleRead(item);
           }}
-          className="mt-1.5 flex h-4 w-4 shrink-0 items-center justify-center rounded-full border border-border text-transparent hover:border-accent hover:text-accent"
+          className="flex h-4 w-4 shrink-0 items-center justify-center rounded-full text-transparent hover:text-faint"
           data-inbox-dot
         >
           {unread ? <span className="h-1.5 w-1.5 rounded-full bg-accent" /> : <Check size={10} />}
         </button>
+        <span className="flex size-[22px] shrink-0 items-center justify-center">
+          {dataFor(item).actorName && <AssigneeAvatar displayName={dataFor(item).actorName ?? ""} size={22} />}
+        </span>
         <button type="button" onClick={() => open(item)} className="min-w-0 flex-1 text-left">
-          <span className={`block truncate text-body ${unread ? "font-medium text-text" : "text-muted"}`}>
+          <span className={`block truncate text-body ${unread ? "text-text" : "text-muted"}`}>
             {sentence(item, t)}
           </span>
-          <span className="block truncate text-caption text-faint">
+          <span className={`block truncate ${LINE_SUB}`}>
             {groupTitle(item, t)}
             {muted ? ` · ${t("Muted")}` : ""}
             <span className="hidden max-[600px]:inline" suppressHydrationWarning> · {timeAgo(item.createdAt, locale)}</span>
           </span>
         </button>
-        <span className="mt-0.5 shrink-0 text-small tabular-nums text-faint max-[600px]:hidden" suppressHydrationWarning>{timeAgo(item.createdAt, locale)}</span>
-        {dataFor(item).actorName && (
-          <span className="mt-0.5 hidden shrink-0 max-[600px]:block">
-            <AssigneeAvatar displayName={dataFor(item).actorName ?? ""} />
-          </span>
-        )}
-        {item.state === "done" && <span className="mt-1 rounded-full bg-elevated px-1.5 py-0.5 text-caption text-muted">{t("Done")}</span>}
+        <span className="shrink-0 text-small tabular-nums text-faint max-[600px]:hidden" suppressHydrationWarning>{timeAgo(item.createdAt, locale)}</span>
+        {item.state === "done" && <span className="inline-flex h-[18px] items-center rounded-[5px] px-1.5 whitespace-nowrap mt-1 bg-elevated text-caption text-muted">{t("Done")}</span>}
         <Menu
           width={200}
           align="right"

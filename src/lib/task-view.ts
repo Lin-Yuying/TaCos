@@ -63,7 +63,7 @@ export const DEFAULT_DISPLAY: TaskViewDisplay = {
   ordering: "manual",
   subIssues: true,
   showEmptyGroups: false,
-  properties: ["id", "status", "assignee", "priority", "labels", "dates"],
+  properties: ["id", "status", "assignee", "priority", "project", "labels", "dates"],
 };
 
 /** Stored/URL values are untrusted: keep the known members and fall back per field. */

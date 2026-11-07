@@ -645,7 +645,7 @@ export function SettingsView({
                   aria-label={t(BUILTIN_AVATAR_LABELS[id])}
                   aria-pressed={active}
                   onClick={() => void chooseAvatar(`builtin:${id}`)}
-                  className={`rounded-full p-0.5 transition ${
+                  className={`rounded-lg p-0.5 transition ${
                     active ? "ring-2 ring-accent" : "hover:bg-elevated"
                   } ${busy ? "opacity-50" : ""}`}
                 >
@@ -674,13 +674,13 @@ export function SettingsView({
               onKeyDown={(e) => {
                 if (e.key === "Enter") void saveDisplayName();
               }}
-              className="min-w-0 flex-1 rounded-md border border-border bg-bg px-2.5 py-1.5 text-body text-text focus:border-border-strong focus:outline-none"
+              className="h-[34px] rounded-lg px-2.5 min-w-0 flex-1 border border-border-strong bg-bg text-body text-text focus:border-border-strong focus:outline-none"
             />
             <button
               type="button"
               disabled={busy || displayName.trim() === currentUser.displayName}
               onClick={() => void saveDisplayName()}
-              className="shrink-0 rounded-md bg-accent px-3 py-1.5 text-body font-medium text-white hover:bg-accent-hover disabled:opacity-40"
+              className="inline-flex items-center justify-center gap-1.5 whitespace-nowrap h-[30px] rounded-lg px-2.5 text-small shrink-0 bg-accent font-medium text-white hover:bg-accent-hover disabled:opacity-40"
             >
               {t("Save")}
             </button>
@@ -789,7 +789,7 @@ export function SettingsView({
                       value={member.role}
                       disabled={memberBusy.includes(member.id)}
                       onChange={(e) => {const role=e.target.value as "admin"|"member";void memberChange(member.id,()=>setMemberRoleAction(workspace.id,member.id,role));}}
-                      className="ml-auto rounded-md border border-border bg-elevated px-1.5 py-1 text-small text-muted"
+                      className="h-[26px] rounded-[7px] px-2 ml-auto border border-border bg-elevated text-small text-muted"
                     >
                       <option value="admin">{t("Admin")}</option>
                       <option value="member">{t("Member")}</option>
@@ -802,14 +802,14 @@ export function SettingsView({
                           void memberChange(member.id,()=>removeMemberAction(workspace.id,member.id));
                         }
                       }}
-                      className="rounded-md border border-border px-2.5 py-1 text-small text-muted transition-colors hover:text-danger disabled:opacity-50"
+                      className="inline-flex items-center justify-center gap-1.5 whitespace-nowrap h-[30px] rounded-lg px-2.5 text-small border border-border transition-colors hover:text-danger disabled:opacity-50 bg-bg text-text hover:bg-active"
                       aria-label={t("Remove {name}", { name: member.displayName })}
                     >
                       {t("Remove")}
                     </button>
                   </>
                 ) : (
-                  <span className="ml-auto rounded-full bg-elevated px-2 py-0.5 text-caption text-muted">
+                  <span className="inline-flex h-[18px] items-center rounded-[5px] px-1.5 whitespace-nowrap ml-auto bg-elevated text-caption text-muted">
                     {member.role === "admin" ? t("Admin") : t("Member")}
                   </span>
                 )}
@@ -830,14 +830,14 @@ export function SettingsView({
                 readOnly
                 value={code ?? t("No active code")}
                 aria-label={t("Invite teammates")}
-                className="min-w-0 flex-1 rounded-md border border-border bg-bg px-2.5 py-1.5 font-mono text-body text-text focus:outline-none"
+                className="h-[34px] rounded-lg px-2.5 min-w-0 flex-1 border border-border-strong bg-bg text-body text-text focus:outline-none"
               />
               {code && <CopyButton text={code} />}
               {isAdmin && (
                 <button
                   type="button"
                   onClick={() => void rotateCode()}
-                  className="inline-flex items-center gap-1 rounded-md border border-border px-2 py-1 text-small text-muted transition-colors hover:text-text"
+                  className="inline-flex items-center justify-center gap-1.5 whitespace-nowrap h-[30px] rounded-lg px-2.5 text-small border border-border transition-colors bg-bg text-text hover:bg-active"
                 >
                   <RefreshCw size={12} /> {t("Rotate")}
                 </button>
@@ -889,13 +889,13 @@ export function SettingsView({
               }}
               placeholder={t("Project name (e.g. Mobile App)")}
               aria-label={t("Project name (e.g. Mobile App)")}
-              className="w-full rounded-md border border-border bg-bg px-2.5 py-1.5 text-body text-text placeholder:text-faint focus:border-border-strong focus:outline-none"
+              className="h-[34px] rounded-lg px-2.5 w-full border border-border-strong bg-bg text-body text-text placeholder:text-faint focus:border-border-strong focus:outline-none"
             />
             <button
               type="button"
               onClick={() => void addProject()}
               disabled={busy || !projName.trim()}
-              className="shrink-0 rounded-md bg-accent px-3 py-1.5 text-body font-medium text-white hover:bg-accent-hover disabled:opacity-40"
+              className="inline-flex items-center justify-center gap-1.5 whitespace-nowrap h-[30px] rounded-lg px-2.5 text-small shrink-0 bg-accent font-medium text-white hover:bg-accent-hover disabled:opacity-40"
             >
               {t("Add")}
             </button>
@@ -917,12 +917,12 @@ export function SettingsView({
                           if (e.key === "Escape") setRenaming(null);
                         }}
                         aria-label={t("Rename {name}", { name: project.name })}
-                        className="min-w-0 flex-1 rounded-md border border-border bg-bg px-2 py-1 text-body text-text focus:border-border-strong focus:outline-none"
+                        className="h-[34px] rounded-lg px-2.5 min-w-0 flex-1 border border-border-strong bg-bg text-body text-text focus:border-border-strong focus:outline-none"
                       />
                       <button
                         type="button"
                         onClick={() => void saveRename(project, editing.name)}
-                        className="shrink-0 rounded-md bg-accent px-2.5 py-1 text-small font-medium text-white hover:bg-accent-hover"
+                        className="inline-flex items-center justify-center gap-1.5 whitespace-nowrap h-[30px] rounded-lg px-2.5 text-small shrink-0 bg-accent font-medium text-white hover:bg-accent-hover"
                       >
                         {t("Save")}
                       </button>
@@ -933,7 +933,7 @@ export function SettingsView({
                       <button
                         type="button"
                         onClick={() => setRenaming({ id: project.id, name: project.name })}
-                        className="shrink-0 rounded-md border border-border px-2.5 py-1 text-small text-muted transition-colors hover:text-text"
+                        className="inline-flex items-center justify-center gap-1.5 whitespace-nowrap h-[30px] rounded-lg px-2.5 text-small shrink-0 border border-border transition-colors bg-bg text-text hover:bg-active"
                       >
                         {t("Rename")}
                       </button>
@@ -1132,7 +1132,7 @@ export function SettingsView({
                       placeholder="http://127.0.0.1:7890"
                       spellCheck={false}
                       aria-label={t("Proxy (optional)")}
-                      className="min-w-0 flex-1 rounded-md border border-border bg-bg px-2.5 py-1.5 font-mono text-small text-text placeholder:text-faint"
+                      className="h-[34px] rounded-lg px-2.5 min-w-0 flex-1 border border-border-strong bg-bg text-text placeholder:text-faint text-body"
                     />
                     <button
                       type="button"
@@ -1157,7 +1157,7 @@ export function SettingsView({
                   type="button"
                   onClick={() => setKeyFormOpen((open) => !open)}
                   aria-expanded={keyFormOpen}
-                  className="shrink-0 rounded-md bg-accent px-3 py-1.5 text-small font-medium text-white transition-colors hover:bg-accent-hover"
+                  className="inline-flex items-center justify-center gap-1.5 whitespace-nowrap h-[30px] rounded-lg px-2.5 text-small shrink-0 bg-accent font-medium text-white transition-colors hover:bg-accent-hover"
                 >
                   {t("New key")}
                 </button>
@@ -1174,13 +1174,13 @@ export function SettingsView({
                     }}
                     placeholder={t("Key name (e.g. claude-code, triage-bot)")}
                     aria-label={t("Key name")}
-                    className="w-full rounded-md border border-border bg-elevated/50 px-2.5 py-1.5 text-body placeholder:text-faint focus:border-border-strong"
+                    className="h-[34px] rounded-lg px-2.5 w-full border border-border-strong bg-elevated/50 text-body placeholder:text-faint focus:border-border-strong"
                   />
                   <button
                     type="button"
                     onClick={() => void createKey()}
                     disabled={!newKeyName.trim() || busy}
-                    className="shrink-0 rounded-md bg-accent px-3 py-1.5 text-body font-medium text-white hover:bg-accent-hover disabled:opacity-40"
+                    className="inline-flex items-center justify-center gap-1.5 whitespace-nowrap h-[30px] rounded-lg px-2.5 text-small shrink-0 bg-accent font-medium text-white hover:bg-accent-hover disabled:opacity-40"
                   >
                     {busy ? t("Creating…") : t("Generate")}
                   </button>
@@ -1223,7 +1223,7 @@ export function SettingsView({
                     <select
                       value={newKeyExpiry}
                       onChange={(e) => setNewKeyExpiry(e.target.value)}
-                      className="rounded-md border border-border bg-elevated/50 px-2 py-1 text-small text-text focus:border-border-strong"
+                      className="h-[26px] rounded-[7px] px-2 border border-border bg-elevated/50 text-small text-text focus:border-border-strong"
                     >
                       <option value="30">{t("30 days")}</option>
                       <option value="90">{t("90 days")}</option>
@@ -1525,7 +1525,7 @@ export function SettingsView({
                 }}
                 placeholder="confirmed"
                 aria-label={t('Type "confirmed" to delete this workspace')}
-                className="mt-3 w-full rounded-md border border-border bg-background px-2.5 py-1.5 text-body outline-none focus:border-danger"
+                className="h-[34px] rounded-lg px-2.5 mt-3 w-full border border-border-strong bg-background text-body outline-none focus:border-danger"
               />
               {deleteError && <div className="mt-2 text-small text-danger">{t(deleteError)}</div>}
               <div className="mt-4 flex justify-end gap-2">
@@ -1533,7 +1533,7 @@ export function SettingsView({
                   type="button"
                   onClick={closeDeleteDialog}
                   disabled={busy}
-                  className="rounded-md border border-border px-3 py-1.5 text-body text-muted transition-colors hover:text-text disabled:opacity-40"
+                  className="inline-flex items-center justify-center gap-1.5 whitespace-nowrap h-[30px] rounded-lg px-2.5 text-small border border-border transition-colors disabled:opacity-40 bg-bg text-text hover:bg-active"
                 >
                   {t("Cancel")}
                 </button>

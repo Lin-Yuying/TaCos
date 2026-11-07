@@ -26,7 +26,7 @@ function CopyButton({ text }: { text: string }) {
           setTimeout(() => setCopied(false), 1500);
         });
       }}
-      className="inline-flex shrink-0 items-center gap-1 rounded-md border border-border px-2.5 py-1 text-small text-muted transition-colors hover:text-text"
+      className="inline-flex items-center justify-center gap-1.5 whitespace-nowrap h-[30px] rounded-lg px-2.5 text-small shrink-0 border border-border transition-colors bg-bg text-text hover:bg-active"
     >
       {copied ? <Check size={12} /> : <Copy size={12} />}
       {t(copied ? "Copied" : "Copy")}
@@ -108,7 +108,7 @@ export function WorkspaceAdminConsole({
       <header className="app-titlebar flex h-12 shrink-0 items-center gap-2 border-b border-border px-4">
         <WorkspaceMark icon={workspace.icon} className="h-6 w-6" />
         <h1 className="text-lead font-semibold">{workspace.name}</h1>
-        <span className="inline-flex items-center gap-1 rounded-full bg-elevated px-2 py-0.5 text-caption text-muted">
+        <span className="inline-flex h-[18px] items-center rounded-[5px] px-1.5 whitespace-nowrap gap-1 bg-elevated text-caption text-muted">
           <ShieldCheck size={11} /> {t("Workspace admin")}
         </span>
         <Link
@@ -151,7 +151,7 @@ export function WorkspaceAdminConsole({
                           void changeRole(member, event.target.value as "admin" | "member")
                         }
                         title={t(isSelf ? "You cannot change your own role" : "Workspace role")}
-                        className="rounded-md border border-border bg-elevated px-1.5 py-1 text-small text-muted disabled:opacity-50"
+                        className="h-[26px] rounded-[7px] px-2 border border-border bg-elevated text-small text-muted disabled:opacity-50"
                       >
                         <option value="admin">{t("Admin")}</option>
                         <option value="member">{t("Member")}</option>
@@ -162,7 +162,7 @@ export function WorkspaceAdminConsole({
                         disabled={busy || isSelf}
                         aria-label={t("Remove {name}", { name: member.displayName })}
                         title={t(isSelf ? "You cannot remove yourself" : "Remove from workspace")}
-                        className="rounded-md border border-border px-2.5 py-1 text-small text-muted transition-colors hover:text-danger disabled:opacity-40 disabled:hover:text-muted"
+                        className="inline-flex items-center justify-center gap-1.5 whitespace-nowrap h-[30px] rounded-lg px-2.5 text-small border border-border transition-colors hover:text-danger disabled:opacity-40 disabled:hover:text-muted bg-bg text-text hover:bg-active"
                       >
                         {t("Remove")}
                       </button>
@@ -194,14 +194,14 @@ export function WorkspaceAdminConsole({
                 readOnly
                 aria-label={t("Join code")}
                 value={code ?? t("No active code")}
-                className="min-w-[180px] flex-1 rounded-md border border-border bg-bg px-2.5 py-1.5 font-mono text-body text-text focus:outline-none"
+                className="h-[34px] rounded-lg px-2.5 min-w-[180px] flex-1 border border-border-strong bg-bg text-body text-text focus:outline-none"
               />
               {code && <CopyButton text={code} />}
               <button
                 type="button"
                 onClick={() => void rotate()}
                 disabled={busy}
-                className="rounded-md border border-border px-2.5 py-1 text-small text-muted transition-colors hover:text-text disabled:opacity-50"
+                className="inline-flex items-center justify-center gap-1.5 whitespace-nowrap h-[30px] rounded-lg px-2.5 text-small border border-border transition-colors disabled:opacity-50 bg-bg text-text hover:bg-active"
               >
                 {t("Change join code")}
               </button>

@@ -214,7 +214,7 @@ export function ProjectWorkspace({
               <button
                 type="button"
                 onClick={() => setStatus(null)}
-                className="flex items-center gap-1.5 rounded-full bg-elevated px-2 py-0.5 text-small text-text transition-colors hover:bg-elevated/70"
+                className="flex items-center gap-1.5 rounded-lg bg-elevated px-2 py-0.5 text-small text-text transition-colors hover:bg-elevated/70"
               >
                 <StatusIcon status={status} size={12} />
                 {t(STATUS_META[status].label)}
@@ -223,7 +223,7 @@ export function ProjectWorkspace({
             ) : (
               <span className="whitespace-nowrap text-body font-medium text-muted">{t("All tasks")}</span>
             )}
-            <span className="rounded-full bg-elevated px-2 py-0.5 text-caption text-muted">
+            <span className="inline-flex h-[18px] items-center rounded-[5px] px-1.5 whitespace-nowrap bg-elevated text-caption text-muted">
               {taskPage?.total??shown.length}
             </span>
             <div className="ml-auto flex min-w-0 items-center gap-2">

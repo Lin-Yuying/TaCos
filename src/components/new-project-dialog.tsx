@@ -89,14 +89,14 @@ export function NewProjectDialog({
               value={name}
               onChange={(e) => setName(e.target.value)}
               placeholder={t("Project name")}
-              className="w-full rounded-md border border-border bg-bg px-2.5 py-1.5 text-body text-text placeholder:text-faint focus:border-border-strong focus:outline-none"
+              className="h-[34px] rounded-lg px-2.5 w-full border border-border-strong bg-bg text-body text-text placeholder:text-faint focus:border-border-strong focus:outline-none"
             />
             <textarea
               value={description}
               onChange={(e) => setDescription(e.target.value)}
               rows={2}
               placeholder={t("Add a short summary…")}
-              className="mt-2 w-full resize-none rounded-md border border-border bg-bg px-2.5 py-1.5 text-body leading-relaxed text-text placeholder:text-faint focus:border-border-strong focus:outline-none"
+              className="mt-2 w-full resize-none rounded-lg border border-border-strong bg-bg px-2.5 py-1.5 text-body leading-relaxed text-text placeholder:text-faint focus:border-border-strong focus:outline-none"
             />
             <p className="mt-2 text-small text-faint">
               {t("An icon colour is chosen for you — change it later from the project overview.")}
@@ -108,7 +108,7 @@ export function NewProjectDialog({
             <button
               type="button"
               onClick={() => setProjectComposerOpen(false)}
-              className="rounded-md border border-border px-3 py-1.5 text-body text-text transition-colors hover:bg-elevated"
+              className="inline-flex items-center justify-center gap-1.5 whitespace-nowrap h-[30px] rounded-lg px-2.5 text-small border border-border text-text transition-colors bg-bg hover:bg-active"
             >
               {t("Cancel")}
             </button>
@@ -116,7 +116,7 @@ export function NewProjectDialog({
               type="button"
               onClick={() => void submit()}
               disabled={!name.trim() || busy}
-              className="rounded-md bg-accent px-3 py-1.5 text-body font-medium text-white transition-colors hover:bg-accent-hover disabled:opacity-40"
+              className="inline-flex items-center justify-center gap-1.5 whitespace-nowrap h-[30px] rounded-lg px-2.5 text-small bg-accent font-medium text-white transition-colors hover:bg-accent-hover disabled:opacity-40"
             >
               {t("Create project")}
               <span className="ml-2 text-caption opacity-75">{modifier}↵</span>

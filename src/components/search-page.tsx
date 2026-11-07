@@ -8,14 +8,15 @@ import {
   useState,
   type KeyboardEvent,
 } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { PAGE_INSET } from "@/lib/page-chrome";
-import { Search, X } from "lucide-react";
+import { BOX, BTN_GHOST, LINE, LINE_SUB, NARROW_PAGE, PAGE_INSET, SEC, SEC_TITLE } from "@/lib/page-chrome";
+import { FileText, History, Search, User, Users, X } from "lucide-react";
 import { useT, useLocale } from "@/components/i18n-context";
 import { EmptyState } from "@/components/ui/empty-state";
 import { useUI } from "@/components/ui-context";
 import { SearchHitLabel, SearchKindIcon } from "@/components/search-result";
-import { useSearchRecents, type RecentItem } from "@/lib/search-recents";
+import { useSearchRecents, type RecentItem, type RecentSearch } from "@/lib/search-recents";
 import {
   GROUP_LABELS,
   GROUP_ORDER,
@@ -255,7 +256,7 @@ export function SearchPageView({
       className="flex min-h-0 min-w-0 flex-1 flex-col overflow-y-auto"
       onKeyDown={onSearchKeyDown}
     >
-      <div className={`w-full py-3 ${PAGE_INSET}`}>
+      <div className={`w-full pb-2 pt-3.5 ${PAGE_INSET}`}>
         <h1 className="sr-only">{t("Search")}</h1>
         <div className="relative">
           <Search
@@ -281,7 +282,7 @@ export function SearchPageView({
             }}
             aria-label={t("Search everything")}
             placeholder={t("Search tasks, documents, people, labels, files and rules…")}
-            className="w-full rounded-md border border-border bg-bg py-2 pl-9 pr-9 text-body outline-none transition-colors focus:border-border-strong"
+            className="h-10 w-full rounded-lg border border-border bg-bg pl-9 pr-9 text-body outline-none transition-colors placeholder:text-muted focus:border-border-strong focus-visible:outline-none"
           />
           {query && (
             <button
@@ -309,6 +310,7 @@ export function SearchPageView({
           )}
         </div>
 
+        {query.trim() && (<>
         <div
           data-testid="search-tabs"
           role="tablist"
@@ -349,7 +351,7 @@ export function SearchPageView({
             aria-label={t("Project")}
             value={project}
             onChange={(event) => change(() => setProject(event.target.value))}
-            className="max-w-[180px] rounded border border-border bg-bg px-2 py-1 text-small text-muted"
+            className="h-[26px] rounded-[7px] px-2 max-w-[180px] border border-border bg-bg text-small text-muted"
           >
             <option value="">{t("All projects")}</option>
             {projects.map((entry) => (
@@ -363,7 +365,7 @@ export function SearchPageView({
             aria-label={t("Assignee")}
             value={assignee}
             onChange={(event) => change(() => setAssignee(event.target.value))}
-            className="max-w-[180px] rounded border border-border bg-bg px-2 py-1 text-small text-muted"
+            className="h-[26px] rounded-[7px] px-2 max-w-[180px] border border-border bg-bg text-small text-muted"
           >
             <option value="">{t("Anyone")}</option>
             <option value="me">{t("Assigned to me")}</option>
@@ -381,7 +383,7 @@ export function SearchPageView({
             onChange={(event) =>
               change(() => setStatus(event.target.value ? (event.target.value as Status) : ""))
             }
-            className="rounded border border-border bg-bg px-2 py-1 text-small text-muted"
+            className="h-[26px] rounded-[7px] px-2 border border-border bg-bg text-small text-muted"
           >
             <option value="">{t("Any status")}</option>
             {STATUS_ORDER.map((entry) => (
@@ -395,7 +397,7 @@ export function SearchPageView({
             aria-label={t("Created")}
             value={created}
             onChange={(event) => change(() => setCreated(event.target.value))}
-            className="rounded border border-border bg-bg px-2 py-1 text-small text-muted"
+            className="h-[26px] rounded-[7px] px-2 border border-border bg-bg text-small text-muted"
           >
             <option value="">{t("Created anytime")}</option>
             {DATE_PRESETS.map((preset) => (
@@ -409,7 +411,7 @@ export function SearchPageView({
             aria-label={t("Updated")}
             value={updated}
             onChange={(event) => change(() => setUpdated(event.target.value))}
-            className="rounded border border-border bg-bg px-2 py-1 text-small text-muted"
+            className="h-[26px] rounded-[7px] px-2 border border-border bg-bg text-small text-muted"
           >
             <option value="">{t("Updated anytime")}</option>
             {DATE_PRESETS.map((preset) => (
@@ -425,7 +427,7 @@ export function SearchPageView({
             onChange={(event) =>
               change(() => setSort(event.target.value as SearchSort))
             }
-            className="rounded border border-border bg-bg px-2 py-1 text-small text-muted"
+            className="h-[26px] rounded-[7px] px-2 border border-border bg-bg text-small text-muted"
           >
             <option value="relevance">{t("Best match")}</option>
             <option value="updated">{t("Recently updated")}</option>
@@ -445,6 +447,7 @@ export function SearchPageView({
             <span className="text-caption text-faint">{t("Assignee and status apply to tasks.")}</span>
           )}
         </div>
+        </>)}
 
         <div className="mt-3">
           {error && query.trim() && (
@@ -458,7 +461,7 @@ export function SearchPageView({
                 type="button"
                 data-testid="search-retry"
                 onClick={() => setAttempt((value) => value + 1)}
-                className="shrink-0 rounded border border-border px-2 py-1 text-small hover:bg-elevated"
+                className="inline-flex items-center justify-center gap-1.5 whitespace-nowrap h-[30px] rounded-lg px-2.5 text-small shrink-0 border border-border bg-bg text-text hover:bg-active"
               >
                 {t("Retry")}
               </button>
@@ -476,10 +479,7 @@ export function SearchPageView({
               onOpen={openHit}
               onClearSearches={clearSearches}
               onClearItems={clearItems}
-              onSuggest={(nextKind, nextAssignee) => {
-                change(() => setKind(nextKind));
-                if (nextAssignee) change(() => setAssignee(nextAssignee));
-              }}
+              workspaceId={workspaceId}
             />
           ) : !result && loading ? (
             <SearchSkeleton />
@@ -495,7 +495,7 @@ export function SearchPageView({
                 <button
                   type="button"
                   onClick={clearFilters}
-                  className="mt-3 rounded border border-border px-2.5 py-1 text-small hover:bg-elevated"
+                  className="inline-flex items-center justify-center gap-1.5 whitespace-nowrap h-[30px] rounded-lg px-2.5 text-small mt-3 border border-border bg-bg text-text hover:bg-active"
                 >
                   {t("Clear filters")}
                 </button>
@@ -562,7 +562,7 @@ export function SearchPageView({
                     data-testid="search-prev"
                     disabled={page <= 1 || loading}
                     onClick={() => setPage((value) => Math.max(1, value - 1))}
-                    className="rounded border border-border px-2 py-1 disabled:opacity-40"
+                    className="inline-flex items-center justify-center gap-1.5 whitespace-nowrap h-[30px] rounded-lg px-2.5 text-small border border-border disabled:opacity-40 bg-bg text-text hover:bg-active"
                   >
                     {t("Previous")}
                   </button>
@@ -571,7 +571,7 @@ export function SearchPageView({
                     data-testid="search-next"
                     disabled={page >= pages || loading}
                     onClick={() => setPage((value) => Math.min(pages, value + 1))}
-                    className="rounded border border-border px-2 py-1 disabled:opacity-40"
+                    className="inline-flex items-center justify-center gap-1.5 whitespace-nowrap h-[30px] rounded-lg px-2.5 text-small border border-border disabled:opacity-40 bg-bg text-text hover:bg-active"
                   >
                     {t("Next")}
                   </button>
@@ -592,127 +592,88 @@ function SearchIdle({
   onOpen,
   onClearSearches,
   onClearItems,
-  onSuggest,
+  workspaceId,
 }: {
-  searches: { text: string; group: SearchGroup; at: string }[];
+  searches: RecentSearch[];
   items: RecentItem[];
-  onSearch: (entry: { text: string; group: SearchGroup; at: string }) => void;
+  onSearch: (entry: RecentSearch) => void;
   onOpen: (hit: RecentItem) => void;
   onClearSearches: () => void;
   onClearItems: () => void;
-  onSuggest: (group: SearchGroup, assignee?: "me") => void;
+  workspaceId: string;
 }) {
   const t = useT();
   const locale = useLocale();
   return (
-    <div data-testid="search-idle" className="mx-auto w-full max-w-[600px] space-y-6 py-6">
-      <section data-testid="search-recent-searches">
-        <div className="mb-2 flex items-center justify-between">
-          <h2 className="text-small font-medium text-muted">{t("Recent searches")}</h2>
-          {searches.length > 0 && (
-            <button
-              type="button"
-              onClick={onClearSearches}
-              className="text-caption text-faint hover:text-text"
-            >
-              {t("Clear")}
-            </button>
-          )}
-        </div>
+    <div data-testid="search-idle" className={`${NARROW_PAGE} max-w-[720px] !px-0`}>
+      <section data-testid="search-recent-searches" className={SEC}>
+        <h2 className={SEC_TITLE}>{t("Recent searches")}</h2>
         {searches.length === 0 ? (
-          <p className="text-small text-faint">{t("No recent searches yet.")}</p>
+          <p className={LINE_SUB}>{t("No recent searches yet.")}</p>
         ) : (
-          <div className="space-y-0.5">
+          <div className={BOX}>
             {searches.map((entry, index) => (
               <button
                 key={`${entry.text}:${entry.group}:${entry.at}`}
                 type="button"
                 data-testid={`search-recent-query-${index}`}
                 onClick={() => onSearch(entry)}
-                className="flex w-full items-center gap-2 rounded px-1.5 py-1 text-left text-body hover:bg-elevated/60"
+                className={`${LINE} w-full text-left`}
               >
-                <Search size={13} className="shrink-0 text-faint" aria-hidden />
+                <History size={14} className="shrink-0 text-muted" aria-hidden />
                 <span className="min-w-0 flex-1 truncate">{entry.text}</span>
-                {entry.group !== "all" && (
-                  <span className="shrink-0 text-caption text-faint">
-                    {t(GROUP_LABELS[entry.group])}
-                  </span>
-                )}
+                {entry.group !== "all" && <span className={`shrink-0 ${LINE_SUB}`}>{t(GROUP_LABELS[entry.group])}</span>}
               </button>
             ))}
+            <div className="flex min-h-11 items-center justify-end px-5 py-2">
+              <button type="button" onClick={onClearSearches} className={BTN_GHOST}>{t("Clear")}</button>
+            </div>
           </div>
         )}
       </section>
-      <section data-testid="search-recent-items">
-        <div className="mb-2 flex items-center justify-between">
-          <h2 className="text-small font-medium text-muted">{t("Recent items")}</h2>
-          {items.length > 0 && (
-            <button
-              type="button"
-              onClick={onClearItems}
-              className="text-caption text-faint hover:text-text"
-            >
-              {t("Clear")}
-            </button>
-          )}
-        </div>
+      <section data-testid="search-recent-items" className={SEC}>
+        <h2 className={SEC_TITLE}>{t("Recent items")}</h2>
         {items.length === 0 ? (
-          <p className="text-small text-faint">
-            {t("Open a result and it will show up here.")}
-          </p>
+          <p className={LINE_SUB}>{t("Open a result and it will show up here.")}</p>
         ) : (
-          <div className="space-y-0.5">
+          <div className={BOX}>
             {items.map((item, index) => (
               <button
                 key={`${item.kind}:${item.id}`}
                 type="button"
                 data-testid={`search-recent-item-${index}`}
                 onClick={() => onOpen(item)}
-                className="flex w-full items-start gap-2 rounded px-1.5 py-1 text-left text-body hover:bg-elevated/60"
+                className={`${LINE} w-full text-left`}
               >
                 <SearchKindIcon kind={item.kind} />
                 <span className="min-w-0 flex-1">
-                  <span className="flex items-center gap-2">
-                    {item.ref && (
-                      <span className="shrink-0 font-mono text-small text-faint">{item.ref}</span>
-                    )}
-                    <span className="min-w-0 flex-1 truncate">{item.title || t("Untitled")}</span>
-                  </span>
-                  {item.context && (
-                    <span className="block truncate text-caption text-faint">{item.context}</span>
-                  )}
+                  <span className="block truncate">{item.title || t("Untitled")}</span>
+                  {(item.ref || item.context) && <span className={`block truncate ${LINE_SUB}`}>{item.ref || item.context}</span>}
                 </span>
-                <span suppressHydrationWarning className="shrink-0 text-caption text-faint">
-                  {timeAgo(item.at, locale)}
-                </span>
+                <span suppressHydrationWarning className={`shrink-0 ${LINE_SUB}`}>{timeAgo(item.at, locale)}</span>
               </button>
             ))}
+            <div className="flex min-h-11 items-center justify-end px-5 py-2">
+              <button type="button" onClick={onClearItems} className={BTN_GHOST}>{t("Clear")}</button>
+            </div>
           </div>
         )}
       </section>
-      <section data-testid="search-suggestions" className="@2xl:col-span-2">
-        <h2 className="mb-2 text-small font-medium text-muted">{t("Suggestions")}</h2>
-        <div className="flex flex-wrap gap-1.5">
+      <section data-testid="search-suggestions" className={SEC}>
+        <h2 className={SEC_TITLE}>{t("Suggestions")}</h2>
+        <div className={BOX}>
           {[
-            { id: "my-tasks", label: t("Tasks assigned to me"), group: "task" as SearchGroup, assignee: "me" as const },
-            { id: "documents", label: t("Browse documents"), group: "doc" as SearchGroup },
-            { id: "people", label: t("Find a person"), group: "person" as SearchGroup },
-          ].map((suggestion) => (
-            <button
-              key={suggestion.id}
-              type="button"
-              data-testid={`search-suggestion-${suggestion.id}`}
-              onClick={() => onSuggest(suggestion.group, suggestion.assignee)}
-              className="rounded-full border border-border px-2.5 py-1 text-small text-muted hover:bg-elevated hover:text-text"
-            >
-              {suggestion.label}
-            </button>
+            { id: "my-tasks", label: t("Tasks assigned to me"), href: `/${workspaceId}?assignee=me`, Icon: User },
+            { id: "documents", label: t("Browse documents"), href: `/${workspaceId}/docs`, Icon: FileText },
+            { id: "people", label: t("Find a person"), href: `/${workspaceId}/settings#members`, Icon: Users },
+          ].map(({ id, label, href, Icon }) => (
+            <Link key={id} href={href} data-testid={`search-suggestion-${id}`} className={`${LINE} text-text`}>
+              <Icon size={14} className="shrink-0 text-muted" aria-hidden />
+              <span className="min-w-0 flex-1 truncate">{label}</span>
+            </Link>
           ))}
         </div>
       </section>
-      <p className="text-small text-faint @2xl:col-span-2">
-        {t("Type a title, name, label or file. Use filters to narrow tasks and documents.")}
-      </p>
     </div>
   );
 }

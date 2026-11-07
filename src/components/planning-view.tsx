@@ -3,15 +3,16 @@
 import { useMemo, useState } from "react";
 import Link from "next/link";
 import { usePathname, useSearchParams, useRouter } from "next/navigation";
-import { ChevronDown, Download, X } from "lucide-react";
-import { StatusIcon } from "@/components/icons";
+import { ChevronDown, Download, Plus, X } from "lucide-react";
+import { ProjectIcon, StatusIcon } from "@/components/icons";
+import { AssigneeAvatar } from "@/components/issue-table";
 import { Menu } from "@/components/menu";
 import { Modal } from "@/components/ui/modal";
 import { useT, useLocale } from "@/components/i18n-context";
 import { useUI } from "@/components/ui-context";
 import { useDetailSource } from "@/components/detail-navigation";
 import { issueRef } from "@/lib/format";
-import { PAGE_HEADER, PAGE_INSET, PAGE_TITLE } from "@/lib/page-chrome";
+import { BOX, BTN, CHIP, FILTER_BAR, ICON_BTN, LINE, LINE_SUB, NARROW_PAGE, PAGE_HEADER, PAGE_INSET, PAGE_TITLE, SEC, SEC_TITLE } from "@/lib/page-chrome";
 import {
   CYCLE_START_DAYS,
   CYCLE_STATUSES,
@@ -26,7 +27,7 @@ import type {
 } from "@/lib/planning/cycles";
 import type { Initiative, RoadmapGroup } from "@/lib/planning/initiatives";
 import { completeCycleAction, planIssuesAction, saveCycleSettingsAction } from "@/app/planning-actions";
-import { formatDay, formatDayRange } from "@/lib/planning/dates";
+import { eachDay, formatDay, formatDayRange } from "@/lib/planning/dates";
 import { primaryButton, quietButton } from "@/components/planning-ui";
 import { PlanningRoadmap } from "@/components/planning-roadmap";
 import { PlanningInitiatives } from "@/components/planning-initiatives";
@@ -42,9 +43,6 @@ const TABS: Array<{ key: PlanningTab; label: string }> = [
 type MemberOption = { id: string; displayName: string; avatar: string | null };
 type ProjectOption = { id: string; name: string; key: string; color: string; icon: string | null };
 type CandidateTask = IssueWithLabels;
-
-const TOOL_BUTTON =
-  "rounded-md border border-border px-2.5 py-1 text-small text-muted transition-colors hover:border-border-strong hover:text-text";
 
 export function PlanningView({
   workspaceId,
@@ -111,7 +109,7 @@ export function PlanningView({
         <span id="planning-header-tools" className="contents" />
       </header>
       <div className="min-h-0 flex-1 overflow-y-auto">
-        <div className={`${PAGE_INSET} py-5`}>
+        <div className={tab === "cycles" ? "" : `${PAGE_INSET} py-5`}>
           {tab === "cycles" && (
             <CyclesTab
               workspaceId={workspaceId}
@@ -255,16 +253,11 @@ function CyclesTab({
   const startLabel = CYCLE_START_DAYS.find((day) => day.value === settings.startDay)?.label ?? "Monday";
 
   return (
-    <div className="mx-auto max-w-[880px] space-y-4">
-      {error && (
-        <div className="rounded-lg border border-danger/40 p-2.5 text-small text-danger" role="alert">
-          {error}
-        </div>
-      )}
-      <div className="flex flex-wrap items-center gap-2">
+    <div>
+      <div className={`${FILTER_BAR} sticky top-0 z-10 bg-bg`}>
         <Menu
           width={300}
-          triggerClassName="flex items-center gap-1 rounded-md border border-border px-2 py-1 text-small text-text transition-colors hover:border-border-strong"
+          triggerClassName={CHIP}
           trigger={
             <>
               {current
@@ -307,7 +300,7 @@ function CyclesTab({
             </div>
           )}
         </Menu>
-        <span className="text-small text-faint" data-testid="planning-cycle-summary">
+        <span className={`ml-1.5 ${LINE_SUB}`} data-testid="planning-cycle-summary">
           {settings.cooldownWeeks > 0
             ? t("{weeks} weeks · starts {day} · {cooldown} week cooldown", {
                 weeks: settings.durationWeeks,
@@ -325,27 +318,33 @@ function CyclesTab({
               href={`/api/cycles/${selected.cycle.id}/calendar`}
               aria-label={t("Download this cycle as a calendar file")}
               title={t("Download this cycle as a calendar file")}
-              className="rounded-md p-1.5 text-muted transition-colors hover:bg-elevated hover:text-text"
+              className={ICON_BTN}
               data-testid="cycle-ics"
             >
               <Download size={14} />
             </a>
           )}
-          <Link href={`/${workspaceId}/settings#cycles`} className={TOOL_BUTTON} data-testid="cycle-settings-link">
+          <Link href={`/${workspaceId}/settings#cycles`} className={BTN} data-testid="cycle-settings-link">
             {t("Cycle settings")}
           </Link>
           {selected && (
-            <button type="button" onClick={() => setAddOpen(true)} className={TOOL_BUTTON} data-testid="cycle-add-tasks">
+            <button type="button" onClick={() => setAddOpen(true)} className={BTN} data-testid="cycle-add-tasks">
+              <Plus size={14} />
               {t("Add tasks")}
             </button>
           )}
           {selected && isAdmin && selected.cycle.status !== "completed" && (
-            <button type="button" onClick={completeCycle} disabled={busy} className={TOOL_BUTTON} data-testid="cycle-complete">
+            <button type="button" onClick={completeCycle} disabled={busy} className={BTN} data-testid="cycle-complete">
               {t("Complete cycle")}
             </button>
           )}
         </div>
       </div>
+      {error && (
+        <div className={`border-b border-border py-2 text-small text-danger ${PAGE_INSET}`} role="alert">
+          {error}
+        </div>
+      )}
       {selected ? (
         <CycleDetailPanel
           workspaceId={workspaceId}
@@ -357,7 +356,7 @@ function CyclesTab({
           onToast={toast}
         />
       ) : (
-        <p className="py-6 text-body text-faint">{t("Pick a cycle to see its tasks.")}</p>
+        <p className={`py-6 text-body text-faint ${PAGE_INSET}`}>{t("Pick a cycle to see its tasks.")}</p>
       )}
     </div>
   );
@@ -434,8 +433,8 @@ function CycleDetailPanel({
   }
 
   return (
-    <div className="min-w-0 space-y-5" data-testid={`cycle-detail-${cycle.number}`}>
-      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+    <div className={`${NARROW_PAGE} min-w-0 max-w-[1000px]`} data-testid={`cycle-detail-${cycle.number}`}>
+      <div className="grid grid-cols-[repeat(auto-fit,minmax(170px,1fr))] gap-2.5">
         <Stat
           testId="cycle-progress"
           label={t("Progress")}
@@ -475,34 +474,41 @@ function CycleDetailPanel({
         />
       </div>
 
-      <section data-testid="cycle-burndown">
-        <h2 className="mb-2 text-body font-semibold">{t("Burndown")}</h2>
-        <div className="rounded-lg border border-border p-3">
-          <BurndownChart points={detail.burndown} />
+      <section className={SEC} data-testid="cycle-burndown">
+        <h2 className={SEC_TITLE}>{t("Burndown")}</h2>
+        <div className="rounded-[10px] border border-border p-3.5">
+          <BurndownChart points={detail.burndown} endsAt={cycle.endsAt} />
         </div>
       </section>
 
-      <section data-testid="cycle-tasks">
-        <h2 className="mb-2 text-body font-semibold">{t("Tasks")}</h2>
+      <section className={SEC} data-testid="cycle-tasks">
+        <h2 className={SEC_TITLE}>{t("Tasks")}</h2>
         {detail.tasks.length === 0 ? (
-          <p className="rounded-lg border border-border px-4 py-6 text-body text-faint" data-testid="cycle-tasks-empty">
+          <p className="rounded-[10px] border border-border px-5 py-6 text-body text-faint" data-testid="cycle-tasks-empty">
             {t("No tasks in this cycle yet. Add active tasks the team will finish in this period.")}
           </p>
         ) : (
-          <div className="divide-y divide-border rounded-lg border border-border">
+          <div className={BOX}>
             {detail.tasks.map((task) => (
-              <div key={task.id} className="flex items-center gap-2 px-3 py-2 hover:bg-elevated/40">
+              <div key={task.id} className={LINE}>
                 <button
                   type="button"
                   onClick={() => openIssue(task.id)}
                   data-testid="cycle-task-row"
-                  className="flex min-w-0 flex-1 items-center gap-2 text-left"
+                  className="flex min-w-0 flex-1 items-center gap-2.5 text-left"
                 >
                   <StatusIcon status={task.status} size={14} />
-                  <span className="shrink-0 text-small text-faint">{issueRef(task)}</span>
+                  <span className={`shrink-0 ${LINE_SUB}`}>{issueRef(task)}</span>
                   <span className="min-w-0 flex-1 truncate text-body">{task.title}</span>
+                  <span className={`flex min-w-0 max-w-[30%] items-center gap-1 ${LINE_SUB}`}>
+                    <ProjectIcon color={task.projectColor} icon={task.projectIcon} size={12} />
+                    <span className="truncate">{task.projectName}</span>
+                  </span>
+                  {task.assignees.map((assignee) => (
+                    <AssigneeAvatar key={assignee.id} displayName={assignee.displayName} avatar={assignee.avatar} size={22} />
+                  ))}
                   {task.dueDate && (
-                    <span className="shrink-0 text-small text-faint tabular-nums">{formatDay(task.dueDate, locale)}</span>
+                    <span className={`shrink-0 tabular-nums ${LINE_SUB}`}>{formatDay(task.dueDate, locale)}</span>
                   )}
                 </button>
                 <button
@@ -511,9 +517,9 @@ function CycleDetailPanel({
                   title={t("Remove from cycle")}
                   disabled={removing === task.id}
                   onClick={() => removeTask(task.id)}
-                  className="rounded p-1 text-faint transition-colors hover:bg-elevated hover:text-text"
+                  className={ICON_BTN}
                 >
-                  <X size={12} />
+                  <X size={14} />
                 </button>
               </div>
             ))}
@@ -534,7 +540,7 @@ function CycleDetailPanel({
             onChange={(event) => setQuery(event.target.value)}
             placeholder={t("Search tasks")}
             aria-label={t("Search tasks")}
-            className="w-full rounded-md border border-border bg-bg px-2 py-1.5 text-body"
+            className="h-[34px] rounded-lg px-2.5 w-full border border-border-strong bg-bg text-body"
             data-testid="cycle-add-search"
           />
           <div className="max-h-[46vh] divide-y divide-border overflow-y-auto rounded-lg border border-border" data-testid="cycle-candidates">
@@ -562,7 +568,10 @@ function CycleDetailPanel({
                       }}
                     />
                     <span className="min-w-0 flex-1 truncate text-body">{task.title}</span>
-                    <span className="shrink-0 text-small text-faint">{issueRef(task)}</span>
+                    <span className="flex shrink-0 items-center gap-1 text-small text-faint">
+                      <ProjectIcon color={task.projectColor} icon={task.projectIcon} size={12} />
+                      {issueRef(task)}
+                    </span>
                   </label>
                 );
               })
@@ -600,10 +609,10 @@ function Stat({
   testId: string;
 }) {
   return (
-    <div className="rounded-md border border-border px-3 py-2" data-testid={testId}>
+    <div className="flex flex-col gap-0.5 rounded-[10px] border border-border px-3.5 py-3" data-testid={testId}>
       <div className="text-caption text-faint">{label}</div>
-      <div className="mt-0.5 text-lead font-semibold tabular-nums">{value}</div>
-      <div className="mt-0.5 text-caption text-faint">{caption}</div>
+      <div className="text-title font-semibold tabular-nums">{value}</div>
+      <div className={LINE_SUB}>{caption}</div>
     </div>
   );
 }
@@ -618,67 +627,49 @@ function capacityLabel(
     : t("{value} tasks", { value: capacity.average });
 }
 
-function BurndownChart({ points }: { points: CycleDetail["burndown"] }) {
+function BurndownChart({ points, endsAt }: { points: CycleDetail["burndown"]; endsAt: string }) {
   const t = useT();
   const locale = useLocale();
   if (points.length === 0) {
-    return <p className="mt-3 text-small text-faint">{t("The burndown starts when the cycle starts.")}</p>;
+    return <p className="text-small text-faint">{t("The burndown starts when the cycle starts.")}</p>;
   }
-  const width = 640;
-  const height = 150;
-  const pad = 10;
-  const max = Math.max(1, ...points.map((point) => Math.max(point.remaining, point.ideal)));
-  const x = (index: number) =>
-    pad + (points.length === 1 ? 0 : (index / (points.length - 1)) * (width - pad * 2));
-  const y = (value: number) => height - pad - (value / max) * (height - pad * 2);
-  const line = points.map((point, index) => `${x(index)},${y(point.remaining)}`).join(" ");
-  const ideal = points.map((point, index) => `${x(index)},${y(point.ideal)}`).join(" ");
   const last = points[points.length - 1];
+  // Days still to come slope from today's remaining count down to zero at the cycle end.
+  const future = eachDay(last.day, endsAt).slice(1);
+  const bars = [
+    ...points.map((point) => ({ day: point.day, value: point.remaining, future: false })),
+    ...future.map((day, index) => ({
+      day,
+      value: Math.round(last.remaining * (1 - (index + 1) / future.length)),
+      future: true,
+    })),
+  ];
+  const max = Math.max(1, ...bars.map((bar) => bar.value));
   return (
-    <div className="mt-2">
-      <svg
-        viewBox={`0 0 ${width} ${height}`}
-        className="h-36 w-full"
+    <div>
+      <div
+        className="flex h-[120px] items-end gap-1 border-b border-border-strong"
         role="img"
         aria-label={t("Remaining tasks per day: {remaining} now, {total} at the start", {
           remaining: last.remaining,
           total: points[0].remaining,
         })}
       >
-        {[0.25, 0.5, 0.75].map((ratio) => (
-          <line
-            key={ratio}
-            x1={pad}
-            x2={width - pad}
-            y1={pad + ratio * (height - pad * 2)}
-            y2={pad + ratio * (height - pad * 2)}
-            stroke="var(--color-border)"
-            strokeWidth={1}
+        {bars.map((bar) => (
+          <i
+            key={bar.day}
+            title={`${formatDay(bar.day, locale)} · ${bar.value}`}
+            className={`block min-w-0 flex-1 rounded-t-[3px] ${bar.future ? "bg-border-strong" : "bg-text"}`}
+            style={{ height: `${(bar.value / max) * 100}%` }}
           />
         ))}
-        <polyline
-          points={ideal}
-          fill="none"
-          stroke="var(--color-border-strong)"
-          strokeWidth={1.5}
-          strokeDasharray="5 5"
-        />
-        <polyline points={line} fill="none" stroke="var(--color-accent)" strokeWidth={2} />
-        <circle cx={x(points.length - 1)} cy={y(last.remaining)} r={3} fill="var(--color-accent)" />
-      </svg>
-      <div className="mt-1 flex items-center justify-between text-caption text-faint">
-        <span>{formatDay(points[0].day, locale)}</span>
-        <span className="flex items-center gap-3">
-          <span className="inline-flex items-center gap-1">
-            <span className="h-0.5 w-4 bg-accent" /> {t("Remaining")}
-          </span>
-          <span className="inline-flex items-center gap-1">
-            <span className="h-0.5 w-4 border-t border-dashed border-border-strong" /> {t("Ideal")}
-          </span>
-        </span>
-        <span>{formatDay(last.day, locale)}</span>
       </div>
+      <p className="mt-1.5 text-small text-faint">
+        {t("Dark bars show remaining tasks, light bars show days to come · Remaining per day: {remaining} now, {total} at the start", {
+          remaining: last.remaining,
+          total: points[0].remaining,
+        })}
+      </p>
     </div>
   );
 }
-

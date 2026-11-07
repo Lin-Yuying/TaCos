@@ -22,7 +22,7 @@ import {
   type TaskView,
   type ViewFilter,
 } from "@/lib/task-view";
-import { PAGE_INSET } from "@/lib/page-chrome";
+import { CHIP, PAGE_INSET } from "@/lib/page-chrome";
 
 const BUILTIN_LABEL: Record<(typeof BUILTIN_KEYS)[number], string> = {
   title: "Title",
@@ -53,8 +53,7 @@ const TYPE_LABEL: Record<FieldType, string> = {
 };
 
 const inputClass = "min-w-0 rounded border border-border bg-bg px-1 py-0.5 text-small text-text";
-const triggerClass =
-  "flex items-center gap-1 rounded-md px-2 py-1 text-small text-muted transition-colors hover:bg-elevated hover:text-text";
+const triggerClass = CHIP;
 
 /** A fixed list of choices for keys that have one; everything else is typed. */
 function choicesFor(
@@ -200,13 +199,12 @@ export function TaskViewBar({
 
   return (
     <div data-task-view-bar className={`flex min-h-10 shrink-0 flex-wrap items-center gap-1 border-b border-border py-1 ${PAGE_INSET} ${phoneCollapsed && !phoneTaskToolsOpen && view.filters.length === 0 ? "max-[600px]:hidden" : ""}`}>
-      {leading}
       <Menu
         width={420}
         triggerClassName={triggerClass}
         trigger={
           <>
-            <Filter size={12} /> {t("Filter")}
+            <Filter size={14} /> {t("Filter")}
             {view.filters.length > 0 && <span className="text-accent">{view.filters.length}</span>}
           </>
         }
@@ -280,7 +278,7 @@ export function TaskViewBar({
         triggerClassName={triggerClass}
         trigger={
           <>
-            <ArrowDownUp size={12} /> {t("Sort")}
+            <ArrowDownUp size={14} /> {t("Sort")}
             {view.sort.length > 0 && <span className="text-accent">{view.sort.length}</span>}
           </>
         }
@@ -330,6 +328,7 @@ export function TaskViewBar({
           </div>
         )}
       </Menu>
+      {leading}
       <span className="flex-1" />
       {trailing}
       {manageFields&&<TaskFieldManager workspaceId={workspaceId} open={fieldManagerOpen} onOpenChange={setFieldManagerOpen}/>}
@@ -337,7 +336,7 @@ export function TaskViewBar({
         <Menu
           width={300}
           align="right"
-          triggerClassName={triggerClass}
+          triggerClassName="flex size-[26px] items-center justify-center rounded-lg text-muted transition-colors hover:bg-elevated hover:text-text"
           trigger={<MoreHorizontal size={14} aria-label={t("More actions")} />}
         >
           {(close) => (<>

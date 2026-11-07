@@ -64,7 +64,7 @@ export function DocFindBar({ editor, onClose }: { editor: Editor | null; onClose
             step(e.shiftKey ? -1 : 1, fresh);
           }
         }}
-        className="w-[180px] min-w-0 rounded-md border border-border bg-bg px-2 py-1 text-body text-text"
+        className="h-[34px] rounded-lg px-2.5 w-[180px] min-w-0 border border-border-strong bg-bg text-body text-text"
       />
       <span className="shrink-0 px-1 tabular-nums">
         {matches.length ? Math.max(0, index + 1) : 0} / {matches.length}

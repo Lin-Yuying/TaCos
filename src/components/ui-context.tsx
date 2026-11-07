@@ -249,6 +249,12 @@ export function UIProvider({
       if (e.key === "/") {
         e.preventDefault();
         if (paletteOpen) return;
+        const taskSearch = document.querySelector<HTMLInputElement>("[data-task-search] input");
+        if (taskSearch && taskSearch.offsetParent) {
+          taskSearch.focus();
+          taskSearch.select();
+          return;
+        }
         const searchInput = document.querySelector<HTMLInputElement>('[data-testid="search-input"]');
         if (searchInput && pathname.endsWith("/search")) {
           searchInput.focus();
@@ -307,7 +313,7 @@ export function UIProvider({
         {storageFull && (
           <div role="alert" className="pointer-events-auto flex w-max max-w-[92vw] items-center gap-2 rounded-lg border border-border bg-bg px-3 py-2 text-small text-text shadow-[0_6px_20px_rgba(0,0,0,0.12)]">
             <span className="min-w-0 flex-1">{t("Local storage is full. Keep this page open and copy your draft.")}</span>
-            <button type="button" onClick={() => exportLocalDrafts(scope)} className="shrink-0 rounded-md border border-border px-2 py-1 text-small text-muted transition-colors hover:bg-elevated hover:text-text">{t("Export")}</button>
+            <button type="button" onClick={() => exportLocalDrafts(scope)} className="inline-flex items-center justify-center gap-1.5 whitespace-nowrap h-[30px] rounded-lg px-2.5 text-small shrink-0 border border-border transition-colors bg-bg text-text hover:bg-active">{t("Export")}</button>
             <button type="button" aria-label={t("Close")} onClick={() => setStorageFull(false)} className="shrink-0 rounded-md p-1 text-faint transition-colors hover:bg-elevated hover:text-text"><X size={13} /></button>
           </div>
         )}

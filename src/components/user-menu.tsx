@@ -17,10 +17,7 @@ export type UserInfo = {
   siteRole: "admin" | "member";
 };
 
-// Raised, pressable disc: light gradient + inner highlight + drop shadow, and a
-// sunken state while the menu is open or the button is held down.
-const AVATAR_BUTTON =
-  "flex h-8 w-8 items-center justify-center rounded-full bg-[linear-gradient(to_bottom,#ffffff,#f0f0f0)] shadow-[inset_0_1px_0_rgba(255,255,255,0.9),0_1px_2px_rgba(0,0,0,0.16),0_3px_8px_rgba(0,0,0,0.10)] ring-1 ring-black/[0.06] transition-all duration-150 hover:-translate-y-px hover:shadow-[inset_0_1px_0_rgba(255,255,255,0.9),0_2px_4px_rgba(0,0,0,0.18),0_6px_14px_rgba(0,0,0,0.12)] active:translate-y-0 active:bg-[linear-gradient(to_bottom,#f2f2f2,#ffffff)] active:shadow-[inset_0_1px_3px_rgba(0,0,0,0.22)]";
+const AVATAR_BUTTON = "flex size-7 items-center justify-center rounded-full";
 
 export function UserMenu({
   user,
@@ -82,7 +79,7 @@ export function UserMenu({
       triggerClassName={AVATAR_BUTTON}
       trigger={
         <>
-          <AssigneeAvatar displayName={user.displayName} avatar={user.avatar} size={22} />
+          <AssigneeAvatar displayName={user.displayName} avatar={user.avatar} size={28} />
         </>
       }
     >

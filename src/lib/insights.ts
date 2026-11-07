@@ -605,6 +605,7 @@ export async function aggregateInsights(
       projectId: issue.projectId,
       projectName: project?.name ?? "(deleted project)",
       projectColor: project?.color ?? "#8b5cf6",
+      projectIcon: project?.icon ?? null,
       assignees: assigneesByIssue.get(issue.id) ?? [],
       createdAt: issue.createdAt,
       createdDay: zoneDayOf(issue.createdAt, timeZone),
@@ -880,6 +881,7 @@ export async function aggregateInsights(
       position: projectMilestones.position,
       projectName: projects.name,
       projectColor: projects.color,
+      projectIcon: projects.icon,
     })
     .from(projectMilestones)
     .innerJoin(projects, eq(projects.id, projectMilestones.projectId))
@@ -902,6 +904,7 @@ export async function aggregateInsights(
       projectId: milestone.projectId,
       projectName: milestone.projectName,
       projectColor: milestone.projectColor,
+      projectIcon: milestone.projectIcon,
       name: milestone.name,
       targetDate: milestone.targetDate,
       tasks: attached.length,

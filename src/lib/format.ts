@@ -23,6 +23,24 @@ export function formatDate(iso: string, locale: Locale = "en"): string {
   });
 }
 
+// Recent dates read as words, older ones drop the year while it is still this year.
+export function friendlyDate(iso: string, locale: Locale = "en"): string {
+  const zh = locale === "zh";
+  const tag = zh ? "zh-CN" : "en-US";
+  const date = new Date(iso);
+  const now = new Date();
+  const dayStart = (value: Date) => new Date(value.getFullYear(), value.getMonth(), value.getDate()).getTime();
+  const days = Math.round((dayStart(now) - dayStart(date)) / 86_400_000);
+  if (days === 0) return zh ? "今天" : "Today";
+  if (days === 1) return zh ? "昨天" : "Yesterday";
+  if (days > 1 && days < 7) return date.toLocaleDateString(tag, { weekday: zh ? "long" : "short" });
+  return date.toLocaleDateString(tag, {
+    month: "short",
+    day: "numeric",
+    ...(date.getFullYear() === now.getFullYear() ? {} : { year: "numeric" as const }),
+  });
+}
+
 // People read an issue as "<project name>-<number>". The stored identifier keeps the
 // project's short key because that is what the REST API, MCP and activity rows use, so
 // this is display-only — lookups still go through `identifier`.

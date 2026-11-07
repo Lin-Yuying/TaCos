@@ -60,7 +60,7 @@ function RunnerItem({ row }: { row: RunnerAdminRow }) {
         <span className="text-body font-medium">{row.displayName}</span>
         <span className="text-caption text-muted">@{row.username}</span>
         <span
-          className={`rounded-full border px-1.5 py-0.5 text-caption ${
+          className={`inline-flex h-[18px] items-center rounded-[5px] px-1.5 whitespace-nowrap border text-caption ${
             row.online ? "border-border text-muted" : "border-danger text-danger"
           }`}
         >

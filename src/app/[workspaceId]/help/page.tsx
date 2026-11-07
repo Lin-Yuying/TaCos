@@ -3,6 +3,7 @@ import { Suspense } from "react";
 import { connection } from "next/server";
 import { redirect } from "next/navigation";
 import { getSessionUser, requireWorkspace } from "@/lib/auth";
+import { HelpContents } from "@/components/help-contents";
 import { Markdown } from "@/components/markdown";
 import { translator } from "@/lib/i18n";
 import { resolveLocale } from "@/lib/locale";
@@ -209,20 +210,16 @@ async function HelpContent({ params }: { params: Promise<{ workspaceId: string }
         aria-label={translator(locale)("Help contents")}
         className="flex w-[216px] shrink-0 flex-col gap-px overflow-auto border-r border-border px-2 py-3 max-[760px]:w-full max-[760px]:flex-row max-[760px]:border-b max-[760px]:border-r-0"
       >
-        {parts.slice(1).map((part, index) => (
-          <a
-            key={index}
-            href={`#help-${index + 1}`}
-            className="flex min-h-7 shrink-0 items-center rounded-md px-2 text-small text-muted transition-colors hover:bg-elevated hover:text-text max-[760px]:whitespace-nowrap"
-          >
-            {part.slice(3, part.indexOf("\n"))}
-          </a>
-        ))}
+        <HelpContents titles={parts.slice(1).map((part) => part.slice(3, part.indexOf("\n")))} />
       </nav>
-      <article className="min-h-0 min-w-0 flex-1 overflow-y-auto px-5 pb-8 pt-6">
+      <article data-help-article className="min-h-0 min-w-0 flex-1 overflow-y-auto px-6 pb-8 pt-6">
         <div className="max-w-[720px]">
-          {parts.map((part, index) => (
-            <section key={index} id={`help-${index}`}>
+          {parts.slice(1).map((part, index) => (
+            <section
+              key={index}
+              id={`help-${index + 1}`}
+              className="mb-7 scroll-mt-6 [&_h2]:!mb-2.5 [&_h2]:!mt-0 [&_h2]:!text-lead [&_h2]:!font-semibold [&_li]:!my-1.5"
+            >
               <Markdown source={part} />
             </section>
           ))}

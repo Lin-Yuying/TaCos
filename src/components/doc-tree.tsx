@@ -88,7 +88,7 @@ function DocRow({
 
   return (
     <>
-      <EntityRow kind="document" id={page.id} title={page.title}>
+      <EntityRow kind="document" id={page.id} title={page.title} placement="overlay">
       <div
         ref={ref}
         data-doc-row={page.id}
@@ -153,8 +153,11 @@ function DocSection({
   icon,
   roots,
   rowProps,
+  headed,
 }: {
   workspaceId: string;
+  // With documents on only one side the sidebar shows one flat list, without the split.
+  headed: boolean;
   sectionShared: boolean;
   label: string;
   icon: React.ReactNode;
@@ -184,9 +187,9 @@ function DocSection({
   }, [sectionShared]);
 
   return (
-    <div ref={ref} data-doc-section={sectionShared ? "shared" : "private"} className={`rounded-md pb-1 ${over ? "ring-1 ring-accent" : ""}`}>
-      <div className="flex items-center justify-between pr-1 pt-1">
-        <span className="flex min-w-0 items-center gap-1 px-1.5 py-0.5 text-small font-medium uppercase tracking-wider text-faint">
+    <div ref={ref} data-doc-section={sectionShared ? "shared" : "private"} className={`rounded-md ${over ? "ring-1 ring-accent" : ""}`}>
+      {headed && <div className="flex items-center justify-between pr-1 pt-1">
+        <span className="flex min-w-0 items-center gap-1 px-2 py-0.5 text-small text-faint">
           <span className="flex shrink-0 items-center justify-center">{icon}</span>
           {label}
         </span>
@@ -196,10 +199,8 @@ function DocSection({
           variant="icon"
           className="rounded p-1 text-faint transition-colors hover:bg-elevated hover:text-text disabled:opacity-50"
         />
-      </div>
-      {roots.length === 0 ? (
-        <div className="px-2 py-1 text-small text-faint">{t("No documents yet")}</div>
-      ) : (
+      </div>}
+      {roots.length > 0 && (
         <div className="space-y-0.5">
           {roots.map((page) => (
             <DocRow
@@ -330,15 +331,19 @@ export function DocTree({ workspaceId, pages }: { workspaceId: string; pages: Pa
 
   const roots = byParent.get(null) ?? [];
   const rowProps = { byParent, isOpen, onToggle: toggle, active, blocked };
+  const sharedRoots = roots.filter((page) => page.shared);
+  const privateRoots = roots.filter((page) => !page.shared);
+  const headed = sharedRoots.length > 0 && privateRoots.length > 0;
 
   return (
-    <div ref={root} data-doc-tree className="pb-1">
+    <div ref={root} data-doc-tree>
       <DocSection
         workspaceId={workspaceId}
         sectionShared
         label={t("Shared")}
         icon={<Users size={11} />}
-        roots={roots.filter((page) => page.shared)}
+        roots={sharedRoots}
+        headed={headed}
         rowProps={rowProps}
       />
       <DocSection
@@ -346,7 +351,8 @@ export function DocTree({ workspaceId, pages }: { workspaceId: string; pages: Pa
         sectionShared={false}
         label={t("Private")}
         icon={<Lock size={11} />}
-        roots={roots.filter((page) => !page.shared)}
+        roots={privateRoots}
+        headed={headed}
         rowProps={rowProps}
       />
       {error && <div className="px-2 py-1 text-small text-danger">{t(error)}</div>}

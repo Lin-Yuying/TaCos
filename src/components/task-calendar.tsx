@@ -44,7 +44,7 @@ export default function TaskCalendar({
           {error ? <span className="text-danger">{t(error)}</span> : t("{count} tasks have no due date", { count: undated })}
         </div>
       )}
-      <div ref={tray} className="mb-3"><VirtualStack items={undatedItems} keyFor={issue=>issue.id} estimate={34} style={{height:Math.min(160,undatedItems.length*34),overflow:"auto"}} render={issue=><button key={issue.id} data-unscheduled-task data-id={issue.id} data-title={issue.title} onClick={()=>openIssue(issue.id)} className="cursor-grab rounded border border-border bg-surface px-2 py-1 text-small">{issue.title}</button>}/></div>
+      <div ref={tray} className="mb-3"><VirtualStack items={undatedItems} keyFor={issue=>issue.id} estimate={34} style={{height:Math.min(160,undatedItems.length*34),overflow:"auto"}} render={issue=><button key={issue.id} data-unscheduled-task data-id={issue.id} data-title={issue.title} onClick={()=>openIssue(issue.id)} className="inline-flex items-center justify-center gap-1.5 whitespace-nowrap h-[30px] rounded-lg px-2.5 text-small cursor-grab border border-border bg-surface bg-bg text-text hover:bg-active">{issue.title}</button>}/></div>
       <FullCalendar
         plugins={[dayGridPlugin, interactionPlugin, classicTheme]}
         initialView="dayGridMonth"

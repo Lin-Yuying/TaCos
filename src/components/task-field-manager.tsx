@@ -124,7 +124,7 @@ export function TaskFieldManager({ workspaceId, open, onOpenChange: setOpen }: {
                     aria-label={t("Field name")}
                     value={edit.name}
                     onChange={(e) => setEdit({ ...edit, name: e.target.value })}
-                    className="w-full rounded border border-border bg-bg p-1"
+                    className="h-[34px] rounded-lg px-2.5 w-full border border-border-strong bg-bg p-1 text-body"
                   />
                   {field.type === "select" && (
                     <textarea
@@ -133,7 +133,7 @@ export function TaskFieldManager({ workspaceId, open, onOpenChange: setOpen }: {
                       onChange={(e) =>
                         setEdit({ ...edit, options: e.target.value })
                       }
-                      className="mt-2 w-full rounded border border-border bg-bg p-1"
+                      className="mt-2 w-full rounded-lg border border-border-strong bg-bg p-1"
                     />
                   )}
                   <div className="mt-2 flex gap-3 text-small">

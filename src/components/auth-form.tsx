@@ -97,7 +97,7 @@ export function AuthForm({ mode, invite }: { mode: "login" | "register"; invite?
           <button
             type="submit"
             disabled={busy || !username.trim() || !password}
-            className="w-full rounded-md bg-accent px-3 py-2 text-body font-medium text-white transition-colors hover:bg-accent-hover disabled:opacity-40"
+            className="inline-flex items-center justify-center gap-1.5 whitespace-nowrap h-[30px] rounded-lg px-2.5 text-small w-full bg-accent font-medium text-white transition-colors hover:bg-accent-hover disabled:opacity-40"
           >
             {mode === "login" ? t("Sign in") : t("Create account")}
           </button>

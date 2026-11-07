@@ -22,7 +22,7 @@ export function AddIssueButton({ status }: { status: Status }) {
       }}
       title={label}
       aria-label={label}
-      className="ml-auto shrink-0 rounded p-0.5 text-faint transition-colors hover:bg-elevated hover:text-text"
+      className="ml-auto flex size-6 shrink-0 items-center justify-center rounded-lg text-muted transition-colors hover:bg-elevated hover:text-text"
     >
       <Plus size={14} />
     </button>

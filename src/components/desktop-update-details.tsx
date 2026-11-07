@@ -115,7 +115,7 @@ export function DesktopUpdateDetails() {
     <div className="rounded-lg border border-border p-3" data-testid="desktop-update">
       <div className="flex flex-wrap items-center gap-2">
         <p className="text-body font-medium">{t("Desktop app")}</p>
-        <span className="rounded-full border border-border px-1.5 py-0.5 text-caption text-muted">
+        <span className="inline-flex h-[18px] items-center rounded-[5px] px-1.5 whitespace-nowrap border border-border text-caption text-muted">
           {unsigned == null ? t("Not packaged") : unsigned ? t("Unsigned build") : t("Signed build")}
         </span>
         <span className="text-small text-muted">{t("Stable channel")}</span>

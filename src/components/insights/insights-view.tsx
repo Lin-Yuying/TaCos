@@ -3,10 +3,12 @@
 import { useMemo, useState, useTransition } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { Copy, Download, RotateCcw, Save } from "lucide-react";
-import { useT } from "@/components/i18n-context";
+import { Box, Calendar, Check, ChevronDown, Download, Link2, RotateCcw, Star, User, type LucideIcon } from "lucide-react";
+import { useLocale, useT } from "@/components/i18n-context";
+import { Menu } from "@/components/menu";
 import { useDetailSource } from "@/components/detail-navigation";
-import { PAGE_HEADER, PAGE_INSET, PAGE_TITLE } from "@/lib/page-chrome";
+import { BTN, CHIP, FILTER_BAR, ICON_BTN, NARROW_PAGE, PAGE_HEADER, PAGE_INSET, PAGE_TITLE, SEC, SEC_TITLE, SEGMENTED, segment } from "@/lib/page-chrome";
+import { addDays, formatDay } from "@/lib/planning/dates";
 import {
   formatInsightDays,
   formatInsightHours,
@@ -39,6 +41,78 @@ type ProjectOption = { id: string; name: string; color: string; icon: string | n
 type MemberOption = { id: string; displayName: string; avatar: string | null };
 type LabelOption = { id: string; name: string; color: string };
 
+const RANGE_WEEKS = [4, 8, 12];
+
+type InsightChart = "output" | "time" | "total" | "workload" | "projects";
+const CHARTS: Array<{ id: InsightChart; label: string; title: string }> = [
+  { id: "output", label: "Delivered", title: "Tasks completed per week" },
+  { id: "time", label: "Time", title: "Cycle time vs lead time" },
+  { id: "total", label: "Cumulative", title: "Burn-up" },
+  { id: "workload", label: "Workload", title: "Workload" },
+  { id: "projects", label: "Projects", title: "Projects" },
+];
+
+const TABLE_CELL = "border-b border-border px-2 py-1.5 text-left font-normal first:pl-0 last:pr-0";
+
+function ChartTable({ head, rows }: { head: string[]; rows: Array<Array<string | number>> }) {
+  return (
+    <div className="overflow-x-auto" data-testid="insight-chart-table">
+      <table className="w-full text-small tabular-nums">
+        <thead className="text-faint">
+          <tr>
+            {head.map((cell) => (
+              <th key={cell} className={TABLE_CELL}>{cell}</th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((row, index) => (
+            <tr key={index}>
+              {row.map((cell, column) => (
+                <td key={column} className={TABLE_CELL}>{cell}</td>
+              ))}
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+// A filter chip over a native select: the first option names the field while nothing is picked.
+function ChipSelect({
+  icon: Icon,
+  active,
+  value,
+  onChange,
+  label,
+  testId,
+  children,
+}: {
+  icon?: LucideIcon;
+  active: boolean;
+  value: string;
+  onChange: (value: string) => void;
+  label: string;
+  testId: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <label className={`${CHIP} relative max-w-[180px] ${active ? "border-border-strong text-text" : ""}`}>
+      {Icon ? <Icon size={14} /> : null}
+      <select
+        aria-label={label}
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+        className="min-w-0 appearance-none bg-transparent text-small outline-none field-sizing-content"
+        data-testid={testId}
+      >
+        {children}
+      </select>
+    </label>
+  );
+}
+
 const STATUS_OPTIONS: Array<{ value: InsightStatusFilter; label: string }> = [
   { value: "all", label: "All statuses" },
   { value: "active", label: "Active" },
@@ -66,6 +140,7 @@ export function InsightsView({
   activeView: { id: string; name: string } | null;
 }) {
   const t = useT();
+  const locale = useLocale();
   const router = useRouter();
   const pathname = usePathname();
   const [pending, startTransition] = useTransition();
@@ -73,6 +148,8 @@ export function InsightsView({
   const [saveName, setSaveName] = useState("");
   const [saveError, setSaveError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const [chart, setChart] = useState<InsightChart>("output");
+  const [chartView, setChartView] = useState<"chart" | "table">("chart");
   const [copyState, setCopyState] = useState<"idle" | "copied" | "error">("idle");
   useDetailSource("task", data.rows.map((row) => row.id));
   const filters = data.filters;
@@ -107,7 +184,14 @@ export function InsightsView({
   const hasFilters = Boolean(
     filters.projectId || filters.assigneeId || filters.label || filters.status !== "all"
   );
-  const weeks = data.weeks.length;
+  const isDefaultRange = filters.from === defaults.from && filters.to === defaults.to;
+  const presetWeeks = RANGE_WEEKS.find(
+    (count) => filters.to === defaults.to && filters.from === addDays(defaults.to, -(count * 7 - 1))
+  );
+  const rangeLabel = presetWeeks
+    ? t("Last {count} weeks", { count: presetWeeks })
+    : `${formatDay(filters.from, locale)} – ${formatDay(filters.to, locale)}`;
+  const activeChart = CHARTS.find((entry) => entry.id === chart) ?? CHARTS[0];
   const empty =
     data.rowTotal === 0 &&
     metrics.created === 0 &&
@@ -126,33 +210,77 @@ export function InsightsView({
         className={`${PAGE_HEADER} ${PAGE_INSET}`}
       >
         <h1 className={PAGE_TITLE}>{t("Insights")}</h1>
-        <span className="rounded-full bg-elevated px-2 py-0.5 text-caption text-faint">
-          {filters.from} – {filters.to}
-        </span>
-        <span className="text-caption text-faint" data-testid="insight-timezone">
-          {t("Days use {zone}", { zone: data.range.timeZone })}
-        </span>
-        <div className="ml-auto flex flex-wrap items-center gap-1.5">
+        <div className="ml-auto flex flex-wrap items-center gap-1">
+          <Menu
+            width={240}
+            align="right"
+            triggerClassName={BTN}
+            trigger={
+              <>
+                <Star size={14} />
+                {activeView ? activeView.name : t("Saved views")}
+                <ChevronDown size={14} className="text-faint" />
+              </>
+            }
+          >
+            {(close) => (
+              <div data-testid="insight-saved-views">
+                {savedViews.length === 0 ? (
+                  <p className="px-2 py-1.5 text-small text-faint">{t("No saved views yet.")}</p>
+                ) : (
+                  savedViews.map((view) => (
+                    <Link
+                      key={view.id}
+                      href={`${pathname}?viewId=${view.id}`}
+                      onClick={close}
+                      data-testid={`insight-saved-view-${view.id}`}
+                      aria-current={activeView?.id === view.id ? "page" : undefined}
+                      className={`block truncate rounded-md px-2 py-1.5 text-body transition-colors hover:bg-elevated ${
+                        activeView?.id === view.id ? "bg-elevated" : ""
+                      }`}
+                    >
+                      {view.name}
+                    </Link>
+                  ))
+                )}
+                {activeView ? (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      close();
+                      startTransition(() => {
+                        router.replace(`${pathname}?${insightQuery(filters)}`, { scroll: false });
+                      });
+                    }}
+                    className="mt-1 w-full rounded-md border-t border-border px-2 py-1.5 text-left text-small text-muted hover:text-text"
+                    data-testid="insight-clear-view"
+                  >
+                    {t("Clear view")}
+                  </button>
+                ) : null}
+              </div>
+            )}
+          </Menu>
           <button
             type="button"
             onClick={() => {
               setSaveError(null);
               setSaveOpen(true);
             }}
-            className="flex items-center gap-1 rounded-md border border-border px-2.5 py-1.5 text-small text-muted transition-colors hover:border-border-strong hover:text-text"
+            className={BTN}
             data-testid="insight-save-view"
           >
-            <Save size={12} />
             {t("Save view")}
           </button>
           <button
             type="button"
             onClick={copyLink}
-            className="flex items-center gap-1 rounded-md border border-border px-2.5 py-1.5 text-small text-muted transition-colors hover:border-border-strong hover:text-text"
+            aria-label={copyState === "copied" ? t("Copied") : t("Copy link")}
+            title={copyState === "copied" ? t("Copied") : t("Copy link")}
+            className={ICON_BTN}
             data-testid="insight-copy-link"
           >
-            <Copy size={12} />
-            {copyState === "copied" ? t("Copied") : t("Copy link")}
+            {copyState === "copied" ? <Check size={14} /> : <Link2 size={14} />}
           </button>
           {copyState === "error" ? (
             <span className="text-caption text-danger" role="alert">
@@ -162,159 +290,140 @@ export function InsightsView({
           <a
             href={exportHref}
             download
-            className="flex items-center gap-1 rounded-md border border-border px-2.5 py-1.5 text-small text-muted transition-colors hover:border-border-strong hover:text-text"
+            aria-label={t("Export CSV")}
+            title={t("Export CSV")}
+            className={ICON_BTN}
             data-testid="insight-export-csv"
           >
-            <Download size={12} />
-            {t("Export CSV")}
+            <Download size={14} />
           </a>
         </div>
       </header>
 
-      <div className="min-h-0 flex-1 overflow-y-auto">
-        <div className={`space-y-3 py-3 pb-10 ${PAGE_INSET}`}>
-          {/* Filters are their own full-width row; charts never compete with them for width. */}
-          <div
-            className="flex flex-wrap items-end gap-x-2 gap-y-1.5 rounded-lg border border-border px-3 py-2"
-            data-testid="insight-filters"
-          >
-            <label className="flex flex-col gap-0.5 text-caption text-faint">
-              {t("From")}
-              <input
-                type="date"
-                value={filters.from}
-                onChange={(event) => patch({ from: event.target.value || filters.from })}
-                className="rounded-md border border-border bg-bg px-2 py-1 text-body text-text"
-                data-testid="insight-date-from"
-              />
-            </label>
-            <label className="flex flex-col gap-0.5 text-caption text-faint">
-              {t("To")}
-              <input
-                type="date"
-                value={filters.to}
-                onChange={(event) => patch({ to: event.target.value || filters.to })}
-                className="rounded-md border border-border bg-bg px-2 py-1 text-body text-text"
-                data-testid="insight-date-to"
-              />
-            </label>
-            <label className="flex min-w-[150px] flex-1 flex-col gap-0.5 text-caption text-faint">
-              {t("Project")}
-              <select
-                value={filters.projectId ?? ""}
-                onChange={(event) => patch({ projectId: event.target.value || null })}
-                className="rounded-md border border-border bg-bg px-2 py-1 text-body text-text"
-                data-testid="insight-project-filter"
-              >
-                <option value="">{t("All projects")}</option>
-                {projects.map((project) => (
-                  <option key={project.id} value={project.id}>
-                    {project.name}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label className="flex min-w-[130px] flex-1 flex-col gap-0.5 text-caption text-faint">
-              {t("Assignee")}
-              <select
-                value={filters.assigneeId ?? ""}
-                onChange={(event) => patch({ assigneeId: event.target.value || null })}
-                className="rounded-md border border-border bg-bg px-2 py-1 text-body text-text"
-                data-testid="insight-assignee-filter"
-              >
-                <option value="">{t("Anyone")}</option>
-                {members.map((member) => (
-                  <option key={member.id} value={member.id}>
-                    {member.displayName}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label className="flex min-w-[120px] flex-1 flex-col gap-0.5 text-caption text-faint">
-              {t("Label")}
-              <select
-                value={filters.label}
-                onChange={(event) => patch({ label: event.target.value })}
-                className="rounded-md border border-border bg-bg px-2 py-1 text-body text-text"
-                data-testid="insight-label-filter"
-              >
-                <option value="">{t("All labels")}</option>
-                {labels.map((label) => (
-                  <option key={label.id} value={label.name}>
-                    {label.name}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label className="flex min-w-[120px] flex-col gap-0.5 text-caption text-faint">
-              {t("Status")}
-              <select
-                value={filters.status}
-                onChange={(event) => patch({ status: event.target.value as InsightStatusFilter })}
-                className="rounded-md border border-border bg-bg px-2 py-1 text-body text-text"
-                data-testid="insight-status-filter"
-              >
-                {STATUS_OPTIONS.map((option) => (
-                  <option key={option.value} value={option.value}>
-                    {t(option.label)}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <button
-              type="button"
-              onClick={() => navigate(defaults)}
-              className="flex items-center gap-1 rounded-md border border-border px-2 py-1.5 text-small text-muted transition-colors hover:border-border-strong hover:text-text"
-              data-testid="insight-reset-filters"
-            >
-              <RotateCcw size={12} />
-              {t("Reset")}
-            </button>
-            <span className="ml-auto text-caption text-faint" aria-live="polite">
-              {pending ? t("Updating…") : null}
-            </span>
-          </div>
-
-          <div
-            className="flex flex-wrap items-center gap-1.5 text-small"
-            data-testid="insight-saved-views"
-          >
-            <span className="text-caption uppercase tracking-[0.06em] text-faint">{t("Saved views")}</span>
-            {savedViews.length === 0 ? (
-              <span className="text-caption text-faint">{t("No saved views yet.")}</span>
-            ) : (
-              savedViews.map((view) => (
-                <Link
-                  key={view.id}
-                  href={`${pathname}?viewId=${view.id}`}
-                  data-testid={`insight-saved-view-${view.id}`}
-                  aria-current={activeView?.id === view.id ? "page" : undefined}
-                  className={`rounded-full border px-2 py-0.5 text-caption transition-colors ${
-                    activeView?.id === view.id
-                      ? "border-border-strong bg-elevated text-text"
-                      : "border-border text-muted hover:border-border-strong hover:text-text"
-                  }`}
+      {/* Filters are their own full-width row; charts never compete with them for width. */}
+      <div className={FILTER_BAR} data-testid="insight-filters">
+        <Menu
+          width={240}
+          triggerClassName={`${CHIP} border-border-strong !text-text`}
+          trigger={
+            <>
+              <Calendar size={14} />
+              {rangeLabel}
+              <ChevronDown size={14} className="text-faint" />
+            </>
+          }
+        >
+          {(close) => (
+            <div className="space-y-1">
+              {RANGE_WEEKS.map((count) => (
+                <button
+                  key={count}
+                  type="button"
+                  onClick={() => {
+                    close();
+                    patch({ from: addDays(defaults.to, -(count * 7 - 1)), to: defaults.to });
+                  }}
+                  data-testid={`insight-range-${count}`}
+                  className="block w-full rounded-md px-2 py-1.5 text-left text-body transition-colors hover:bg-elevated"
                 >
-                  {view.name}
-                </Link>
-              ))
-            )}
-            {activeView ? (
-              <button
-                type="button"
-                onClick={() =>
-                  startTransition(() => {
-                    router.replace(`${pathname}?${insightQuery(filters)}`, { scroll: false });
-                  })
-                }
-                className="ml-1 text-caption text-faint underline-offset-2 hover:text-text hover:underline"
-                data-testid="insight-clear-view"
-              >
-                {t("Clear view")}
-              </button>
-            ) : null}
-          </div>
+                  {t("Last {count} weeks", { count })}
+                </button>
+              ))}
+              <div className="grid grid-cols-2 gap-1.5 border-t border-border px-2 pb-1 pt-2">
+                <label className="flex min-w-0 flex-col gap-0.5 text-caption text-faint">
+                  {t("From")}
+                  <input
+                    type="date"
+                    value={filters.from}
+                    onChange={(event) => patch({ from: event.target.value || filters.from })}
+                    className="h-[30px] min-w-0 rounded-lg border border-border bg-bg px-1.5 text-small text-text"
+                    data-testid="insight-date-from"
+                  />
+                </label>
+                <label className="flex min-w-0 flex-col gap-0.5 text-caption text-faint">
+                  {t("To")}
+                  <input
+                    type="date"
+                    value={filters.to}
+                    onChange={(event) => patch({ to: event.target.value || filters.to })}
+                    className="h-[30px] min-w-0 rounded-lg border border-border bg-bg px-1.5 text-small text-text"
+                    data-testid="insight-date-to"
+                  />
+                </label>
+              </div>
+            </div>
+          )}
+        </Menu>
+        <ChipSelect
+          icon={Box}
+          label={t("Project")}
+          active={Boolean(filters.projectId)}
+          value={filters.projectId ?? ""}
+          onChange={(value) => patch({ projectId: value || null })}
+          testId="insight-project-filter"
+        >
+          <option value="">{t("Project")}</option>
+          {projects.map((project) => (
+            <option key={project.id} value={project.id}>
+              {project.name}
+            </option>
+          ))}
+        </ChipSelect>
+        <ChipSelect
+          icon={User}
+          label={t("Assignee")}
+          active={Boolean(filters.assigneeId)}
+          value={filters.assigneeId ?? ""}
+          onChange={(value) => patch({ assigneeId: value || null })}
+          testId="insight-assignee-filter"
+        >
+          <option value="">{t("Assignee")}</option>
+          {members.map((member) => (
+            <option key={member.id} value={member.id}>
+              {member.displayName}
+            </option>
+          ))}
+        </ChipSelect>
+        <ChipSelect
+          label={t("Label")}
+          active={Boolean(filters.label)}
+          value={filters.label}
+          onChange={(value) => patch({ label: value })}
+          testId="insight-label-filter"
+        >
+          <option value="">{t("Label")}</option>
+          {labels.map((label) => (
+            <option key={label.id} value={label.name}>
+              {label.name}
+            </option>
+          ))}
+        </ChipSelect>
+        <ChipSelect
+          label={t("Status")}
+          active={filters.status !== "all"}
+          value={filters.status}
+          onChange={(value) => patch({ status: value as InsightStatusFilter })}
+          testId="insight-status-filter"
+        >
+          {STATUS_OPTIONS.map((option) => (
+            <option key={option.value} value={option.value}>
+              {option.value === "all" ? t("Status") : t(option.label)}
+            </option>
+          ))}
+        </ChipSelect>
+        {hasFilters || !isDefaultRange ? (
+          <button type="button" onClick={() => navigate(defaults)} className={CHIP} data-testid="insight-reset-filters">
+            <RotateCcw size={14} />
+            {t("Reset")}
+          </button>
+        ) : null}
+        <span className="ml-auto text-small text-faint" aria-live="polite" data-testid="insight-timezone">
+          {pending ? t("Updating…") : t("Days use {zone}", { zone: data.range.timeZone })}
+        </span>
+      </div>
 
+      <div className="min-h-0 flex-1 overflow-y-auto">
+        <div className={`${NARROW_PAGE} max-w-[980px]`}>
           {pending ? (
             <div
               className="animate-pulse rounded-lg border border-border bg-surface px-3 py-2 text-small text-muted"
@@ -339,7 +448,7 @@ export function InsightsView({
               <button
                 type="button"
                 onClick={() => navigate(defaults)}
-                className="mt-3 rounded-md border border-border px-3 py-1.5 text-small text-muted hover:border-border-strong hover:text-text"
+                className="inline-flex items-center justify-center gap-1.5 whitespace-nowrap h-[30px] rounded-lg px-2.5 text-small mt-3 border border-border bg-bg text-text hover:bg-active"
                 data-testid="insight-empty-reset"
               >
                 {t("Reset filters")}
@@ -347,7 +456,7 @@ export function InsightsView({
             </div>
           ) : null}
 
-          <div className="grid grid-cols-2 gap-2 @2xl:grid-cols-4" data-testid="insight-metrics">
+          <div className="grid grid-cols-[repeat(auto-fit,minmax(170px,1fr))] gap-2.5" data-testid="insight-metrics">
             <MetricCard
               label={t("Completed")}
               value={String(metrics.completed)}
@@ -374,8 +483,8 @@ export function InsightsView({
             />
           </div>
           <details data-testid="insight-more-metrics">
-            <summary className="cursor-pointer text-small text-muted">{t("Four more metrics")}</summary>
-            <div className="mt-2 grid grid-cols-2 gap-2 @2xl:grid-cols-4">
+            <summary className="cursor-pointer text-small text-faint">{t("Four more metrics")}</summary>
+            <div className="mt-2 grid grid-cols-[repeat(auto-fit,minmax(170px,1fr))] gap-2.5">
             <MetricCard
               label={t("Created")}
               value={String(metrics.created)}
@@ -407,50 +516,82 @@ export function InsightsView({
             </div>
           </details>
 
-          <div className="grid gap-3 @4xl:grid-cols-2">
-            <Section
-              title={t("Throughput by week")}
-              caption={t("{count} completed over {weeks} weeks", {
-                count: metrics.completed,
-                weeks: Math.max(1, weeks),
-              })}
-              testId="insight-throughput-section"
-            >
-              <ThroughputChart weeks={data.weeks} />
-            </Section>
-            <Section
-              title={t("Cycle time vs lead time")}
-              caption={t("One dot per completed task")}
-              testId="insight-scatter-section"
-            >
-              <ScatterChart rows={data.rows} />
-            </Section>
-          </div>
-
-          <Section
-            title={t("Burn-up")}
-            caption={t("Cumulative created, completed and canceled tasks")}
-            testId="insight-burnup-section"
-          >
-            <BurnupChart points={data.burnup} />
-          </Section>
-
-          <div className="grid gap-3 @4xl:grid-cols-2">
-            <Section
-              title={t("Workload")}
-              caption={t("Active work at the end and completed work in range")}
-              testId="insight-workload-section"
-            >
-              <WorkloadChart rows={data.workload} />
-            </Section>
-            <Section
-              title={t("Projects")}
-              caption={t("Select a project to filter the report")}
-              testId="insight-projects-section"
-            >
-              <ProjectPanel rows={data.projects} onPickProject={(id) => patch({ projectId: id })} />
-            </Section>
-          </div>
+          <section className={SEC} data-testid={`insight-chart-${chart}`}>
+            <div className="flex flex-wrap items-center gap-2">
+              <h2 className={`${SEC_TITLE} min-w-0 flex-1`}>{t(activeChart.title)}</h2>
+              <div className={SEGMENTED} role="group" aria-label={t("Chart")}>
+                {CHARTS.map((entry) => (
+                  <button
+                    key={entry.id}
+                    type="button"
+                    onClick={() => setChart(entry.id)}
+                    aria-pressed={chart === entry.id}
+                    className={segment(chart === entry.id)}
+                    data-testid={`insight-chart-tab-${entry.id}`}
+                  >
+                    {t(entry.label)}
+                  </button>
+                ))}
+              </div>
+              {chart !== "projects" ? (
+                <div className={SEGMENTED} role="group" aria-label={t("View as")}>
+                  {(["chart", "table"] as const).map((mode) => (
+                    <button
+                      key={mode}
+                      type="button"
+                      onClick={() => setChartView(mode)}
+                      aria-pressed={chartView === mode}
+                      className={segment(chartView === mode)}
+                      data-testid={`insight-view-${mode}`}
+                    >
+                      {mode === "chart" ? t("Chart") : t("Table")}
+                    </button>
+                  ))}
+                </div>
+              ) : null}
+            </div>
+            {chart === "projects" ? (
+              <div data-testid="insight-projects-section">
+                <ProjectPanel rows={data.projects} onPickProject={(id) => patch({ projectId: id })} />
+              </div>
+            ) : chartView === "chart" ? (
+              <>
+                {chart === "output" ? <ThroughputChart weeks={data.weeks} /> : null}
+                {chart === "time" ? <ScatterChart rows={data.rows} /> : null}
+                {chart === "total" ? <BurnupChart points={data.burnup} /> : null}
+                {chart === "workload" ? <WorkloadChart rows={data.workload} /> : null}
+              </>
+            ) : (
+              <>
+                {chart === "output" ? (
+                  <ChartTable
+                    head={[t("Week"), t("Created"), t("Completed"), t("Canceled")]}
+                    rows={data.weeks.map((week) => [formatDay(week.weekStart, locale), week.created, week.completed, week.canceled])}
+                  />
+                ) : null}
+                {chart === "time" ? (
+                  <ChartTable
+                    head={[t("Task"), t("Cycle time"), t("Lead time")]}
+                    rows={data.rows
+                      .filter((row) => row.completedInRange)
+                      .map((row) => [row.title, formatInsightDays(row.cycleDays), formatInsightDays(row.leadDays)])}
+                  />
+                ) : null}
+                {chart === "total" ? (
+                  <ChartTable
+                    head={[t("Date"), t("Created"), t("Completed"), t("Canceled")]}
+                    rows={data.burnup.map((point) => [formatDay(point.day, locale), point.scope, point.completed, point.canceled])}
+                  />
+                ) : null}
+                {chart === "workload" ? (
+                  <ChartTable
+                    head={[t("Assignee"), t("Active"), t("Completed")]}
+                    rows={data.workload.map((row) => [row.name, row.active, row.completed])}
+                  />
+                ) : null}
+              </>
+            )}
+          </section>
 
           <Section
             title={t("Tasks")}
@@ -548,7 +689,7 @@ export function InsightsView({
               onChange={(event) => setSaveName(event.target.value)}
               maxLength={80}
               autoFocus
-              className="rounded-md border border-border bg-bg px-2 py-1.5 text-body text-text"
+              className="h-[34px] rounded-lg px-2.5 border border-border-strong bg-bg text-body text-text"
               data-testid="insight-view-name"
             />
           </label>
@@ -561,14 +702,14 @@ export function InsightsView({
             <button
               type="button"
               onClick={() => setSaveOpen(false)}
-              className="rounded-md border border-border px-3 py-1.5 text-body text-muted hover:border-border-strong hover:text-text"
+              className="inline-flex items-center justify-center gap-1.5 whitespace-nowrap h-[30px] rounded-lg px-2.5 text-small border border-border bg-bg text-text hover:bg-active"
             >
               {t("Cancel")}
             </button>
             <button
               type="submit"
               disabled={!saveName.trim() || saving}
-              className="rounded-md bg-accent px-3 py-1.5 text-body font-medium text-white transition-colors hover:bg-accent-hover disabled:cursor-not-allowed disabled:opacity-50"
+              className="inline-flex items-center justify-center gap-1.5 whitespace-nowrap h-[30px] rounded-lg px-2.5 text-small bg-accent font-medium text-white transition-colors hover:bg-accent-hover disabled:cursor-not-allowed disabled:opacity-50"
               data-testid="insight-save-submit"
             >
               {saving ? t("Saving…") : t("Save")}

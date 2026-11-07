@@ -156,7 +156,7 @@ export function AgentSettingsSection({
               <div className="flex flex-wrap items-center gap-2">
                 <span className="text-body font-medium text-text">{agent.name}</span>
                 {agent.personal && (
-                  <span className="rounded-full bg-elevated px-2 py-0.5 text-caption text-faint">{t("Personal")}</span>
+                  <span className="inline-flex h-[18px] items-center rounded-[5px] px-1.5 whitespace-nowrap bg-elevated text-caption text-faint">{t("Personal")}</span>
                 )}
               </div>
               <p className="text-small text-faint">
@@ -177,7 +177,7 @@ export function AgentSettingsSection({
               )}
             </div>
             <span
-              className={`shrink-0 rounded-full px-2 py-0.5 text-caption font-medium ${
+              className={`inline-flex h-[18px] items-center rounded-[5px] px-1.5 whitespace-nowrap shrink-0 text-caption font-medium ${
                 agent.enabled && agent.available ? "bg-accent/10 text-accent" : "bg-elevated text-faint"
               }`}
             >
@@ -364,7 +364,7 @@ export function AgentSettingsSection({
                 onClick={() => void save()}
                 disabled={busy || !draft.name.trim()}
                 data-testid="agent-save"
-                className="rounded-md bg-accent px-3 py-1.5 text-small font-medium text-white disabled:opacity-40"
+                className="inline-flex items-center justify-center gap-1.5 whitespace-nowrap h-[30px] rounded-lg px-2.5 text-small bg-accent font-medium text-white disabled:opacity-40 hover:bg-accent-hover"
               >
                 {busy ? t("Saving…") : t("Save")}
               </button>

@@ -199,7 +199,7 @@ export function ThreadSidebar({
           setQuery(e.target.value);
           setError(null);
         }}
-        className="mx-2 mb-1 rounded-md border border-border bg-bg px-2 py-1 text-small placeholder:text-faint"
+        className="h-[34px] rounded-lg px-2.5 mx-2 mb-1 border border-border-strong bg-bg placeholder:text-faint text-body"
       />
       <nav className="min-h-0 flex-1 overflow-auto px-2 pb-3">
         {error && (

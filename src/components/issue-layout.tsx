@@ -3,7 +3,7 @@
 import { useDetailSource } from "@/components/detail-navigation";
 import { TaskViews } from "@/components/task-views";
 import { TaskBulkBar } from "@/components/task-bulk-bar";
-import { PAGE_INSET } from "@/lib/page-chrome";
+import { BTN_PRIMARY, SEGMENTED, PAGE_INSET, segment } from "@/lib/page-chrome";
 import { DisplayMenu } from "@/components/display-menu";
 import { BatchSelection } from "@/components/ui/batch-selection";
 import dynamic from "next/dynamic";
@@ -55,7 +55,7 @@ export function LayoutToggle() {
   const t = useT();
   const { layout, setLayout } = useUI();
   return (
-    <div className="flex shrink-0 items-center gap-0.5 rounded-full border border-border bg-elevated/50 p-0.5">
+    <div role="group" aria-label={t("Layout")} className={SEGMENTED}>
       {LAYOUTS.map(({ key, label, icon: Icon }) => (
         <button
           key={key}
@@ -64,11 +64,7 @@ export function LayoutToggle() {
           aria-pressed={layout === key}
           aria-label={t(label)}
           title={t(label)}
-          className={`flex h-7 w-8 items-center justify-center rounded-full transition-colors ${
-            layout === key
-              ? "bg-bg text-text shadow-[0_1px_2px_rgba(0,0,0,0.06)]"
-              : "text-muted hover:text-text"
-          }`}
+          className={segment(layout === key)}
         >
           <Icon size={14} />
         </button>
@@ -90,7 +86,7 @@ function Empty() {
       <button
         type="button"
         onClick={() => setComposerOpen(true)}
-        className="flex items-center gap-1 rounded-md bg-accent px-3 py-1.5 text-body font-medium text-white hover:bg-accent-hover"
+        className={BTN_PRIMARY}
       >
         <Plus size={13} /> {t("New task")}
       </button>
@@ -339,15 +335,6 @@ export function IssueLayout({
         manageFields={manageFields}
         onFieldsChanged={() => router.refresh()}
         leading={<>
-        <TaskViews
-          workspaceId={workspaceId}
-          scope={scope}
-          projectId={projectId}
-          context={viewScope}
-          definition={currentDefinition}
-          active={active}
-          onSelect={selectView}
-        />
         <DisplayMenu
           open={displayOpen}
           onOpenChange={setDisplayOpen}
@@ -363,6 +350,15 @@ export function IssueLayout({
           error={displayError}
         />
           {layout === "table" && <span ref={setColumnsSlot} className="contents" />}
+        <TaskViews
+          workspaceId={workspaceId}
+          scope={scope}
+          projectId={projectId}
+          context={viewScope}
+          definition={currentDefinition}
+          active={active}
+          onSelect={selectView}
+        />
         </>}
         trailing={<>
           {!serverQuery && shown.length !== issues.length && <span className="text-small tabular-nums text-faint">{`${shown.length} / ${issues.length}`}</span>}
@@ -375,11 +371,11 @@ export function IssueLayout({
             setSelecting((mode) => !mode);
             setSelected([]);
           }}
-          className={`flex items-center gap-1 rounded-md px-2 py-1 text-small transition-colors ${
+          className={`inline-flex h-[26px] items-center gap-1.5 rounded-lg px-2.5 text-small transition-colors ${
             selecting ? "bg-elevated font-medium text-text" : "text-muted hover:bg-elevated hover:text-text"
           }`}
         >
-          <CheckSquare size={12} /> {t("Select tasks")}
+          <CheckSquare size={14} /> {t("Pick tasks")}
         </button>
         </>}
         onExport={serverQuery ? () => void exportView() : undefined}
@@ -394,7 +390,7 @@ export function IssueLayout({
             <button
               type="button"
               onClick={() => setView({ ...view, filters: [] })}
-              className="rounded-md border border-border px-2 py-1 text-small text-muted transition-colors hover:bg-elevated hover:text-text"
+              className="inline-flex items-center justify-center gap-1.5 whitespace-nowrap h-[30px] rounded-lg px-2.5 text-small border border-border transition-colors bg-bg text-text hover:bg-active"
             >
               {t("Clear filters")}
             </button>

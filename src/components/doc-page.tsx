@@ -516,7 +516,7 @@ export function DocPageView({
             ))}
           </nav>
           <span
-            className="flex shrink-0 items-center gap-1 rounded-full bg-elevated px-1.5 py-0.5 text-caption text-muted"
+            className="inline-flex h-[18px] items-center rounded-[5px] px-1.5 whitespace-nowrap shrink-0 gap-1 bg-elevated text-caption text-muted"
             title={shared ? t("Shared with the workspace") : t("Private")}
           >
             {shared ? <Users size={11} /> : <Lock size={11} />}
@@ -594,7 +594,7 @@ export function DocPageView({
               onClick={(event) => openAi(event.currentTarget)}
               title="AI"
               aria-label="AI"
-              className="max-[600px]:hidden flex items-center gap-1 rounded-md border border-border px-2 py-1 text-small font-medium text-muted transition-colors hover:border-border-strong hover:text-text"
+              className="inline-flex items-center justify-center gap-1.5 whitespace-nowrap h-[30px] rounded-lg px-2.5 text-small max-[600px]:hidden border border-border font-medium transition-colors bg-bg text-text hover:bg-active"
             >
               <Sparkles size={12} />
               {!compact && "AI"}
@@ -694,8 +694,8 @@ export function DocPageView({
         {proposal&&<div className="my-3 max-h-[60dvh] overflow-auto rounded-lg border border-border p-3"><DiffLines before={proposal.before} after={proposal.after}/></div>}
         <p className="text-small text-muted">{t("If the document changes in the meantime, generate the edit again.")}</p>
         <div className="mt-3 flex justify-end gap-2">
-          <button type="button" onClick={()=>setProposal(null)} className="rounded-md border border-border px-3 py-1.5 text-small font-medium text-muted hover:border-border-strong hover:text-text">{t("Discard")}</button>
-          <button type="button" disabled={!canEditBody} onClick={()=>{if(!proposal||!editorRef.current?.isEditable)return;if(contentRef.current!==proposal.before){setError("The document changed. Generate the edit again before replacing it.");return;}editorRef.current.commands.setContent(markdownToDocument(markdown,proposal.after));setProposal(null);}} className="rounded-md bg-accent px-3 py-1.5 text-small font-medium text-white hover:bg-accent-hover disabled:opacity-40">{t("Replace document")}</button>
+          <button type="button" onClick={()=>setProposal(null)} className="inline-flex items-center justify-center gap-1.5 whitespace-nowrap h-[30px] rounded-lg px-2.5 text-small border border-border font-medium bg-bg text-text hover:bg-active">{t("Discard")}</button>
+          <button type="button" disabled={!canEditBody} onClick={()=>{if(!proposal||!editorRef.current?.isEditable)return;if(contentRef.current!==proposal.before){setError("The document changed. Generate the edit again before replacing it.");return;}editorRef.current.commands.setContent(markdownToDocument(markdown,proposal.after));setProposal(null);}} className="inline-flex items-center justify-center gap-1.5 whitespace-nowrap h-[30px] rounded-lg px-2.5 text-small bg-accent font-medium text-white hover:bg-accent-hover disabled:opacity-40">{t("Replace document")}</button>
         </div>
       </Modal>
       {aiPanel && (
@@ -773,14 +773,14 @@ export function DocPageView({
                   <button
                     type="button"
                     onClick={() => coverInput.current?.click()}
-                    className="rounded border border-border bg-bg px-2 py-0.5 text-small text-muted hover:text-text"
+                    className="inline-flex items-center justify-center gap-1.5 whitespace-nowrap h-[30px] rounded-lg px-2.5 text-small border border-border bg-bg text-text hover:bg-active"
                   >
                     {t("Change cover")}
                   </button>
                   <button
                     type="button"
                     onClick={() => void saveCover(null)}
-                    className="rounded border border-border bg-bg px-2 py-0.5 text-small text-muted hover:text-text"
+                    className="inline-flex items-center justify-center gap-1.5 whitespace-nowrap h-[30px] rounded-lg px-2.5 text-small border border-border bg-bg text-text hover:bg-active"
                   >
                     {t("Remove cover")}
                   </button>
@@ -874,14 +874,14 @@ export function DocPageView({
                 <button
                   type="button"
                   onClick={keepMine}
-                  className="rounded-md bg-accent px-2 py-1 text-small font-medium text-bg hover:bg-accent-hover"
+                  className="inline-flex items-center justify-center gap-1.5 whitespace-nowrap h-[30px] rounded-lg px-2.5 text-small bg-accent font-medium text-white hover:bg-accent-hover"
                 >
                   {t("Keep my text")}
                 </button>
                 <button
                   type="button"
                   onClick={useTheirs}
-                  className="rounded-md border border-border px-2 py-1 text-small font-medium text-muted hover:border-border-strong hover:text-text"
+                  className="inline-flex items-center justify-center gap-1.5 whitespace-nowrap h-[30px] rounded-lg px-2.5 text-small border border-border font-medium bg-bg text-text hover:bg-active"
                 >
                   {t("Use the other text")}
                 </button>
@@ -1095,7 +1095,7 @@ function PagePicker({
   }
   return (
     <>
-      <input aria-label={t("Search documents")} placeholder={t("Search documents")} value={query} onChange={event=>{setQuery(event.target.value);setLimit(40);}} className="sticky top-0 w-full rounded border border-border bg-bg px-2 py-1 text-small"/>
+      <input aria-label={t("Search documents")} placeholder={t("Search documents")} value={query} onChange={event=>{setQuery(event.target.value);setLimit(40);}} className="h-[34px] rounded-lg px-2.5 sticky top-0 w-full border border-border-strong bg-bg text-body"/>
       {matches.slice(0, limit).map((ref) => (
         <MenuItem
           key={ref.id}

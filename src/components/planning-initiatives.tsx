@@ -314,7 +314,7 @@ export function PlanningInitiatives({
                   {initiative.labels.map((label) => (
                     <span
                       key={label.id}
-                      className="rounded-full border px-1.5 py-0.5 text-caption"
+                      className="inline-flex h-[18px] items-center rounded-[5px] px-1.5 whitespace-nowrap border text-caption"
                       style={{ borderColor: `${label.color}55`, color: label.color }}
                     >
                       {label.name}
@@ -485,7 +485,7 @@ export function PlanningInitiatives({
                               : [...draft.labelIds, label.id],
                           })
                         }
-                        className={`rounded-full border px-2 py-0.5 text-caption transition-colors ${
+                        className={`rounded-lg border px-2 py-0.5 text-caption transition-colors ${
                           on ? "border-border-strong bg-elevated text-text" : "border-border text-muted"
                         }`}
                       >

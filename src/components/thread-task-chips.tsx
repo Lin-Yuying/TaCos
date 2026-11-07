@@ -43,7 +43,7 @@ export function ThreadTaskChips({
           key={task.id}
           type="button"
           onClick={() => openIssue(task.id)}
-          className="flex max-w-[160px] items-center gap-1 rounded-full border border-border px-2 py-0.5 text-caption text-muted transition-colors hover:text-text"
+          className="inline-flex items-center justify-center gap-1.5 whitespace-nowrap h-[30px] rounded-lg px-2.5 text-small max-w-[160px] border border-border transition-colors bg-bg text-text hover:bg-active"
         >
           <StatusIcon status={task.status} size={11} />
           <span className="shrink-0">{task.ref}</span>

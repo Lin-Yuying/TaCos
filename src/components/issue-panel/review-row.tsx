@@ -66,7 +66,7 @@ export function ReviewRow({
         <ShieldCheck size={13} className="text-faint" />
         <span className="text-muted">{t("Review")}</span>
         <span
-          className={`rounded-full border px-1.5 py-px text-caption ${
+          className={`inline-flex h-[18px] items-center rounded-[5px] px-1.5 whitespace-nowrap border text-caption ${
             status === "approved"
               ? "border-accent/40 text-accent"
               : status === "pending"
@@ -82,7 +82,7 @@ export function ReviewRow({
             onClick={() => setMode(mode === "request_changes" ? null : "request_changes")}
             data-testid="review-request-changes"
             aria-pressed={mode === "request_changes"}
-            className="flex items-center gap-1 rounded-md border border-border px-2 py-1 text-small text-muted transition-colors hover:border-border-strong hover:text-text"
+            className="inline-flex items-center justify-center gap-1.5 whitespace-nowrap h-[30px] rounded-lg px-2.5 text-small border border-border transition-colors bg-bg text-text hover:bg-active"
           >
             <MessageSquareWarning size={12} />
             {t("Request changes")}
@@ -92,7 +92,7 @@ export function ReviewRow({
             onClick={() => void submit("approve", "")}
             disabled={busy}
             data-testid="review-approve"
-            className="flex items-center gap-1 rounded-md border border-border px-2 py-1 text-small text-muted transition-colors hover:border-border-strong hover:text-text disabled:opacity-40"
+            className="inline-flex items-center justify-center gap-1.5 whitespace-nowrap h-[30px] rounded-lg px-2.5 text-small border border-border transition-colors disabled:opacity-40 bg-bg text-text hover:bg-active"
           >
             <Check size={12} />
             {t("Approve")}

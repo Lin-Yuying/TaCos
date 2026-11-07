@@ -334,7 +334,7 @@ export function AutomationSettingsSection({
             onClick={beginCreate}
             disabled={busy}
             data-testid="automation-create"
-            className="rounded-md bg-accent px-2.5 py-1 text-small font-medium text-white transition-colors hover:bg-accent-hover disabled:opacity-50"
+            className="inline-flex items-center justify-center gap-1.5 whitespace-nowrap h-[30px] rounded-lg px-2.5 text-small bg-accent font-medium text-white transition-colors hover:bg-accent-hover disabled:opacity-50"
           >
             {t("New rule")}
           </button>
@@ -664,7 +664,7 @@ export function AutomationSettingsSection({
               onClick={() => void save()}
               disabled={busy || !draft.name.trim()}
               data-testid="automation-save"
-              className="rounded-md bg-accent px-3 py-1 text-small font-medium text-white transition-colors hover:bg-accent-hover disabled:opacity-50"
+              className="inline-flex items-center justify-center gap-1.5 whitespace-nowrap h-[30px] rounded-lg px-2.5 text-small bg-accent font-medium text-white transition-colors hover:bg-accent-hover disabled:opacity-50"
             >
               {t("Save rule")}
             </button>
@@ -960,7 +960,7 @@ function ActionEditor({
               }
             }}
             data-testid={action.kind === "set_assignees" ? "automation-action-assignees" : "automation-action-notify"}
-            className="min-w-40 rounded-md border border-border bg-bg px-2 py-1 text-small text-text"
+            className="h-[26px] rounded-[7px] px-2 min-w-40 border border-border bg-bg text-small text-text"
           >
             {members.map((member) => (
               <option key={member.id} value={member.id}>

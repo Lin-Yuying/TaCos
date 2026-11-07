@@ -305,7 +305,7 @@ function MilestoneChip({
           ? t("{name} · {date}", { name: milestone.name, date: formatDay(milestone.targetDate, locale) })
           : milestone.name
       }
-      className="mb-1 flex min-w-0 items-center gap-1 rounded border border-border bg-bg px-1.5 py-0.5 text-caption transition-colors hover:border-border-strong"
+      className="inline-flex items-center justify-center gap-1.5 whitespace-nowrap h-[30px] rounded-lg px-2.5 text-small mb-1 min-w-0 border border-border bg-bg transition-colors text-text hover:bg-active"
     >
       <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-accent" />
       <span className="truncate">{milestone.name}</span>

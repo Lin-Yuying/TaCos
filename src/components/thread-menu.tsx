@@ -205,7 +205,7 @@ export function ThreadMenu({
               () => setMoving(false),
             )
           }
-          className="my-3 w-full rounded border border-border bg-bg p-2 text-body"
+          className="h-[34px] rounded-lg px-2.5 my-3 w-full border border-border-strong bg-bg p-2 text-body"
         >
           <option value="">{t("No project")}</option>
           {projects.map((project) => (
@@ -288,7 +288,7 @@ export function ThreadMenu({
             aria-label={t("Conversation name")}
             value={draft ?? thread.title}
             onChange={(e) => setDraft(e.target.value)}
-            className="my-3 w-full rounded border border-border bg-bg p-2 text-body"
+            className="h-[34px] rounded-lg px-2.5 my-3 w-full border border-border-strong bg-bg p-2 text-body"
           />
           {error && (
             <p role="alert" className="text-small text-danger">
@@ -297,7 +297,7 @@ export function ThreadMenu({
           )}
           <button
             disabled={busy}
-            className="rounded border border-border px-3 py-1 text-body"
+            className="inline-flex items-center justify-center gap-1.5 whitespace-nowrap h-[30px] rounded-lg px-2.5 text-small border border-border bg-bg text-text hover:bg-active"
           >
             {t("Save")}
           </button>

@@ -63,7 +63,7 @@ export function PersonPage({
           <h1 className={PAGE_TITLE}>
             {person.displayName}
           </h1>
-          <span className="shrink-0 rounded-full bg-elevated px-2 py-0.5 text-caption text-muted">
+          <span className="inline-flex h-[18px] items-center rounded-[5px] px-1.5 whitespace-nowrap shrink-0 bg-elevated text-caption text-muted">
             {t(workspaceRole)}
           </span>
         </div>
@@ -116,7 +116,7 @@ export function PersonPage({
                     {/* Owner is the project's creator; everyone else in the list was
                         added through project membership, so the badge says which. */}
                     <span
-                      className={`shrink-0 rounded-full px-2 py-0.5 text-caption ${
+                      className={`inline-flex h-[18px] items-center rounded-[5px] px-1.5 whitespace-nowrap shrink-0 text-caption ${
                         project.role === "owner"
                           ? "bg-elevated font-medium text-text"
                           : "border border-border text-muted"
@@ -171,7 +171,7 @@ export function PersonPage({
         <>
           <header className={`flex min-h-12 shrink-0 flex-wrap items-center gap-2 border-b border-border py-1.5 ${PAGE_INSET}`}>
             <span className="text-body font-medium text-muted">{t("Tasks")}</span>
-            <span className="rounded-full bg-elevated px-2 py-0.5 text-caption text-muted">
+            <span className="inline-flex h-[18px] items-center rounded-[5px] px-1.5 whitespace-nowrap bg-elevated text-caption text-muted">
               {shown.length}
             </span>
             <div className="ml-auto flex items-center gap-2">

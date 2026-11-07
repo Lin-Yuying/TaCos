@@ -118,7 +118,7 @@ export function ExportView({
               disabled={busy || Boolean(job && RUNNING.has(job.status))}
               onClick={() => void start()}
               data-testid="export-start"
-              className="rounded-md bg-accent px-3 py-1.5 text-body font-medium text-white transition-opacity disabled:opacity-40"
+              className="inline-flex items-center justify-center gap-1.5 whitespace-nowrap h-[30px] rounded-lg px-2.5 text-small bg-accent font-medium text-white disabled:opacity-40 hover:bg-accent-hover"
             >
               {job && RUNNING.has(job.status) ? t("Exporting…") : t("Start export")}
             </button>
@@ -152,7 +152,7 @@ export function ExportView({
                   <a
                     href={job.downloadUrl ?? "#"}
                     data-testid="export-download"
-                    className="rounded-md border border-border px-2.5 py-1 text-small text-text transition-colors hover:bg-elevated"
+                    className="inline-flex items-center justify-center gap-1.5 whitespace-nowrap h-[30px] rounded-lg px-2.5 text-small border border-border text-text transition-colors bg-bg hover:bg-active"
                   >
                     {t("Download")}
                   </a>
@@ -211,7 +211,7 @@ export function ExportView({
                   {entry.downloadUrl && (
                     <a
                       href={entry.downloadUrl}
-                      className="rounded-md border border-border px-2.5 py-1 text-small text-text transition-colors hover:bg-elevated"
+                      className="inline-flex items-center justify-center gap-1.5 whitespace-nowrap h-[30px] rounded-lg px-2.5 text-small border border-border text-text transition-colors bg-bg hover:bg-active"
                     >
                       {t("Download")}
                     </a>

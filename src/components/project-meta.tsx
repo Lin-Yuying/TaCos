@@ -412,7 +412,7 @@ export function ProjectMeta({
                         onChange={(event) => setPersonQuery(event.target.value)}
                         aria-label={t("Search members")}
                         placeholder={t("Search members")}
-                        className="w-full rounded-md border border-border bg-transparent px-2 py-1 text-small outline-none placeholder:text-faint focus:border-border-strong"
+                        className="h-[34px] rounded-lg px-2.5 w-full border border-border-strong bg-transparent outline-none placeholder:text-faint focus:border-border-strong text-body"
                       />
                     </div>
                     {candidates.filter((member) => member.displayName.toLowerCase().includes(personQuery.trim().toLowerCase())).map((member) => (
@@ -434,7 +434,7 @@ export function ProjectMeta({
                               close();
                               void addPerson(member.id, level);
                             }}
-                            className="rounded border border-border px-1.5 py-0.5 text-caption text-muted hover:border-border-strong hover:text-text"
+                            className="inline-flex items-center justify-center gap-1.5 whitespace-nowrap h-[30px] rounded-lg px-2.5 text-small border border-border bg-bg text-text hover:bg-active"
                           >
                             {t(label)}
                           </button>
@@ -510,7 +510,7 @@ export function ProjectMeta({
                       aria-label={t("Remove {name}", { name: title })}
                       title={t("Remove")}
                       onClick={() => void removeResource(resource.id)}
-                      className="mr-1 rounded-full p-0.5 text-faint transition-colors hover:bg-elevated hover:text-danger"
+                      className="mr-1 rounded-lg p-0.5 text-faint transition-colors hover:bg-elevated hover:text-danger"
                     >
                       <X size={10} />
                     </button>
@@ -600,13 +600,13 @@ export function ProjectMeta({
                 value={linkUrl}
                 onChange={(event) => setLinkUrl(event.target.value)}
                 placeholder={t("Paste a link")}
-                className="w-full rounded-md border border-border bg-bg px-2.5 py-1.5 text-body text-text placeholder:text-faint focus:border-border-strong focus:outline-none"
+                className="h-[34px] rounded-lg px-2.5 w-full border border-border-strong bg-bg text-body text-text placeholder:text-faint focus:border-border-strong focus:outline-none"
               />
               <input
                 value={linkTitle}
                 onChange={(event) => setLinkTitle(event.target.value)}
                 placeholder={t("Title (optional)")}
-                className="w-full rounded-md border border-border bg-bg px-2.5 py-1.5 text-body text-text placeholder:text-faint focus:border-border-strong focus:outline-none"
+                className="h-[34px] rounded-lg px-2.5 w-full border border-border-strong bg-bg text-body text-text placeholder:text-faint focus:border-border-strong focus:outline-none"
               />
               <div className="flex items-center justify-end gap-2">
                 <button
@@ -624,7 +624,7 @@ export function ProjectMeta({
                 <button
                   type="submit"
                   disabled={!linkUrl.trim() || resourceBusy}
-                  className="rounded-md bg-accent px-2.5 py-1 text-small font-medium text-white transition-opacity hover:opacity-90 disabled:opacity-40"
+                  className="inline-flex items-center justify-center gap-1.5 whitespace-nowrap h-[30px] rounded-lg px-2.5 text-small bg-accent font-medium text-white disabled:opacity-40 hover:bg-accent-hover"
                 >
                   {resourceBusy ? t("Adding…") : t("Add link")}
                 </button>

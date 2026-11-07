@@ -60,7 +60,7 @@ export function JoinInvite({
               data-testid="join-invite"
               disabled={busy}
               onClick={() => void join()}
-              className="w-full rounded-md bg-accent px-3 py-2 text-body font-medium text-white transition-colors hover:bg-accent-hover disabled:opacity-60"
+              className="inline-flex items-center justify-center gap-1.5 whitespace-nowrap h-[30px] rounded-lg px-2.5 text-small w-full bg-accent font-medium text-white transition-colors hover:bg-accent-hover disabled:opacity-60"
             >
               {busy ? t("Joining…") : t("Join workspace")}
             </button>
@@ -77,7 +77,7 @@ export function JoinInvite({
           <>
             <h1 className="text-title font-semibold">{t("This invite link no longer works")}</h1>
             <p className="text-body text-muted">{t("Ask a workspace admin for a new link.")}</p>
-            <Link href="/" className="w-full rounded-md bg-accent px-3 py-2 text-body font-medium text-white transition-colors hover:bg-accent-hover">
+            <Link href="/" className="inline-flex items-center justify-center gap-1.5 whitespace-nowrap h-[30px] rounded-lg px-2.5 text-small w-full bg-accent font-medium text-white transition-colors hover:bg-accent-hover">
               {t("Go home")}
             </Link>
           </>

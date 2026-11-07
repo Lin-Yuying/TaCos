@@ -222,7 +222,7 @@ export function AiEditPanel({
               close();
               router.push(`/${workspaceId}/agent`);
             }}
-            className="flex items-center gap-1 rounded-md bg-accent px-2.5 py-1 text-small font-medium text-white transition-opacity hover:opacity-90"
+            className="inline-flex items-center justify-center gap-1.5 whitespace-nowrap h-[30px] rounded-lg px-2.5 text-small bg-accent font-medium text-white hover:bg-accent-hover"
           >
             <Bot size={12} /> {t("Open Agent in Work mode")}
           </button>
@@ -242,13 +242,13 @@ export function AiEditPanel({
           }}
           aria-label={t("Tell the AI what to change…")}
           placeholder={placeholder ?? t("Tell the AI what to change…")}
-          className="min-w-0 flex-1 rounded-md border border-border bg-elevated/40 px-2 py-1.5 text-small text-text placeholder:text-faint focus:border-border-strong"
+          className="h-[34px] rounded-lg px-2.5 min-w-0 flex-1 border border-border-strong bg-elevated/40 text-text placeholder:text-faint focus:border-border-strong text-body"
         />
         <button
           type="button"
           disabled={busy || !instruction.trim()}
           onClick={() => void run("custom")}
-          className="shrink-0 rounded-md bg-accent px-2.5 py-1.5 text-small font-medium text-white transition-opacity hover:opacity-90 disabled:opacity-40"
+          className="inline-flex items-center justify-center gap-1.5 whitespace-nowrap h-[30px] rounded-lg px-2.5 text-small shrink-0 bg-accent font-medium text-white disabled:opacity-40 hover:bg-accent-hover"
         >
           {t("Run")}
         </button>
@@ -304,7 +304,7 @@ export function AiEditPanel({
             onChange={(event) => setResult(event.target.value)}
             rows={7}
             aria-label={t("AI result")}
-            className="w-full resize-y rounded-md border border-border bg-bg px-2 py-1.5 font-mono text-small leading-relaxed text-text focus:border-border-strong focus:outline-none"
+            className="w-full resize-y rounded-lg border border-border-strong bg-bg px-2 py-1.5 text-small leading-relaxed text-text focus:border-border-strong focus:outline-none"
           />
           {busy && (
             <div className="mt-1 flex items-center gap-1 text-caption text-faint">
@@ -323,7 +323,7 @@ export function AiEditPanel({
           <button
             type="button"
             onClick={close}
-            className="rounded-md border border-border px-2 py-1 text-small text-muted transition-colors hover:text-text"
+            className="inline-flex items-center justify-center gap-1.5 whitespace-nowrap h-[30px] rounded-lg px-2.5 text-small border border-border transition-colors bg-bg text-text hover:bg-active"
           >
             {t("Cancel")}
           </button>
@@ -332,7 +332,7 @@ export function AiEditPanel({
               type="button"
               disabled={busy || !result.trim()}
               onClick={() => onAccept(result.trim(), action ?? "custom",sourceRef.current)}
-              className="flex items-center gap-1 rounded-md bg-accent px-2.5 py-1 text-small font-medium text-white transition-opacity hover:opacity-90 disabled:opacity-40"
+              className="inline-flex items-center justify-center gap-1.5 whitespace-nowrap h-[30px] rounded-lg px-2.5 text-small bg-accent font-medium text-white disabled:opacity-40 hover:bg-accent-hover"
             >
               <Check size={11} /> {target.acceptLabel}
             </button>
@@ -461,14 +461,14 @@ export function AiTaskDialog({
             onChange={(event) => setPrompt(event.target.value)}
             rows={3}
             placeholder={t("Describe the work, for example: 把微信登录的联调拆成几个任务，包含接口、前端和回归测试")}
-            className="w-full resize-y rounded-lg border border-border bg-bg px-3 py-2 text-body leading-relaxed text-text placeholder:text-faint focus:border-border-strong focus:outline-none"
+            className="w-full resize-y rounded-lg border border-border-strong bg-bg px-3 py-2 text-body leading-relaxed text-text placeholder:text-faint focus:border-border-strong focus:outline-none"
           />
           <div className="flex items-center gap-2">
             <button
               type="button"
               onClick={() => void generate()}
               disabled={!prompt.trim() || busy || creating}
-              className="flex items-center gap-1.5 rounded-md bg-accent px-3 py-1.5 text-small font-medium text-white transition-opacity hover:opacity-90 disabled:opacity-40"
+              className="inline-flex items-center justify-center gap-1.5 whitespace-nowrap h-[30px] rounded-lg px-2.5 text-small bg-accent font-medium text-white disabled:opacity-40 hover:bg-accent-hover"
             >
               {busy ? <LoaderCircle size={12} className="animate-spin" /> : <Sparkles size={12} />}
               {busy ? t("Thinking…") : t(tasks ? "Regenerate" : "Generate")}
@@ -524,7 +524,7 @@ export function AiTaskDialog({
           <button
             type="button"
             onClick={onClose}
-            className="rounded-md border border-border px-3 py-1.5 text-small text-muted transition-colors hover:text-text"
+            className="inline-flex items-center justify-center gap-1.5 whitespace-nowrap h-[30px] rounded-lg px-2.5 text-small border border-border transition-colors bg-bg text-text hover:bg-active"
           >
             {t("Cancel")}
           </button>
@@ -532,7 +532,7 @@ export function AiTaskDialog({
             type="button"
             onClick={() => void create()}
             disabled={creating || picked.size === 0}
-            className="rounded-md bg-accent px-3 py-1.5 text-small font-medium text-white transition-opacity hover:opacity-90 disabled:opacity-40"
+            className="inline-flex items-center justify-center gap-1.5 whitespace-nowrap h-[30px] rounded-lg px-2.5 text-small bg-accent font-medium text-white disabled:opacity-40 hover:bg-accent-hover"
           >
             {creating
               ? t("Creating…")

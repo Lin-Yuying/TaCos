@@ -224,7 +224,7 @@ export function ModelKeysSection({
               type="button"
               onClick={() => void save()}
               disabled={busy || !form.baseUrl.trim() || (!formId && !form.key.trim())}
-              className="rounded-md bg-accent px-3 py-1.5 text-small font-medium text-white transition-colors hover:bg-accent-hover disabled:opacity-40"
+              className="inline-flex items-center justify-center gap-1.5 whitespace-nowrap h-[30px] rounded-lg px-2.5 text-small bg-accent font-medium text-white transition-colors hover:bg-accent-hover disabled:opacity-40"
             >
               {busy ? t("Saving…") : t("Save")}
             </button>
@@ -245,7 +245,7 @@ export function ModelKeysSection({
             value={view.editProvider ? `${view.editProvider}/${view.editModel}` : ""}
             onChange={(event) => void pickEditModel(event.target.value)}
             disabled={busy}
-            className="block w-full rounded-md border border-border bg-elevated/50 px-2 py-1.5 text-small text-text"
+            className="h-[26px] rounded-[7px] px-2 block w-full border border-border bg-elevated/50 text-small text-text"
           >
             {view.endpoints.flatMap((endpoint) =>
               endpoint.models.map((model) => (

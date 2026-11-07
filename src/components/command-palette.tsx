@@ -183,7 +183,7 @@ function PaletteInner({ workspaceId }: { workspaceId: string }) {
                     type="button"
                     data-testid="palette-scope"
                     onClick={removeScope}
-                    className="rounded-full bg-elevated px-2 py-0.5 text-caption text-text"
+                    className="rounded-lg bg-elevated px-2 py-0.5 text-caption text-text"
                   >
                     {t(GROUP_LABELS[parsed.group])} ×
                   </button>
@@ -197,7 +197,7 @@ function PaletteInner({ workspaceId }: { workspaceId: string }) {
                       setQuery(removeSearchToken(query, token));
                       inputRef.current?.focus();
                     }}
-                    className="rounded-full bg-elevated px-2 py-0.5 font-mono text-caption text-text"
+                    className="rounded-lg bg-elevated px-2 py-0.5 font-mono text-caption text-text"
                   >
                     {token} ×
                   </button>

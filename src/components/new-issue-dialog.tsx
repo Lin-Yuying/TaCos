@@ -260,14 +260,14 @@ export function NewIssueDialog({ workspaceId }: { workspaceId: string }) {
                 }
               }}
               placeholder={t("Task title")}
-              className="w-full rounded-md border border-border bg-bg px-2.5 py-1.5 text-body text-text placeholder:text-faint focus:border-border-strong focus:outline-none"
+              className="h-[34px] rounded-lg px-2.5 w-full border border-border-strong bg-bg text-body text-text placeholder:text-faint focus:border-border-strong focus:outline-none"
             />
             <textarea
               value={description}
               onChange={(e) => setDescription(e.target.value)}
               placeholder={t("Add description…")}
               rows={4}
-              className="mt-2 w-full resize-none rounded-md border border-border bg-bg px-2.5 py-1.5 text-body leading-relaxed text-text placeholder:text-faint focus:border-border-strong focus:outline-none"
+              className="mt-2 w-full resize-none rounded-lg border border-border-strong bg-bg px-2.5 py-1.5 text-body leading-relaxed text-text placeholder:text-faint focus:border-border-strong focus:outline-none"
             />
             <div className="mt-3 flex flex-wrap items-center gap-2">
 
@@ -481,10 +481,10 @@ export function NewIssueDialog({ workspaceId }: { workspaceId: string }) {
               </Menu>
 
               <DuePicker value={dueDate} reminder={reminder} onSave={async(date,next)=>{setDueDate(date);setReminder(next);return true;}}/>
-              <label className="flex items-center gap-1 text-small text-muted">{t("Estimate")}<input aria-label={t("Estimate")} data-task-estimate type="number" min="0" step="1" value={estimate} onChange={event=>setEstimate(event.target.value)} className="w-14 rounded border border-border bg-bg px-1 py-0.5 text-small text-text"/></label>
+              <label className="flex items-center gap-1 text-small text-muted">{t("Estimate")}<input aria-label={t("Estimate")} data-task-estimate type="number" min="0" step="1" value={estimate} onChange={event=>setEstimate(event.target.value)} className="h-[34px] rounded-lg px-2.5 w-14 border border-border-strong bg-bg text-text text-body"/></label>
             </div>
               {Object.keys(fieldValues).some(id=>!fields.some(field=>field.id===id))&&<p role="alert" className="text-small text-danger">{t("Some saved properties are no longer available.")} <button type="button" onClick={()=>setFieldValues(old=>Object.fromEntries(Object.entries(old).filter(([id])=>fields.some(field=>field.id===id))))} className="underline">{t("Remove unavailable properties")}</button></p>}
-            {fields.length>0&&<details className="my-2 text-small"><summary className="cursor-pointer">{t("More properties")}</summary><div className="mt-2 grid grid-cols-2 gap-2">{fields.map(field=><label key={field.id} className="block">{field.name}{field.type==="select"?<select disabled={busy} value={fieldValues[field.id]??""} onChange={e=>setFieldValues(old=>({...old,[field.id]:e.target.value}))} className="block w-full rounded border border-border bg-bg p-1"><option value=""/>{field.options.map(option=><option key={option}>{option}</option>)}</select>:<input disabled={busy} type={field.type==="checkbox"?"checkbox":field.type==="number"?"number":field.type==="date"?"date":"text"} checked={fieldValues[field.id]==="1"} value={fieldValues[field.id]??""} onChange={e=>setFieldValues(old=>({...old,[field.id]:field.type==="checkbox"?(e.target.checked?"1":""):e.target.value}))} className="block w-full rounded border border-border bg-bg p-1"/>}</label>)}</div></details>}
+            {fields.length>0&&<details className="my-2 text-small"><summary className="cursor-pointer">{t("More properties")}</summary><div className="mt-2 grid grid-cols-2 gap-2">{fields.map(field=><label key={field.id} className="block">{field.name}{field.type==="select"?<select disabled={busy} value={fieldValues[field.id]??""} onChange={e=>setFieldValues(old=>({...old,[field.id]:e.target.value}))} className="h-[34px] rounded-lg px-2.5 block w-full border border-border-strong bg-bg p-1 text-body"><option value=""/>{field.options.map(option=><option key={option}>{option}</option>)}</select>:<input disabled={busy} type={field.type==="checkbox"?"checkbox":field.type==="number"?"number":field.type==="date"?"date":"text"} checked={fieldValues[field.id]==="1"} value={fieldValues[field.id]??""} onChange={e=>setFieldValues(old=>({...old,[field.id]:field.type==="checkbox"?(e.target.checked?"1":""):e.target.value}))} className="h-[34px] rounded-lg px-2.5 block w-full border border-border-strong bg-bg p-1 text-body"/>}</label>)}</div></details>}
             <div className="mt-2 flex flex-wrap items-center gap-2">
             {aiReady && (
               <div className={aiOpen ? "w-full" : undefined}>
@@ -502,13 +502,13 @@ export function NewIssueDialog({ workspaceId }: { workspaceId: string }) {
                         if (event.key === "Escape") {event.stopPropagation();setAiOpen(false);}
                       }}
                       placeholder={t("Describe the task, e.g. 修复微信登录回调偶发失败")}
-                      className="min-w-0 flex-1 rounded-md border border-border bg-elevated/40 px-2.5 py-1.5 text-small text-text placeholder:text-faint focus:border-border-strong"
+                      className="h-[34px] rounded-lg px-2.5 min-w-0 flex-1 border border-border-strong bg-elevated/40 text-text placeholder:text-faint focus:border-border-strong text-body"
                     />
                     <button
                       type="button"
                       onClick={() => void aiDraft()}
                       disabled={!aiPrompt.trim() || aiBusy}
-                      className="flex shrink-0 items-center gap-1 rounded-md bg-accent px-2.5 py-1.5 text-small font-medium text-white disabled:opacity-40"
+                      className="inline-flex items-center justify-center gap-1.5 whitespace-nowrap h-[30px] rounded-lg px-2.5 text-small shrink-0 bg-accent font-medium text-white disabled:opacity-40 hover:bg-accent-hover"
                     >
                       {aiBusy ? <LoaderCircle size={11} className="animate-spin" /> : <Sparkles size={11} />}
                       {aiBusy ? t("Drafting…") : t("Draft")}
@@ -580,7 +580,7 @@ export function NewIssueDialog({ workspaceId }: { workspaceId: string }) {
                           placeholder={t("Template name")}
                           value={templateName}
                           onChange={(event) => setTemplateName(event.target.value)}
-                          className="min-w-0 flex-1 rounded border border-border bg-bg p-1 text-small"
+                          className="h-[34px] rounded-lg px-2.5 min-w-0 flex-1 border border-border-strong bg-bg p-1 text-body"
                         />
                         <button
                           type="button"
@@ -600,7 +600,7 @@ export function NewIssueDialog({ workspaceId }: { workspaceId: string }) {
             {projectsLoaded && projects.length === 0 && (
               <div role="status" className="mt-3 flex flex-wrap items-center gap-2 rounded-md bg-elevated px-3 py-2 text-small text-muted">
                 <span className="min-w-0 flex-1">{t("A task goes in a project. Create one first.")}</span>
-                <button type="button" onClick={newProject} className="rounded-md border border-border px-2.5 py-1 text-small text-text hover:bg-overlay">{t("New project")}</button>
+                <button type="button" onClick={newProject} className="inline-flex items-center justify-center gap-1.5 whitespace-nowrap h-[30px] rounded-lg px-2.5 text-small border border-border text-text bg-bg hover:bg-active">{t("New project")}</button>
               </div>
             )}
           </div>
@@ -608,12 +608,12 @@ export function NewIssueDialog({ workspaceId }: { workspaceId: string }) {
             <label className="flex items-center gap-2 text-small text-muted"><input type="checkbox" checked={continueCreating} onChange={event=>setContinueCreating(event.target.checked)}/>{t("Create and continue")}</label>
             <span className="flex-1" />
             {error && <span className="text-small text-danger">{t(error)}</span>}
-            <button type="button" onClick={() => {if(!submitRunning.current)setComposerOpen(false);}} className="rounded-md border border-border px-3 py-1.5 text-body text-text transition-colors hover:bg-elevated">{t("Cancel")}</button>
+            <button type="button" onClick={() => {if(!submitRunning.current)setComposerOpen(false);}} className="inline-flex items-center justify-center gap-1.5 whitespace-nowrap h-[30px] rounded-lg px-2.5 text-small border border-border text-text transition-colors bg-bg hover:bg-active">{t("Cancel")}</button>
                 <button
                   type="button"
                   onClick={() => void submit()}
                   disabled={!title.trim() || !project || busy}
-                  className="rounded-md bg-accent px-3 py-1.5 text-body font-medium text-white transition-colors hover:bg-accent-hover disabled:opacity-40"
+                  className="inline-flex items-center justify-center gap-1.5 whitespace-nowrap h-[30px] rounded-lg px-2.5 text-small bg-accent font-medium text-white transition-colors hover:bg-accent-hover disabled:opacity-40"
                 >
                   {t("Create task")}
                   <span className="ml-2 text-caption opacity-75">{modifier}↵</span>

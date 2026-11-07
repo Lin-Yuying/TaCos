@@ -37,7 +37,7 @@ function LevelSelect({
         value={value}
         aria-label={label}
         onChange={(event) => onChange(event.target.value)}
-        className="appearance-none rounded-md border border-border bg-bg py-1 pl-2 pr-6 text-small text-text transition-colors hover:border-border-strong"
+        className="h-[26px] rounded-[7px] px-2 appearance-none border border-border bg-bg pl-2 pr-6 text-small text-text transition-colors hover:border-border-strong"
       >
         {extra && <option value="">{extra}</option>}
         {PAGE_LEVELS.map((level) => (

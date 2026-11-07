@@ -11,7 +11,7 @@ export function AgentUsageSection({ usage }: { usage: AgentUsageSummary }) {
   return (
     <section className="space-y-3" data-testid="agent-usage">
       <div className="flex flex-wrap items-center gap-2">
-                <span className="rounded-full bg-elevated px-2 py-0.5 font-variant-numeric tabular-nums text-caption text-faint">
+                <span className="tabular-nums text-small text-faint">
           {t("Last {days} days", { days: "30" })}
         </span>
       </div>
@@ -72,7 +72,7 @@ export function AgentUsageSection({ usage }: { usage: AgentUsageSummary }) {
       {usage.byDay.length > 0 && (
         <div className="flex flex-wrap gap-1.5" data-testid="agent-usage-days">
           {usage.byDay.map((row) => (
-            <span key={row.date} className="rounded-full border border-border px-2 py-0.5 text-caption text-muted">
+            <span key={row.date} className="inline-flex h-[18px] items-center rounded-[5px] px-1.5 whitespace-nowrap border border-border text-caption text-muted">
               {row.date} · {formatTokens(row.usage.totalTokens)}
             </span>
           ))}
@@ -83,7 +83,7 @@ export function AgentUsageSection({ usage }: { usage: AgentUsageSummary }) {
           {usage.byModel.map((row) => (
             <span
               key={`${row.engine}|${row.model}`}
-              className="rounded-full border border-border px-2 py-0.5 text-caption text-muted"
+              className="inline-flex h-[18px] items-center rounded-[5px] px-1.5 whitespace-nowrap border border-border text-caption text-muted"
             >
               {row.engine} · {row.model} · {formatTokens(row.usage.totalTokens)}
             </span>

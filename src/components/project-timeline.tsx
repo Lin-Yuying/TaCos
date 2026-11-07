@@ -207,7 +207,7 @@ export function ProjectTimeline({
               <CalendarDays size={14} />
               {t("Milestones")}
             </span>
-            <span className="rounded-full bg-elevated px-2 py-0.5 text-caption text-muted tabular-nums">
+            <span className="tabular-nums text-small text-faint">
               {milestones.length}
             </span>
             {currentMilestone && (
@@ -221,7 +221,7 @@ export function ProjectTimeline({
                 onChange={(event) => setFilter(event.target.value)}
                 aria-label={t("Filter tasks by milestone")}
                 data-testid="milestone-filter"
-                className="rounded-md border border-border bg-bg px-2 py-1.5 text-body"
+                className="h-[34px] rounded-lg px-2.5 border border-border-strong bg-bg text-body"
               >
                 <option value="all">{t("All milestones")}</option>
                 {milestones.map((milestone) => (
@@ -406,7 +406,7 @@ export function ProjectTimeline({
                           disabled={milestones.length === 0 || updatingTask === task.id}
                           aria-label={t("Milestone for {task}", { task: issueRef(task) })}
                           data-testid="milestone-select"
-                          className="mt-0.5 max-w-[150px] shrink-0 rounded border border-border bg-bg px-1 py-0.5 text-caption text-muted disabled:opacity-50"
+                          className="h-[34px] rounded-lg px-2.5 mt-0.5 max-w-[150px] shrink-0 border border-border-strong bg-bg text-caption text-muted disabled:opacity-50 text-body"
                         >
                           <option value="">{t("No milestone")}</option>
                           {milestones.map((milestone) => (

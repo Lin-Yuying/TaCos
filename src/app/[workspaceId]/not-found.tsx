@@ -13,10 +13,10 @@ export default function WorkspaceNotFound() {
       title={t("This page could not be found")}
       hint={t("It may have been deleted, the link may be wrong, or it may not be shared with you.")}
     >
-      <Link href={`/${workspaceId}/start`} className="rounded-md bg-accent px-3 py-1.5 text-small font-medium text-white transition-colors hover:bg-accent-hover">
+      <Link href={`/${workspaceId}/start`} className="inline-flex items-center justify-center gap-1.5 whitespace-nowrap h-[30px] rounded-lg px-2.5 text-small bg-accent font-medium text-white transition-colors hover:bg-accent-hover">
         {t("Back to Start")}
       </Link>
-      <Link href={`/${workspaceId}/trash`} className="rounded-md border border-border px-3 py-1.5 text-small text-muted transition-colors hover:text-text">
+      <Link href={`/${workspaceId}/trash`} className="inline-flex items-center justify-center gap-1.5 whitespace-nowrap h-[30px] rounded-lg px-2.5 text-small border border-border transition-colors bg-bg text-text hover:bg-active">
         {t("Open Trash")}
       </Link>
     </EmptyState>

@@ -247,13 +247,13 @@ function CommentComposer({
         }}
         rows={2}
         placeholder={placeholder}
-        className="min-h-[38px] flex-1 resize-y rounded-lg border border-border bg-bg px-2.5 py-2 text-body text-text placeholder:text-faint focus:border-border-strong focus:outline-none"
+        className="min-h-[38px] flex-1 resize-y rounded-lg border border-border-strong bg-bg px-2.5 py-2 text-body text-text placeholder:text-faint focus:border-border-strong focus:outline-none"
       />
       <button
         type="button"
         onClick={onPost}
         disabled={!draft.trim() || posting}
-        className="rounded-md bg-accent px-3 py-1.5 text-small font-medium text-white transition-opacity hover:opacity-90 disabled:opacity-40"
+        className="inline-flex items-center justify-center gap-1.5 whitespace-nowrap h-[30px] rounded-lg px-2.5 text-small bg-accent font-medium text-white disabled:opacity-40 hover:bg-accent-hover"
       >
         {t("Comment")}
       </button>
@@ -1568,7 +1568,7 @@ export function ProjectOverview({
                                   type="button"
                                   disabled={restoring === edit.id}
                                   onClick={() => void restoreEdit(edit)}
-                                  className="rounded-md bg-accent px-2 py-0.5 text-caption font-medium text-white transition-opacity hover:opacity-90 disabled:opacity-50"
+                                  className="inline-flex items-center justify-center gap-1.5 whitespace-nowrap h-[30px] rounded-lg px-2.5 text-small bg-accent font-medium text-white disabled:opacity-50 hover:bg-accent-hover"
                                 >
                                   {restoring === edit.id ? t("Restoring…") : t("Confirm restore")}
                                 </button>
@@ -1588,7 +1588,7 @@ export function ProjectOverview({
                                 type="button"
                                 onClick={() => setConfirmRestore(edit.id)}
                                 title={t("Restore the document to how it was before this change")}
-                                className="flex items-center gap-1 rounded-md border border-border px-1.5 py-0.5 text-caption text-muted transition-colors hover:border-border-strong hover:text-text"
+                                className="inline-flex items-center justify-center gap-1.5 whitespace-nowrap h-[30px] rounded-lg px-2.5 text-small border border-border transition-colors bg-bg text-text hover:bg-active"
                               >
                                 <RotateCcw size={11} /> {t("Restore")}
                               </button>

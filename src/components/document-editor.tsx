@@ -306,7 +306,7 @@ function SelectionStyleButtons({ editor }: { editor: Editor }) {
             onChange={(event) => setLinkDraft(event.target.value)}
             placeholder="https://"
             aria-label={t("Web address")}
-            className="min-w-0 flex-1 rounded border border-border bg-bg px-1 py-0.5 text-small text-text"
+            className="h-[34px] rounded-lg px-2.5 min-w-0 flex-1 border border-border-strong bg-bg text-text text-body"
           />
           <button
             type="submit"
@@ -1302,7 +1302,7 @@ export function DocumentEditor({
             <div className="mt-1 flex items-center gap-2 border-t border-border px-2 pb-1 pt-1.5 text-small text-muted">
               <span className="min-w-0 flex-1">{t("{names} cannot see this document.", { names: mentionMenu.items[mentionMenu.selected].displayName })}</span>
               {mentionWarning.onShare && (
-                <button type="button" onMouseDown={(event) => { event.preventDefault(); mentionWarning.onShare?.(); }} className="shrink-0 rounded-md border border-border px-2 py-0.5 text-small font-medium text-text hover:border-border-strong">
+                <button type="button" onMouseDown={(event) => { event.preventDefault(); mentionWarning.onShare?.(); }} className="inline-flex items-center justify-center gap-1.5 whitespace-nowrap h-[30px] rounded-lg px-2.5 text-small shrink-0 border border-border font-medium text-text bg-bg hover:bg-active">
                   {t("Share with workspace")}
                 </button>
               )}
