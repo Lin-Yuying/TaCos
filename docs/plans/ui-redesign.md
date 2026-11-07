@@ -4,7 +4,7 @@ Source: design canvas Version 45 (private artifact). Where the canvas and the co
 
 Decisions taken: clicking the sidebar replaces the current tab (⌘-click opens a new one); the sidebar uses the new grouping; "Hand to Agent" and "Work on it in chat" both stay.
 
-State per item: `todo`, `pass` (commit plus cheap checks: `npx tsc --noEmit`, `npm run lint`, `node scripts/check-i18n.mjs`, `npx tsx scripts/check-type-scale.ts`), `blocked` (with the failure output).
+State per item: `pass` = compared side by side with the Version 45 canvas (the 2026-11-07 comparison pass covers every row except the phone boards), plus the cheap checks `npx tsc --noEmit`, `node scripts/check-i18n.mjs`, `npx tsx scripts/check-type-scale.ts`; `pass*` = covered by commit and cheap checks only, not compared (phone boards are out of scope by rule); `blocked` = the state could not be constructed, see [ui-redesign-handoff.md](ui-redesign-handoff.md).
 
 | # | Item | Canvas boards | State |
 | --- | --- | --- | --- |
@@ -42,6 +42,6 @@ State per item: `todo`, `pass` (commit plus cheap checks: `npx tsc --noEmit`, `n
 | 32 | Shared states: empty, loading, load error, not found, no access, deleted workspace, reconnect, storage full, toast, confirm | EmptyStates, LoadingList, LoadingDoc, LoadError, NotFound, NoAccess, WsDeleted, Reconnect, StorageFull, Toasts, Confirm, SearchNoResult | pass |
 | 33 | Desktop screens | DesktopSetup, DesktopStarting, DesktopOffline, DesktopUpdate, DesktopUpdateStates, DesktopImport | pass |
 | 34 | Narrow window (720) | Narrow720, Narrow720Panel | pass |
-| 35 | Phone: bottom navigation, drawer, full-screen task/doc/new-task/search | PhoneTasks, PhoneTask, PhoneDrawer, PhoneInbox, PhoneAgent, PhoneSearch, PhoneNewTask, PhoneDoc | pass |
+| 35 | Phone: bottom navigation, drawer, full-screen task/doc/new-task/search | PhoneTasks, PhoneTask, PhoneDrawer, PhoneInbox, PhoneAgent, PhoneSearch, PhoneNewTask, PhoneDoc | pass* |
 | 36 | Batch end-to-end run and screenshots (real models, fresh data dir) | all | pass |
 | 37 | Fresh-context review, PR | all | pass |
