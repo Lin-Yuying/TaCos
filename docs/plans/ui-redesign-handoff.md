@@ -17,7 +17,7 @@
 
 - 已比对：Inbox、Review、Planning、Insights、Main、TasksList、Start、Trash、DocsIndex、SearchLanding、Activity、Agent（空白状态）、Help。
 - 未比对：其余 Settings 页、Login、Register、NotFound、ExportPage、ImportPage、System、Admin、AdminWs、弹窗、菜单、文档页、项目页、桌面端和错误状态画板。
-- 未运行：`next build`、33 个端到端流程、Electron 验证。`check:harness` 的结果见提交后的汇报。
+- 未运行：`next build`、33 个端到端流程、Electron 验证。`check:harness` 未跑完，截至 2026-11-07 有 118 项通过、2 项失败。
 
 ## 剩余工作
 
@@ -28,6 +28,8 @@
 5. 比对 Search 的最近搜索和最近打开。
 6. 种入未解析链接和已删除工作区后，比对 DocsIndex 和 Trash 下半部分。
 7. 逐张比对“未比对”列出的画板，修复差异。
-8. 运行 `npm run check:harness`。失败时修代码，不放宽检查。
+8. 修复 `check-agents-md.ts` 和 `check-desktop-updater-entry.ts` 的失败，再运行 `npm run check:harness`，确认其余检查。失败时修代码，不放宽检查。
+   - `check-agents-md.ts`：`Sidebar must use "Tasks", not "Workspace" as a group`。
+   - `check-desktop-updater-entry.ts`：`a narrow list column needs a view menu instead of losing the filters`。
 9. 用全新数据目录运行 `npm run build`。
 10. 把比对结果写回 ui-redesign.md 表格，只有并排看过的项才写 pass。
