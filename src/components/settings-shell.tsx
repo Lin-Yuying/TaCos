@@ -49,7 +49,8 @@ function subscribeHash(listener: () => void) {
 }
 
 export function useSettingsPage(): SettingsPage {
-  const hash = useSyncExternalStore(subscribeHash, () => window.location.hash.slice(1), () => "");
+  // A soft navigation back to a page first loaded with a hash can arrive with it doubled.
+  const hash = useSyncExternalStore(subscribeHash, () => window.location.hash.slice(1).split("#")[0], () => "");
   return (SETTINGS_PAGES as readonly string[]).includes(hash) ? (hash as SettingsPage) : "profile";
 }
 
@@ -84,8 +85,12 @@ export function SettingsShell({
   const base = `/${workspaceId}/settings`;
   const onMain = pathname === base;
   useEffect(() => {
-    if (onMain) rememberTabHash(base, `#${hashPage}`);
-  }, [onMain, base, hashPage]);
+    if (!onMain) return;
+    rememberTabHash(base, `#${hashPage}`);
+    if (window.location.hash.lastIndexOf("#") > 0) {
+      history.replaceState(history.state, "", `${window.location.pathname}${window.location.search}#${window.location.hash.slice(1).split("#")[0]}`);
+    }
+  });
   const page = (id: SettingsPage, label: string): NavItem => ({ key: id, label, href: `${base}#${id}`, page: id });
   const route = (segment: string, label: string, testId?: string): NavItem => ({ key: segment, label, href: `${base}/${segment}`, testId });
   const groups: { title: string; items: NavItem[] }[] = [
