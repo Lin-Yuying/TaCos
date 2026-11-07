@@ -9,9 +9,8 @@ import {
   type KeyboardEvent,
 } from "react";
 import { useRouter } from "next/navigation";
-import { PAGE_TITLE } from "@/lib/page-chrome";
+import { PAGE_INSET } from "@/lib/page-chrome";
 import { Search, X } from "lucide-react";
-import { usePrimaryModifier } from "@/lib/ui/platform";
 import { useT, useLocale } from "@/components/i18n-context";
 import { useUI } from "@/components/ui-context";
 import { SearchHitLabel, SearchKindIcon } from "@/components/search-result";
@@ -73,7 +72,6 @@ export function SearchPageView({
 }) {
   const t = useT();
   const locale = useLocale();
-  const modifier = usePrimaryModifier();
   const router = useRouter();
   const { scope, openIssue, openPage } = useUI();
   const inputRef = useRef<HTMLInputElement>(null);
@@ -256,24 +254,9 @@ export function SearchPageView({
       className="flex min-h-0 min-w-0 flex-1 flex-col overflow-y-auto"
       onKeyDown={onSearchKeyDown}
     >
-      <div className="mx-auto w-full max-w-5xl px-4 py-5 @2xl:px-8 @4xl:px-12">
-        <div className="flex flex-wrap items-baseline justify-between gap-2">
-          <h1 className={PAGE_TITLE}>{t("Search")}</h1>
-          <p className="hidden items-center gap-2 text-caption text-faint @2xl:flex">
-            <span>
-              <kbd className="rounded border border-border bg-elevated px-1 font-mono">/</kbd>{" "}
-              {t("search anywhere")}
-            </span>
-            <span>
-              <kbd className="rounded border border-border bg-elevated px-1 font-mono">
-                {modifier}K
-              </kbd>{" "}
-              {t("palette")}
-            </span>
-          </p>
-        </div>
-
-        <div className="relative mt-3">
+      <div className={`w-full py-3 ${PAGE_INSET}`}>
+        <h1 className="sr-only">{t("Search")}</h1>
+        <div className="relative">
           <Search
             size={16}
             aria-hidden
@@ -297,7 +280,7 @@ export function SearchPageView({
             }}
             aria-label={t("Search everything")}
             placeholder={t("Search tasks, documents, people, labels, files and rules…")}
-            className="w-full rounded-xl border border-border bg-bg py-2.5 pl-9 pr-9 text-body outline-none transition-colors focus:border-border-strong"
+            className="w-full rounded-md border border-border bg-bg py-2 pl-9 pr-9 text-body outline-none transition-colors focus:border-border-strong"
           />
           {query && (
             <button
@@ -623,7 +606,7 @@ function SearchIdle({
   const t = useT();
   const locale = useLocale();
   return (
-    <div data-testid="search-idle" className="grid gap-6 py-6 @2xl:grid-cols-2">
+    <div data-testid="search-idle" className="mx-auto w-full max-w-[600px] space-y-6 py-6">
       <section data-testid="search-recent-searches">
         <div className="mb-2 flex items-center justify-between">
           <h2 className="text-small font-medium text-muted">{t("Recent searches")}</h2>
