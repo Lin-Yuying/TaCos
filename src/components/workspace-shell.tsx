@@ -1297,6 +1297,8 @@ const SIDEBAR_DEFAULT = 216;
 const SIDEBAR_MIN = 180;
 const SIDEBAR_MAX = 420;
 const SIDEBAR_CONTENT_MIN = 480;
+// Below this window width the column stays an icon rail, whatever width it was left at.
+const SIDEBAR_FORCE_RAIL_BELOW = 860;
 // The rail only holds 32px targets, so 48px is enough and 44px is the floor.
 const SIDEBAR_RAIL = 48;
 const SIDEBAR_RAIL_MIN = 44;
@@ -1385,7 +1387,7 @@ function useSidebarWidth() {
     });
   }, [remember]);
 
-  const rendered=available===null?width:Math.min(width,Math.max(SIDEBAR_RAIL_MIN,available-SIDEBAR_CONTENT_MIN));
+  const rendered=available===null?width:available<SIDEBAR_FORCE_RAIL_BELOW?Math.min(width,SIDEBAR_RAIL):Math.min(width,Math.max(SIDEBAR_RAIL_MIN,available-SIDEBAR_CONTENT_MIN));
   return { width:rendered, rail: rendered < SIDEBAR_MIN, resize, commit, toggle };
 }
 
