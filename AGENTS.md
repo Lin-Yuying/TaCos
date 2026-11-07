@@ -87,6 +87,9 @@ Always-on rules for this repo. Put occasional workflows in skills or docs, and d
 | Thread / turn | A conversation with Agent / one request and its reply inside it. | `agent_threads` |
 | Watcher | A member who follows a task, project or document and receives its comment notices. | `watchers` |
 | Activity | The workspace-wide, read-only timeline of changes. Inbox is the actionable notices. | `events` |
+| Cycle | A workspace time box (1-8 weeks). Unfinished todo/in-progress tasks roll to the next one. | `cycles` |
+| Milestone | A project stage with an optional target date and an order. Progress comes from its tasks. | `project_milestones` |
+| Initiative | A workspace objective that groups projects for roadmap and progress roll-up. | `initiatives` |
 
 <!-- BEGIN:nextjs-agent-rules -->
 
