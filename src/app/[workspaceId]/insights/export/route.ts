@@ -24,9 +24,11 @@ export async function GET(
     return new Response(status === 403 ? "Forbidden" : "Workspace not found", { status });
   }
   const query = Object.fromEntries(new URL(request.url).searchParams);
-  const resolved = await resolveInsightRequest(workspaceId, user.id, query);
+  const now = new Date().toISOString();
+  const resolved = await resolveInsightRequest(workspaceId, user.id, query, { now });
   const data = await aggregateInsights(workspaceId, user.id, resolved.config, {
     timeZone: resolved.timeZone,
+    now,
   });
   // The BOM keeps Excel on Windows from mangling non-ASCII task titles.
   const csv = `\uFEFF${buildInsightsCsv(data)}`;

@@ -1,6 +1,5 @@
 "use client";
 
-import { useState } from "react";
 import { useT, useLocale } from "@/components/i18n-context";
 import { AssigneeAvatar } from "@/components/issue-table";
 import { ProjectIcon, StatusIcon } from "@/components/icons";
@@ -11,7 +10,6 @@ import { STATUS_META } from "@/lib/constants";
 import { formatDay, formatDayRange } from "@/lib/planning/dates";
 import {
   formatInsightDays,
-  formatInsightHours,
   formatInsightPercent,
   type InsightAgentPanel,
   type InsightAutomationPanel,
@@ -347,8 +345,6 @@ export function TaskTable({
   const t = useT();
   const locale = useLocale();
   const { openIssue } = useUI();
-  const [showAll, setShowAll] = useState(false);
-  const visible = showAll ? rows : rows.slice(0, 200);
   if (rows.length === 0) {
     return (
       <EmptyNote testId="insight-table-empty">
@@ -374,7 +370,7 @@ export function TaskTable({
             </tr>
           </thead>
           <tbody>
-            {visible.map((row) => (
+            {rows.map((row) => (
               <tr
                 key={row.id}
                 className="border-t border-border align-top hover:bg-elevated/40"
@@ -444,13 +440,8 @@ export function TaskTable({
       </div>
       <div className="mt-2 flex flex-wrap items-center gap-2 text-caption text-faint">
         <span>
-          {t("Showing {shown} of {total} tasks", { shown: visible.length, total: rowTotal })}
+          {t("Showing {shown} of {total} tasks", { shown: rows.length, total: rowTotal })}
         </span>
-        {rows.length > 200 ? (
-          <button type="button" onClick={() => setShowAll((value) => !value)} className="text-muted hover:text-text">
-            {showAll ? t("Show fewer") : t("Show all")}
-          </button>
-        ) : null}
         {rowTotal > rows.length ? (
           <span>{t("The export includes the same rows as this table.")}</span>
         ) : null}
@@ -493,4 +484,3 @@ export function DataNotes({ data }: { data: InsightData }) {
   );
 }
 
-export { formatInsightHours };

@@ -41,10 +41,8 @@ import {
   INSIGHT_MAX_ROWS,
   INSIGHT_MAX_TASKS,
   defaultInsightConfig,
-  insightQuery,
   median,
   normalizeInsightConfig,
-  parseInsightSavedConfig,
   weekStartDay,
   type InsightAgentPanel,
   type InsightAssignee,
@@ -1308,16 +1306,4 @@ export function buildInsightsCsv(data: InsightData): string {
 
 export function insightExportName(data: InsightData): string {
   return `insights-${data.range.from}-to-${data.range.to}.csv`;
-}
-
-/** The link a member can copy; the page and the export route read the same params. */
-export function insightReportHref(workspaceId: string, config: InsightSavedConfig, viewId?: string): string {
-  const query = insightQuery(config);
-  return `/${workspaceId}/insights?${query}${viewId ? `&viewId=${encodeURIComponent(viewId)}` : ""}`;
-}
-
-/** Used by the page to restore a saved report and by checks to parse one. */
-export function insightConfigFromView(definition: unknown): InsightSavedConfig | null {
-  if (!definition || typeof definition !== "object") return null;
-  return parseInsightSavedConfig((definition as { insight?: unknown }).insight);
 }

@@ -1,7 +1,6 @@
 "use client";
 
 import type { ReactNode } from "react";
-import { useT } from "@/components/i18n-context";
 
 export const cardClass = "rounded-lg border border-border bg-bg";
 
@@ -54,15 +53,6 @@ export function EmptyNote({ children, testId }: { children: ReactNode; testId: s
   return (
     <p className="py-3 text-small text-faint" data-testid={testId}>
       {children}
-    </p>
-  );
-}
-
-export function EmptyPanel({ testId }: { testId: string }) {
-  const t = useT();
-  return (
-    <p className="py-3 text-small text-faint" data-testid={testId}>
-      {t("No data in this range.")}
     </p>
   );
 }

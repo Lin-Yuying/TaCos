@@ -144,6 +144,16 @@ function canManage(row: ViewRow, userId: string, manager: boolean): boolean {
   return Boolean(row.shared) && manager;
 }
 
+/** A malformed report row must not fall back into the task-view lists. */
+function hasInsightField(raw: string): boolean {
+  try {
+    const value = JSON.parse(raw) as unknown;
+    return Boolean(value && typeof value === "object" && "insight" in value);
+  } catch {
+    return false;
+  }
+}
+
 function mergeDefinition(row: ViewRow, pref: PrefRow | undefined): TaskViewDefinition {
   const base = parseStoredDefinition(row.definition);
   if (!pref?.displayOverride) return base;
@@ -338,7 +348,7 @@ export function listTaskViews(
   // Insight reports and task views share the table but never each other's lists.
   rows = rows.filter((row) => {
     const insight = Boolean(parseStoredDefinition(row.definition).insight);
-    return options.insightOnly ? insight : !insight;
+    return options.insightOnly ? insight : !insight && !hasInsightField(row.definition);
   });
   if (!options.sharedOnly) {
     rows = rows.filter((row) => {
@@ -400,7 +410,7 @@ export function defaultTaskView(
     )
     .get();
   if (!row || (row.projectId && !projectIsOpen(workspaceId, row.projectId))) return null;
-  if (parseStoredDefinition(row.definition).insight) return null;
+  if (hasInsightField(row.definition)) return null;
   const prefs = prefsFor(workspaceId, userId, [row.id]);
   return summarise(row, prefs.get(row.id), userId, managerOf(workspaceId, userId));
 }

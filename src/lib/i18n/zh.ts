@@ -2003,8 +2003,6 @@ const zh: Record<string, string> = {
   "Success": "成功",
   "No tasks match this range and filter. Widen the range or clear a filter.": "没有任务符合此日期范围和筛选条件。请扩大范围或清除筛选。",
   "Showing {shown} of {total} tasks": "显示 {shown}/{total} 个任务",
-  "Show fewer": "收起",
-  "Show all": "显示全部",
   "The export includes the same rows as this table.": "导出内容与此表格的行一致。",
   "Ranges are limited to one year; the start date was moved forward.": "日期范围最长一年；开始日期已相应后移。",
   "The dates were in the wrong order, so they were swapped.": "日期顺序颠倒，已自动交换。",
@@ -2013,7 +2011,6 @@ const zh: Record<string, string> = {
   "{count} completed tasks have no status event; their last update time is used.": "{count} 个已完成任务没有状态事件；使用最后更新时间。",
   "That saved view is no longer available.": "该已保存视图已不可用。",
   "Some historical tasks predate event tracking, so time measures may be incomplete.": "部分历史任务早于事件记录，时间指标可能不完整。",
-  "No data in this range.": "此区间内没有数据。",
 
   "Could not copy. Copy the address bar.": "复制失败，请复制地址栏。",
   "Export CSV": "导出 CSV",

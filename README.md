@@ -9,6 +9,7 @@ TaCos is a fast, local-first tracker where humans and agents share the same back
 - **Teams and workspaces** — multiple workspaces per install, invite codes, roles, avatars, per-workspace API keys.
 - **Projects** — markdown overviews, color-coded icons, favorites, task prefixes (`CORE-7`), and a 30-day recycle bin.
 - **Tasks** — list and board views, labels, priorities, multiple assignees, comments, and a combined activity timeline.
+- **Insights** — on-demand flow metrics, workload, lead/cycle time, delegation and token usage, automation runs, shared reports and CSV export.
 - **Agents as teammates** — named workspace agents and a personal agent, task delegation that keeps the human assignee, review (approve / request changes / retry), Inbox notices and filters.
 - **Agent runtime** — local harnesses (Codex, Pi, OpenCode, WorkBuddy, dsh), the built-in API agent with no desktop runner, ACP agents, native session resume, token usage, and plan usage where a harness reports it.
 - **Agent-first APIs** — scoped Bearer-key REST at `/api/v1/*`, a stdio MCP server, and a stateless Streamable HTTP MCP endpoint at `/api/mcp` for Claude Code / Claude Desktop / Codex.
@@ -52,6 +53,7 @@ Set `TACOS_ADMIN_PASSWORD` before the first start to give the built-in admin a d
 | `TACOS_API_AGENT_BASE_URL` / `TACOS_API_AGENT_KEY` / `TACOS_API_AGENT_MODEL` | unset | Server-side model endpoint for the built-in API agent when member keys live on their computers. |
 | `TACOS_API_AGENT_MAX_ITERATIONS` | `20` | Internal safety guard for the built-in loop. Not a budget. |
 | `TACOS_ACP_BIN` | unset | An ACP-compatible agent command (JSON-RPC over stdio); adds it to the Agent composer. |
+| `TACOS_TIMEZONE` | server timezone | IANA zone for Insights day boundaries and its CSV date columns, for example `Asia/Shanghai`. |
 | `TACOS_CODEX_SUBSCRIPTION_JSON` | unset | Test/headless Codex plan snapshot; otherwise TaCos reads app-server rate limits. |
 
 Workspaces are created in the app. Joining an existing workspace uses a code such as `TACOS-1A2B3C4D`.
@@ -340,6 +342,47 @@ deliberately small: no custom planning fields, no forecast, no drag scheduling.
 
 Checks: `check-cycles.ts`, `check-milestones.ts`, `check-initiatives.ts` and
 `check-planning-rollover.ts` run under `npm run check:harness`.
+
+## Insights: flow, workload and agent usage
+
+**Insights** (`/insights`, one sidebar row) is a read-only report over the tasks the
+viewer can already see. Everything is aggregated on demand from the existing tables;
+there is no snapshot table, warehouse, query builder or custom formula. A range wider
+than one year is clamped. Sections can be empty while the workspace is young: that is a
+real state, not an error.
+
+- **Dataset and filters.** Project visibility, the workspace task-visibility switch and
+  the Trash rules are the ones the task lists use. Sub-tasks are counted as separate
+  tasks. Deleted tasks, tasks in deleted projects and rejected agent drafts never enter a
+  report. Filters are project, assignee (assigned or claimed), label and status; the date
+  range is applied to flow events, and every chart and panel is recomputed from the same
+  dataset, so the project panel and the workspace totals agree.
+- **Definitions.** Created / completed / canceled are transitions inside the range.
+  **Lead time** runs from creation to the latest Done; **cycle time** runs from the first
+  In Progress (or creation when the task starts in progress) to Done. **WIP** is the
+  status at the end of the range. Canceled tasks are counted separately and left out of
+  all three time measures. **Review latency** runs from an agent review request to the
+  next approval; an agent-published task falls back to its creation when the request is
+  the publish gate. Subtasks are separate. A task completed before status events were
+  recorded uses its last update time and the page says the history is partial.
+- **Time and timezone.** Day boundaries use `TACOS_TIMEZONE` (otherwise the server's
+  zone) and the page shows the zone it used. Weeks start on Monday; the burn-up seeds the
+  cumulative lines from tasks that existed before the range.
+- **Panels.** Throughput bars, a lead/cycle scatter plot and a burn-up chart are
+  accessible SVG with text summaries and no chart dependency. Workload by assignee,
+  project roll-up, cycle and milestone progress reuse the planning and task records. The
+  Agent panel shows delegation coverage, runs, reported input/output/cached/reasoning
+  tokens by agent and model; usage stays observe-only and never shows a price or budget.
+  The Automation panel shows run outcomes, failures and duration; members see the runs
+  they triggered, while workspace admins see every run.
+- **Sharing and export.** Save the current dates and filters as a shared workspace view
+  (the same view table and permissions as task views — members only, no guests), copy a
+  link to the report, or export the current table as UTF-8 CSV. The CSV is built from the
+  same rows the table renders and applies the same visibility checks.
+
+Checks: `check-insights-metrics.ts` (a hand-computed fixture covering definitions,
+filters and timezone boundaries) and `check-insights-export.ts` (CSV shape, project access,
+shared report links) run under `npm run check:harness`.
 
 ## Documents, links and page templates
 
