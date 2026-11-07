@@ -4,7 +4,8 @@ import { DebouncedInput } from "./ui/debounced-input";
 import { Menu, MenuItem } from "@/components/menu";
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Search, X } from "lucide-react";
+import { Filter, Search, X } from "lucide-react";
+import { useUI } from "@/components/ui-context";
 import { LayoutToggle } from "@/components/issue-layout";
 import { STATUS_META } from "@/lib/constants";
 import type { Status } from "@/lib/constants";
@@ -59,6 +60,7 @@ export function ListHeader({
 }) {
   const t = useT();
   const router = useRouter();
+  const { phoneTaskToolsOpen: toolsOpen, setPhoneTaskToolsOpen } = useUI();
   const [value, setValue] = useState(q);
 
   useEffect(() => setValue(q), [q]);
@@ -100,11 +102,22 @@ export function ListHeader({
   };
 
   return (
-    <header className={`flex min-h-[52px] shrink-0 items-center gap-2 overflow-hidden border-b border-border ${PAGE_INSET}`}>
+    <header className={`flex min-h-[52px] shrink-0 items-center gap-2 overflow-hidden border-b border-border ${PAGE_INSET} max-[600px]:min-h-11 max-[600px]:flex-wrap max-[600px]:py-2 max-[600px]:pl-3 max-[600px]:pr-3`}>
       {/* Shrinks last: the person's name and the count stay readable while the search
           field gives up width as the detail panel eats into the list. */}
-      <h1 className="min-w-[72px] shrink-[0.25] truncate text-lead font-semibold">{heading}</h1>
-      <span className="shrink-0 rounded-full bg-elevated px-2 py-0.5 text-caption text-muted">
+      <h1 className="min-w-[72px] shrink-[0.25] truncate text-lead font-semibold max-[600px]:flex-1">{heading}</h1>
+      <button
+        type="button"
+        onClick={() => setPhoneTaskToolsOpen(!toolsOpen)}
+        aria-label={t("Filter")}
+        aria-expanded={toolsOpen}
+        title={t("Filter")}
+        className={`hidden size-7 shrink-0 items-center justify-center rounded-md transition-colors hover:bg-elevated hover:text-text max-[600px]:flex ${toolsOpen ? "bg-elevated text-text" : "text-muted"}`}
+      >
+        <Filter size={15} />
+      </button>
+      {toolsOpen && <span aria-hidden="true" className="order-1 hidden basis-full max-[600px]:block" />}
+      <span className="shrink-0 rounded-full bg-elevated px-2 py-0.5 text-caption text-muted max-[600px]:hidden">
         {count}
       </span>
       <div
@@ -130,7 +143,7 @@ export function ListHeader({
           );
         })}
       </div>
-      <div className="shrink-0 @min-[640px]:hidden">
+      <div className={`shrink-0 @min-[640px]:hidden ${toolsOpen ? "max-[600px]:order-2" : "max-[600px]:hidden"}`}>
         <Menu
           width={200}
           trigger={<span className="text-small">{t("Views")}</span>}
@@ -168,8 +181,8 @@ export function ListHeader({
           {t("label: {label}", { label })} <X size={11} className="shrink-0" />
         </button>
       )}
-      <div className="ml-auto flex min-w-0 shrink items-center gap-2">
-        <div className={`flex w-40 min-w-[56px] shrink items-center gap-2 rounded-full ${value ? "" : "max-[600px]:hidden "} border border-border bg-elevated/50 px-3 py-1.5 focus-within:border-border-strong`}>
+      <div className={`ml-auto flex min-w-0 shrink items-center gap-2 ${toolsOpen ? "max-[600px]:order-2" : "max-[600px]:hidden"}`}>
+        <div className={`flex w-40 min-w-[56px] shrink items-center gap-2 rounded-full ${value || toolsOpen ? "" : "max-[600px]:hidden "} border border-border bg-elevated/50 px-3 py-1.5 focus-within:border-border-strong`}>
           <Search size={13} className="shrink-0 text-faint" />
           <DebouncedInput
             value={value}

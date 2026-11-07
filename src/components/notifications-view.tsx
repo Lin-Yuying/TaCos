@@ -3,7 +3,8 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { BellOff, Check, ChevronDown, ChevronRight, Clock, Search, Settings2, X } from "lucide-react";
+import { BellOff, Check, ChevronDown, ChevronRight, Clock, MoreHorizontal, Search, Settings2, X } from "lucide-react";
+import { AssigneeAvatar } from "@/components/issue-table";
 import { useUI, NOTIFICATIONS_READ } from "@/components/ui-context";
 import { Menu, MenuItem } from "@/components/menu";
 import { Modal } from "@/components/ui/modal";
@@ -189,6 +190,7 @@ export function NotificationsView({
   const [selected, setSelected] = useState(-1);
   const [snoozing, setSnoozing] = useState<string | null>(null);
   const [prefsOpen, setPrefsOpen] = useState(false);
+  const [phoneSearch, setPhoneSearch] = useState(false);
   const [mutedOpen, setMutedOpen] = useState(false);
   const [busy, setBusy] = useState<string[]>([]);
   const [loadingMore, setLoadingMore] = useState(false);
@@ -471,12 +473,33 @@ export function NotificationsView({
 
   return (
     <div className="flex-1 overflow-y-auto">
-      <header className={`${PAGE_HEADER} ${PAGE_INSET}`}>
-        <h1 className={PAGE_TITLE}>{t("Inbox")}</h1>
-        <span className="rounded-full bg-elevated px-2 py-0.5 text-caption text-muted">
+      <header className={`${PAGE_HEADER} ${PAGE_INSET} max-[600px]:min-h-11 max-[600px]:pl-3 max-[600px]:pr-3`}>
+        <h1 className={`${PAGE_TITLE} max-[600px]:flex-1`}>{t("Inbox")}</h1>
+        <span className="rounded-full bg-elevated px-2 py-0.5 text-caption text-muted tabular-nums max-[600px]:bg-transparent max-[600px]:px-0 max-[600px]:text-small">
           {t("{count} unread", { count: counts.unread })}
         </span>
-        <div className="ml-auto flex items-center gap-2">
+        <div className="hidden max-[600px]:block">
+          <Menu
+            width={220}
+            align="right"
+            triggerClassName="flex size-7 items-center justify-center rounded-md text-muted transition-colors hover:bg-elevated hover:text-text"
+            trigger={<span aria-label={t("More")} title={t("More")}><MoreHorizontal size={15} /></span>}
+          >
+            {(close) => (
+              <>
+                <MenuItem disabled={counts.unread === 0 || busySet.has("all")} onSelect={() => { close(); void markAll(); }}>{t("Mark all read")}</MenuItem>
+                {items.length > 0 && <MenuItem danger disabled={busySet.has("all")} onSelect={() => { close(); void clearAll(); }}>{t("Clear all")}</MenuItem>}
+                <div className="my-1 h-px bg-border" />
+                <MenuItem onSelect={() => { close(); setPhoneSearch((open) => !open); }}>{t("Search notifications…")}</MenuItem>
+                <MenuItem onSelect={() => { close(); setPrefsOpen((open) => !open); }}>{t("Notification preferences")}</MenuItem>
+                <MenuItem onSelect={() => { close(); setMutedOpen(true); }}>{t("Muted tasks and documents")}</MenuItem>
+                <MenuItem onSelect={() => { close(); router.push(`/${workspaceId}/review`); }}>{t("Open the review queue")}</MenuItem>
+                <p className="px-2 py-1 text-caption text-faint">{t("Notifications are kept for 90 days.")}</p>
+              </>
+            )}
+          </Menu>
+        </div>
+        <div className="ml-auto flex items-center gap-2 max-[600px]:hidden">
           <button
             type="button"
             onClick={() => void markAll()}
@@ -515,14 +538,14 @@ export function NotificationsView({
         </div>
       </header>
 
-      <div className={`flex flex-wrap items-center gap-1 border-b border-border py-2 ${PAGE_INSET}`} data-inbox-tabs>
+      <div className={`flex flex-wrap items-center gap-1 border-b border-border py-2 ${PAGE_INSET} max-[600px]:flex-nowrap max-[600px]:overflow-x-auto max-[600px]:pl-3 max-[600px]:pr-3`} data-inbox-tabs>
         {TABS.map((entry) => (
           <button
             key={entry.id}
             type="button"
             onClick={() => goTab(entry.id)}
             data-testid={`inbox-tab-${entry.id}`}
-            className={`flex items-center gap-1.5 rounded-md px-2.5 py-1 text-small transition-colors ${
+            className={`flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-md px-2.5 py-1 text-small transition-colors ${
               tab === entry.id ? "bg-elevated font-medium text-text" : "text-muted hover:text-text"
             }`}
           >
@@ -530,7 +553,7 @@ export function NotificationsView({
             <span className="text-caption text-faint">{counts[entry.key]}</span>
           </button>
         ))}
-        <div className="ml-auto">
+        <div className="ml-auto max-[600px]:hidden">
           <form onSubmit={submitSearch} className="relative flex items-center">
             <Search size={13} className="pointer-events-none absolute left-2 text-faint" />
             <input
@@ -542,6 +565,18 @@ export function NotificationsView({
           </form>
         </div>
       </div>
+
+      {(phoneSearch || query) && (
+        <form onSubmit={submitSearch} className="relative hidden items-center border-b border-border px-3 py-2 max-[600px]:flex">
+          <Search size={13} className="pointer-events-none absolute left-5 text-faint" />
+          <input
+            value={query}
+            onChange={(event) => setQuery(event.target.value)}
+            placeholder={t("Search notifications…")}
+            className="h-8 w-full rounded-md border border-border bg-elevated/40 pl-7 pr-2 text-small text-text placeholder:text-faint focus:border-border-strong"
+          />
+        </form>
+      )}
 
       {error && <p role="alert" className={`py-2 text-small text-danger ${PAGE_INSET}`}>{error}</p>}
 
@@ -587,7 +622,7 @@ export function NotificationsView({
         </div>
       )}
 
-      <div className={`divide-y divide-border pb-8 ${PAGE_INSET}`}>
+      <div className={`divide-y divide-border pb-8 ${PAGE_INSET} max-[600px]:pl-4 max-[600px]:pr-4`}>
         {items.length === 0 && (
           <EmptyState
             title={initialQuery ? t("No notifications match this search.") : t("Your inbox is empty")}
@@ -629,7 +664,7 @@ export function NotificationsView({
         )}
       </div>
 
-      <div className={`flex flex-wrap items-center gap-2 border-t border-border py-3 text-small text-faint ${PAGE_INSET}`}>
+      <div className={`flex flex-wrap items-center gap-2 border-t border-border py-3 text-small text-faint ${PAGE_INSET} max-[600px]:hidden`}>
         <span>{t("Notifications are kept for 90 days.")}</span>
         <Link
           href={`/${workspaceId}/review`}
@@ -694,7 +729,7 @@ export function NotificationsView({
       <div
         key={item.id}
         data-inbox-read={unread ? "false" : "true"}
-        className={`group flex items-start gap-2 py-2.5 transition-colors ${isSelected ? "bg-elevated/60" : "hover:bg-elevated/40"}`}
+        className={`group flex items-start gap-2 py-2.5 transition-colors max-[600px]:min-h-11 ${isSelected ? "bg-elevated/60" : "hover:bg-elevated/40"}`}
       >
         <button
           type="button"
@@ -716,15 +751,21 @@ export function NotificationsView({
           <span className="block truncate text-caption text-faint">
             {groupTitle(item, t)}
             {muted ? ` · ${t("Muted")}` : ""}
+            <span className="hidden max-[600px]:inline" suppressHydrationWarning> · {timeAgo(item.createdAt, locale)}</span>
           </span>
         </button>
-        <span className="mt-0.5 shrink-0 text-small tabular-nums text-faint" suppressHydrationWarning>{timeAgo(item.createdAt, locale)}</span>
+        <span className="mt-0.5 shrink-0 text-small tabular-nums text-faint max-[600px]:hidden" suppressHydrationWarning>{timeAgo(item.createdAt, locale)}</span>
+        {dataFor(item).actorName && (
+          <span className="mt-0.5 hidden shrink-0 max-[600px]:block">
+            <AssigneeAvatar displayName={dataFor(item).actorName ?? ""} />
+          </span>
+        )}
         {item.state === "done" && <span className="mt-1 rounded-full bg-elevated px-1.5 py-0.5 text-caption text-muted">{t("Done")}</span>}
         <Menu
           width={200}
           align="right"
           trigger={<span className="text-muted">…</span>}
-          triggerClassName="shrink-0 rounded p-1 text-faint opacity-0 transition-opacity hover:bg-elevated hover:text-text focus-visible:opacity-100 group-hover:opacity-100"
+          triggerClassName="shrink-0 rounded p-1 text-faint opacity-0 transition-opacity hover:bg-elevated hover:text-text focus-visible:opacity-100 group-hover:opacity-100 max-[600px]:opacity-100"
         >
           {(close) => (
             <>

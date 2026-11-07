@@ -125,6 +125,7 @@ export function IssueLayout({
   scope = "workspace",
   projectId = null,
   initialView = null,
+  phoneToolsCollapsed = false,
 }: {
   issues: IssueWithLabels[];
   workspaceId: string;
@@ -138,6 +139,8 @@ export function IssueLayout({
   projectId?: string | null;
   // The view the server resolved from ?viewId= or the scope default.
   initialView?: TaskViewSummary | null;
+  // The task list has a filter button in its phone header; other lists keep the bar open.
+  phoneToolsCollapsed?: boolean;
 }) {
   const t = useT();
   const router = useRouter();
@@ -326,6 +329,7 @@ export function IssueLayout({
         />
       ) : null}
       <TaskViewBar
+        phoneCollapsed={phoneToolsCollapsed}
         workspaceId={workspaceId}
         view={view}
         onChange={setView}

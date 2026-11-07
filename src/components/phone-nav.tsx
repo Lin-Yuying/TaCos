@@ -59,7 +59,7 @@ export function PhoneNav({ workspaceId, workspaceName, switcher, projects, accou
           <Plus size={20} />
         </button>
       )}
-      <nav aria-label={t("Main navigation")} data-phone-nav className="flex shrink-0 border-t border-border bg-bg pb-[env(safe-area-inset-bottom)] min-[601px]:hidden">
+      <nav aria-label={t("Main navigation")} data-phone-nav hidden={/\/docs\/[^/]+$/.test(pathname)} className="flex shrink-0 border-t border-border bg-bg pb-[env(safe-area-inset-bottom)] min-[601px]:hidden">
         <PhoneTab href={`${base}/notifications`} active={pathname.endsWith("/notifications")} badge={unread} icon={<Inbox size={18} />}>{t("Inbox")}</PhoneTab>
         <PhoneTab href={`${base}?view=all&assignee=me`} active={mine} icon={<CircleUser size={18} />}>{t("My Tasks")}</PhoneTab>
         {agentAllowed && <PhoneTab href={`${base}/agent`} active={pathname.endsWith("/agent")} icon={<Bot size={18} />}>{t("Agent")}</PhoneTab>}

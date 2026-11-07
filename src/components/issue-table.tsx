@@ -322,7 +322,7 @@ export function IssueTable({
                   else openIssue(issue.id);
                 }}
                 onMouseEnter={() => setFocusIndex(index)}
-                className={`flex cursor-default items-center gap-2.5 py-[7px] text-body transition-colors ${PAGE_INSET} ${
+                className={`flex cursor-default items-center gap-2.5 py-[7px] text-body transition-colors ${PAGE_INSET} max-[600px]:min-h-11 max-[600px]:border-b max-[600px]:border-b-border max-[600px]:py-2.5 max-[600px]:pl-4 max-[600px]:pr-4 ${
                   focused ? "bg-row-active" : opened ? "bg-surface" : "hover:bg-elevated/40"
                 } ${opened ? "border-l-2 border-l-accent" : "border-l-2 border-l-transparent"}`}
               >
@@ -345,7 +345,7 @@ export function IssueTable({
                 <span className="min-w-0 flex-1">
                   <span className="block truncate">{issue.title}</span>
                   <span suppressHydrationWarning className="hidden truncate text-small text-faint max-[600px]:block">
-                    {[show("id") ? issueRef(issue) : null, show("dates") ? timeAgo(issue.updatedAt, locale) : null].filter(Boolean).join(" · ")}
+                    {[show("id") ? issueRef(issue) : null, show("status") ? t(STATUS_META[issue.status].label) : null, show("dates") ? timeAgo(issue.updatedAt, locale) : null].filter(Boolean).join(" · ")}
                   </span>
                 </span>
                 {issue.delegatedAgentId ? (
@@ -356,6 +356,11 @@ export function IssueTable({
                   >
                     <Bot size={11} />
                     {issue.delegationStatus === "review" ? t("Review") : null}
+                  </span>
+                ) : null}
+                {show("assignee") && issue.assignees[0] ? (
+                  <span className="hidden shrink-0 max-[600px]:block">
+                    <AssigneeAvatar displayName={issue.assignees[0].displayName} avatar={issue.assignees[0].avatar} />
                   </span>
                 ) : null}
                 {show("project") ? (

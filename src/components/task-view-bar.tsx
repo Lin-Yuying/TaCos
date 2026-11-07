@@ -118,6 +118,7 @@ export function filterSummary(
 }
 
 export function TaskViewBar({
+  phoneCollapsed = false,
   workspaceId,
   view,
   onChange,
@@ -130,6 +131,7 @@ export function TaskViewBar({
   onExport,
   exportDisabled,
 }: {
+  phoneCollapsed?: boolean;
   workspaceId: string;
   view: TaskView;
   onChange: (next: TaskView) => void;
@@ -144,7 +146,7 @@ export function TaskViewBar({
   exportDisabled?: boolean;
 }) {
   const t = useT();
-  const {confirm, toast} = useUI();
+  const {confirm, toast, phoneTaskToolsOpen} = useUI();
   const [name, setName] = useState("");
   const [type, setType] = useState<FieldType>("text");
   const [options, setOptions] = useState("");
@@ -197,7 +199,7 @@ export function TaskViewBar({
   }
 
   return (
-    <div data-task-view-bar className={`flex min-h-10 shrink-0 flex-wrap items-center gap-1 border-b border-border py-1 ${PAGE_INSET}`}>
+    <div data-task-view-bar className={`flex min-h-10 shrink-0 flex-wrap items-center gap-1 border-b border-border py-1 ${PAGE_INSET} ${phoneCollapsed && !phoneTaskToolsOpen && view.filters.length === 0 ? "max-[600px]:hidden" : ""}`}>
       {leading}
       <Menu
         width={420}

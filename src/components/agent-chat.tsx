@@ -41,6 +41,7 @@ import {
   Users,
   Wrench,
   X,
+  List,
 } from "lucide-react";
 import { Menu, MenuItem } from "@/components/menu";
 import { useUI } from "@/components/ui-context";
@@ -1829,7 +1830,7 @@ export function AgentWorkspace({
       )}
 
       <main className="flex min-w-0 flex-1 flex-col">
-        <button className="self-start px-3 py-1 text-small text-muted" onClick={()=>{setSidebarClosed(!sidebarClosed);setDrawer(true);}}>{t(sidebarClosed?"Show conversations":"Conversations")}</button>
+        <button className="self-start px-3 py-1 text-small text-muted max-[600px]:hidden" onClick={()=>{setSidebarClosed(!sidebarClosed);setDrawer(true);}}>{t(sidebarClosed?"Show conversations":"Conversations")}</button>
         {active ? (
           // Keyed by thread so switching conversations starts from that thread's own state
           // instead of carrying the previous one's messages across.
@@ -1854,14 +1855,17 @@ export function AgentWorkspace({
           />
         ) : (
           <>
-            <header className="relative flex h-12 shrink-0 items-center justify-center px-4">
+            <header className="relative flex h-12 shrink-0 items-center justify-center px-4 max-[600px]:h-11 max-[600px]:justify-start max-[600px]:border-b max-[600px]:border-border max-[600px]:px-3">
+              <h1 className="hidden min-w-0 flex-1 truncate text-lead font-semibold max-[600px]:block">{t("New chat")}</h1>
               <button
                 type="button"
                 onClick={() => setDrawer(true)}
-                className="absolute left-2 top-2 flex h-8 w-8 items-center justify-center rounded-md text-muted transition-colors hover:bg-elevated hover:text-text @[620px]:hidden"
+                className="absolute left-2 top-2 flex h-8 w-8 items-center justify-center rounded-md text-muted transition-colors hover:bg-elevated hover:text-text @[620px]:hidden max-[600px]:static"
                 title={t("Conversations")}
+                aria-label={t("Conversations")}
               >
-                <PanelLeft size={15} />
+                <PanelLeft size={15} className="max-[600px]:hidden" />
+                <List size={15} className="hidden max-[600px]:block" />
               </button>
             </header>
             <StartComposer
@@ -2198,36 +2202,38 @@ function Conversation({
   async function changeProject(projectId:string){const result=await setAgentThreadProjectAction(workspaceId,active.id,projectId);if(!result.ok)setError(result.error);else router.refresh();}
   return (
     <div className="flex min-h-0 min-w-0 flex-1 flex-col">
-      <header className="relative flex h-12 shrink-0 items-center justify-between gap-2 px-3">
-        <div className="flex min-w-0 items-center gap-1.5 text-small text-muted">
+      <header className="relative flex h-12 shrink-0 items-center justify-between gap-2 px-3 max-[600px]:h-auto max-[600px]:min-h-11 max-[600px]:flex-wrap max-[600px]:border-b max-[600px]:border-border max-[600px]:py-2">
+        <div className="flex min-w-0 items-center gap-1.5 text-small text-muted max-[600px]:flex-1">
           <button
             type="button"
             onClick={onOpenSidebar}
-            className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-muted transition-colors hover:bg-elevated hover:text-text @[620px]:hidden"
+            className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-muted transition-colors hover:bg-elevated hover:text-text @[620px]:hidden max-[600px]:order-last"
             title={t("Conversations")}
+            aria-label={t("Conversations")}
           >
-            <PanelLeft size={15} />
+            <PanelLeft size={15} className="max-[600px]:hidden" />
+            <List size={15} className="hidden max-[600px]:block" />
           </button>
           <span
-            className="h-1.5 w-1.5 shrink-0 rounded-full"
+            className="h-1.5 w-1.5 shrink-0 rounded-full max-[600px]:hidden"
             style={{ background: active.projectColor || "var(--color-faint)" }}
           />
-          <h1 className="max-w-[240px] truncate text-body font-medium text-text" title={active.title}>{active.title||t("Untitled conversation")}</h1><span className="max-w-[120px] truncate">{active.projectName||t("No project")}</span>
+          <h1 className="max-w-[240px] truncate text-body font-medium text-text max-[600px]:max-w-none max-[600px]:flex-1 max-[600px]:text-lead max-[600px]:font-semibold" title={active.title}>{active.title||t("Untitled conversation")}</h1><span className="max-w-[120px] truncate max-[600px]:hidden">{active.projectName||t("No project")}</span>
           {active.contextChars > 0 && (
             <span
               data-testid="context-meter"
               title={t("About {tokens} tokens in this conversation. Long API-agent threads are summarized, not stopped.", { tokens: contextTokens.toLocaleString() })}
-              className={`shrink-0 rounded-full px-1.5 py-0.5 text-caption ${
+              className={`shrink-0 rounded-full px-1.5 py-0.5 text-caption max-[600px]:hidden ${
                 active.contextChars >= CONTEXT_COMPACT_CHARS ? "bg-accent/10 text-accent" : "bg-elevated text-faint"
               } font-variant-numeric tabular-nums`}
             >
               {t("Context ~{tokens}k", { tokens: String(Math.max(1, Math.round(contextTokens / 1000))) })}
             </span>
           )}
-          {active.visibility === "shared" && <span className="shrink-0 rounded-full bg-elevated px-1.5 py-0.5 text-caption text-muted">{t("Shared conversations")}</span>}
-          {!active.mine && <span className="shrink-0 text-faint">· {active.createdByName}</span>}
+          {active.visibility === "shared" && <span className="shrink-0 rounded-full bg-elevated px-1.5 py-0.5 text-caption text-muted max-[600px]:hidden">{t("Shared conversations")}</span>}
+          {!active.mine && <span className="shrink-0 text-faint max-[600px]:hidden">· {active.createdByName}</span>}
         </div>
-        <div className="min-w-0 flex-1 overflow-x-auto">
+        <div className="min-w-0 flex-1 overflow-x-auto empty:hidden max-[600px]:order-last max-[600px]:flex-none max-[600px]:basis-full">
           <ThreadTaskChips workspaceId={workspaceId} threadId={active.id} busy={busy} />
         </div>
         <div className="flex shrink-0 items-center gap-1">
@@ -2236,7 +2242,7 @@ function Conversation({
               type="button"
               disabled={busy || forkBusy !== null}
               onClick={() => void forkAt(messages[messages.length - 1].id)}
-              className="rounded-md px-2 py-1 text-small text-muted transition-colors hover:bg-elevated hover:text-text disabled:opacity-40"
+              className="rounded-md px-2 py-1 text-small text-muted transition-colors hover:bg-elevated hover:text-text disabled:opacity-40 max-[600px]:hidden"
             >
               {t("Open a copy")}
             </button>
@@ -2246,7 +2252,7 @@ function Conversation({
       </header>
 
       <div ref={chatScroll} onScroll={e=>{const element=e.currentTarget;setFollow(element.scrollHeight-element.scrollTop-element.clientHeight<80);}} className="min-h-0 flex-1 overflow-y-auto">
-        <div className="mx-auto flex w-full max-w-3xl flex-col gap-6 px-5 pb-8 pt-4">
+        <div className="mx-auto flex w-full max-w-3xl flex-col gap-6 px-5 pb-8 pt-4 max-[600px]:gap-3 max-[600px]:px-4 max-[600px]:pb-4 max-[600px]:pt-3.5">
           {messages.length === 0 && (
             <div className="pt-16 text-center">
               <h1 className="text-display font-normal leading-tight tracking-[-0.015em]">
@@ -2287,7 +2293,7 @@ function Conversation({
         </div>
       </div>
 
-      <div className="shrink-0 px-4 pb-4">
+      <div className="shrink-0 px-4 pb-4 max-[600px]:border-t max-[600px]:border-border max-[600px]:px-3 max-[600px]:py-2">
         <div className="mx-auto w-full max-w-3xl">
           {!follow&&<button className="mb-2 rounded border border-border px-3 py-1 text-small" onClick={()=>{setFollow(true);bottom.current?.scrollIntoView({block:"end"});}}>{t("Jump to latest")}</button>}
           {turnTaken && active.turnUserName && (

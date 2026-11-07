@@ -107,6 +107,8 @@ type UIState = {
   focused: FocusRef;
   setFocused: (focused: FocusRef) => void;
   layout: IssueLayout;
+  phoneTaskToolsOpen: boolean;
+  setPhoneTaskToolsOpen: (open: boolean) => void;
   setLayout: (layout: IssueLayout) => void;
   // True when this workspace has an enabled AI provider; drives the sparkle buttons.
   aiReady: boolean;
@@ -225,6 +227,7 @@ export function UIProvider({
   }, []);
 
   function setLayout(next: IssueLayout) { setLayoutState(next); }
+  const [phoneTaskToolsOpen, setPhoneTaskToolsOpen] = useState(false);
   // Native history participates in Next navigation without reloading the list.
   useEffect(() => { setOpenIssueId(params.get("issue"));setOpenPageId(params.get("issue")?null:params.get("doc")); }, [params]);
   useEffect(() => {
@@ -291,6 +294,8 @@ export function UIProvider({
         setFocused,
         layout,
         setLayout,
+        phoneTaskToolsOpen,
+        setPhoneTaskToolsOpen,
         aiReady,
         toast,
       }}

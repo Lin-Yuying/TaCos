@@ -119,6 +119,7 @@ async function IssuesView({
         assigneeName={assigneeParam === "me" ? user.displayName : assigneeMember?.displayName}
       />
       <IssueLayout
+        phoneToolsCollapsed
         key={activeView?.id ?? "no-view"}
         serverQuery={query}
         initialPage={result}
