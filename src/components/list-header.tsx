@@ -169,7 +169,7 @@ export function ListHeader({
         </button>
       )}
       <div className="ml-auto flex min-w-0 shrink items-center gap-2">
-        <div className="flex w-40 min-w-[56px] shrink items-center gap-2 rounded-full border border-border bg-elevated/50 px-3 py-1.5 focus-within:border-border-strong">
+        <div className={`flex w-40 min-w-[56px] shrink items-center gap-2 rounded-full ${value ? "" : "max-[600px]:hidden "} border border-border bg-elevated/50 px-3 py-1.5 focus-within:border-border-strong`}>
           <Search size={13} className="shrink-0 text-faint" />
           <DebouncedInput
             value={value}

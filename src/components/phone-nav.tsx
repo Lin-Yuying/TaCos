@@ -29,7 +29,7 @@ export function PhoneNav({ workspaceId, workspaceName, projects, account, unread
   const t = useT();
   const pathname = usePathname();
   const params = useSearchParams();
-  const { setComposerOpen } = useUI();
+  const { setComposerOpen, openIssueId } = useUI();
   const [drawer, setDrawer] = useState(false);
   const base = `/${workspaceId}`;
   const onTasks = pathname === base;
@@ -49,7 +49,7 @@ export function PhoneNav({ workspaceId, workspaceName, projects, account, unread
   ].filter((entry) => !hidden.includes(entry.key));
   return (
     <>
-      {onTasks && (
+      {onTasks && !openIssueId && (
         <button
           type="button"
           aria-label={t("New task")}

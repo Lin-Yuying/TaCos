@@ -95,7 +95,7 @@ export function WatchControl({
             : "border-border text-muted hover:border-border-strong hover:text-text"
         }`}
         trigger={
-          <span data-testid={`watch-button-${scopeType}`} aria-pressed={following}>
+          <span data-testid={`watch-button-${scopeType}`} aria-pressed={following} className="inline-flex items-center gap-1.5 whitespace-nowrap">
             {following ? (muted ? <BellOff size={12} /> : <Bell size={12} />) : <Bell size={12} />}
             {following ? t(muted ? "Muted" : "Following") : t("Follow")}
             {watchers.length > 0 && (

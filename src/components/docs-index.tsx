@@ -171,8 +171,7 @@ export function DocsIndex({
             void importFiles(list, true);
           }}
         />
-        <BatchSelection workspaceId={workspaceId} kind="document" items={shown}/>
-        <div className="my-3 flex flex-wrap items-center gap-2"><input aria-label={t("Search documents")} placeholder={t("Search documents")} value={query} onChange={e=>setQuery(e.target.value)} className="min-w-0 flex-1 rounded border border-border bg-bg px-2 py-1 text-body"/><select aria-label={t("Sort")} value={sort} onChange={e=>setSort(e.target.value)} className="rounded border border-border bg-bg p-1 text-small"><option value="updated">{t("Recently updated")}</option><option value="title">{t("Title")}</option><option value="path">{t("Path")}</option></select><span className="text-small text-faint">{shown.length} / {pages.length}</span>
+        <div className="my-3 flex flex-wrap items-center gap-2"><input aria-label={t("Search documents")} placeholder={t("Search documents")} value={query} onChange={e=>setQuery(e.target.value)} className="min-w-0 flex-1 rounded border border-border bg-bg px-2 py-1 text-body"/><select aria-label={t("Sort")} value={sort} onChange={e=>setSort(e.target.value)} className="rounded border border-border bg-bg p-1 text-small"><option value="updated">{t("Recently updated")}</option><option value="title">{t("Title")}</option><option value="path">{t("Path")}</option></select>{pages.length>0&&<span className="text-small tabular-nums text-faint">{shown.length} / {pages.length}</span>}{pages.length>0&&<BatchSelection workspaceId={workspaceId} kind="document" items={shown}/>}
         <Menu
           align="right"
           width={220}

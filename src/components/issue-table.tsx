@@ -336,12 +336,17 @@ export function IssueTable({
                 {show("id") ? (
                   <span
                     title={issueRef(issue)}
-                    className="w-[124px] shrink-0 truncate font-mono text-small text-faint"
+                    className="w-[124px] shrink-0 truncate font-mono text-small text-faint max-[600px]:hidden"
                   >
                     {issueRef(issue)}
                   </span>
                 ) : null}
-                <span className="min-w-0 flex-1 truncate">{issue.title}</span>
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate">{issue.title}</span>
+                  <span suppressHydrationWarning className="hidden truncate text-small text-faint max-[600px]:block">
+                    {[show("id") ? issueRef(issue) : null, show("dates") ? timeAgo(issue.updatedAt, locale) : null].filter(Boolean).join(" · ")}
+                  </span>
+                </span>
                 {issue.delegatedAgentId ? (
                   <span
                     title={issue.delegatedAgentName ? t("Delegated to {name}", { name: issue.delegatedAgentName }) : t("Delegated to an agent")}
@@ -422,7 +427,7 @@ export function IssueTable({
                     )}
                   </span>
                 ) : null}
-                <span className="flex w-[72px] shrink-0 items-center justify-end gap-1">
+                <span className="flex w-[72px] shrink-0 items-center justify-end gap-1 max-[600px]:hidden">
                   <ViaBadge via={issue.createdVia} />
                   {show("dates") ? (
                     <span suppressHydrationWarning className="whitespace-nowrap text-right text-small text-faint">
