@@ -19,6 +19,10 @@ import {
   type TaskViewDisplay,
   type ViewLayout,
 } from "@/lib/task-view";
+import {
+  parseInsightSavedConfig,
+  type InsightSavedConfig,
+} from "@/lib/insights.shared";
 
 export const VIEW_SCOPES = ["workspace", "project"] as const;
 export type ViewScope = (typeof VIEW_SCOPES)[number];
@@ -28,6 +32,9 @@ export type TaskViewDefinition = TaskView & {
   display: TaskViewDisplay;
   // Personal views: the URL context they belong to. Shared views leave it empty.
   context?: string;
+  // U-02: a shared Insights report stored in the same view table, so members and
+  // permissions are the ones U-09 already defines. Task lists skip these rows.
+  insight?: InsightSavedConfig;
 };
 
 const definitionSchema = z.object({
@@ -46,7 +53,15 @@ const definitionSchema = z.object({
   layout: z.enum(VIEW_LAYOUTS),
   display: z.unknown().optional(),
   context: z.string().max(600).optional(),
+  insight: z.unknown().optional(),
 });
+
+function insightOf(raw: unknown): InsightSavedConfig | undefined {
+  if (raw === undefined) return undefined;
+  const parsed = parseInsightSavedConfig(raw);
+  if (!parsed) throw new TacosError("Enter a valid report range and filters", 400);
+  return parsed;
+}
 
 /** Validates a client-sent definition; a bad layout/filter is a 400, not a saved view. */
 export function parseTaskViewDefinition(raw: unknown): TaskViewDefinition {
@@ -58,6 +73,7 @@ export function parseTaskViewDefinition(raw: unknown): TaskViewDefinition {
     layout: parsed.data.layout,
     display: normalizeDisplay(parsed.data.display),
     ...(parsed.data.context ? { context: parsed.data.context } : {}),
+    ...(parsed.data.insight === undefined ? {} : { insight: insightOf(parsed.data.insight) }),
   };
 }
 
@@ -67,12 +83,15 @@ export function parseStoredDefinition(raw: string): TaskViewDefinition {
     const value = JSON.parse(raw) as unknown;
     const parsed = definitionSchema.safeParse(value);
     if (!parsed.success) throw new Error("invalid");
+    const insight =
+      parsed.data.insight === undefined ? undefined : (parseInsightSavedConfig(parsed.data.insight) ?? undefined);
     return {
       filters: parsed.data.filters,
       sort: parsed.data.sort,
       layout: parsed.data.layout,
       display: normalizeDisplay(parsed.data.display),
       ...(parsed.data.context ? { context: parsed.data.context } : {}),
+      ...(insight ? { insight } : {}),
     };
   } catch {
     return { ...EMPTY_DEFINITION, display: DEFAULT_DISPLAY };
@@ -125,6 +144,16 @@ function canManage(row: ViewRow, userId: string, manager: boolean): boolean {
   return Boolean(row.shared) && manager;
 }
 
+/** A malformed report row must not fall back into the task-view lists. */
+function hasInsightField(raw: string): boolean {
+  try {
+    const value = JSON.parse(raw) as unknown;
+    return Boolean(value && typeof value === "object" && "insight" in value);
+  } catch {
+    return false;
+  }
+}
+
 function mergeDefinition(row: ViewRow, pref: PrefRow | undefined): TaskViewDefinition {
   const base = parseStoredDefinition(row.definition);
   if (!pref?.displayOverride) return base;
@@ -145,6 +174,7 @@ function mergeDefinition(row: ViewRow, pref: PrefRow | undefined): TaskViewDefin
         : base.layout,
       display: override.display === undefined ? base.display : override.display,
       ...(base.context ? { context: base.context } : {}),
+      ...(base.insight ? { insight: base.insight } : {}),
     });
   } catch {
     return base;
@@ -264,6 +294,8 @@ export type ListTaskViewsOptions = {
   context?: string;
   // The sidebar wants shared views only.
   sharedOnly?: boolean;
+  // Insights lists its own reports; task lists never show them.
+  insightOnly?: boolean;
 };
 
 /** Everything this member can open from the current page, shared first. */
@@ -313,6 +345,11 @@ export function listTaskViews(
       !row.projectId ||
       (openProjects.has(row.projectId) && canSeeProject(workspaceId, userId, row.projectId))
   );
+  // Insight reports and task views share the table but never each other's lists.
+  rows = rows.filter((row) => {
+    const insight = Boolean(parseStoredDefinition(row.definition).insight);
+    return options.insightOnly ? insight : !insight && !hasInsightField(row.definition);
+  });
   if (!options.sharedOnly) {
     rows = rows.filter((row) => {
       if (row.shared) return true;
@@ -373,6 +410,7 @@ export function defaultTaskView(
     )
     .get();
   if (!row || (row.projectId && !projectIsOpen(workspaceId, row.projectId))) return null;
+  if (hasInsightField(row.definition)) return null;
   const prefs = prefsFor(workspaceId, userId, [row.id]);
   return summarise(row, prefs.get(row.id), userId, managerOf(workspaceId, userId));
 }
@@ -467,6 +505,39 @@ export function createTaskView(
   return getTaskView(workspaceId, userId, id);
 }
 
+/**
+ * U-02: save the current report as a shared workspace view. It reuses U-09's view
+ * table and permissions, so every member who can see the workspace can open it and
+ * guests do not exist.
+ */
+export function createInsightView(
+  workspaceId: string,
+  userId: string,
+  name: string,
+  insight: InsightSavedConfig
+): TaskViewSummary {
+  return createTaskView(workspaceId, userId, {
+    name,
+    scope: "workspace",
+    shared: true,
+    definition: {
+      filters: [],
+      sort: [],
+      layout: "list",
+      display: DEFAULT_DISPLAY,
+      insight,
+    },
+  });
+}
+
+export function listInsightViews(workspaceId: string, userId: string): TaskViewSummary[] {
+  return listTaskViews(workspaceId, userId, {
+    scope: "workspace",
+    sharedOnly: true,
+    insightOnly: true,
+  });
+}
+
 export function updateTaskView(
   workspaceId: string,
   userId: string,
@@ -507,6 +578,9 @@ export function saveTaskViewDefinition(
     const stored = parseStoredDefinition(row.definition);
     // A personal view keeps the context it was saved under, whatever the editor sends.
     if (!row.shared && stored.context) definition.context = stored.context;
+    // A report's range and filters are not part of the task-view editor, so a generic
+    // save keeps them instead of turning the row back into a task view.
+    if (!definition.insight && stored.insight) definition.insight = stored.insight;
     db.transaction((tx) => {
       tx.update(taskViews)
         .set({ definition: JSON.stringify(definition), updatedAt: new Date().toISOString() })
