@@ -97,7 +97,7 @@ export function TaskBulkBar({
   }
 
   return (
-    <div data-task-bulk role="toolbar" aria-label={t("Select tasks")} className="fixed bottom-5 left-1/2 z-40 flex max-w-[calc(100vw-32px)] -translate-x-1/2 flex-wrap items-center gap-1.5 rounded-[10px] border border-border bg-bg px-2 py-1.5 text-small shadow-xl">
+    <div data-task-bulk role="toolbar" aria-label={t("Select tasks")} className="fixed bottom-5 left-1/2 max-[600px]:bottom-[72px] z-40 flex max-w-[calc(100vw-32px)] -translate-x-1/2 flex-wrap items-center gap-1.5 rounded-[10px] border border-border bg-bg px-2 py-1.5 text-small shadow-xl">
       <span className="flex items-center gap-1 font-medium text-text">
         <CheckSquare size={12} />
         {t("{count} selected", { count: selected.length })}

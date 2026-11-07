@@ -23,8 +23,8 @@ function PhoneTab({ href, active, icon, badge, children }: {
 }
 
 // Phones get five fixed destinations at the bottom; everything else in the sidebar sits behind "More".
-export function PhoneNav({ workspaceId, workspaceName, projects, account, unread, agentAllowed, hidden }: {
-  workspaceId: string; workspaceName: string; projects: { id: string; name: string }[]; account: ReactNode; unread: number; agentAllowed: boolean; hidden: string[];
+export function PhoneNav({ workspaceId, workspaceName, switcher, projects, account, unread, agentAllowed, hidden }: {
+  workspaceId: string; workspaceName: string; switcher: ReactNode; projects: { id: string; name: string }[]; account: ReactNode; unread: number; agentAllowed: boolean; hidden: string[];
 }) {
   const t = useT();
   const pathname = usePathname();
@@ -73,7 +73,8 @@ export function PhoneNav({ workspaceId, workspaceName, projects, account, unread
         <Dialog.Portal>
           <Dialog.Overlay className="fixed inset-0 z-[60] bg-black/40" />
           <Dialog.Content aria-describedby={undefined} className="fixed inset-y-0 left-0 z-[70] flex w-[300px] max-w-[85vw] flex-col bg-bg">
-            <Dialog.Title className="border-b border-border px-4 py-3.5 text-body font-semibold">{workspaceName}</Dialog.Title>
+            <Dialog.Title className="sr-only">{workspaceName}</Dialog.Title>
+            <div className="border-b border-border px-3 py-2.5">{switcher}</div>
             <div className="min-h-0 flex-1 overflow-y-auto">
               {entries.map((entry) => (
                 <Link key={entry.key} href={entry.href} onClick={() => setDrawer(false)} className="flex min-h-11 items-center truncate px-4 py-2.5 text-body text-text">

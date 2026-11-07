@@ -1636,7 +1636,10 @@ function TabBar({
     if (justClosed.current !== null && current !== justClosed.current) justClosed.current = null;
     if (current === justClosed.current) return;
     if (current === startKey) return;
-    if (tabs.includes(current)) return;
+    if (tabs.includes(current)) {
+      openAsNew.current = false;
+      return;
+    }
     const next = placeInTabs(tabs, current, {
       from: cameFrom.current,
       fixed: fixedTabs,
@@ -1658,8 +1661,13 @@ function TabBar({
       if (!url.pathname.startsWith(`/${workspace.id}`)) return;
       event.preventDefault();
       event.stopPropagation();
-      openAsNew.current = true;
-      router.push(`${url.pathname}${url.search}`);
+      const params = new URLSearchParams(url.search);
+      params.sort();
+      const query = params.toString();
+      const key = `${url.pathname}${query ? `?${query}` : ""}`;
+      // A link to the page already on screen places no tab, so nothing would spend the flag.
+      openAsNew.current = key !== lastKey.current;
+      router.push(`${url.pathname}${url.search}${url.hash}`);
     };
     document.addEventListener("click", onClick, true);
     return () => document.removeEventListener("click", onClick, true);
@@ -1671,7 +1679,7 @@ function TabBar({
     if (paletteOpen || !openAsNew.current) return;
     const timer = setTimeout(() => {
       openAsNew.current = false;
-    }, 1000);
+    }, 3000);
     return () => clearTimeout(timer);
   }, [paletteOpen]);
 
@@ -1824,7 +1832,7 @@ function TabBar({
         })}
       </div>
 
-      <Menu align="right" width={300} trigger={<span aria-label={t("Open tabs")} className="tabular-nums">{hiddenTabs.length>0?`+${hiddenTabs.length}`:"▾"}</span>} triggerClassName="rounded px-2 py-1 text-small text-muted hover:bg-elevated hover:text-text">{close=><>{visible.map(key=><MenuItem key={key} onSelect={()=>{close();router.push(key);}}>{tabMeta(key,workspace,projects,members,pages,t).label}</MenuItem>)}{recentTabs.length>0&&<div className="border-t border-border px-2 py-1 text-small text-faint">{t("Recently closed")}</div>}{recentTabs.map(key=><MenuItem key={key} onSelect={()=>{close();setRecentTabs(previous=>previous.filter(item=>item!==key));router.push(key);}}>{tabMeta(key,workspace,projects,members,pages,t).label}</MenuItem>)}</>}</Menu>
+      <Menu align="right" width={300} trigger={<span aria-label={t("Open tabs")} className="tabular-nums">{hiddenTabs.length>0?`+${hiddenTabs.length}`:"▾"}</span>} triggerClassName="rounded px-2 py-1 text-small text-muted hover:bg-elevated hover:text-text">{close=><>{visible.map(key=><MenuItem key={key} onSelect={()=>{close();router.push(key);}}>{tabMeta(key,workspace,projects,members,pages,t).label}</MenuItem>)}{recentTabs.length>0&&<div className="border-t border-border px-2 py-1 text-small text-faint">{t("Recently closed")}</div>}{recentTabs.map(key=><MenuItem key={key} onSelect={()=>{close();setRecentTabs(previous=>previous.filter(item=>item!==key));openAsNew.current=true;router.push(key);}}>{tabMeta(key,workspace,projects,members,pages,t).label}</MenuItem>)}</>}</Menu>
 
       <DesktopAppUpdateButton />
 
@@ -2100,6 +2108,7 @@ export function WorkspaceShell({
       <Suspense fallback={null}>
         <PhoneNav
           workspaceId={workspace.id}
+          switcher={<WorkspaceSwitcher workspace={workspace} workspaces={workspaces} />}
           workspaceName={workspace.name}
           projects={projects}
           account={<UserMenu user={user} adminUrl={user.siteRole === "admin" ? "/admin" : workspace.role === "admin" ? `/admin/${workspace.id}` : null} />}

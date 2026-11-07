@@ -39,8 +39,8 @@ export function PanelHeader({
   const {workspaceId}=useParams<{workspaceId:string}>();
   const {toast}=useUI();
   return (
-    <div className="flex min-h-[52px] shrink-0 items-center gap-2 border-b border-border px-4">
-      <span className="max-w-[240px] shrink-0 truncate font-mono text-small text-faint">
+    <div className="flex min-h-[52px] shrink-0 flex-wrap items-center gap-x-2 gap-y-1 border-b border-border px-4 py-1.5">
+      <span className="min-w-0 max-w-[240px] truncate font-mono text-small text-faint">
         {issueRef(detail)}
       </span>
       {canChangeStatus ? (

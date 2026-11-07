@@ -336,7 +336,7 @@ export function AutomationSettingsSection({
         </div>
       )}
 
-      {error && (
+      {error && !draft && (
         <div role="alert" data-testid="automation-error" className="text-small text-danger">
           {t(error)}
         </div>
@@ -438,6 +438,7 @@ export function AutomationSettingsSection({
               <X size={14} />
             </button>
           </div>
+          {error && <div role="alert" data-testid="automation-error" className="px-4 pt-3 text-small text-danger">{t(error)}</div>}
           <div className="space-y-3 p-4">
           <label className={LABEL}>
             <span>{t("Rule name")}</span>

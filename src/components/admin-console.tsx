@@ -298,6 +298,7 @@ export function AdminConsole({
                 <span className="text-caption text-faint">{t("Password")}</span>
                 <input
                   type="password"
+                  autoComplete="new-password"
                   value={form.password}
                   onChange={(e) => setForm({ ...form, password: e.target.value })}
                   placeholder={t("at least 8 characters")}

@@ -79,7 +79,8 @@ export function TrashView({
     await perform(doc.id,()=>purgePageAction(workspaceId,doc.id));
   }
 
-  const empty = projects.length === 0 && issues.length === 0 && docs.length === 0;
+  const listed = { all: projects.length + issues.length + docs.length + deletedWorkspaces.length, tasks: issues.length, docs: docs.length, projects: projects.length }[tab];
+  const empty = listed === 0;
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
@@ -228,9 +229,11 @@ export function TrashView({
             ))}
           </div>
         )}
-        <div className={`${PAGE_LEFT} ${PAGE_RIGHT}`}>
-          <WorkspaceTrashList items={deletedWorkspaces} />
-        </div>
+        {tab === "all" && (
+          <div className={`${PAGE_LEFT} ${PAGE_RIGHT}`}>
+            <WorkspaceTrashList items={deletedWorkspaces} />
+          </div>
+        )}
       </div>
     </div>
   );
