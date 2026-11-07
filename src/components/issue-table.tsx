@@ -318,7 +318,8 @@ export function IssueTable({
                 onFocus={() => setFocusIndex(index)}
                 onClick={() => {
                   setFocusIndex(index);
-                  openIssue(issue.id);
+                  if (selection?.mode) selection.toggle(issue.id);
+                  else openIssue(issue.id);
                 }}
                 onMouseEnter={() => setFocusIndex(index)}
                 className={`flex cursor-default items-center gap-2.5 py-[7px] text-body transition-colors ${PAGE_INSET} ${
