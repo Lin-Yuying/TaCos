@@ -228,7 +228,9 @@ function IssuePanel({
         onToggleExpanded={onToggleExpanded}
       />
 
-      <div ref={scrollRef} className="flex min-h-0 flex-1 flex-col space-y-5 overflow-y-auto p-4">
+      {/* Keep content in normal flow: a flex column shrinks the description to its
+          120px minimum while its Markdown overflows into the comment history. */}
+      <div ref={scrollRef} className="min-h-0 flex-1 space-y-5 overflow-y-auto p-4">
         {error && <div role="alert" className="text-small text-danger">{t(error)} <button onClick={()=>setAttempt((n)=>n+1)}>{t("Retry")}</button></div>}
         <EditableTitle id={`task.${id}`} value={detail.title} onSave={(title)=>update({title})}/>
         <div className="flex items-center gap-2">

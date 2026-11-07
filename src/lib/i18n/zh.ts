@@ -1348,7 +1348,6 @@ const zh: Record<string, string> = {
   "Save view": "保存视图",
   "Clear history": "清除历史",
   "Settings sections": "设置分组",
-  "Search settings": "搜索设置",
   "Display density": "显示密度",
   "Compact": "紧凑",
   "Comfortable": "舒适",
