@@ -2,6 +2,13 @@
 // #80: the automation due scheduler is the second (and only other) in-process interval.
 export async function register() {
   if (process.env.NEXT_RUNTIME !== "nodejs") return;
+  // U-12: keep a bounded operations log that the diagnostics bundle can export.
+  const { recordServerEvent } = await import("./lib/ops/server-log");
+  const { appVersion } = await import("./lib/ops/version");
+  recordServerEvent("info", "server started", {
+    version: appVersion(),
+    mode: process.env.TACOS_SERVER_MODE === "1" ? "server" : "desktop",
+  });
   const { warmHarnessDetectCache }=await import("./lib/harness/detect-bin");
   await warmHarnessDetectCache();
   const { failInterruptedRuns } = await import("./lib/runner/hub");
