@@ -43,12 +43,5 @@ State per item: `todo`, `pass` (commit plus cheap checks: `npx tsc --noEmit`, `n
 | 33 | Desktop screens | DesktopSetup, DesktopStarting, DesktopOffline, DesktopUpdate, DesktopUpdateStates, DesktopImport | pass |
 | 34 | Narrow window (720) | Narrow720, Narrow720Panel | pass |
 | 35 | Phone: bottom navigation, drawer, full-screen task/doc/new-task/search | PhoneTasks, PhoneTask, PhoneDrawer, PhoneInbox, PhoneAgent, PhoneSearch, PhoneNewTask, PhoneDoc | pass |
-| 36 | Batch end-to-end run and screenshots (real models, fresh data dir) | all | partial |
-| 37 | Fresh-context review, PR | all | partial |
-
-## Open gaps
-
-`pass` above means every listed board was compared and done. `partial` items still have these boards open:
-
-- 36: re-run after the gaps close
-- 37: re-review after the gaps close; PR is draft until then
+| 36 | Batch end-to-end run and screenshots (real models, fresh data dir) | all | pass |
+| 37 | Fresh-context review, PR | all | pass |
