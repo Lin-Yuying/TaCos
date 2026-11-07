@@ -96,8 +96,12 @@ function main() {
   assert(component.includes("if (!api.restart)"), "older shells keep their own native prompt");
 
   const header = read("src/components/list-header.tsx");
+  // The redesign moved the quick-view pills to a 860px container breakpoint so they only
+  // appear when the list column is wide enough for them, the save-view button, the search
+  // field and New task. The Views menu takes over below that same breakpoint; a 640px
+  // threshold would overflow the header again between 640 and 860.
   assert(
-    header.includes('t("Views")') && header.includes("@min-[640px]:hidden"),
+    header.includes('t("Views")') && header.includes("@min-[860px]:hidden"),
     "a narrow list column needs a view menu instead of losing the filters",
   );
   assert(
