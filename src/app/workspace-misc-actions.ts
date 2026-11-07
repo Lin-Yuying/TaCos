@@ -174,7 +174,7 @@ export async function unmuteNotificationScopeAction(
 
 export async function loadNotificationsAction(
   workspaceId: string,
-  options: { tab?: "unread" | "mentions" | "assigned" | "all"; q?: string; cursor?: string | null }
+  options: { tab?: "unread" | "mentions" | "assigned" | "reviews" | "all"; q?: string; cursor?: string | null }
 ) {
   try {
     const ws = await requireWorkspace(workspaceId);

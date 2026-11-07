@@ -3,6 +3,7 @@ export type NotificationPrefGroup =
   | "assigned"
   | "comments"
   | "mentions"
+  | "reviews"
   | "claims"
   | "blockers"
   | "handoff"
@@ -18,6 +19,7 @@ export const NOTIFICATION_EVENT_GROUPS: {
   { id: "assigned", label: "Assignments", types: ["assigned"] },
   { id: "comments", label: "Comments", types: ["commented"] },
   { id: "mentions", label: "Mentions", types: ["mentioned", "doc_mentioned", "doc_commented"] },
+  { id: "reviews", label: "Review decisions", types: ["review_decision"] },
   { id: "claims", label: "Claims and handovers", types: ["claimed", "released", "claim_transferred"] },
   { id: "blockers", label: "Blockers", types: ["blocker"] },
   {

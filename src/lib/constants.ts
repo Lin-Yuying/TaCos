@@ -3,6 +3,26 @@ export type Recurrence = "daily" | "weekly" | "monthly";
 export type Priority = 0 | 1 | 2 | 3 | 4;
 export type Via = "web" | "api" | "mcp";
 
+// U-11: a comment thread can be closed as resolved. The fixed set keeps the reaction
+// picker small; no free emoji picker (plan decision 2).
+export const COMMENT_REACTIONS = ["👍", "❤️", "🎉", "👀", "🙌"] as const;
+export type CommentReaction = (typeof COMMENT_REACTIONS)[number];
+export const COMMENT_REACTION_META: Record<CommentReaction, { label: string }> = {
+  "👍": { label: "Thumbs up" },
+  "❤️": { label: "Heart" },
+  "🎉": { label: "Celebrate" },
+  "👀": { label: "Eyes" },
+  "🙌": { label: "Raise hands" },
+};
+
+// Follow scopes. "issue" matches the notification-mute vocabulary; the UI says Task.
+export type WatchScopeType = "issue" | "project" | "page";
+export const WATCH_SCOPE_META: Record<WatchScopeType, { label: string; noun: string }> = {
+  issue: { label: "task", noun: "task" },
+  project: { label: "project", noun: "project" },
+  page: { label: "document", noun: "document" },
+};
+
 export const STATUS_ORDER: Status[] = ["in_progress", "todo", "done", "canceled"];
 export const BOARD_STATUS_ORDER: Status[] = ["todo", "in_progress", "done", "canceled"];
 

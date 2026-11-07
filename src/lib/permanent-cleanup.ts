@@ -18,6 +18,9 @@ function queueFiles(where:string,params:unknown[],preserveReferences=false){cons
 function cancelRuns(where:string,ids:string[]){const rows=getDb().$client.prepare(`SELECT id FROM agent_runs WHERE ${where} AND status IN ('queued','running')`).all(...ids) as {id:string}[];for(const row of rows)cancelLiveRun(row.id);}
 export function deleteTaskRecords(ids:string[]){if(!ids.length)return;const db=getDb().$client,q=ids.map(()=>"?").join(",");
  cancelRuns(`issue_id IN (${q})`,ids);
+ // U-11: reactions hang off comments, which go with the task.
+ db.prepare(`DELETE FROM comment_reactions WHERE comment_id IN (SELECT id FROM comments WHERE issue_id IN (${q}))`).run(...ids);
+ db.prepare(`DELETE FROM watchers WHERE scope_type='issue' AND scope_id IN (${q})`).run(...ids);
  for(const [table,column] of [["task_field_values","issue_id"],["issue_assignees","issue_id"],["issue_labels","issue_id"],["blockers","issue_id"],["comments","issue_id"],["events","issue_id"],["notifications","issue_id"]])db.prepare(`DELETE FROM ${table} WHERE ${column} IN (${q})`).run(...ids);
  db.prepare(`DELETE FROM issue_dependencies WHERE issue_id IN (${q}) OR blocked_by_id IN (${q})`).run(...ids,...ids);
  db.prepare(`DELETE FROM personal_entity_state WHERE entity_type='task' AND entity_id IN (${q})`).run(...ids);
@@ -29,6 +32,8 @@ export function deletePageRecords(ids:string[]){if(!ids.length)return;const db=g
  for(const id of ids){db.prepare("DELETE FROM attachment_references WHERE source IN (?,?) OR source IN (SELECT 'page_versions:'||id FROM page_versions WHERE page_id=?) OR source IN (SELECT 'page_comments:'||id FROM page_comments WHERE page_id=?)").run(`pages:${id}`,`collaboration:${id}`,id,id);}
  queueFiles(`page_id IN (${q})`,ids,true);
  for(const table of ["page_collab","page_access","page_favorites","page_comments","page_versions"])db.prepare(`DELETE FROM ${table} WHERE page_id IN (${q})`).run(...ids);
+ db.prepare(`DELETE FROM watchers WHERE scope_type='page' AND scope_id IN (${q})`).run(...ids);
+ db.prepare(`DELETE FROM events WHERE object_type='document' AND object_id IN (${q})`).run(...ids);
  db.prepare(`DELETE FROM page_links WHERE (source_kind='page' AND source_id IN (${q})) OR target_page_id IN (${q})`).run(...ids,...ids);
  db.prepare(`DELETE FROM personal_entity_state WHERE entity_type='document' AND entity_id IN (${q})`).run(...ids);
  db.prepare(`DELETE FROM project_resources WHERE page_id IN (${q})`).run(...ids);
@@ -46,6 +51,8 @@ export function deleteThreadRecords(ids:string[]){if(!ids.length)return;const db
 }
 function deleteProjects(ids:string[]){if(!ids.length)return;const db=getDb().$client,q=ids.map(()=>"?").join(",");
  for(const table of ["project_members","favorites","project_grants","overview_comments","overview_doc_edits","overview_doc_edit_views","project_resources"])db.prepare(`DELETE FROM ${table} WHERE project_id IN (${q})`).run(...ids);
+ db.prepare(`DELETE FROM watchers WHERE scope_type='project' AND scope_id IN (${q})`).run(...ids);
+ db.prepare(`DELETE FROM events WHERE object_type='project' AND object_id IN (${q})`).run(...ids);
  // Documents and conversations keep their workspace ownership and history.
  db.prepare(`UPDATE pages SET project_id=NULL WHERE project_id IN (${q})`).run(...ids);
  db.prepare(`UPDATE agent_threads SET project_id='' WHERE project_id IN (${q})`).run(...ids);
@@ -67,7 +74,7 @@ export async function purgeWorkspaceRecords(workspaceId:string){await leased(`wo
  for(const [table,remove] of [["issues",deleteTaskRecords],["pages",deletePageRecords],["agent_threads",deleteThreadRecords],["projects",deleteProjects]] as const){
   while(true){const more=db.transaction(()=>{if(!expired())return false;const rows=db.prepare(`SELECT id FROM ${table} WHERE workspace_id=? LIMIT ?`).all(workspaceId,BATCH) as {id:string}[];remove(rows.map(row=>row.id));renew(rows.length);return rows.length===BATCH;}).immediate();if(!more)break;await nextTurn();}
  }
- db.transaction(()=>{renew();if(!expired())return;cancelRuns("workspace_id=?",[workspaceId]);db.prepare("DELETE FROM runner_event_batches WHERE run_id IN (SELECT id FROM agent_runs WHERE workspace_id=?)").run(workspaceId);queueFiles("workspace_id=?",[workspaceId]);for(const table of ["attachment_reference_checks","agent_runs","personal_entity_state","personal_task_views","ai_settings","task_fields","page_templates","page_links","page_versions","page_comments","labels","notifications","join_codes","api_keys","workspace_members"])db.prepare(`DELETE FROM ${table} WHERE workspace_id=?`).run(workspaceId);
+ db.transaction(()=>{renew();if(!expired())return;cancelRuns("workspace_id=?",[workspaceId]);db.prepare("DELETE FROM runner_event_batches WHERE run_id IN (SELECT id FROM agent_runs WHERE workspace_id=?)").run(workspaceId);queueFiles("workspace_id=?",[workspaceId]);for(const table of ["attachment_reference_checks","agent_runs","personal_entity_state","personal_task_views","ai_settings","task_fields","page_templates","page_links","page_versions","page_comments","labels","notifications","join_codes","api_keys","workspace_members","watchers"])db.prepare(`DELETE FROM ${table} WHERE workspace_id=?`).run(workspaceId);
   db.prepare("DELETE FROM workspaces WHERE id=?").run(workspaceId);db.prepare("DELETE FROM workspace_revisions WHERE workspace_id=?").run(workspaceId);
  }).immediate();await processFileCleanup();});}
 export async function purgePageRecords(workspaceId:string,pageId:string){await leased(`page:${pageId}`,async renew=>{const db=getDb().$client;

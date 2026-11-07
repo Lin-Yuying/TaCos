@@ -11,6 +11,12 @@ import {
   assertSeesProject,
   addComment,
   addOverviewComment,
+  addReviewComment,
+  deleteComment,
+  editComment,
+  restoreComment,
+  setCommentResolved,
+  toggleCommentReaction,
   addProjectMember,
   claimIssue,
   getIssueDetail,
@@ -54,6 +60,7 @@ import {
   type IssueDetail,
   type IssueWithLabels,
   type Label,
+  type CommentOptions,
   type MoveIssueInput,
   type OverviewComment,
   type OverviewRole,
@@ -66,6 +73,15 @@ import {
   removeProjectResource,
   type ProjectResource,
 } from "@/lib/resources";
+import {
+  followScope,
+  setWatchMuted,
+  unfollowScope,
+  watchState,
+  type WatchState,
+} from "@/lib/watchers";
+import { getPage } from "@/lib/pages";
+import type { WatchScopeType } from "@/lib/constants";
 
 function refresh(workspaceId:string,domain:"tasks"|"projects"|"layout"|"settings"="tasks",projectId?:string){
  if(domain==="layout"){revalidatePath(`/${workspaceId}`,"layout");return;}
@@ -265,13 +281,144 @@ export async function reportBlockerAction(workspaceId: string, idOrIdentifier: s
   });
 }
 
-export async function addCommentAction(workspaceId: string, idOrIdentifier: string, body: string) {
+export async function addCommentAction(
+  workspaceId: string,
+  idOrIdentifier: string,
+  body: string,
+  options: CommentOptions = {}
+) {
   return run<IssueDetail>(async () => {
     const { user } = await requireWorkspace(workspaceId);
     await assertSeesIssue(workspaceId, idOrIdentifier, user.id);
-    const result = await addComment(workspaceId, idOrIdentifier, body, userActor(user));
+    const result = await addComment(workspaceId, idOrIdentifier, body, userActor(user), options);
     refresh(workspaceId);
     return result;
+  });
+}
+
+export async function editCommentAction(
+  workspaceId: string,
+  idOrIdentifier: string,
+  commentId: string,
+  body: string
+) {
+  return run<IssueDetail>(async () => {
+    const { user } = await requireWorkspace(workspaceId);
+    await assertSeesIssue(workspaceId, idOrIdentifier, user.id);
+    return editComment(workspaceId, idOrIdentifier, commentId, body, userActor(user));
+  });
+}
+
+export async function deleteCommentAction(
+  workspaceId: string,
+  idOrIdentifier: string,
+  commentId: string
+) {
+  return run<IssueDetail>(async () => {
+    const { user } = await requireWorkspace(workspaceId);
+    await assertSeesIssue(workspaceId, idOrIdentifier, user.id);
+    return deleteComment(workspaceId, idOrIdentifier, commentId, userActor(user));
+  });
+}
+
+export async function restoreCommentAction(
+  workspaceId: string,
+  idOrIdentifier: string,
+  commentId: string
+) {
+  return run<IssueDetail>(async () => {
+    const { user } = await requireWorkspace(workspaceId);
+    await assertSeesIssue(workspaceId, idOrIdentifier, user.id);
+    return restoreComment(workspaceId, idOrIdentifier, commentId, userActor(user));
+  });
+}
+
+export async function setCommentResolvedAction(
+  workspaceId: string,
+  idOrIdentifier: string,
+  commentId: string,
+  resolved: boolean
+) {
+  return run<IssueDetail>(async () => {
+    const { user } = await requireWorkspace(workspaceId);
+    await assertSeesIssue(workspaceId, idOrIdentifier, user.id);
+    return setCommentResolved(workspaceId, idOrIdentifier, commentId, resolved, userActor(user));
+  });
+}
+
+export async function toggleCommentReactionAction(
+  workspaceId: string,
+  idOrIdentifier: string,
+  commentId: string,
+  emoji: string
+) {
+  return run<IssueDetail>(async () => {
+    const { user } = await requireWorkspace(workspaceId);
+    await assertSeesIssue(workspaceId, idOrIdentifier, user.id);
+    return toggleCommentReaction(workspaceId, idOrIdentifier, commentId, emoji, user.id);
+  });
+}
+
+export async function reviewCommentAction(
+  workspaceId: string,
+  idOrIdentifier: string,
+  decision: "approve" | "request_changes",
+  body: string
+) {
+  return run<IssueDetail>(async () => {
+    const { user } = await requireWorkspace(workspaceId);
+    await assertSeesIssue(workspaceId, idOrIdentifier, user.id);
+    const result = await addReviewComment(workspaceId, idOrIdentifier, user.id, decision, body);
+    refresh(workspaceId);
+    return result;
+  });
+}
+
+async function assertWatchScope(workspaceId: string, viewerId: string, scopeType: WatchScopeType, scopeId: string) {
+  if (scopeType === "issue") return assertSeesIssue(workspaceId, scopeId, viewerId);
+  if (scopeType === "project") return assertSeesProject(workspaceId, scopeId, viewerId);
+  const page = await getPage(workspaceId, scopeId, viewerId);
+  if (!page) throw new TacosError("Document not found", 404);
+}
+
+export async function watchStateAction(
+  workspaceId: string,
+  scopeType: WatchScopeType,
+  scopeId: string
+) {
+  return run<WatchState>(async () => {
+    const { user } = await requireWorkspace(workspaceId);
+    await assertWatchScope(workspaceId, user.id, scopeType, scopeId);
+    return watchState(workspaceId, user.id, scopeType, scopeId);
+  });
+}
+
+export async function setWatchAction(
+  workspaceId: string,
+  scopeType: WatchScopeType,
+  scopeId: string,
+  following: boolean
+) {
+  return run<WatchState>(async () => {
+    const { user } = await requireWorkspace(workspaceId);
+    await assertWatchScope(workspaceId, user.id, scopeType, scopeId);
+    if (following) await followScope(workspaceId, user.id, scopeType, scopeId, "manual");
+    else await unfollowScope(workspaceId, user.id, scopeType, scopeId);
+    return watchState(workspaceId, user.id, scopeType, scopeId);
+  });
+}
+
+export async function setWatchMutedAction(
+  workspaceId: string,
+  scopeType: WatchScopeType,
+  scopeId: string,
+  muted: boolean
+) {
+  return run<WatchState>(async () => {
+    const { user } = await requireWorkspace(workspaceId);
+    await assertWatchScope(workspaceId, user.id, scopeType, scopeId);
+    await setWatchMuted(workspaceId, user.id, scopeType, scopeId, muted);
+    return watchState(workspaceId, user.id, scopeType, scopeId);
   });
 }
 

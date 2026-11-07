@@ -14,6 +14,12 @@ export type NotificationData = {
   // Automations: which rule fired and the notice the rule asked for.
   ruleName?: string;
   note?: string;
+  // U-11 comments: the row to scroll to, and the author a reply answers.
+  commentId?: string;
+  replyToId?: string;
+  replyToName?: string;
+  // U-11 review decisions: approved | changes_requested.
+  decision?: string;
 };
 
 export function parseNotificationData(raw: string | null | undefined): NotificationData | null {
@@ -22,7 +28,7 @@ export function parseNotificationData(raw: string | null | undefined): Notificat
     const value = JSON.parse(raw) as unknown;
     if (!value || typeof value !== "object" || Array.isArray(value)) return null;
     const data: NotificationData = {};
-    for (const key of ["actorName", "title", "task", "date", "workspaceName", "ownerName", "viewName", "statusLabel", "ruleName", "note"] as const) {
+    for (const key of ["actorName", "title", "task", "date", "workspaceName", "ownerName", "viewName", "statusLabel", "ruleName", "note", "commentId", "replyToId", "replyToName", "decision"] as const) {
       const item = (value as Record<string, unknown>)[key];
       if (typeof item === "string" && item) data[key] = item;
     }

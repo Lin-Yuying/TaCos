@@ -489,9 +489,37 @@ CREATE TABLE IF NOT EXISTS comments (
   author_id TEXT,
   agent_author TEXT,
   body TEXT NOT NULL,
+  parent_id TEXT,
+  edited_at TEXT,
+  deleted_at TEXT,
+  resolved_at TEXT,
+  review_state TEXT,
+  via TEXT NOT NULL DEFAULT 'you',
   created_at TEXT NOT NULL
 );
 CREATE INDEX IF NOT EXISTS comments_issue_idx ON comments (issue_id);
+
+-- U-11: one row per person, comment and reaction. Fixed set lives in constants.ts.
+CREATE TABLE IF NOT EXISTS comment_reactions (
+  comment_id TEXT NOT NULL,
+  user_id TEXT NOT NULL,
+  emoji TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  PRIMARY KEY (comment_id, user_id, emoji)
+);
+
+-- U-11: explicit follow for a task, project or document. Auto-follow writes the same
+-- row (source names why), so Follow/Unfollow and the watcher list have one truth.
+CREATE TABLE IF NOT EXISTS watchers (
+  workspace_id TEXT NOT NULL,
+  user_id TEXT NOT NULL,
+  scope_type TEXT NOT NULL,
+  scope_id TEXT NOT NULL,
+  source TEXT NOT NULL DEFAULT 'manual',
+  muted INTEGER NOT NULL DEFAULT 0,
+  created_at TEXT NOT NULL,
+  PRIMARY KEY (workspace_id, user_id, scope_type, scope_id)
+);
 
 CREATE TABLE IF NOT EXISTS events (
   id TEXT PRIMARY KEY,
@@ -500,6 +528,13 @@ CREATE TABLE IF NOT EXISTS events (
   data TEXT NOT NULL DEFAULT '{}',
   actor_id TEXT,
   agent_actor TEXT,
+  workspace_id TEXT,
+  object_type TEXT NOT NULL DEFAULT 'task',
+  object_id TEXT,
+  project_id TEXT,
+  page_id TEXT,
+  owner_id TEXT,
+  visibility TEXT NOT NULL DEFAULT 'project',
   created_at TEXT NOT NULL
 );
 CREATE INDEX IF NOT EXISTS events_issue_idx ON events (issue_id);
@@ -1526,6 +1561,29 @@ function bootstrap(sqlite: Database.Database) {
   addColumnIfMissing(sqlite, "notifications", "state", "TEXT NOT NULL DEFAULT 'unread'");
   addColumnIfMissing(sqlite, "notifications", "snoozed_until", "TEXT");
   addColumnIfMissing(sqlite, "notifications", "deleted_at", "TEXT");
+  // U-11: task comments gain threading, edit/delete, resolve and a review marker.
+  // Old rows stay valid: every field is nullable except via, which defaults to the UI.
+  for (const column of ["parent_id", "edited_at", "deleted_at", "resolved_at", "review_state"]) {
+    addColumnIfMissing(sqlite, "comments", column, "TEXT");
+  }
+  addColumnIfMissing(sqlite, "comments", "via", "TEXT NOT NULL DEFAULT 'you'");
+  // U-11: the activity feed reads one table. Task events already live in `events`;
+  // page and project events join them with the object columns added here.
+  addColumnIfMissing(sqlite, "events", "workspace_id", "TEXT");
+  addColumnIfMissing(sqlite, "events", "object_type", "TEXT NOT NULL DEFAULT 'task'");
+  addColumnIfMissing(sqlite, "events", "object_id", "TEXT");
+  addColumnIfMissing(sqlite, "events", "project_id", "TEXT");
+  addColumnIfMissing(sqlite, "events", "page_id", "TEXT");
+  addColumnIfMissing(sqlite, "events", "owner_id", "TEXT");
+  addColumnIfMissing(sqlite, "events", "visibility", "TEXT NOT NULL DEFAULT 'project'");
+  // Indexes on the new columns come after the ALTERs: a 2.3 database already has the
+  // tables, and CREATE INDEX on a missing column would abort the whole bootstrap.
+  sqlite.exec(`CREATE INDEX IF NOT EXISTS comments_parent_idx ON comments (parent_id);
+    CREATE INDEX IF NOT EXISTS comment_reactions_comment_idx ON comment_reactions (comment_id);
+    CREATE INDEX IF NOT EXISTS watchers_scope_idx ON watchers (scope_type, scope_id);
+    CREATE INDEX IF NOT EXISTS watchers_user_idx ON watchers (workspace_id, user_id);
+    CREATE INDEX IF NOT EXISTS events_workspace_idx ON events (workspace_id, created_at);
+    CREATE INDEX IF NOT EXISTS events_object_idx ON events (object_type, object_id);`);
   sqlite.exec(`
     CREATE INDEX IF NOT EXISTS notifications_user_created_idx
       ON notifications (workspace_id, user_id, created_at);
@@ -1635,6 +1693,59 @@ function bootstrap(sqlite: Database.Database) {
   // seed() bails out when any user exists, so demo teammates have to be inserted
   // before the superuser, otherwise a fresh install gets an empty demo workspace.
   seed(sqlite);
+  // U-11: every task event becomes an activity row keyed by workspace and visibility.
+  // Backfill once on upgrade; new rows are written with these columns by recordEvent.
+  sqlite.exec(`UPDATE events SET workspace_id = (
+      SELECT workspace_id FROM issues WHERE issues.id = events.issue_id
+    ) WHERE workspace_id IS NULL AND issue_id <> '';
+    UPDATE events SET object_type = 'task' WHERE object_type IS NULL OR object_type = '';
+    UPDATE events SET object_id = issue_id WHERE object_id IS NULL AND issue_id <> '';
+    UPDATE events SET visibility = 'project' WHERE visibility IS NULL OR visibility = '';
+    UPDATE events SET project_id = (
+      SELECT project_id FROM issues WHERE issues.id = events.issue_id
+    ) WHERE project_id IS NULL AND issue_id <> '';
+    UPDATE events SET owner_id = (
+      SELECT created_by FROM issues WHERE issues.id = events.issue_id
+    ) WHERE owner_id IS NULL AND issue_id <> '';`);
+  // U-11 follow migration: the implicit creator/assignee audience becomes the initial
+  // watcher set exactly once. The marker matters: re-running would undo an Unfollow.
+  if (!sqlite.prepare("SELECT 1 FROM schema_migrations WHERE name = ?").get("u11_watchers_v1")) {
+    sqlite.transaction(() => {
+      const now = new Date().toISOString();
+      sqlite
+        .prepare(
+          `INSERT OR IGNORE INTO watchers (workspace_id, user_id, scope_type, scope_id, source, muted, created_at)
+           SELECT workspace_id, created_by, 'issue', id, 'creator', 0, ? FROM issues
+           WHERE created_by IS NOT NULL AND deleted_at IS NULL`
+        )
+        .run(now);
+      sqlite
+        .prepare(
+          `INSERT OR IGNORE INTO watchers (workspace_id, user_id, scope_type, scope_id, source, muted, created_at)
+           SELECT i.workspace_id, a.user_id, 'issue', i.id, 'assignee', 0, ?
+           FROM issue_assignees a JOIN issues i ON i.id = a.issue_id
+           WHERE i.deleted_at IS NULL`
+        )
+        .run(now);
+      sqlite
+        .prepare(
+          `INSERT OR IGNORE INTO watchers (workspace_id, user_id, scope_type, scope_id, source, muted, created_at)
+           SELECT workspace_id, created_by, 'project', id, 'creator', 0, ? FROM projects
+           WHERE created_by IS NOT NULL AND deleted_at IS NULL`
+        )
+        .run(now);
+      sqlite
+        .prepare(
+          `INSERT OR IGNORE INTO watchers (workspace_id, user_id, scope_type, scope_id, source, muted, created_at)
+           SELECT workspace_id, created_by, 'page', id, 'creator', 0, ? FROM pages
+           WHERE created_by IS NOT NULL AND deleted_at IS NULL`
+        )
+        .run(now);
+      sqlite
+        .prepare("INSERT INTO schema_migrations (name, applied_at) VALUES (?, ?)")
+        .run("u11_watchers_v1", now);
+    })();
+  }
   ensureSuperAdmin(sqlite);
   ensureInitialAvatars(sqlite);
   ensureSearchIndex(sqlite);

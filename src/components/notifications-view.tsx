@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { BellOff, Check, ChevronDown, ChevronRight, Clock, Search, Settings2 } from "lucide-react";
 import { useUI, NOTIFICATIONS_READ } from "@/components/ui-context";
@@ -48,6 +49,7 @@ const TABS: { id: NotificationTab; key: keyof NotificationCounts; label: string 
   { id: "unread", key: "unread", label: "Unread" },
   { id: "mentions", key: "mentions", label: "Mentions" },
   { id: "assigned", key: "assigned", label: "Assigned" },
+  { id: "reviews", key: "reviews", label: "Reviews" },
   { id: "all", key: "all", label: "All" },
 ];
 
@@ -74,10 +76,16 @@ function sentence(item: NotificationRow, t: ReturnType<typeof useT>): string {
   switch (item.type) {
     case "assigned":
       return t("{name} assigned you to “{title}”", { name, title });
-    case "commented":
-      return t("{name} commented on “{title}”", { name, title });
     case "mentioned":
       return t("{name} mentioned you", { name });
+    case "review_decision":
+      return data.decision === "approved"
+        ? t("{name} approved “{title}”", { name, title })
+        : t("{name} requested changes on “{title}”", { name, title });
+    case "commented":
+      return data.replyToName
+        ? t("{name} replied to your comment on “{title}”", { name, title })
+        : t("{name} commented on “{title}”", { name, title });
     case "doc_mentioned":
       return t("{name} mentioned you in a document", { name });
     case "doc_commented":
@@ -236,11 +244,12 @@ export function NotificationsView({
     setItems((old) => old.map((item) => (item.id === id ? { ...item, ...values } : item)));
   }
 
-  function applyCounts(delta: { unread?: number; mentions?: number; assigned?: number; all?: number }) {
+  function applyCounts(delta: { unread?: number; mentions?: number; assigned?: number; reviews?: number; all?: number }) {
     setCounts((old) => ({
       unread: Math.max(0, old.unread + (delta.unread ?? 0)),
       mentions: Math.max(0, old.mentions + (delta.mentions ?? 0)),
       assigned: Math.max(0, old.assigned + (delta.assigned ?? 0)),
+      reviews: Math.max(0, old.reviews + (delta.reviews ?? 0)),
       all: Math.max(0, old.all + (delta.all ?? 0)),
     }));
   }
@@ -256,6 +265,7 @@ export function NotificationsView({
       unread: unread ? -1 : 1,
       mentions: item.type === "mentioned" || item.type === "doc_mentioned" ? (unread ? -1 : 1) : 0,
       assigned: item.type === "assigned" ? (unread ? -1 : 1) : 0,
+      reviews: item.type === "review_decision" ? (unread ? -1 : 1) : 0,
     });
     refreshed();
   }
@@ -285,12 +295,12 @@ export function NotificationsView({
   async function remove(item: NotificationRow) {
     const ok = await perform(`delete:${item.id}`, () => deleteNotificationAction(workspaceId, item.id));
     if (!ok) return;
-    removeLocally(item, { unread: item.state === "unread" ? -1 : 0, all: -1, mentions: item.type === "mentioned" || item.type === "doc_mentioned" ? (item.state === "unread" ? -1 : 0) : 0, assigned: item.type === "assigned" ? (item.state === "unread" ? -1 : 0) : 0 });
+    removeLocally(item, { unread: item.state === "unread" ? -1 : 0, all: -1, mentions: item.type === "mentioned" || item.type === "doc_mentioned" ? (item.state === "unread" ? -1 : 0) : 0, assigned: item.type === "assigned" ? (item.state === "unread" ? -1 : 0) : 0, reviews: item.type === "review_decision" ? (item.state === "unread" ? -1 : 0) : 0 });
     showUndo(t("Notification deleted"), () => restoreNotificationsAction(workspaceId, [item.id]));
     refreshed();
   }
 
-  function removeLocally(item: NotificationRow, delta: { unread?: number; mentions?: number; assigned?: number; all?: number }) {
+  function removeLocally(item: NotificationRow, delta: { unread?: number; mentions?: number; assigned?: number; reviews?: number; all?: number }) {
     setItems((old) => old.filter((row) => row.id !== item.id));
     applyCounts(delta);
     setUndo((old) => old);
@@ -300,7 +310,7 @@ export function NotificationsView({
     const ok = await perform("all", () => markNotificationsReadAction(workspaceId));
     if (!ok) return;
     setItems((old) => old.map((item) => (item.state === "unread" ? { ...item, state: "read", readAt: new Date().toISOString() } : item)));
-    setCounts({ unread: 0, mentions: 0, assigned: 0, all: counts.all });
+    setCounts({ unread: 0, mentions: 0, assigned: 0, reviews: counts.reviews, all: counts.all });
     refreshed();
   }
 
@@ -311,7 +321,7 @@ export function NotificationsView({
     const ok = await perform("all", () => clearNotificationsAction(workspaceId));
     if (!ok) return;
     setItems([]);
-    setCounts({ unread: 0, mentions: 0, assigned: 0, all: 0 });
+    setCounts({ unread: 0, mentions: 0, assigned: 0, reviews: 0, all: 0 });
     showUndo(t("Inbox cleared"), () => restoreNotificationsAction(workspaceId, ids));
     refreshed();
   }
@@ -508,6 +518,7 @@ export function NotificationsView({
             key={entry.id}
             type="button"
             onClick={() => goTab(entry.id)}
+            data-testid={`inbox-tab-${entry.id}`}
             className={`flex items-center gap-1.5 rounded-full px-2.5 py-1 text-small transition-colors ${
               tab === entry.id ? "bg-elevated font-medium text-text" : "text-muted hover:text-text"
             }`}
@@ -516,7 +527,17 @@ export function NotificationsView({
             <span className="text-caption text-faint">{counts[entry.key]}</span>
           </button>
         ))}
-        <span className="ml-auto text-caption text-faint">{t("Notifications are kept for 90 days.")}</span>
+        {tab === "reviews" ? (
+          <Link
+            href={`/${workspaceId}/review`}
+            data-testid="inbox-review-queue-link"
+            className="ml-auto text-caption text-muted underline decoration-border underline-offset-2 hover:text-text"
+          >
+            {t("Open the review queue")}
+          </Link>
+        ) : (
+          <span className="ml-auto text-caption text-faint">{t("Notifications are kept for 90 days.")}</span>
+        )}
       </div>
 
       {error && <p role="alert" className={`py-2 text-small text-danger ${PAGE_INSET}`}>{error}</p>}
