@@ -191,7 +191,7 @@ export function DocsIndex({
                   filesRef.current?.click();
                 }}
               >
-                <FileText size={13} /> {t("Markdown files…")}
+                {t("Markdown files…")}
               </MenuItem>
               <MenuItem
                 onSelect={() => {
@@ -199,7 +199,7 @@ export function DocsIndex({
                   folderRef.current?.click();
                 }}
               >
-                <FolderOpen size={13} /> {t("Folder…")}
+                {t("Folder…")}
               </MenuItem>
             </>
           )}
@@ -211,7 +211,41 @@ export function DocsIndex({
               <h2 className="text-lead font-semibold text-text">{t("Import results")}</h2>
               <button type="button" aria-label={t("Close")} onClick={()=>setImportResults([])} className="rounded p-1 text-faint transition-colors hover:bg-elevated hover:text-text"><X size={14} /></button>
             </div>
-            <div className="p-4"><div className="max-h-[50dvh] overflow-auto text-small">{importResults.map((result,index)=><p key={index} className={result.status==="Failed"?"text-danger":"text-muted"}>{relativePath(result.file)}: {t(result.status)} {result.error}</p>)}</div>{importResults.some(result=>result.status==="Failed")&&<button disabled={!!progress} onClick={()=>{const failed=importResults.filter(result=>result.status==="Failed");void importFiles(failed.map(result=>result.file),failed[0]?.stripRoot??false);}} className="mt-2 rounded-md border border-border px-2.5 py-1 text-small text-text hover:bg-elevated">{t("Retry failed files")}</button>}</div>
+            <div className="p-4">
+              <ul className="max-h-[50dvh] divide-y divide-border overflow-auto rounded-lg border border-border">
+                {importResults.map((result, index) => (
+                  <li key={index} className="flex items-center gap-2 px-3 py-2">
+                    <span className="min-w-0 flex-1">
+                      <span className="block truncate text-small text-text">{relativePath(result.file)}</span>
+                      {result.error && <span className="block text-caption text-faint">{t(result.error)}</span>}
+                    </span>
+                    <span className={`shrink-0 rounded-full border px-1.5 text-caption ${result.status === "Failed" ? "border-danger/30 text-danger" : "border-border text-muted"}`}>{t(result.status)}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+            <div className="flex justify-end gap-2 border-t border-border px-4 py-3">
+              {importResults.some((result) => result.status === "Failed") && (
+                <button
+                  type="button"
+                  disabled={!!progress}
+                  onClick={() => {
+                    const failed = importResults.filter((result) => result.status === "Failed");
+                    void importFiles(failed.map((result) => result.file), failed[0]?.stripRoot ?? false);
+                  }}
+                  className="rounded-md border border-border px-2.5 py-1 text-small text-text transition-colors hover:bg-elevated"
+                >
+                  {t("Retry failed files")}
+                </button>
+              )}
+              <button
+                type="button"
+                onClick={() => setImportResults([])}
+                className="rounded-md bg-accent px-2.5 py-1 text-small font-medium text-white transition-colors hover:bg-accent-hover"
+              >
+                {t("Done")}
+              </button>
+            </div>
           </div>
         </Modal>
         {error && <div className="mt-3 text-small text-danger">{t(error)}</div>}

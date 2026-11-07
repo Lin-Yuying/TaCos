@@ -349,7 +349,6 @@ export function ProjectOverview({
   const [toolsHost, setToolsHost] = useState<HTMLElement | null>(null);
   const [pins, setPins] = useState<CommentPin[]>([]);
   // Editing column width, measured during the paint pass so the popover can stay inside it.
-  const [editorWidth, setEditorWidth] = useState(0);
   // Anchors whose quoted passage no longer exists in the document.
   const [missing, setMissing] = useState<Set<string>>(new Set());
   const [historyOpen, setHistoryOpen] = useState(false);
@@ -981,7 +980,6 @@ export function ProjectOverview({
       }
       const wrapRect = wrap.getBoundingClientRect();
       const width = wrap.clientWidth;
-      setEditorWidth((prev) => (Math.abs(prev - width) < 1 ? prev : width));
       const nextPins = anchorRanges.current.map(({ anchor, range }) => {
         const rect = range.getBoundingClientRect();
         return {
