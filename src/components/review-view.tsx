@@ -2,13 +2,12 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { Check, MessageSquare, X } from "lucide-react";
 import { reviewIssueAction } from "@/app/actions";
 import { ProjectIcon, StatusIcon } from "@/components/icons";
-import { formatDate, issueRef } from "@/lib/format";
+import { friendlyDate, issueRef } from "@/lib/format";
 import type { PendingReviewIssue, ReviewDecision } from "@/lib/issues";
 import { useLocale, useT } from "@/components/i18n-context";
-import { PAGE_INSET } from "@/lib/page-chrome";
+import { BTN, BTN_PRIMARY, LINE, LINE_SUB, PAGE_HINT, PAGE_INSET } from "@/lib/page-chrome";
 import { useUI } from "@/components/ui-context";
 
 // H-COLLAB-03: agent-published tasks wait here until a person approves or rejects them.
@@ -26,35 +25,33 @@ export function ReviewView({ workspaceId, issues }: { workspaceId: string; issue
   }
 
   return (
-    <div className={`flex-1 overflow-y-auto pb-10 pt-6 ${PAGE_INSET}`}>
-      <div className="space-y-4">
-        <p className="text-body leading-relaxed text-muted">
+    <div className="flex min-h-0 flex-1 flex-col">
+      <p className={PAGE_HINT}>
           {t("Tasks that an agent published wait here. Approve one to let anyone claim it. Reject one to remove it from the board.")}
         </p>
-        {error && <div className="rounded-lg border border-danger/40 p-3 text-body text-danger">{error}</div>}
+      <div className="min-h-0 flex-1 overflow-y-auto pb-10">
+        {error && <div role="alert" className={`pb-3 text-small text-danger ${PAGE_INSET}`}>{error}</div>}
         {issues.length === 0 && (
-          <div className="rounded-lg border border-border p-4 text-body text-faint">{t("No tasks wait for review.")}</div>
+          <div className={`py-3 text-body text-faint ${PAGE_INSET}`}>{t("No tasks wait for review.")}</div>
         )}
         {issues.length > 0 && (
-          <div className="divide-y divide-border rounded-lg border border-border" data-testid="review-list">
+          <div data-testid="review-list">
             {issues.map((issue) => (
-              <div key={issue.id} className="flex items-start gap-3 px-4 py-2.5" data-testid="review-row">
-                <span className="mt-[3px] flex shrink-0 items-center">
+              <div key={issue.id} className={`${LINE} flex-wrap`} data-testid="review-row">
+                <span className="flex shrink-0 items-center">
                   <StatusIcon status={issue.status} size={14} />
                 </span>
-                <div className="min-w-0 flex-1">
-                  <div className="flex min-w-0 items-baseline gap-2">
-                    <span className="shrink-0 text-small text-faint">{issueRef(issue)}</span>
-                    <span className="truncate text-body">{issue.title}</span>
-                  </div>
-                  <div className="mt-0.5 flex min-w-0 items-center gap-1.5 text-small text-faint">
-                    <ProjectIcon color={issue.projectColor} size={12} />
+                <span className={`shrink-0 ${LINE_SUB}`}>{issueRef(issue)}</span>
+                <div className="min-w-[200px] flex-1">
+                  <div className="truncate">{issue.title}</div>
+                  <div className={`mt-0.5 flex min-w-0 items-center gap-1.5 ${LINE_SUB}`}>
+                    <ProjectIcon color={issue.projectColor} icon={issue.projectIcon} size={12} />
                     <span className="truncate">{issue.projectName}</span>
                     <span className="shrink-0">
                       ·{" "}
                       {t("published by {name} through an agent on {date}", {
                         name: issue.publisherName ?? t("Agent"),
-                        date: formatDate(issue.createdAt, locale),
+                        date: friendlyDate(issue.createdAt, locale),
                       })}
                     </span>
                   </div>
@@ -65,28 +62,25 @@ export function ReviewView({ workspaceId, issues }: { workspaceId: string; issue
                     onClick={() => openIssue(issue.id, issue.latestReviewCommentId ?? undefined)}
                     data-testid="review-open-thread"
                     title={t("Open the review thread")}
-                    className="flex items-center gap-1 rounded-md border border-border px-2 py-1 text-small text-muted transition-colors hover:border-border-strong hover:text-text"
+                    className={BTN}
                   >
-                    <MessageSquare size={13} />
                     {issue.reviewCommentCount > 0
                       ? t("Thread ({count})", { count: issue.reviewCommentCount })
                       : t("Discuss")}
                   </button>
                   <button
                     type="button"
-                    onClick={() => void decide(issue, "approve")}
-                    className="flex items-center gap-1 rounded-md border border-border px-2 py-1 text-small text-muted transition-colors hover:border-border-strong hover:text-text"
+                    onClick={() => void decide(issue, "reject")}
+                    className={BTN}
                   >
-                    <Check size={13} />
-                    {t("Approve")}
+                    {t("Reject")}
                   </button>
                   <button
                     type="button"
-                    onClick={() => void decide(issue, "reject")}
-                    className="flex items-center gap-1 rounded-md px-2 py-1 text-small text-faint transition-colors hover:bg-elevated hover:text-danger"
+                    onClick={() => void decide(issue, "approve")}
+                    className={BTN_PRIMARY}
                   >
-                    <X size={13} />
-                    {t("Reject")}
+                    {t("Approve")}
                   </button>
                 </div>
               </div>

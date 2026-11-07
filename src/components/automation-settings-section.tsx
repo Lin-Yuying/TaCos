@@ -3,8 +3,10 @@
 // #80: Settings › Automations. Owner/admin create or edit rules from a template or from
 // scratch, dry-run them against a task, and read the run log. Members see the enabled
 // rules and the runs their own actions triggered.
-import { useState } from "react";
-import { ArrowDown, ArrowUp, Plus, Trash2 } from "lucide-react";
+import { useRef, useState } from "react";
+import { Menu } from "@/components/menu";
+import { ArrowDown, ArrowUp, MoreHorizontal, Trash2, X } from "lucide-react";
+import { Modal } from "@/components/ui/modal";
 import { useUI } from "@/components/ui-context";
 import { useLocale, useT } from "@/components/i18n-context";
 import { safeAction } from "@/lib/ui/safe-action";
@@ -115,6 +117,7 @@ export function AutomationSettingsSection({
   const locale = useLocale();
   const { confirm } = useUI();
   const [draft, setDraft] = useState<Draft | null>(null);
+  const draftAtStart = useRef("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
@@ -124,8 +127,17 @@ export function AutomationSettingsSection({
   const sharedAgents = agents.filter((agent) => !agent.personal);
   const lastRun = draft?.id ? runs.find((run) => run.ruleId === draft.id) ?? null : null;
 
+  // Esc and a click outside are easy to do by accident, so an edited draft asks first.
+  async function dismissDraft() {
+    if (draft && JSON.stringify(draft) !== draftAtStart.current) {
+      if (!(await confirm(t("Discard your changes to this rule?"), { action: t("Discard") }))) return;
+    }
+    setDraft(null);
+  }
+
   function start(draft: Draft) {
     setDraft(draft);
+    draftAtStart.current = JSON.stringify(draft);
     setDryRun(null);
     setDryTask("");
     setError(null);
@@ -246,7 +258,7 @@ export function AutomationSettingsSection({
 
   async function remove(rule: AutomationRuleView) {
     if (busy) return;
-    if (!(await confirm(t("Delete the rule “{name}”? Its run log stays.", { name: rule.name })))) {
+    if (!(await confirm(t("Delete the rule “{name}”?", { name: rule.name }), { body: t("Its run log stays."), action: t("Delete") }))) {
       return;
     }
     setBusy(true);
@@ -289,54 +301,47 @@ export function AutomationSettingsSection({
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center gap-2">
-        <span className="rounded-full bg-elevated px-2 py-0.5 text-caption text-faint">
-          {t("{count} rules", { count: String(rules.length) })}
-        </span>
+        <p className="min-w-0 flex-1 basis-64 text-small leading-relaxed text-faint">
+          {t("You see enabled rules and the runs your own actions triggered. The owner or an admin manages rules.")}
+        </p>
+        {canManage && (
+          <div data-testid="automation-templates">
+            <Menu width={280} align="right" triggerClassName={BUTTON} trigger={t("Start from a template")}>
+              {(close) =>
+                AUTOMATION_TEMPLATES.map((template) => (
+                  <button
+                    key={template.id}
+                    type="button"
+                    onClick={() => {
+                      close();
+                      beginTemplate(template.id);
+                    }}
+                    disabled={busy}
+                    data-testid={`automation-template-${template.id}`}
+                    className="block w-full rounded-md px-2 py-1.5 text-left transition-colors hover:bg-elevated"
+                  >
+                    <span className="block text-small text-text">{t(template.name)}</span>
+                    <span className="block text-caption text-faint">{t(template.description)}</span>
+                  </button>
+                ))
+              }
+            </Menu>
+          </div>
+        )}
         {canManage && (
           <button
             type="button"
             onClick={beginCreate}
             disabled={busy}
             data-testid="automation-create"
-            className={`ml-auto ${BUTTON}`}
+            className="inline-flex items-center justify-center gap-1.5 whitespace-nowrap h-[30px] rounded-lg px-2.5 text-small bg-accent font-medium text-white transition-colors hover:bg-accent-hover disabled:opacity-50"
           >
-            <span className="flex items-center gap-1">
-              <Plus size={12} /> {t("New rule")}
-            </span>
+            {t("New rule")}
           </button>
         )}
       </div>
-      <p className="text-body leading-relaxed text-muted">
-        {t(
-          "When a trigger happens, matching rules run their actions in order inside TaCos. Actions fail independently and stay in the run log."
-        )}
-      </p>
-      {!canManage && (
-        <p className="text-small text-faint">
-          {t("You see enabled rules and the runs your own actions triggered. The owner or an admin manages rules.")}
-        </p>
-      )}
 
-      {canManage && (
-        <div className="flex flex-wrap items-center gap-2 text-small text-muted" data-testid="automation-templates">
-          <span>{t("Start from a template")}</span>
-          {AUTOMATION_TEMPLATES.map((template) => (
-            <button
-              key={template.id}
-              type="button"
-              onClick={() => beginTemplate(template.id)}
-              disabled={busy}
-              data-testid={`automation-template-${template.id}`}
-              title={t(template.description)}
-              className={BUTTON}
-            >
-              {t(template.name)}
-            </button>
-          ))}
-        </div>
-      )}
-
-      {error && (
+      {error && !draft && (
         <div role="alert" data-testid="automation-error" className="text-small text-danger">
           {t(error)}
         </div>
@@ -347,6 +352,7 @@ export function AutomationSettingsSection({
         </div>
       )}
 
+      <h3 className="text-body font-semibold">{t("{count} rules", { count: String(rules.length) })}</h3>
       <div className="overflow-hidden rounded-lg border border-border">
         {rules.length === 0 && (
           <p className="px-4 py-3 text-small text-faint">{t("No rules yet.")}</p>
@@ -356,26 +362,13 @@ export function AutomationSettingsSection({
             key={rule.id}
             data-testid="automation-row"
             data-rule-id={rule.id}
-            className={`flex flex-wrap items-start gap-3 px-4 py-3 ${index > 0 ? "border-t border-border" : ""}`}
+            className={`flex flex-wrap items-center gap-2 px-4 py-2.5 ${index > 0 ? "border-t border-border" : ""}`}
           >
             <div className="min-w-0 flex-1">
-              <div className="flex flex-wrap items-center gap-2">
-                <span className="text-body font-medium" data-testid="automation-rule-name">
-                  {rule.name}
-                </span>
-                <span
-                  className={`rounded-full px-2 py-0.5 text-caption ${
-                    rule.enabled ? "bg-accent/10 text-accent" : "bg-elevated text-faint"
-                  }`}
-                  data-testid="automation-rule-state"
-                >
-                  {rule.enabled ? t("On") : t("Off")}
-                </span>
-                <span className="text-caption text-faint">
-                  v{rule.version} · {rule.createdByName}
-                </span>
+              <div className="truncate text-body" data-testid="automation-rule-name">
+                {rule.name}
               </div>
-              <p className="text-small text-muted">
+              <p className="text-small text-faint">
                 {t(triggerSummary(rule.trigger).key, triggerSummary(rule.trigger).params)}
                 {" · "}
                 {t("{count} actions", { count: String(rule.actions.length) })}
@@ -385,52 +378,85 @@ export function AutomationSettingsSection({
                   : t("Never run")}
               </p>
             </div>
-            <div className="flex shrink-0 items-center gap-1">
-              {canManage && (
-                <>
-                  <button
-                    type="button"
-                    onClick={() => void toggle(rule)}
-                    disabled={busy}
-                    aria-label={rule.enabled ? t("Disable rule") : t("Enable rule")}
-                    data-testid="automation-enable"
-                    aria-pressed={rule.enabled}
-                    className={BUTTON}
-                  >
-                    {rule.enabled ? t("Disable") : t("Enable")}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => beginEdit(rule)}
-                    disabled={busy}
-                    data-testid="automation-edit"
-                    className={BUTTON}
-                  >
-                    {t("Edit")}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => void remove(rule)}
-                    disabled={busy}
-                    aria-label={t("Delete rule")}
-                    data-testid="automation-delete"
-                    className={BUTTON}
-                  >
-                    <Trash2 size={12} />
-                  </button>
-                </>
-              )}
-            </div>
+            <span
+              className={`shrink-0 rounded-full border px-1.5 text-caption ${
+                rule.enabled ? "border-accent/30 text-accent" : "border-border text-faint"
+              }`}
+              data-testid="automation-rule-state"
+            >
+              {rule.enabled ? t("Enabled") : t("Disabled")}
+            </span>
+            {canManage && (
+              <>
+                <button
+                  type="button"
+                  onClick={() => beginEdit(rule)}
+                  disabled={busy}
+                  data-testid="automation-edit"
+                  className={BUTTON}
+                >
+                  {t("Edit")}
+                </button>
+                <Menu
+                  width={160}
+                  align="right"
+                  triggerClassName="rounded-md p-1 text-faint transition-colors hover:bg-elevated hover:text-text"
+                  trigger={
+                    <>
+                      <span className="sr-only">{t("More actions")}</span>
+                      <MoreHorizontal size={14} />
+                    </>
+                  }
+                >
+                  {(close) => (
+                    <>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          close();
+                          void toggle(rule);
+                        }}
+                        disabled={busy}
+                        data-testid="automation-enable"
+                        aria-pressed={rule.enabled}
+                        className="block w-full rounded-md px-2 py-1.5 text-left text-small text-text transition-colors hover:bg-elevated"
+                      >
+                        {rule.enabled ? t("Disable") : t("Enable")}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          close();
+                          void remove(rule);
+                        }}
+                        disabled={busy}
+                        data-testid="automation-delete"
+                        className="block w-full rounded-md px-2 py-1.5 text-left text-small text-danger transition-colors hover:bg-elevated"
+                      >
+                        {t("Delete rule")}
+                      </button>
+                    </>
+                  )}
+                </Menu>
+              </>
+            )}
           </div>
         ))}
       </div>
 
       {draft && (
+        <Modal open onClose={() => void dismissDraft()} title={draft.id ? t("Edit rule") : t("New rule")} className="max-w-[640px] !p-0">
         <div
-          className="space-y-3 rounded-lg border border-border bg-surface/60 p-4"
           data-testid="automation-editor"
         >
-          <div className="text-body font-medium">{draft.id ? t("Edit rule") : t("New rule")}</div>
+          <div className="flex items-center justify-between border-b border-border px-4 py-3">
+            <h2 className="text-lead font-semibold text-text">{draft.id ? t("Edit rule") : t("New rule")}</h2>
+            <button type="button" aria-label={t("Close")} onClick={() => setDraft(null)} className="rounded-md p-1 text-faint transition-colors hover:bg-elevated hover:text-text">
+              <X size={14} />
+            </button>
+          </div>
+          {error && <div role="alert" data-testid="automation-error" className="px-4 pt-3 text-small text-danger">{t(error)}</div>}
+          <div className="space-y-3 p-4">
           <label className={LABEL}>
             <span>{t("Rule name")}</span>
             <input
@@ -514,7 +540,7 @@ export function AutomationSettingsSection({
               className={BUTTON}
             >
               <span className="flex items-center gap-1">
-                <Plus size={12} /> {t("Add condition")}
+                {t("Add condition")}
               </span>
             </button>
           </fieldset>
@@ -545,52 +571,27 @@ export function AutomationSettingsSection({
               className={BUTTON}
             >
               <span className="flex items-center gap-1">
-                <Plus size={12} /> {t("Add action")}
+                {t("Add action")}
               </span>
             </button>
           </fieldset>
 
-          <div className="flex flex-wrap gap-2">
-            <button
-              type="button"
-              onClick={() => void save()}
-              disabled={busy || !draft.name.trim()}
-              data-testid="automation-save"
-              className="rounded-md bg-accent px-3 py-1.5 text-body font-medium text-white hover:bg-accent-hover disabled:opacity-40"
-            >
-              {t("Save rule")}
-            </button>
-            <button
-              type="button"
-              onClick={() => {
-                setDraft(null);
-                setDryRun(null);
-              }}
-              data-testid="automation-cancel"
-              className={BUTTON}
-            >
-              {t("Cancel")}
-            </button>
-          </div>
-
-          <div className="space-y-2 rounded-md border border-border bg-bg p-3" data-testid="automation-dry-run">
-            <div className="text-small font-medium text-muted">{t("Dry run")}</div>
-            <p className="text-small text-faint">
-              {t(
-                "Evaluate the saved rule against a task or its last event. Nothing is executed."
-              )}
-            </p>
-            <div className="flex flex-wrap items-end gap-2">
-              <label className={LABEL}>
-                <span>{t("Task identifier or id")}</span>
-                <input
-                  value={dryTask}
-                  onChange={(event) => setDryTask(event.target.value)}
-                  placeholder="TAC-12"
-                  data-testid="automation-dry-task"
-                  className={INPUT}
-                />
-              </label>
+          <div className="space-y-2 rounded-lg border border-border p-3" data-testid="automation-dry-run">
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="min-w-0 flex-1 basis-40 text-body">
+                {t("Dry run")}
+                <span className="block text-small text-faint">
+                  {t("Nothing is executed; this only shows whether the rule matches.")}
+                </span>
+              </span>
+              <input
+                value={dryTask}
+                onChange={(event) => setDryTask(event.target.value)}
+                aria-label={t("Task identifier or id")}
+                placeholder={t("Task identifier or id")}
+                data-testid="automation-dry-task"
+                className={`${INPUT} !w-36`}
+              />
               <button
                 type="button"
                 onClick={() => void runDryRun("task")}
@@ -645,7 +646,31 @@ export function AutomationSettingsSection({
               </div>
             )}
           </div>
+          </div>
+          <div className="flex justify-end gap-2 border-t border-border px-4 py-3">
+            <button
+              type="button"
+              onClick={() => {
+                setDraft(null);
+                setDryRun(null);
+              }}
+              data-testid="automation-cancel"
+              className={BUTTON}
+            >
+              {t("Cancel")}
+            </button>
+            <button
+              type="button"
+              onClick={() => void save()}
+              disabled={busy || !draft.name.trim()}
+              data-testid="automation-save"
+              className="inline-flex items-center justify-center gap-1.5 whitespace-nowrap h-[30px] rounded-lg px-2.5 text-small bg-accent font-medium text-white transition-colors hover:bg-accent-hover disabled:opacity-50"
+            >
+              {t("Save rule")}
+            </button>
+          </div>
         </div>
+        </Modal>
       )}
 
       <div className="space-y-2" data-testid="automation-run-log">
@@ -653,56 +678,40 @@ export function AutomationSettingsSection({
         {runs.length === 0 ? (
           <p className="text-small text-faint">{t("No runs yet.")}</p>
         ) : (
-          <div className="overflow-hidden rounded-lg border border-border">
-            {runs.map((run, index) => (
-              <div
-                key={run.id}
-                data-testid="automation-run"
-                className={`space-y-1 px-4 py-2 ${index > 0 ? "border-t border-border" : ""}`}
-              >
-                <div className="flex flex-wrap items-center gap-2 text-small">
-                  <span className="font-medium">{run.ruleName}</span>
-                  <span className="text-faint">
-                    {t(triggerShortSummary(run.trigger).key, triggerShortSummary(run.trigger).params)}
-                  </span>
-                  {run.issueIdentifier && <span className="text-faint">{run.issueIdentifier}</span>}
-                  <span
-                    className={
-                      run.status === "failed"
-                        ? "text-danger"
-                        : run.status === "partial"
-                          ? "text-muted"
-                          : "text-muted"
-                    }
-                    data-testid="automation-run-status"
-                  >
-                    {runStatusLabel(run.status, t)}
-                  </span>
-                  <span className="text-faint">
-                    {run.durationMs} ms · {timeAgo(run.createdAt, locale)} · {run.triggeredByName}
-                  </span>
-                </div>
-                {run.actionResults.length > 0 && (
+          <div className="divide-y divide-border rounded-lg border border-border">
+            {runs.map((run) => (
+              <div key={run.id} data-testid="automation-run" className="flex items-start gap-2 px-4 py-2">
+                <span
+                  className={`mt-0.5 shrink-0 rounded-full border px-1.5 text-caption ${
+                    run.status === "failed" ? "border-danger/30 text-danger" : "border-border text-muted"
+                  }`}
+                  data-testid="automation-run-status"
+                >
+                  {runStatusLabel(run.status, t)}
+                </span>
+                <div className="min-w-0 flex-1">
+                  <div className="truncate text-body">{run.ruleName}</div>
                   <p className="text-caption text-faint">
-                    {run.actionResults
-                      .map(
+                    {[
+                      t(triggerShortSummary(run.trigger).key, triggerShortSummary(run.trigger).params),
+                      run.issueIdentifier,
+                      run.triggeredByName,
+                      `${run.durationMs} ms`,
+                      ...run.actionResults.map(
                         (result) =>
-                          `${result.index + 1}. ${t(
-                            result.status === "ok"
-                              ? "ok"
-                              : result.status === "skipped"
-                                ? "skipped"
-                                : "failed"
-                          )}`
-                      )
+                          `${result.index + 1}. ${t(result.status === "ok" ? "ok" : result.status === "skipped" ? "skipped" : "failed")}`
+                      ),
+                    ]
+                      .filter(Boolean)
                       .join(" · ")}
                   </p>
-                )}
-                {run.error && (
-                  <p role="alert" className="text-small text-danger">
-                    {run.error}
-                  </p>
-                )}
+                  {run.error && (
+                    <p role="alert" className="text-small text-danger">
+                      {run.error}
+                    </p>
+                  )}
+                </div>
+                <span className="shrink-0 text-small text-faint">{timeAgo(run.createdAt, locale)}</span>
               </div>
             ))}
           </div>
@@ -712,11 +721,13 @@ export function AutomationSettingsSection({
       {canManage && audit.length > 0 && (
         <div className="space-y-2" data-testid="automation-audit">
           <h3 className="text-body font-semibold">{t("Rule changes")}</h3>
-          <ul className="space-y-1 text-small text-muted">
+          <ul className="divide-y divide-border rounded-lg border border-border">
             {audit.map((row) => (
-              <li key={row.id}>
-                {row.ruleName} · {auditActionLabel(row.action, t)} · {row.actorName} ·{" "}
-                {timeAgo(row.createdAt, locale)}
+              <li key={row.id} className="flex items-center gap-2 px-4 py-2">
+                <span className="min-w-0 flex-1 truncate text-body">{row.ruleName}</span>
+                <span className="shrink-0 text-small text-faint">
+                  {auditActionLabel(row.action, t)} · {row.actorName} · {timeAgo(row.createdAt, locale)}
+                </span>
               </li>
             ))}
           </ul>
@@ -949,7 +960,7 @@ function ActionEditor({
               }
             }}
             data-testid={action.kind === "set_assignees" ? "automation-action-assignees" : "automation-action-notify"}
-            className="min-w-40 rounded-md border border-border bg-bg px-2 py-1 text-small text-text"
+            className="h-[26px] rounded-[7px] px-2 min-w-40 border border-border bg-bg text-small text-text"
           >
             {members.map((member) => (
               <option key={member.id} value={member.id}>

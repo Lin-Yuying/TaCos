@@ -7,11 +7,11 @@ import { useEffect, useRef, useMemo, useState, useTransition, type DragEvent } f
 import { useRouter } from "next/navigation";
 import { moveIssueAction, updateIssueAction } from "@/app/actions";
 import { AddIssueButton } from "@/components/add-issue-button";
-import { LabelPill, PriorityIcon, StatusIcon, ViaBadge } from "@/components/icons";
+import { LabelPill, PriorityIcon, ProjectIcon, StatusIcon, ViaBadge } from "@/components/icons";
 import { AssigneeStack, useAssigneeHref } from "@/components/issue-table";
 import { useUI, type TaskSelection } from "@/components/ui-context";
 import { BOARD_STATUS_ORDER, STATUS_META, type Status } from "@/lib/constants";
-import { PAGE_BOARD } from "@/lib/page-chrome";
+import { BADGE, PAGE_BOARD } from "@/lib/page-chrome";
 import { issueRef } from "@/lib/format";
 import type { IssueWithLabels } from "@/lib/issues";
 import { useT } from "@/components/i18n-context";
@@ -45,7 +45,7 @@ function BoardCard({
   const checked = selection?.selected.has(issue.id) ?? false;
 
   return (
-    <EntityRow kind="task" id={issue.id} title={issue.title}>
+    <EntityRow kind="task" id={issue.id} title={issue.title} placement="corner">
     <article
       data-issue-id={issue.id}
       data-selected={checked || undefined}
@@ -60,11 +60,11 @@ function BoardCard({
       }}
       onDragEnd={onDragEnd}
       onClick={() => openIssue(issue.id)}
-      className={`@container/card shrink-0 rounded-lg border bg-surface px-3 py-2.5 transition-colors ${canDrag ? "cursor-grab active:cursor-grabbing" : "cursor-pointer"} ${
+      className={`@container/card flex shrink-0 flex-col gap-2 rounded-[10px] border bg-bg px-3 py-2.5 shadow-[0_1px_2px_rgba(0,0,0,.04)] transition-colors ${canDrag ? "cursor-grab active:cursor-grabbing" : "cursor-pointer"} ${
         checked ? "border-accent ring-1 ring-accent" : opened ? "border-accent" : "border-border hover:border-border-strong"
       } ${dragging ? "opacity-40" : ""}`}
     >
-      <div className="flex items-center gap-1.5 text-small text-faint">
+      <div className="flex min-h-[18px] items-center gap-1.5 text-small text-faint">
         {selection?.mode ? (
           <input
             type="checkbox"
@@ -79,20 +79,23 @@ function BoardCard({
           />
         ) : null}
         {show("status") ? <StatusIcon status={issue.status} size={12} /> : null}
-        {show("id") ? <span className="truncate font-mono">{issueRef(issue)}</span> : null}
-        {show("project") ? (
-          <span className="ml-1 min-w-0 truncate text-caption">{issue.projectName}</span>
+        {show("id") ? <span className="truncate">{issueRef(issue)}</span> : null}
+        {show("priority") ? (
+          <span className="ml-auto flex shrink-0 items-center">
+            <PriorityIcon priority={issue.priority} size={13} />
+          </span>
         ) : null}
       </div>
-      <h3 className="mt-1.5 line-clamp-2 text-body font-medium leading-snug text-text">
+      <h3 className="line-clamp-2 text-body font-medium leading-snug text-text">
         {issue.title}
       </h3>
       {/* Narrow cards (four columns on a laptop, panel open) drop labels entirely and
           keep only priority + people; from ~240px there is room to show them again. */}
-      <div className="mt-2 flex h-[18px] items-center gap-1.5 overflow-hidden">
-        {show("priority") ? (
-          <span className="flex shrink-0 items-center">
-            <PriorityIcon priority={issue.priority} size={13} />
+      <div className="flex h-[18px] items-center gap-1.5 overflow-hidden text-small text-faint">
+        {show("project") ? (
+          <span className="flex min-w-0 items-center gap-1.5">
+            <ProjectIcon color={issue.projectColor} icon={issue.projectIcon} size={10} />
+            <span className="min-w-0 truncate">{issue.projectName}</span>
           </span>
         ) : null}
         {show("labels") ? (
@@ -112,7 +115,7 @@ function BoardCard({
         <span className="ml-auto flex shrink-0 items-center gap-1.5">
           <ViaBadge via={issue.createdVia} />
           {show("assignee") ? (
-            <AssigneeStack assignees={issue.assignees} size={18} hrefFor={assigneeHref} />
+            issue.assignees.length > 0 ? <AssigneeStack assignees={issue.assignees} size={18} hrefFor={assigneeHref} /> : <span className={BADGE}>{t("Unassigned")}</span>
           ) : null}
         </span>
       </div>
@@ -286,21 +289,22 @@ export function IssueBoard({
   return (
     // min-h-0 keeps the board inside the card: without it the columns' content height
     // wins over the flex budget and the last cards get clipped by the card's overflow.
-    <div className={`@container flex min-h-0 flex-1 gap-1.5 overflow-x-auto ${PAGE_BOARD}`} data-task-board>
+    <div className={`@container flex min-h-0 flex-1 gap-2.5 overflow-x-auto overflow-y-hidden ${PAGE_BOARD}`} data-task-board>
       {columns.map((column) => {
         const status = grouping === "status" && column.value ? (column.value as Status) : null;
         const canDragColumn = grouping === "status" || grouping === "assignee" || grouping === "priority";
         return (
-          <section key={column.key} data-board-group={column.key} className="flex min-h-0 min-w-[260px] flex-1 flex-col">
-            <header className="flex shrink-0 items-center gap-2 px-1 pb-2">
-              {status ? <StatusIcon status={status} size={13} /> : null}
-              <span className="truncate text-small font-medium text-muted">
+          <section key={column.key} data-board-group={column.key} className="group/column flex min-h-0 min-w-[240px] max-w-[340px] flex-[1_0_240px] flex-col">
+            <header className="flex h-7 shrink-0 items-center gap-[7px] mb-2">
+              {status ? <StatusIcon status={status} size={14} /> : null}
+              <span className="truncate text-small font-medium text-text">
                 {t(column.label)}
               </span>
               <span className="text-small text-faint">{column.tasks.length}</span>
-              {status ? <AddIssueButton status={status} /> : null}
+              <span className="flex-1" />
+              {status ? <span className={status === "done" || status === "canceled" ? "opacity-0 transition-opacity focus-within:opacity-100 group-hover/column:opacity-100" : ""}><AddIssueButton status={status} /></span> : null}
             </header>
-            <VirtualStack items={column.tasks} keyFor={issue=>issue.id} estimate={126} keepIndex={drag?.status===column.value&&columnByTask.get(drag.id)?.key===column.key?ranks.get(drag.id):undefined}
+            {column.tasks.length>0&&<VirtualStack items={column.tasks} keyFor={issue=>issue.id} estimate={126} keepIndex={drag?.status===column.value&&columnByTask.get(drag.id)?.key===column.key?ranks.get(drag.id):undefined}
               onDragOverIndex={(event,index)=>handleDragOver(event,column,index)} onDropIndex={(event,index)=>void handleDrop(event,column,index)}
               render={(issue,index)=>{
                 const source=columnByTask.get(drag?.id??"")?.key===column.key?(ranks.get(drag!.id)??-1):-1;
@@ -313,9 +317,9 @@ export function IssueBoard({
                     onDragEnd={()=>{cancelAnimationFrame(overFrame.current);overFrame.current=0;setDrag(null);setOver(null);}}/>
                   {!!drag&&over?.key===column.key&&index===column.tasks.length-1&&over.index===column.tasks.length-(source>=0?1:0)&&<DropLine/>}
                 </div>;
-              }}/>
-            {column.tasks.length===0&&<div onDragOver={event=>handleDragOver(event,column,0)} onDrop={event=>void handleDrop(event,column,0)} className="min-h-24 rounded-lg border border-dashed border-border px-3 py-4 text-center text-small text-faint">
-              {grouping === "status" ? t("No {status} tasks",{status:t(column.label)}) : t("Drop tasks here")}
+              }}/>}
+            {column.tasks.length===0&&<div onDragOver={event=>handleDragOver(event,column,0)} onDrop={event=>void handleDrop(event,column,0)} className="flex h-16 shrink-0 items-center justify-center rounded-[10px] border border-dashed border-border-strong text-small text-faint">
+              {t("Drag here")}
             </div>}
 
           </section>

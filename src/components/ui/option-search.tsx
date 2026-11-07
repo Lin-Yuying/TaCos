@@ -17,7 +17,7 @@ export function OptionSearch({
         placeholder={t("Search options")}
         value={value}
         onChange={(e) => onChange(e.target.value)}
-        className="w-full rounded border border-border bg-bg px-2 py-1 text-small"
+        className="h-[34px] rounded-lg px-2.5 w-full border border-border-strong bg-bg text-body"
       />
       {selected !== undefined && (
         <p className="text-caption text-faint">

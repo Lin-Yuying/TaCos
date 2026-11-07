@@ -41,7 +41,7 @@ export function Pill({
   return (
     <span
       data-testid={dataTestId}
-      className="inline-flex shrink-0 items-center gap-1 rounded-full border px-1.5 py-0.5 text-caption"
+      className="inline-flex h-[18px] items-center rounded-[5px] px-1.5 whitespace-nowrap shrink-0 gap-1 border text-caption"
       style={
         color
           ? {

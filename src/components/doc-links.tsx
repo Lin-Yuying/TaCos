@@ -81,7 +81,7 @@ export function DocLinksPanel({
                 </span>
                 <span className="min-w-0 flex-1">
                   <span className="block truncate text-body text-text">{link.title}</span>
-                  {link.path && <span className="block truncate text-caption text-faint">{link.path}</span>}
+                  {link.path && link.path !== link.title && <span className="block truncate text-caption text-faint">{link.path}</span>}
                 </span>
               </>
             );

@@ -25,6 +25,7 @@ export type InsightTaskRow = {
   projectId: string;
   projectName: string;
   projectColor: string;
+  projectIcon: string | null;
   assignees: InsightAssignee[];
   createdAt: string;
   createdDay: string;
@@ -125,6 +126,7 @@ export type InsightMilestoneRow = {
   projectId: string;
   projectName: string;
   projectColor: string;
+  projectIcon: string | null;
   name: string;
   targetDate: string | null;
   tasks: number;

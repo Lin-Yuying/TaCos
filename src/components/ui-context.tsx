@@ -14,7 +14,8 @@ import { listPinsAction } from "@/app/entity-actions";
 import { PERSONAL_STATE_CHANGED, type PersonalPin } from "@/lib/ui/entity-actions";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { exportLocalDrafts, useStoredJson } from "@/lib/use-stored-json";
-import { Modal } from "@/components/ui/modal";
+import { ConfirmDialog, type ConfirmOptions } from "@/components/ui/confirmation";
+import { X } from "lucide-react";
 import { useT } from "@/components/i18n-context";
 import type { Priority, Status } from "@/lib/constants";
 
@@ -77,7 +78,7 @@ type UIState = {
   density:"compact"|"comfortable";
   setDensity:(density:"compact"|"comfortable")=>void;
   refreshPins: () => void;
-  confirm: (message: string) => Promise<boolean>;
+  confirm: (message: string, options?: ConfirmOptions) => Promise<boolean>;
   openIssueId: string | null;
   openIssue: (id: string,commentId?:string) => void;
   closeIssue: () => void;
@@ -106,6 +107,8 @@ type UIState = {
   focused: FocusRef;
   setFocused: (focused: FocusRef) => void;
   layout: IssueLayout;
+  phoneTaskToolsOpen: boolean;
+  setPhoneTaskToolsOpen: (open: boolean) => void;
   setLayout: (layout: IssueLayout) => void;
   // True when this workspace has an enabled AI provider; drives the sparkle buttons.
   aiReady: boolean;
@@ -157,8 +160,8 @@ export function UIProvider({
   const [pins, setPins] = useState<PersonalPin[]>([]);
   const refreshPins = useCallback(() => { void listPinsAction(workspaceId).then((result) => { if (result.ok) setPins(result.data); }); }, [workspaceId]);
   useEffect(() => { refreshPins(); window.addEventListener(PERSONAL_STATE_CHANGED, refreshPins); return () => window.removeEventListener(PERSONAL_STATE_CHANGED, refreshPins); }, [refreshPins]);
-  const [confirmation, setConfirmation] = useState<{message: string; resolve: (ok: boolean) => void} | null>(null);
-  const confirm = useCallback((message: string) => new Promise<boolean>((resolve) => setConfirmation({message, resolve})), []);
+  const [confirmation, setConfirmation] = useState<{message: string; options?: ConfirmOptions; resolve: (ok: boolean) => void} | null>(null);
+  const confirm = useCallback((message: string, options?: ConfirmOptions) => new Promise<boolean>((resolve) => setConfirmation({message, options, resolve})), []);
   const [openIssueId, setOpenIssueId] = useState<string | null>(null);
   const [openPageId, setOpenPageId] = useState<string | null>(null);
   const [panelExpanded, setPanelExpandedState] = useStoredJson(`tacos.panel.expanded.${scope}`, false);
@@ -215,6 +218,7 @@ export function UIProvider({
   const [layout, setLayoutState] = useStoredJson<IssueLayout>(layoutKey, "list");
   const [toasts, setToasts] = useState<{ id: number; message: string; action?: ToastAction }[]>([]);
   const toastSeq = useRef(0);
+  const [storageFull, setStorageFull] = useState(false);
 
   const toast = useCallback((message: string, action?: ToastAction) => {
     const id = ++toastSeq.current;
@@ -223,13 +227,15 @@ export function UIProvider({
   }, []);
 
   function setLayout(next: IssueLayout) { setLayoutState(next); }
+  const [phoneTaskToolsOpen, setPhoneTaskToolsOpen] = useState(false);
   // Native history participates in Next navigation without reloading the list.
+  // eslint-disable-next-line react-hooks/set-state-in-effect -- the URL drives which panel is open
   useEffect(() => { setOpenIssueId(params.get("issue"));setOpenPageId(params.get("issue")?null:params.get("doc")); }, [params]);
   useEffect(() => {
-    const failed = () => toast(t("Local storage is full. Keep this page open and copy your draft."),{label:t("Export"),run:()=>exportLocalDrafts(scope)});
+    const failed = () => setStorageFull(true);
     window.addEventListener("tacos:storage-error", failed);
     return () => window.removeEventListener("tacos:storage-error", failed);
-  }, [t, toast,scope]);
+  }, []);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -243,6 +249,12 @@ export function UIProvider({
       if (e.key === "/") {
         e.preventDefault();
         if (paletteOpen) return;
+        const taskSearch = document.querySelector<HTMLInputElement>("[data-task-search] input");
+        if (taskSearch && taskSearch.offsetParent) {
+          taskSearch.focus();
+          taskSearch.select();
+          return;
+        }
         const searchInput = document.querySelector<HTMLInputElement>('[data-testid="search-input"]');
         if (searchInput && pathname.endsWith("/search")) {
           searchInput.focus();
@@ -289,27 +301,30 @@ export function UIProvider({
         setFocused,
         layout,
         setLayout,
+        phoneTaskToolsOpen,
+        setPhoneTaskToolsOpen,
         aiReady,
         toast,
       }}
     >
       {children}
-      <Modal open={!!confirmation} title={t("Confirm")} onClose={() => { confirmation?.resolve(false); setConfirmation(null); }}>
-        <p className="text-body text-text">{confirmation?.message}</p>
-        <div className="mt-4 flex justify-end gap-3">
-          <button autoFocus onClick={() => { confirmation?.resolve(false); setConfirmation(null); }}>{t("Cancel")}</button>
-          <button className="rounded bg-danger px-3 py-1.5 text-body text-white" onClick={() => { confirmation?.resolve(true); setConfirmation(null); }}>{t("Confirm")}</button>
-        </div>
-      </Modal>
+      <ConfirmDialog message={confirmation?.message ?? null} options={confirmation?.options} onFinish={(ok) => { confirmation?.resolve(ok); setConfirmation(null); }} />
       <div className="pointer-events-none fixed bottom-6 left-1/2 z-50 flex -translate-x-1/2 flex-col items-center gap-1.5">
+        {storageFull && (
+          <div role="alert" className="pointer-events-auto flex w-max max-w-[92vw] items-center gap-2 rounded-lg border border-border bg-bg px-3 py-2 text-small text-text shadow-[0_6px_20px_rgba(0,0,0,0.12)]">
+            <span className="min-w-0 flex-1">{t("Local storage is full. Keep this page open and copy your draft.")}</span>
+            <button type="button" onClick={() => exportLocalDrafts(scope)} className="inline-flex items-center justify-center gap-1.5 whitespace-nowrap h-[30px] rounded-lg px-2.5 text-small shrink-0 border border-border transition-colors bg-bg text-text hover:bg-active">{t("Export")}</button>
+            <button type="button" aria-label={t("Close")} onClick={() => setStorageFull(false)} className="shrink-0 rounded-md p-1 text-faint transition-colors hover:bg-elevated hover:text-text"><X size={13} /></button>
+          </div>
+        )}
         {toasts.map((entry) => (
           <div
             key={entry.id}
             role="status"
-            className="rounded-lg bg-text px-3.5 py-2 text-small font-medium text-bg shadow-[0_6px_20px_rgba(0,0,0,0.18)]"
+            className="flex items-center gap-2.5 rounded-lg bg-text py-1.5 pl-3 pr-2 text-small font-medium text-bg shadow-[0_6px_20px_rgba(0,0,0,0.18)]"
           >
             {entry.message}
-            {entry.action && <button className="pointer-events-auto ml-3 underline" onClick={() => { void entry.action!.run(); setToasts((all) => all.filter((item) => item.id !== entry.id)); }}>{entry.action.label}</button>}
+            {entry.action && <button className="pointer-events-auto rounded bg-bg/15 px-2 py-0.5 font-medium" onClick={() => { void entry.action!.run(); setToasts((all) => all.filter((item) => item.id !== entry.id)); }}>{entry.action.label}</button>}
           </div>
         ))}
       </div>

@@ -10,6 +10,8 @@ import { createWorkspaceAction, joinWorkspaceAction } from "@/app/auth-actions";
 import { markWorkspaceNoticeReadAction } from "@/app/workspace-misc-actions";
 import type { DeletedWorkspace, WorkspaceDeletionNotice } from "@/lib/issues";
 import { useT } from "@/components/i18n-context";
+import { OtterMark } from "@/components/icons";
+import { GATE, GATE_CARD, GATE_INPUT } from "@/lib/page-chrome";
 
 export function OnboardingForm({
   displayName,
@@ -74,36 +76,27 @@ export function OnboardingForm({
   }
 
   return (
-    <div className="relative flex h-full items-center justify-center">
+    <div className={`relative ${GATE}`}>
       <div className="app-auth-titlebar" aria-hidden="true" />
       <div className="app-auth-menu absolute right-4 top-3">
         <UserMenu user={user} workspaceUrl={workspaceUrl} />
       </div>
-      <div className="w-[400px] max-w-[92vw]">
-        <div className="mb-5 flex items-center gap-3 text-small">
-          <span className="text-faint">
-            {t("Wrong account? Switch back from the avatar menu at the top right.")}
-          </span>
-          {siteAdmin && homeUrl !== "/admin" && (
-            <Link
-              href="/admin"
-              className="ml-auto inline-flex items-center gap-1 text-muted transition-colors hover:text-text"
-            >
-              <ShieldCheck size={13} /> {t("Admin console")}
-            </Link>
-          )}
+      <div className={`${GATE_CARD} max-w-[440px]`}>
+        <div className="flex items-center gap-2">
+          <OtterMark className="h-7 w-7" />
+          <span className="text-body font-semibold">TaCos</span>
         </div>
-        <h1 className="text-heading font-semibold tracking-tight">
+        <h1 className="text-title font-semibold">
           {hasWorkspaces ? t("Add a workspace") : t("Welcome, {name}", { name: displayName })}
         </h1>
-        <p className="mb-6 mt-1 text-body text-muted">
+        <p className="text-body text-muted">
           {hasWorkspaces
             ? t("Create another workspace, or join a teammate's with a code.")
             : t("Create a workspace for your team, or join an existing one with a code from a teammate.")}
         </p>
 
         {notices.length > 0 && (
-          <div className="mb-4 space-y-2">
+          <div className="space-y-2">
             {notices.map((notice) => (
               <div
                 key={notice.id}
@@ -129,7 +122,7 @@ export function OnboardingForm({
           </div>
         )}
 
-        <div className="mb-4 flex rounded-lg border border-border p-1">
+        <div role="group" aria-label={t("Add a workspace")} className="flex gap-px rounded-lg bg-elevated p-0.5">
           {(["create", "join"] as const).map((option) => (
             <button
               key={option}
@@ -138,8 +131,9 @@ export function OnboardingForm({
                 setTab(option);
                 setError(null);
               }}
-              className={`flex-1 rounded-md py-1.5 text-body font-medium transition-colors ${
-                tab === option ? "bg-elevated text-text" : "text-muted hover:text-text"
+              aria-pressed={tab === option}
+              className={`flex-1 rounded-md py-1 text-small transition-colors ${
+                tab === option ? "bg-bg font-medium text-text shadow-sm" : "text-muted hover:text-text"
               }`}
             >
               {option === "create" ? t("Create workspace") : t("Join with code")}
@@ -161,7 +155,7 @@ export function OnboardingForm({
                 autoFocus
                 value={wsName}
                 onChange={(e) => setWsName(e.target.value)}
-                className="w-full rounded-md border border-border bg-elevated/50 px-2.5 py-2 text-body placeholder:text-faint focus:border-border-strong"
+                className={GATE_INPUT}
                 placeholder={t("e.g. Acme Inc")}
               />
             </label>
@@ -172,18 +166,18 @@ export function OnboardingForm({
               <input
                 value={wsKey}
                 onChange={(e) => setWsKey(e.target.value.toUpperCase())}
-                className="w-full rounded-md border border-border bg-elevated/50 px-2.5 py-2 font-mono text-body placeholder:text-faint focus:border-border-strong"
+                className={`${GATE_INPUT} font-mono`}
                 placeholder={t("e.g. ACME")}
               />
               <span className="mt-1 block text-caption text-faint">
-                2-10 letters/digits. Projects get their own prefixes; this reserves the workspace default.
+                {t("2-10 letters or digits. Projects get their own prefixes; this reserves the workspace default.")}
               </span>
             </label>
             {error && <div className="text-small text-danger">{t(error)}</div>}
             <button
               type="submit"
               disabled={busy || !wsName.trim() || !wsKey.trim()}
-              className="w-full rounded-md bg-accent px-3 py-2 text-body font-medium text-white transition-colors hover:bg-accent-hover disabled:opacity-40"
+              className="inline-flex items-center justify-center gap-1.5 whitespace-nowrap h-[30px] rounded-lg px-2.5 text-small w-full bg-accent font-medium text-white transition-colors hover:bg-accent-hover disabled:opacity-40"
             >
               {t("Create workspace")}
             </button>
@@ -202,7 +196,7 @@ export function OnboardingForm({
                 autoFocus
                 value={joinCode}
                 onChange={(e) => setJoinCode(e.target.value.toUpperCase())}
-                className="w-full rounded-md border border-border bg-elevated/50 px-2.5 py-2 font-mono text-body placeholder:text-faint focus:border-border-strong"
+                className={`${GATE_INPUT} font-mono`}
                 placeholder="TACOS-XXXXXXXX"
               />
               <span className="mt-1 block text-caption text-faint">
@@ -213,7 +207,7 @@ export function OnboardingForm({
             <button
               type="submit"
               disabled={busy || !joinCode.trim()}
-              className="w-full rounded-md bg-accent px-3 py-2 text-body font-medium text-white transition-colors hover:bg-accent-hover disabled:opacity-40"
+              className="inline-flex items-center justify-center gap-1.5 whitespace-nowrap h-[30px] rounded-lg px-2.5 text-small w-full bg-accent font-medium text-white transition-colors hover:bg-accent-hover disabled:opacity-40"
             >
               {t("Join workspace")}
             </button>
@@ -224,14 +218,26 @@ export function OnboardingForm({
           <button
             type="button"
             onClick={() => router.back()}
-            className="mt-4 w-full rounded-md px-3 py-2 text-body text-muted transition-colors hover:bg-elevated hover:text-text"
+            className="w-full rounded-md px-3 py-2 text-body text-muted transition-colors hover:bg-elevated hover:text-text"
           >
             {t("Back")}
           </button>
         )}
 
+        <p className="text-center text-small text-faint">
+          {t("Wrong account? Switch back from the avatar menu at the top right.")}
+          {siteAdmin && homeUrl !== "/admin" && (
+            <Link
+              href="/admin"
+              className="ml-2 inline-flex items-center gap-1 text-muted transition-colors hover:text-text"
+            >
+              <ShieldCheck size={13} /> {t("Admin console")}
+            </Link>
+          )}
+        </p>
+
         {deletedWorkspaces.length > 0 && (
-          <div className="mt-8 text-left">
+          <div className="text-left">
             <WorkspaceTrashList items={deletedWorkspaces} />
           </div>
         )}

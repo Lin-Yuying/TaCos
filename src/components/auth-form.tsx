@@ -5,6 +5,7 @@ import Link from "next/link";
 import { loginAction, registerAction } from "@/app/auth-actions";
 import { OtterMark } from "@/components/icons";
 import { useT } from "@/components/i18n-context";
+import { GATE, GATE_CARD, GATE_INPUT } from "@/lib/page-chrome";
 
 // invite: H-COLLAB-12 join code from an invite link; after sign-in the user goes back
 // to /join/<code>.
@@ -34,21 +35,21 @@ export function AuthForm({ mode, invite }: { mode: "login" | "register"; invite?
   }
 
   return (
-    <div className="flex h-full items-center justify-center">
+    <div className={GATE}>
       <div className="app-auth-titlebar" aria-hidden="true" />
-      <div className="w-[360px] max-w-[92vw]">
-        <div className="mb-6 flex items-center gap-3">
-          <OtterMark className="h-10 w-10" />
-          <span className="text-lead font-semibold tracking-tight">TaCos</span>
+      <div className={GATE_CARD}>
+        <div className="flex items-center gap-2">
+          <OtterMark className="h-7 w-7" />
+          <span className="text-body font-semibold">TaCos</span>
         </div>
-        <h1 className="text-heading font-semibold tracking-tight">
+        <h1 className="text-title font-semibold">
           {mode === "login" ? t("Sign in") : t("Create your account")}
         </h1>
-        <p className="mb-6 mt-1 text-body text-muted">
-          {mode === "login"
-            ? t("Welcome back — your team's issues await.")
-            : t("Open registration. Join an existing workspace with a code, or create your own.")}
-        </p>
+        {mode === "register" && (
+          <p className="text-body text-muted">
+            {t("Open registration. Join an existing workspace with a code, or create your own.")}
+          </p>
+        )}
 
         <form
           className="space-y-3"
@@ -64,7 +65,7 @@ export function AuthForm({ mode, invite }: { mode: "login" | "register"; invite?
               value={username}
               onChange={(e) => setUsername(e.target.value)}
               autoComplete="username"
-              className="w-full rounded-md border border-border bg-elevated/50 px-2.5 py-2 text-body placeholder:text-faint focus:border-border-strong"
+              className={GATE_INPUT}
               placeholder={t("e.g. alex")}
             />
           </label>
@@ -74,7 +75,7 @@ export function AuthForm({ mode, invite }: { mode: "login" | "register"; invite?
               <input
                 value={displayName}
                 onChange={(e) => setDisplayName(e.target.value)}
-                className="w-full rounded-md border border-border bg-elevated/50 px-2.5 py-2 text-body placeholder:text-faint focus:border-border-strong"
+                className={GATE_INPUT}
                 placeholder={t("e.g. Alex Chen")}
               />
             </label>
@@ -86,7 +87,7 @@ export function AuthForm({ mode, invite }: { mode: "login" | "register"; invite?
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               autoComplete={mode === "login" ? "current-password" : "new-password"}
-              className="w-full rounded-md border border-border bg-elevated/50 px-2.5 py-2 text-body placeholder:text-faint focus:border-border-strong"
+              className={GATE_INPUT}
               placeholder={mode === "register" ? t("At least 8 characters") : ""}
             />
           </label>
@@ -96,13 +97,13 @@ export function AuthForm({ mode, invite }: { mode: "login" | "register"; invite?
           <button
             type="submit"
             disabled={busy || !username.trim() || !password}
-            className="w-full rounded-md bg-accent px-3 py-2 text-body font-medium text-white transition-colors hover:bg-accent-hover disabled:opacity-40"
+            className="inline-flex items-center justify-center gap-1.5 whitespace-nowrap h-[30px] rounded-lg px-2.5 text-small w-full bg-accent font-medium text-white transition-colors hover:bg-accent-hover disabled:opacity-40"
           >
             {mode === "login" ? t("Sign in") : t("Create account")}
           </button>
         </form>
 
-        <div className="mt-4 text-center text-body text-muted">
+        <div className="text-center text-small text-muted">
           {mode === "login" ? (
             <>
               {t("No account yet?")}{" "}

@@ -88,7 +88,7 @@ export function AssigneeAvatar({
       href={href}
       title={displayName}
       onClick={(event) => event.stopPropagation()}
-      className="shrink-0 rounded-full transition-opacity hover:opacity-80"
+      className="shrink-0 rounded-lg transition-opacity hover:opacity-80"
     >
       {face}
     </Link>
@@ -291,9 +291,9 @@ export function IssueTable({
 
   return (
     <VirtualStack scrollRef={scroller} handle={windowHandle} className="@container min-h-0 flex-1 overflow-y-auto" items={entries} keepIndex={focusId?entryIndex.get(focusId):undefined} estimate={38} stickyIndexes={stickyIndexes} keyFor={entry=>"header" in entry?`group:${entry.header.key}`:entry.issue.id} render={entry=>{
-      if("header" in entry){const group=entry.header;const status=group.property==="status"&&group.value&&group.key!=="pinned"?group.value as keyof typeof STATUS_META:null;return (<div className={`sticky top-0 z-10 flex items-center gap-2 border-b border-border bg-bg/95 py-1.5 backdrop-blur ${PAGE_INSET}`}>
-            {status?<StatusIcon status={status} size={13}/>:null}
-            <span className="text-small font-medium text-muted">
+      if("header" in entry){const group=entry.header;const status=group.property==="status"&&group.value&&group.key!=="pinned"?group.value as keyof typeof STATUS_META:null;return (<div className={`sticky top-0 z-10 flex h-[34px] items-center gap-2 border-b border-border bg-surface ${PAGE_INSET}`}>
+            {status?<StatusIcon status={status} size={14}/>:null}
+            <span className="text-small font-medium text-text">
               {t(group.label)}
             </span>
             <span className="text-small text-faint">{group.tasks.length}</span>
@@ -305,7 +305,8 @@ export function IssueTable({
             const opened = openIssueId === issue.id;
             const checked = selection?.selected.has(issue.id) ?? false;
             return (
-              <EntityRow key={issue.id} kind="task" id={issue.id} title={issue.title}>
+              <div key={issue.id} className="max-[600px]:border-b max-[600px]:border-border">
+              <EntityRow kind="task" id={issue.id} title={issue.title} placement="overlay">
               <div
                 key={issue.id}
                 ref={(el) => {
@@ -318,10 +319,11 @@ export function IssueTable({
                 onFocus={() => setFocusIndex(index)}
                 onClick={() => {
                   setFocusIndex(index);
-                  openIssue(issue.id);
+                  if (selection?.mode) selection.toggle(issue.id);
+                  else openIssue(issue.id);
                 }}
                 onMouseEnter={() => setFocusIndex(index)}
-                className={`flex cursor-default items-center gap-2.5 py-[7px] text-body transition-colors ${PAGE_INSET} ${
+                className={`flex h-[38px] cursor-default items-center gap-2.5 border-b border-border text-body transition-colors ${PAGE_INSET} max-[600px]:h-auto max-[600px]:min-h-11 max-[600px]:py-2.5 max-[600px]:pl-4 max-[600px]:pr-4 ${
                   focused ? "bg-row-active" : opened ? "bg-surface" : "hover:bg-elevated/40"
                 } ${opened ? "border-l-2 border-l-accent" : "border-l-2 border-l-transparent"}`}
               >
@@ -336,20 +338,30 @@ export function IssueTable({
                 {show("id") ? (
                   <span
                     title={issueRef(issue)}
-                    className="w-[124px] shrink-0 truncate font-mono text-small text-faint"
+                    className="w-[92px] shrink-0 truncate text-small text-faint max-[600px]:hidden"
                   >
                     {issueRef(issue)}
                   </span>
                 ) : null}
-                <span className="min-w-0 flex-1 truncate">{issue.title}</span>
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate">{issue.title}</span>
+                  <span suppressHydrationWarning className="hidden truncate text-small text-faint max-[600px]:block">
+                    {[show("id") ? issueRef(issue) : null, show("status") ? t(STATUS_META[issue.status].label) : null, show("dates") ? timeAgo(issue.updatedAt, locale) : null].filter(Boolean).join(" · ")}
+                  </span>
+                </span>
                 {issue.delegatedAgentId ? (
                   <span
                     title={issue.delegatedAgentName ? t("Delegated to {name}", { name: issue.delegatedAgentName }) : t("Delegated to an agent")}
                     data-testid="task-delegated"
-                    className="flex shrink-0 items-center gap-0.5 rounded-full bg-elevated px-1.5 py-0.5 text-caption text-muted"
+                    className="inline-flex h-[18px] items-center rounded-[5px] px-1.5 whitespace-nowrap shrink-0 gap-0.5 bg-elevated text-caption text-muted"
                   >
                     <Bot size={11} />
                     {issue.delegationStatus === "review" ? t("Review") : null}
+                  </span>
+                ) : null}
+                {show("assignee") && issue.assignees[0] ? (
+                  <span className="hidden shrink-0 max-[600px]:block">
+                    <AssigneeAvatar displayName={issue.assignees[0].displayName} avatar={issue.assignees[0].avatar} />
                   </span>
                 ) : null}
                 {show("project") ? (
@@ -358,15 +370,12 @@ export function IssueTable({
                   </span>
                 ) : null}
                 {show("priority") ? (
-                  <span className="hidden w-[96px] shrink-0 items-center gap-1.5 text-small @xl:flex">
+                  <span title={t(PRIORITY_NAMES[issue.priority])} className="hidden w-4 shrink-0 items-center @xl:flex">
                     <PriorityIcon priority={issue.priority} size={14} />
-                    <span className={issue.priority === 0 ? "truncate text-faint" : "truncate text-muted"}>
-                      {t(PRIORITY_NAMES[issue.priority])}
-                    </span>
                   </span>
                 ) : null}
                 {show("assignee") ? (
-                  <span className="hidden w-[146px] shrink-0 items-center gap-1.5 @4xl:flex">
+                  <span className="hidden w-[150px] shrink-0 items-center gap-1.5 @4xl:flex">
                     {issue.assignees.length === 1 ? (
                       (() => {
                         const assignee = issue.assignees[0];
@@ -422,7 +431,7 @@ export function IssueTable({
                     )}
                   </span>
                 ) : null}
-                <span className="flex w-[72px] shrink-0 items-center justify-end gap-1">
+                <span className="flex w-[72px] shrink-0 items-center justify-end gap-1 max-[600px]:hidden">
                   <ViaBadge via={issue.createdVia} />
                   {show("dates") ? (
                     <span suppressHydrationWarning className="whitespace-nowrap text-right text-small text-faint">
@@ -432,6 +441,7 @@ export function IssueTable({
                 </span>
               </div>
               </EntityRow>
+              </div>
             );
     }}/>
   );

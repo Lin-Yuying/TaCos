@@ -62,7 +62,7 @@ export function WorkspaceViews({ workspaceId }: { workspaceId: string }) {
             </span>
             <span className="truncate">{view.name}</span>
             {view.isDefault ? (
-              <span className="ml-auto shrink-0 rounded-full border border-border px-1.5 py-px text-caption text-faint">
+              <span className="inline-flex h-[18px] items-center rounded-[5px] px-1.5 whitespace-nowrap ml-auto shrink-0 border border-border text-caption text-faint">
                 {t("Default")}
               </span>
             ) : null}

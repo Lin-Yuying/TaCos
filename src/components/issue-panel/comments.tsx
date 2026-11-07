@@ -137,7 +137,7 @@ export function CommentsSection({
           {item.reviewState && (
             <span
               data-testid="comment-review-badge"
-              className={`rounded-full border px-1.5 py-px text-caption ${
+              className={`inline-flex h-[18px] items-center rounded-[5px] px-1.5 whitespace-nowrap border text-caption ${
                 item.reviewState === "approve"
                   ? "border-accent/40 text-accent"
                   : "border-[#f2994a]/50 text-[#f2994a]"
@@ -147,7 +147,7 @@ export function CommentsSection({
             </span>
           )}
           {!isReply && item.resolvedAt && (
-            <span className="rounded-full border border-border px-1.5 py-px text-caption text-faint">
+            <span className="inline-flex h-[18px] items-center rounded-[5px] px-1.5 whitespace-nowrap border border-border text-caption text-faint">
               {t("Resolved")}
             </span>
           )}
@@ -324,7 +324,7 @@ export function CommentsSection({
                     toggleCommentReactionAction(workspaceId, issueId, item.id, reaction.emoji)
                   )
                 }
-                className={`flex items-center gap-1 rounded-full border px-1.5 py-px text-small transition-colors ${
+                className={`flex items-center gap-1 rounded-lg border px-1.5 py-px text-small transition-colors ${
                   reaction.mine
                     ? "border-accent/50 bg-accent/10 text-text"
                     : "border-border text-muted hover:border-border-strong"

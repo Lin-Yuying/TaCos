@@ -1,6 +1,6 @@
 "use client";
 
-import Link from "next/link";
+import { SETTINGS_PAGE, SETTINGS_SCROLL, SETTINGS_TITLE } from "@/lib/page-chrome";
 import { useState } from "react";
 import { Download, RefreshCw } from "lucide-react";
 import { systemSnapshotAction } from "@/app/ops-actions";
@@ -165,15 +165,15 @@ export function SystemView({
   ];
 
   return (
-    <div className="min-w-0 flex-1 overflow-auto p-6" data-testid="system-page">
-      <div className="mx-auto max-w-5xl space-y-8">
+    <div className={SETTINGS_SCROLL} data-testid="system-page">
+      <div className={`max-w-[720px] ${SETTINGS_PAGE}`}>
         <header className="flex flex-wrap items-center gap-3">
           <div className="min-w-0">
-            <h1 className="text-heading font-semibold">{t("System")}</h1>
+            <h1 className={SETTINGS_TITLE}>{t("System")}</h1>
             <p className="text-small text-muted">{t("Instance health, backups, updates and runners.")}</p>
           </div>
           <span
-            className={`rounded-full border px-2 py-0.5 text-caption ${STATE_BADGE[health.status]}`}
+            className={`inline-flex h-[18px] items-center rounded-[5px] px-1.5 whitespace-nowrap border text-caption ${STATE_BADGE[health.status]}`}
             data-testid="system-overall"
           >
             {stateLabel(health.status, t)}
@@ -183,15 +183,12 @@ export function SystemView({
               type="button"
               disabled={busy}
               onClick={() => void refresh()}
-              className="inline-flex items-center gap-1 rounded-md border border-border px-2.5 py-1 text-small text-muted transition-colors hover:text-text disabled:opacity-50"
+              className="inline-flex items-center justify-center gap-1.5 whitespace-nowrap h-[30px] rounded-lg px-2.5 text-small border border-border transition-colors disabled:opacity-50 bg-bg text-text hover:bg-active"
               data-testid="system-refresh"
             >
               <RefreshCw size={12} className={busy ? "animate-spin" : undefined} />
               {t("Refresh")}
             </button>
-            <Link className="text-small text-muted underline" href={`/${workspaceId}/settings`}>
-              {t("Settings")}
-            </Link>
           </div>
         </header>
 
@@ -211,7 +208,7 @@ export function SystemView({
               <div className="flex items-center justify-between gap-2">
                 <h2 className="text-small font-medium text-muted">{stat.label}</h2>
                 <span
-                  className={`rounded-full border px-1.5 py-0.5 text-caption ${STATE_BADGE[stat.state]}`}
+                  className={`inline-flex h-[18px] items-center rounded-[5px] px-1.5 whitespace-nowrap border text-caption ${STATE_BADGE[stat.state]}`}
                 >
                   {stateLabel(stat.state, t)}
                 </span>
@@ -228,7 +225,7 @@ export function SystemView({
             {checks.map((item) => (
               <li key={item.id} className="flex flex-wrap items-start gap-x-3 gap-y-1 px-3 py-2">
                 <span
-                  className={`mt-0.5 shrink-0 rounded-full border px-1.5 py-0.5 text-caption ${STATE_BADGE[item.state]}`}
+                  className={`inline-flex h-[18px] items-center rounded-[5px] px-1.5 whitespace-nowrap mt-0.5 shrink-0 border text-caption ${STATE_BADGE[item.state]}`}
                 >
                   {stateLabel(item.state, t)}
                 </span>
@@ -267,7 +264,7 @@ export function SystemView({
             )}
           </p>
           <a
-            className="inline-flex items-center gap-1.5 rounded-md border border-border px-3 py-1.5 text-small transition-colors hover:text-text"
+            className="inline-flex items-center justify-center gap-1.5 whitespace-nowrap h-[30px] rounded-lg px-2.5 text-small border border-border transition-colors bg-bg text-text hover:bg-active"
             href={`/api/internal/${workspaceId}/ops/diagnostics`}
             data-testid="system-download-diagnostics"
           >

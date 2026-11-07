@@ -145,7 +145,7 @@ export function SystemUpdateSection({
         <div className="flex flex-wrap items-center gap-2">
           <h3 className="text-body font-semibold">{t("Upgrade preflight")}</h3>
           <span
-            className={`rounded-full border px-1.5 py-0.5 text-caption ${
+            className={`inline-flex h-[18px] items-center rounded-[5px] px-1.5 whitespace-nowrap border text-caption ${
               upgrade.ready ? STATE_BADGE.ok : STATE_BADGE.fail
             }`}
             data-testid="upgrade-ready"
@@ -157,7 +157,7 @@ export function SystemUpdateSection({
               type="button"
               disabled={busy != null}
               onClick={() => void runPreflight()}
-              className="rounded-md border border-border px-2.5 py-1 text-small transition-colors hover:text-text disabled:opacity-50"
+              className="inline-flex items-center justify-center gap-1.5 whitespace-nowrap h-[30px] rounded-lg px-2.5 text-small border border-border transition-colors disabled:opacity-50 bg-bg text-text hover:bg-active"
               data-testid="upgrade-refresh"
             >
               {busy === "preflight" ? t("Checking…") : t("Run preflight")}
@@ -166,7 +166,7 @@ export function SystemUpdateSection({
               type="button"
               disabled={busy != null}
               onClick={() => void preUpgradeBackup()}
-              className="rounded-md border border-border px-2.5 py-1 text-small transition-colors hover:text-text disabled:opacity-50"
+              className="inline-flex items-center justify-center gap-1.5 whitespace-nowrap h-[30px] rounded-lg px-2.5 text-small border border-border transition-colors disabled:opacity-50 bg-bg text-text hover:bg-active"
               data-testid="pre-upgrade-backup"
             >
               {busy === "backup" ? t("Backing up…") : t("Create pre-upgrade backup")}
@@ -177,7 +177,7 @@ export function SystemUpdateSection({
           {checks.map((item) => (
             <li key={item.id} className="flex flex-wrap items-start gap-x-3 gap-y-1 px-3 py-2">
               <span
-                className={`mt-0.5 shrink-0 rounded-full border px-1.5 py-0.5 text-caption ${STATE_BADGE[item.state]}`}
+                className={`inline-flex h-[18px] items-center rounded-[5px] px-1.5 whitespace-nowrap mt-0.5 shrink-0 border text-caption ${STATE_BADGE[item.state]}`}
               >
                 {stateLabel(item.state, t)}
               </span>

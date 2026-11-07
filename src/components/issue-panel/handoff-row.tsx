@@ -192,7 +192,7 @@ export function HandoffRow({
             onChange={(event) => setNote(event.target.value)}
             rows={2}
             placeholder={t("Anything your Agent should know (optional)")}
-            className="resize-y rounded-md border border-border bg-bg px-2 py-1 text-small text-text"
+            className="resize-y rounded-lg border border-border-strong bg-bg px-2 py-1 text-small text-text"
           />
           <div className="flex gap-1.5">
             <button

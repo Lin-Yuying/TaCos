@@ -1,5 +1,6 @@
 "use client";
 
+import { CHIP } from "@/lib/page-chrome";
 import { SlidersHorizontal } from "lucide-react";
 import { Menu } from "@/components/menu";
 import { useT } from "@/components/i18n-context";
@@ -96,10 +97,10 @@ export function DisplayMenu({
       width={340}
       open={open}
       onOpenChange={onOpenChange}
-      triggerClassName="flex items-center gap-1 rounded-md px-2 py-1 text-small text-muted transition-colors hover:bg-elevated hover:text-text"
+      triggerClassName={CHIP}
       trigger={
         <>
-          <SlidersHorizontal size={12} />
+          <SlidersHorizontal size={14} />
           {t("Display")}
         </>
       }
@@ -108,7 +109,7 @@ export function DisplayMenu({
         <div data-task-display className="space-y-2.5 p-2 text-small">
           <div>
             <div className="pb-1 text-caption uppercase tracking-wide text-faint">{t("Layout")}</div>
-            <div className="flex flex-wrap gap-1">
+            <div className="flex gap-0.5 rounded-lg bg-elevated p-0.5">
               {VIEW_LAYOUTS.map((value) => (
                 <button
                   key={value}
@@ -116,10 +117,10 @@ export function DisplayMenu({
                   data-display-layout={value}
                   aria-pressed={layout === value}
                   onClick={() => onLayoutChange(value)}
-                  className={`rounded-full border px-2 py-0.5 text-small transition-colors ${
+                  className={`flex-1 rounded-md px-1.5 py-0.5 text-small transition-colors ${
                     layout === value
-                      ? "border-border-strong bg-elevated font-medium text-text"
-                      : "border-border text-muted hover:text-text"
+                      ? "bg-bg font-medium text-text shadow-sm"
+                      : "text-muted hover:text-text"
                   }`}
                 >
                   {t(LAYOUT_LABEL[value])}
@@ -127,15 +128,15 @@ export function DisplayMenu({
               ))}
             </div>
           </div>
-          <label className="block">
-            <span className="text-caption uppercase tracking-wide text-faint">{t("Grouping")}</span>
+          <label className="flex items-center justify-between gap-2">
+            <span className="shrink-0 text-small text-muted">{t("Grouping")}</span>
             <select
               data-display-grouping
               value={display.grouping}
               onChange={(event) =>
                 onChange({ ...display, grouping: event.target.value as ViewGrouping })
               }
-              className="mt-1 w-full rounded border border-border bg-bg px-1 py-0.5 text-small text-text"
+              className="h-[26px] w-[132px] shrink-0 rounded-[7px] px-2 border border-border bg-bg text-small text-text"
             >
               {VIEW_GROUPINGS.map((value) => (
                 <option key={value} value={value}>
@@ -144,15 +145,15 @@ export function DisplayMenu({
               ))}
             </select>
           </label>
-          <label className="block">
-            <span className="text-caption uppercase tracking-wide text-faint">{t("Ordering")}</span>
+          <label className="flex items-center justify-between gap-2">
+            <span className="shrink-0 text-small text-muted">{t("Ordering")}</span>
             <select
               data-display-ordering
               value={display.ordering}
               onChange={(event) =>
                 onChange({ ...display, ordering: event.target.value as ViewOrdering })
               }
-              className="mt-1 w-full rounded border border-border bg-bg px-1 py-0.5 text-small text-text"
+              className="h-[26px] w-[132px] shrink-0 rounded-[7px] px-2 border border-border bg-bg text-small text-text"
             >
               {VIEW_ORDERINGS.map((value) => (
                 <option key={value} value={value}>
@@ -210,7 +211,7 @@ export function DisplayMenu({
                   data-display-save-shared
                   disabled={saving}
                   onClick={() => void onSaveForEveryone()}
-                  className="rounded-md bg-accent px-2.5 py-1 text-small font-medium text-white disabled:opacity-40"
+                  className="inline-flex items-center justify-center gap-1.5 whitespace-nowrap h-[30px] rounded-lg px-2.5 text-small bg-accent font-medium text-white disabled:opacity-40 hover:bg-accent-hover"
                 >
                   {t("Save display for everyone")}
                 </button>
@@ -220,7 +221,7 @@ export function DisplayMenu({
                   data-display-save-personal
                   disabled={saving}
                   onClick={() => void onSavePersonal()}
-                  className="rounded-md bg-accent px-2.5 py-1 text-small font-medium text-white disabled:opacity-40"
+                  className="inline-flex items-center justify-center gap-1.5 whitespace-nowrap h-[30px] rounded-lg px-2.5 text-small bg-accent font-medium text-white disabled:opacity-40 hover:bg-accent-hover"
                 >
                   {t("Save my display")}
                 </button>

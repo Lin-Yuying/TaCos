@@ -31,7 +31,7 @@ export function BlockerReport({
   return (
     <div className="space-y-2" data-testid="blocker-report">
       {reports.map((event) => (
-        <p key={event.id} className="text-small text-muted">
+        <p key={event.id} className="rounded-lg bg-elevated px-3 py-2 text-small text-muted">
           <span className="font-medium text-text">{actorName(event, t)}</span>{" "}
           {typeof event.data.body === "string" && event.data.body
             ? t("reported a blocker: {text}", { text: event.data.body })
@@ -62,7 +62,7 @@ export function BlockerReport({
               type="button"
               disabled={!body.trim() || busy}
               onClick={() => void submit()}
-              className="rounded-md bg-accent px-2.5 py-1 text-small font-medium text-white transition-colors hover:bg-accent-hover disabled:opacity-40"
+              className="inline-flex items-center justify-center gap-1.5 whitespace-nowrap h-[30px] rounded-lg px-2.5 text-small bg-accent font-medium text-white transition-colors hover:bg-accent-hover disabled:opacity-40"
             >
               {t("Report")}
             </button>

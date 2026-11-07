@@ -41,10 +41,9 @@ export function MetricCard({
   testId: string;
 }) {
   return (
-    <div className="rounded-lg border border-border px-3 py-2.5" data-testid={testId}>
-      <div className="text-caption uppercase tracking-[0.06em] text-faint">{label}</div>
-      <div className="mt-0.5 font-variant-numeric tabular-nums text-title">{value}</div>
-      {caption ? <div className="mt-0.5 text-caption text-faint">{caption}</div> : null}
+    <div className="flex flex-col gap-0.5 rounded-[10px] border border-border px-3.5 py-3" data-testid={testId}>
+      <b className="text-heading font-semibold tabular-nums">{value}</b>
+      <span className="text-small text-faint">{caption ? `${label} · ${caption}` : label}</span>
     </div>
   );
 }

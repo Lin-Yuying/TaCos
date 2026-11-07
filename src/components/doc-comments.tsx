@@ -6,7 +6,7 @@ import { VirtualStack,type VirtualStackHandle } from "./ui/virtual-stack";
 import { loadPageCommentBodiesAction } from "@/app/pages-actions";
 import { SidePanel } from "@/components/ui/side-panel";
 import { editPageCommentAction, restorePageCommentAction } from "@/app/pages-actions";
-import { Check, MessageSquare, RotateCcw, Trash2, X } from "lucide-react";
+import { Check, MessageSquare, RotateCcw, Trash2, X, RefreshCw } from "lucide-react";
 import { Markdown } from "@/components/markdown";
 import { AssigneeAvatar } from "@/components/issue-table";
 import { MentionBox } from "@/components/mention-box";
@@ -104,7 +104,7 @@ export function DocCommentsPanel({
         data-doc-comment
         data-comment-id={comment.id}
         onClick={() => comment.quote && onSelect(comment.id)}
-        className={`group rounded-md px-2 py-2 ${comment.quote ? "cursor-pointer" : ""} ${
+        className={`group mb-2 rounded-lg border border-border p-2.5 ${comment.quote ? "cursor-pointer" : ""} ${
           active === comment.id ? "bg-elevated/60" : "hover:bg-elevated/40"
         }`}
       >
@@ -117,21 +117,8 @@ export function DocCommentsPanel({
             {timeAgo(comment.createdAt, locale)}
           </span>
           <span className="ml-auto flex shrink-0 items-center gap-0.5 opacity-0 transition-opacity focus-within:opacity-100 group-hover:opacity-100">
-            {canComment&&!comment.deletedAt&&<button disabled={pending} onClick={e=>{e.stopPropagation();setReplyTo(comment.id);}} className="rounded p-1 text-small">{t("Reply")}</button>}
             {canComment&&comment.author?.id===userId&&!comment.deletedAt&&<button disabled={pending||comment.bodyLoaded===false} onClick={e=>{e.stopPropagation();if(editId!==comment.id)setEditDraft({id:comment.id,body:comment.body});}} className="rounded p-1 text-small">{t("Edit")}</button>}
             {comment.deletedAt&&canRemove&&canComment&&<button disabled={pending} onClick={e=>{e.stopPropagation();void change(()=>restorePageCommentAction(workspaceId,pageId,comment.id));}} className="rounded p-1 text-small">{t("Restore")}</button>}
-            {canComment && !comment.deletedAt && <button
-              type="button"
-              title={comment.resolvedAt ? t("Reopen") : t("Resolve")}
-              aria-label={comment.resolvedAt ? t("Reopen") : t("Resolve")}
-              onClick={(event) => {
-                event.stopPropagation();
-                onResolve(comment.id, !comment.resolvedAt);
-              }}
-              className="rounded p-1 text-faint hover:bg-elevated hover:text-text"
-            >
-              {comment.resolvedAt ? <RotateCcw size={12} /> : <Check size={12} />}
-            </button>}
             {canRemove && !comment.deletedAt && (
               <button
                 type="button"
@@ -157,9 +144,15 @@ export function DocCommentsPanel({
           <p className="mt-1 text-small text-faint">{t("The quoted text has changed.")}</p>
         )}
         <div className="mt-1 text-body leading-relaxed text-text">
-          {comment.deletedAt?<p className="text-muted">{t("Deleted comment")}</p>:editId===comment.id?<div onClick={e=>e.stopPropagation()}><textarea disabled={pending} aria-label={t("Edit comment")} value={editBody} onChange={e=>setEditBody(e.target.value)} className="w-full rounded border border-border bg-bg p-2"/><div className="flex gap-3 text-small"><button disabled={pending} onClick={()=>void change(()=>editPageCommentAction(workspaceId,pageId,comment.id,editBody))}>{t("Save")}</button><button onClick={()=>setEditId(null)}>{t("Cancel")}</button></div></div>:comment.bodyLoaded?<Markdown source={comment.body} />:<span className="text-muted">{t("Loading…")}</span>}
+          {comment.deletedAt?<p className="text-muted">{t("Deleted comment")}</p>:editId===comment.id?<div onClick={e=>e.stopPropagation()}><textarea disabled={pending} aria-label={t("Edit comment")} value={editBody} onChange={e=>setEditBody(e.target.value)} className="w-full rounded-lg border border-border-strong bg-bg p-2"/><div className="flex gap-3 text-small"><button disabled={pending} onClick={()=>void change(()=>editPageCommentAction(workspaceId,pageId,comment.id,editBody))}>{t("Save")}</button><button onClick={()=>setEditId(null)}>{t("Cancel")}</button></div></div>:comment.bodyLoaded?<Markdown source={comment.body} />:<span className="text-muted">{t("Loading…")}</span>}
           {comment.editedAt&&!comment.deletedAt&&<span className="text-caption text-faint">{t("Edited")}</span>}
         </div>
+        {canComment && !comment.deletedAt && (
+          <div className="mt-1 flex items-center gap-1">
+            <button type="button" disabled={pending} onClick={e=>{e.stopPropagation();setReplyTo(comment.id);}} className="rounded-md px-1.5 py-0.5 text-small text-muted hover:bg-elevated hover:text-text">{t("Reply")}</button>
+            <button type="button" onClick={(event) => {event.stopPropagation();onResolve(comment.id, !comment.resolvedAt);}} className="rounded-md px-1.5 py-0.5 text-small text-muted hover:bg-elevated hover:text-text">{comment.resolvedAt ? t("Reopen") : t("Resolve")}</button>
+          </div>
+        )}
       </div>
     );
   }
@@ -174,17 +167,27 @@ export function DocCommentsPanel({
       <div className="flex h-10 shrink-0 items-center gap-1.5 border-b border-border px-3 text-body font-medium text-text">
         <MessageSquare size={13} />
         {t("Comments")}
+        {loading&&<span className="text-caption font-normal text-faint">{t("Loading…")}</span>}
+        <button
+          type="button"
+          disabled={loading||busy||pending}
+          onClick={onReload}
+          aria-label={t("Refresh")}
+          title={t("Refresh")}
+          className="ml-auto rounded p-1 text-muted hover:bg-elevated hover:text-text"
+        >
+          <RefreshCw size={13} />
+        </button>
         <button
           type="button"
           onClick={onClose}
           aria-label={t("Close comments")}
           title={t("Close comments")}
-          className="ml-auto rounded p-1 text-muted hover:bg-elevated hover:text-text"
+          className="rounded p-1 text-muted hover:bg-elevated hover:text-text"
         >
           <X size={14} />
         </button>
       </div>
-      <div className="flex gap-3 px-3 py-1 text-small"><button disabled={loading||busy||pending} onClick={onReload}>{t("Refresh")}</button>{loading&&t("Loading…")}</div>
       {(loadError||actionError)&&<p role="alert" className="px-3 text-small text-danger">{t(actionError??loadError??"")}</p>}
       {!loading&&!loadError&&comments.length===0&&<p className="p-3 text-body text-faint">{t("No comments yet.")}</p>}
       {resolved.length>0&&<button type="button" onClick={()=>setShowResolved(value=>!value)} className="px-3 py-1 text-left text-small text-faint">{t(showResolved?"Hide {count} resolved":"Show {count} resolved",{count:resolved.length})}</button>}
@@ -217,6 +220,7 @@ export function DocCommentsPanel({
           page={page}
           isOwner={isOwner}
           onShare={onShare}
+          placeholder={draftAnchor||replyTo?undefined:t("Comment on the whole document. Type @ to mention a member")}
         /></fieldset>
       </div>}
     </aside></SidePanel>

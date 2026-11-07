@@ -2,18 +2,22 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import { Activity, ChevronDown, FileText, FolderKanban, ListChecks } from "lucide-react";
+import { Activity } from "lucide-react";
+import { ProjectIcon } from "@/components/icons";
 import { AssigneeAvatar } from "@/components/issue-table";
 import { useUI } from "@/components/ui-context";
 import { useLiveTick } from "@/components/live-refresh";
 import { loadActivityAction } from "@/app/activity-actions";
 import { actorName, eventText } from "@/components/issue-panel/format";
+import { DEFAULT_PROJECT_COLOR } from "@/lib/constants";
 import { timeAgo } from "@/lib/format";
 import type { Locale, Translate } from "@/lib/i18n";
 import type { ActivityObjectType, ActivityScope, WorkspaceActivityItem, WorkspaceActivityPage } from "@/lib/activity";
 import type { Member } from "@/lib/issues";
 import { useLocale, useT } from "@/components/i18n-context";
-import { PAGE_INSET } from "@/lib/page-chrome";
+import { BTN, FILTER_BAR, LINE, LINE_SUB, PAGE_HEADER, PAGE_HINT, PAGE_INSET, PAGE_TITLE, vtab } from "@/lib/page-chrome";
+
+const ACTIVITY_SELECT = "h-[26px] max-w-[180px] rounded-[7px] border border-border bg-bg px-2 text-small text-muted";
 
 type ProjectOption = { id: string; name: string; color: string; icon: string | null };
 
@@ -24,7 +28,7 @@ const SCOPES: { id: ActivityScope; label: string }[] = [
 ];
 
 const OBJECT_TYPES: { id: ActivityObjectType | ""; label: string }[] = [
-  { id: "", label: "All types" },
+  { id: "", label: "Object type" },
   { id: "task", label: "Tasks" },
   { id: "document", label: "Documents" },
   { id: "project", label: "Projects" },
@@ -272,83 +276,73 @@ export function ActivityView({
   }
 
   return (
-    <div className={`flex-1 overflow-y-auto pb-10 pt-6 ${PAGE_INSET}`} data-testid="activity-feed">
-      <div className="space-y-4">
-        <div className="flex flex-wrap items-baseline gap-2">
-          <h1 className="text-heading font-semibold tracking-tight">{t("Activity")}</h1>
-          <span className="text-body text-muted">
-            {t("Everything that changed in this workspace. Inbox is for notices that need you.")}
-          </span>
-        </div>
-
-        <div className="flex flex-wrap items-center gap-2" data-testid="activity-filters">
-          <div className="flex items-center gap-1 rounded-full border border-border p-0.5">
-            {SCOPES.map((option) => (
-              <button
-                key={option.id}
-                type="button"
-                onClick={() => changeScope(option.id)}
-                aria-pressed={scope === option.id}
-                data-testid={`activity-scope-${option.id}`}
-                className={`rounded-full px-2.5 py-1 text-small transition-colors ${
-                  scope === option.id ? "bg-elevated font-medium text-text" : "text-muted hover:text-text"
-                }`}
-              >
-                {t(option.label)}
-              </button>
-            ))}
-          </div>
-          <label className="flex items-center gap-1.5 text-small text-muted">
-            <span className="sr-only">{t("Object type")}</span>
-            <select
-              value={objectType}
-              onChange={(event) => changeType(event.target.value as ActivityObjectType | "")}
-              data-testid="activity-filter-type"
-              className="rounded-md border border-border bg-bg px-2 py-1 text-small text-text"
+    <div className="flex-1 overflow-y-auto pb-10" data-testid="activity-feed">
+      <header className={`${PAGE_HEADER} ${PAGE_INSET}`}>
+        <h1 className={PAGE_TITLE}>{t("Activity")}</h1>
+        <nav aria-label={t("Activity")} className="ml-1.5 flex items-center gap-0.5">
+          {SCOPES.map((option) => (
+            <button
+              key={option.id}
+              type="button"
+              onClick={() => changeScope(option.id)}
+              aria-pressed={scope === option.id}
+              data-testid={`activity-scope-${option.id}`}
+              className={vtab(scope === option.id)}
             >
-              {OBJECT_TYPES.map((option) => (
-                <option key={option.id || "all"} value={option.id}>
-                  {t(option.label)}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label className="flex items-center gap-1.5 text-small text-muted">
-            <span className="sr-only">{t("Project")}</span>
-            <select
-              value={projectId}
-              onChange={(event) => changeProject(event.target.value)}
-              data-testid="activity-filter-project"
-              className="max-w-[180px] rounded-md border border-border bg-bg px-2 py-1 text-small text-text"
-            >
-              <option value="">{t("All projects")}</option>
-              {projects.map((project) => (
-                <option key={project.id} value={project.id}>
-                  {project.name}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label className="flex items-center gap-1.5 text-small text-muted">
-            <span className="sr-only">{t("Person")}</span>
-            <select
-              value={personId}
-              onChange={(event) => changePerson(event.target.value)}
-              data-testid="activity-filter-person"
-              className="max-w-[180px] rounded-md border border-border bg-bg px-2 py-1 text-small text-text"
-            >
-              <option value="">{t("Anyone")}</option>
-              {members.map((member) => (
-                <option key={member.id} value={member.id}>
-                  {member.displayName}
-                </option>
-              ))}
-            </select>
-          </label>
-        </div>
-
+              {t(option.label)}
+            </button>
+          ))}
+        </nav>
+      </header>
+      <p className={PAGE_HINT}>
+        {t("Everything that changed in this workspace. Inbox is for notices that need you.")}
+      </p>
+      <div className={FILTER_BAR} data-testid="activity-filters">
+        <select
+          aria-label={t("Object type")}
+          value={objectType}
+          onChange={(event) => changeType(event.target.value as ActivityObjectType | "")}
+          data-testid="activity-filter-type"
+          className={ACTIVITY_SELECT}
+        >
+          {OBJECT_TYPES.map((option) => (
+            <option key={option.id || "all"} value={option.id}>
+              {t(option.label)}
+            </option>
+          ))}
+        </select>
+        <select
+          aria-label={t("Project")}
+          value={projectId}
+          onChange={(event) => changeProject(event.target.value)}
+          data-testid="activity-filter-project"
+          className={ACTIVITY_SELECT}
+        >
+          <option value="">{t("All projects")}</option>
+          {projects.map((project) => (
+            <option key={project.id} value={project.id}>
+              {project.name}
+            </option>
+          ))}
+        </select>
+        <select
+          aria-label={t("Person")}
+          value={personId}
+          onChange={(event) => changePerson(event.target.value)}
+          data-testid="activity-filter-person"
+          className={ACTIVITY_SELECT}
+        >
+          <option value="">{t("Member")}</option>
+          {members.map((member) => (
+            <option key={member.id} value={member.id}>
+              {member.displayName}
+            </option>
+          ))}
+        </select>
+      </div>
+      <div>
         {error && (
-          <div role="alert" className="rounded-lg border border-danger/40 p-3 text-body text-danger">
+          <div role="alert" className="px-5 py-3 text-body text-danger">
             {t(error)}{" "}
             <button type="button" onClick={() => void loadFirst()} className="underline">
               {t("Retry")}
@@ -357,53 +351,47 @@ export function ActivityView({
         )}
 
         {items.length === 0 && !loading && (
-          <div className="rounded-lg border border-border p-4 text-body text-faint">
+          <div className="px-5 py-6 text-body text-faint">
             {t("No activity matches these filters.")}
           </div>
         )}
 
         {groups.map((group) => (
-          <section key={group.key} className="space-y-1">
-            <h2 className="px-1 text-small font-medium uppercase tracking-wider text-faint">
+          <section key={group.key}>
+            <h2 className="px-5 pb-1 pt-2.5 text-small font-normal text-faint">
               {dayLabel(group.items[0].createdAt, locale, t)}
             </h2>
-            <div className="divide-y divide-border rounded-lg border border-border bg-bg" data-testid="activity-list">
+            <div data-testid="activity-list">
               {group.items.map((item) => {
                 const actor = actorName(
                   { actor: item.actor, agentActor: item.agentActor },
                   t
                 );
                 const title = item.title || t("Deleted item");
-                const Icon =
-                  item.objectType === "document"
-                    ? FileText
-                    : item.objectType === "project"
-                      ? FolderKanban
-                      : ListChecks;
-                return (
+                                return (
                   <div
                     key={item.id}
                     data-testid="activity-row"
                     data-activity-type={item.objectType}
                     data-activity-id={item.id}
-                    className="flex items-start gap-2.5 px-3 py-2"
+                    className={LINE}
                   >
-                    <span className="mt-0.5 flex size-5 shrink-0 items-center justify-center rounded-full bg-elevated text-faint">
+                    <span className="flex size-[22px] shrink-0 items-center justify-center rounded-full bg-elevated text-faint">
                       {item.actor ? (
-                        <AssigneeAvatar displayName={item.actor.displayName} avatar={item.actor.avatar} size={16} />
+                        <AssigneeAvatar displayName={item.actor.displayName} avatar={item.actor.avatar} size={22} />
                       ) : (
                         <Activity size={12} />
                       )}
                     </span>
                     <div className="min-w-0 flex-1">
-                      <div className="flex min-w-0 flex-wrap items-baseline gap-1.5 text-body">
+                      <div className="flex min-w-0 flex-wrap items-baseline gap-1">
                         <span className="font-medium text-text">{actor}</span>
-                        <span className="text-muted">{sentence(item, t, locale)}</span>
+                        <span className="text-text">{sentence(item, t, locale)}</span>
                         {item.objectType === "project" ? (
                           <Link
                             href={`/${workspaceId}/projects/${item.objectId}`}
                             data-testid="activity-open"
-                            className="min-w-0 truncate text-text underline decoration-border underline-offset-2 hover:decoration-text"
+                            className="min-w-0 truncate text-text underline decoration-border-strong underline-offset-2 hover:decoration-text"
                           >
                             {title}
                           </Link>
@@ -425,20 +413,21 @@ export function ActivityView({
                               open(item);
                             }}
                             data-testid="activity-open"
-                            className="flex min-w-0 items-center gap-1 truncate text-left text-text underline decoration-border underline-offset-2 hover:decoration-text"
+                            className="min-w-0 truncate text-left text-text underline decoration-border-strong underline-offset-2 hover:decoration-text"
                           >
-                            <Icon size={12} className="shrink-0 text-faint" />
-                            <span className="truncate">{title}</span>
+                            {title}
                           </a>
                         )}
                         {item.identifier && <span className="text-caption text-faint">{item.identifier}</span>}
                       </div>
-                      <div className="mt-0.5 flex items-center gap-1.5 text-caption text-faint">
-                        {item.projectName && <span className="truncate">{item.projectName}</span>}
-                        {item.projectName && <span>·</span>}
-                        <span suppressHydrationWarning>{timeAgo(item.createdAt, locale)}</span>
-                      </div>
                     </div>
+                    {item.projectName && (
+                      <span className={`flex min-w-0 max-w-[30%] items-center gap-1 ${LINE_SUB}`}>
+                        <ProjectIcon color={item.projectColor ?? DEFAULT_PROJECT_COLOR} icon={item.projectIcon} size={12} />
+                        <span className="truncate">{item.projectName}</span>
+                      </span>
+                    )}
+                    <span suppressHydrationWarning className={`shrink-0 ${LINE_SUB}`}>{timeAgo(item.createdAt, locale)}</span>
                   </div>
                 );
               })}
@@ -447,18 +436,19 @@ export function ActivityView({
         ))}
 
         {nextCursor && (
-          <button
-            type="button"
-            onClick={() => void loadMore()}
-            disabled={loadingMore}
-            data-testid="activity-load-more"
-            className="flex items-center gap-1 rounded-md border border-border px-2.5 py-1 text-small text-muted transition-colors hover:border-border-strong hover:text-text disabled:opacity-40"
-          >
-            <ChevronDown size={13} />
-            {t("Show older")}
-          </button>
+          <div className="flex min-h-11 justify-center py-2">
+            <button
+              type="button"
+              onClick={() => void loadMore()}
+              disabled={loadingMore}
+              data-testid="activity-load-more"
+              className={BTN}
+            >
+              {t("Show older")}
+            </button>
+          </div>
         )}
-        {loading && <p className="text-small text-faint">{t("Loading…")}</p>}
+        {loading && <p className="px-5 py-3 text-small text-faint">{t("Loading…")}</p>}
       </div>
     </div>
   );

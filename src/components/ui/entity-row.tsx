@@ -1,6 +1,6 @@
 "use client";
 import { MoveDocument } from "./move-document";
-import { useMemo, useRef, useState, type ReactNode } from "react";
+import { Fragment, useMemo, useRef, useState, type ReactNode } from "react";
 import { useRouter, useParams } from "next/navigation";
 import * as Context from "@radix-ui/react-context-menu";
 import { MoreHorizontal, Pin } from "lucide-react";
@@ -13,7 +13,8 @@ import { createPageAction, deletePageAction, restorePageAction, togglePageFavori
 import { announceDocsDeleted } from "@/components/tab-events";
 import { ENTITY_RENAMED, PERSONAL_STATE_CHANGED, entityHref, type EntityKind, type EntityCapabilities } from "@/lib/ui/entity-actions";
 
-export function EntityRow({ kind, id, title, children }: { kind: EntityKind; id: string; title: string; children: ReactNode }) {
+// placement: "reserve" keeps room for the actions button, "overlay" and "corner" show it over the row on hover.
+export function EntityRow({ kind, id, title, children, placement = "reserve" }: { kind: EntityKind; id: string; title: string; children: ReactNode; placement?: "reserve" | "overlay" | "corner" }) {
   const { workspaceId } = useParams<{workspaceId: string}>();
   const { confirm, toast } = useUIActions();
   const { keys } = usePins();
@@ -50,7 +51,7 @@ export function EntityRow({ kind, id, title, children }: { kind: EntityKind; id:
     catch { setError(t("Could not save. Retry.")); } finally { setBusy(false); }
   }
   async function remove() {
-    if (!(await confirm(t("Move “{title}” to Trash?", {title})))) return;
+    if (!(await confirm(t("Move “{title}” to Trash?", {title}), { body: t("You can restore it from the Trash."), action: t("Move to Trash") }))) return;
     await run(async () => {
       const result = kind === "document" ? await deletePageAction(workspaceId, id) : kind === "project" ? await trashProjectAction(workspaceId, id) : await deleteIssueAction(workspaceId, id);
       if (result.ok) {
@@ -65,11 +66,11 @@ export function EntityRow({ kind, id, title, children }: { kind: EntityKind; id:
   }
   const actions = [
     {label:t("Rename"), disabled:!cap?.rename || busy, run:rename},
-    {label:t(pinned ? "Unpin" : "Pin"), disabled:busy, run:() => run(() => setPinAction(workspaceId,kind,id,!pinned))},
-    ...(kind !== "task" ? [{label:t(cap?.isFavorite ? "Remove from favorites" : "Add to favorites"), disabled:!cap?.favorite || busy, run:() => run(() => kind === "document" ? togglePageFavoriteAction(workspaceId,id) : toggleProjectFavoriteAction(workspaceId,id))}] : []),
     ...(kind === "document" ? [{label:t("Move document"),disabled:!cap?.rename||busy,run:async()=>setMoveOpen(true)}] : []),
     {label:t("Copy link"), disabled:busy, run:async () => { try { await navigator.clipboard.writeText(new URL(entityHref(workspaceId,{kind,id}),location.origin).href); toast(t("Copied")); } catch { setError(t("Could not copy. Retry.")); } }},
     ...(kind === "document" ? [{label:t("New subpage"),disabled:!cap?.rename || busy,run:() => run(async () => { const result=await createPageAction(workspaceId,{parentId:id}); if(result.ok) router.push(entityHref(workspaceId,{kind,id:result.data.id})); return result; })}] : []),
+    {label:t(pinned ? "Unpin" : "Pin"), disabled:busy, run:() => run(() => setPinAction(workspaceId,kind,id,!pinned))},
+    ...(kind !== "task" ? [{label:t(cap?.isFavorite ? "Remove from favorites" : "Add to favorites"), disabled:!cap?.favorite || busy, run:() => run(() => kind === "document" ? togglePageFavoriteAction(workspaceId,id) : toggleProjectFavoriteAction(workspaceId,id))}] : []),
     {label:t("Move to Trash"),disabled:!cap?.remove || busy,run:remove,danger:true},
   ];
   return <>{moveOpen&&<MoveDocument workspaceId={workspaceId} id={id} onClose={()=>setMoveOpen(false)}/>}<Context.Root onOpenChange={(open) => { if (open) void inspect(); }}>
@@ -78,10 +79,10 @@ export function EntityRow({ kind, id, title, children }: { kind: EntityKind; id:
         e.stopPropagation(); if (e.nativeEvent.isComposing || e.nativeEvent.keyCode === 229) return;
         if (e.key === "Enter") { e.preventDefault(); void save(); }
         if (e.key === "Escape") { setEditing(false); setError(null); }
-      }} className="min-w-0 flex-1 rounded border border-border bg-bg px-2 py-1 text-body"/><button disabled={busy} onClick={() => void save()} className="text-small">{t(busy ? "Saving…" : "Save")}</button><button disabled={busy} onClick={() => {setEditing(false);setError(null);}} className="text-small">{t("Cancel")}</button></div> : <div className="pr-8">{children}</div>}
-      {!editing && <div className="absolute right-0 top-1/2 -translate-y-1/2" onClick={(e) => e.stopPropagation()}>
+      }} className="h-[34px] rounded-lg px-2.5 min-w-0 flex-1 border border-border-strong bg-bg text-body"/><button disabled={busy} onClick={() => void save()} className="text-small">{t(busy ? "Saving…" : "Save")}</button><button disabled={busy} onClick={() => {setEditing(false);setError(null);}} className="text-small">{t("Cancel")}</button></div> : <div className={placement === "reserve" ? "pr-8" : ""}>{children}</div>}
+      {!editing && <div className={`absolute opacity-0 transition-opacity focus-within:opacity-100 group-hover/entity:opacity-100 has-[[aria-expanded=true]]:opacity-100 [@media(hover:none)]:opacity-100 ${placement === "corner" ? "right-1 top-1 rounded-md bg-bg" : "right-0.5 top-1/2 -translate-y-1/2"}`} onClick={(e) => e.stopPropagation()}>
         <Menu onOpenChange={(open) => {if(open) void inspect();}} width={240} triggerClassName="flex h-7 w-7 items-center justify-center rounded text-faint hover:bg-elevated focus-visible:text-text" trigger={<span aria-label={t("More actions")}><MoreHorizontal size={14}/></span>}>
-          {(close) => <>{!cap && <p className="p-2 text-small text-faint">{t("Loading…")}</p>}{actions.map((action) => <MenuItem key={action.label} disabled={action.disabled} danger={action.danger} onSelect={() => {close();void action.run();}}>{action.label}</MenuItem>)}</>}
+          {(close) => <>{!cap && <p className="p-2 text-small text-faint">{t("Loading…")}</p>}{actions.map((action) => <Fragment key={action.label}>{action.danger&&<div className="my-1 h-px bg-border"/>}<MenuItem disabled={action.disabled} danger={action.danger} onSelect={() => {close();void action.run();}}>{action.label}</MenuItem></Fragment>)}</>}
         </Menu>
       </div>}
       {pinned && !editing && <Pin aria-label={t("Pinned")} size={10} className="pointer-events-none absolute right-7 top-1 text-accent"/>}
@@ -89,7 +90,7 @@ export function EntityRow({ kind, id, title, children }: { kind: EntityKind; id:
     </div></Context.Trigger>
     <Context.Portal><Context.Content collisionPadding={8} onEscapeKeyDown={(e) => e.stopPropagation()} className="z-[90] max-h-[80dvh] min-w-52 overflow-y-auto rounded-lg border border-border bg-overlay p-1 shadow-xl">
       {!cap && <p className="p-2 text-small text-faint">{t("Loading…")}</p>}
-      {actions.map((action) => <Context.Item key={action.label} disabled={action.disabled} onSelect={() => void action.run()} className={`cursor-default rounded px-2 py-1.5 text-body outline-none data-[highlighted]:bg-elevated data-[disabled]:text-faint ${action.danger ? "text-danger" : "text-text"}`}>{action.label}</Context.Item>)}
+      {actions.map((action) => <Fragment key={action.label}>{action.danger&&<Context.Separator className="my-1 h-px bg-border"/>}<Context.Item disabled={action.disabled} onSelect={() => void action.run()} className={`cursor-default rounded px-2 py-1.5 text-body outline-none data-[highlighted]:bg-elevated data-[disabled]:text-faint ${action.danger ? "text-danger" : "text-text"}`}>{action.label}</Context.Item></Fragment>)}
     </Context.Content></Context.Portal>
   </Context.Root></>;
 }

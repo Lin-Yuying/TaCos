@@ -1,6 +1,12 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  type CSSProperties,
+} from "react";
 import Link from "next/link";
 import { Bot, CircleCheck, RotateCcw, TriangleAlert } from "lucide-react";
 import {
@@ -16,29 +22,95 @@ import { useT } from "@/components/i18n-context";
 import type { FlatDetail } from "./types";
 
 const POLL_MS = 3000;
-const buttonClass =
-  "flex w-fit items-center gap-1.5 rounded-md border border-border px-2 py-1 text-small text-muted hover:bg-elevated hover:text-text disabled:opacity-50";
+
+// The row follows the DelegationStates canvas: a status pill, the sentence that explains
+// that state, and the state's action on the same line. globals.css has no semantic status
+// colours (only accent / danger / the desktop-update pair), so the tints below are mixed
+// from the tokens that do exist instead of hard-coding new ones here.
+const PRIMARY_BTN =
+  "inline-flex h-[30px] shrink-0 items-center justify-center gap-1.5 whitespace-nowrap rounded-lg bg-accent px-2.5 text-small font-medium text-white transition-colors hover:bg-accent-hover disabled:opacity-50";
+const OUTLINE_BTN =
+  "inline-flex h-[30px] shrink-0 items-center justify-center gap-1.5 whitespace-nowrap rounded-lg border border-border bg-bg px-2.5 text-small text-text transition-colors hover:bg-active disabled:opacity-40";
+const TEXT_BTN =
+  "inline-flex shrink-0 items-center gap-1 text-caption text-muted transition-colors hover:text-text disabled:opacity-50";
+const PILL =
+  "inline-flex h-[19px] shrink-0 items-center rounded-[5px] px-1.5 text-caption font-medium";
+const TAG =
+  "inline-flex h-[18px] items-center rounded-[5px] bg-elevated px-1.5 whitespace-nowrap text-caption text-faint";
+const buttonClass = OUTLINE_BTN;
 const selectClass = "rounded-md border border-border bg-bg px-1.5 py-1 text-small text-text";
 
-function statusLabel(t: ReturnType<typeof useT>, status: string | null): string {
-  switch (status) {
-    case "queued":
-      return t("Waiting for the agent");
-    case "running":
-      return t("The agent is working");
-    case "review":
-      return t("Ready for review");
-    case "changes_requested":
-      return t("Changes requested");
-    case "approved":
-      return t("Approved");
-    case "failed":
-      return t("The agent could not finish");
-    case "cancelled":
-      return t("Cancelled");
-    default:
-      return "";
-  }
+type DelegationState =
+  | "queued"
+  | "running"
+  | "review"
+  | "changes_requested"
+  | "approved"
+  | "failed"
+  | "cancelled";
+type ShownState = DelegationState | "idle";
+
+const STATE_PILL: Record<ShownState, string> = {
+  idle: "Waiting",
+  queued: "Waiting",
+  running: "In Progress",
+  review: "Review",
+  changes_requested: "Changes",
+  approved: "Approved",
+  failed: "Not finished",
+  cancelled: "Cancelled",
+};
+const STATE_PHRASE: Record<ShownState, string> = {
+  idle: "Waiting for the agent",
+  queued: "Waiting for the agent",
+  running: "The agent is working",
+  review: "Ready for review",
+  changes_requested: "Changes requested",
+  approved: "Approved",
+  failed: "The agent could not finish",
+  cancelled: "Cancelled",
+};
+const STATE_TONE: Record<ShownState, CSSProperties> = {
+  idle: { backgroundColor: "var(--color-elevated)", color: "var(--color-muted)" },
+  queued: { backgroundColor: "var(--color-elevated)", color: "var(--color-muted)" },
+  running: { backgroundColor: "var(--color-update-bg)", color: "var(--color-update-text)" },
+  review: {
+    backgroundColor: "color-mix(in srgb, var(--color-code-keyword) 12%, var(--color-bg))",
+    color: "var(--color-code-keyword)",
+  },
+  changes_requested: {
+    backgroundColor: "color-mix(in srgb, var(--color-code-number) 12%, var(--color-bg))",
+    color: "var(--color-code-number)",
+  },
+  approved: {
+    backgroundColor: "color-mix(in srgb, var(--color-code-string) 10%, var(--color-bg))",
+    color: "var(--color-code-string)",
+  },
+  failed: {
+    backgroundColor: "color-mix(in srgb, var(--color-danger) 10%, var(--color-bg))",
+    color: "var(--color-danger)",
+  },
+  cancelled: { backgroundColor: "var(--color-elevated)", color: "var(--color-muted)" },
+};
+
+// Run rows and the issue's stored state disagree for a moment during a review decision;
+// the stored state is the one the board names, so prefer it once the run is done.
+function shownStateOf(panel: DelegationPanel): ShownState {
+  const run = panel.run;
+  const declared = (value: string | null | undefined): DelegationState | null =>
+    value === "queued" ||
+    value === "running" ||
+    value === "review" ||
+    value === "changes_requested" ||
+    value === "approved" ||
+    value === "failed" ||
+    value === "cancelled"
+      ? value
+      : null;
+  if (run?.reviewStatus === "approved") return "approved";
+  if (run?.reviewStatus === "changes_requested") return "changes_requested";
+  if (run?.status === "done") return declared(panel.status) ?? "review";
+  return declared(run?.status) ?? declared(panel.status) ?? "idle";
 }
 
 // #79: a task delegated to a named or personal agent. The human assignees stay in charge;
@@ -79,21 +151,27 @@ export function DelegationRow({
     [agentId, onFinished]
   );
 
-  const status = panel?.run?.status;
-  // After a review decision the run row is still `done`; the issue's delegation
-  // state carries approved/changes_requested, so prefer that for the label.
-  const shownStatus =
-    panel?.run?.reviewStatus === "approved"
-      ? "approved"
-      : panel?.run?.reviewStatus === "changes_requested"
-        ? "changes_requested"
-        : status === "done"
-          ? panel?.status ?? "review"
-          : status ?? panel?.status ?? null;
-  const open = status === "queued" || status === "running";
+  const state = panel ? shownStateOf(panel) : "idle";
+  const open = panel?.run?.status === "queued" || panel?.run?.status === "running";
   const review = panel?.run?.status === "done" && panel.run.reviewStatus === "pending";
   const failedOrChanges =
     panel?.run?.status === "failed" || panel?.status === "changes_requested" || panel?.status === "failed";
+
+  // "Changes requested: <note>" from the review event, when the board's note exists.
+  const requestedNote =
+    state === "changes_requested"
+      ? (() => {
+          const event = [...detail.events]
+            .reverse()
+            .find((item) => item.type === "agent_changes_requested");
+          const value = event?.data.note;
+          return typeof value === "string" ? value.trim() : "";
+        })()
+      : "";
+  const phrase =
+    state === "changes_requested" && requestedNote
+      ? t("Changes requested: {note}", { note: requestedNote })
+      : t(STATE_PHRASE[state]);
 
   useEffect(() => {
     let cancelled = false;
@@ -130,58 +208,88 @@ export function DelegationRow({
   const current = panel.agents.find((agent) => agent.id === picked);
   const run = panel.run;
   const usage = run?.usage;
+  const cancel = () => void act(() => cancelDelegationAction(workspaceId, issueId));
 
-  return (
-    <div className="flex flex-col gap-1.5 text-small" data-testid="delegation-row">
-      {panel.agent && (
-        <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-muted">
-          <Bot size={13} className="shrink-0 text-faint" />
-          <span className="text-text" data-testid="delegation-agent">
-            {panel.agent.name}
-          </span>
-          <span data-delegation-status={shownStatus ?? "idle"}>
-            {statusLabel(t, shownStatus)}
-          </span>
-          {run?.source && (
-            <span className="rounded-full bg-elevated px-1.5 py-0.5 text-caption" data-testid="delegation-source">
-              {run.source === "api" ? t("Built-in API agent") : t("Desktop runner")}
-              {run.fallback ? ` · ${t("fallback from runner")}` : ""}
-            </span>
-          )}
-          {run?.subscription && (
-            <span className="rounded-full bg-elevated px-1.5 py-0.5 text-caption text-faint" data-testid="delegation-subscription">
-              {run.subscription.windows[0]
-                ? t("{percent}% plan left", {
-                    percent: String(Math.round(run.subscription.windows[0].remainingPercent)),
-                  })
-                : t("Plan: not reported")}
-            </span>
-          )}
-          {run?.model && <span className="font-mono text-caption text-faint">{run.model}</span>}
-          {usage && usage.totalTokens > 0 && (
-            <span className="font-variant-numeric tabular-nums text-caption text-faint" data-testid="delegation-tokens">
-              {t("{count} tokens", { count: usage.totalTokens.toLocaleString() })}
-            </span>
-          )}
+  const rowActions = (
+    <>
+      {state === "queued" && (
+        <button type="button" disabled={busy} onClick={cancel} data-delegation-cancel className={OUTLINE_BTN}>
+          {t("Cancel")}
+        </button>
+      )}
+      {state === "running" && (
+        <>
           {run?.threadId && (
-            <Link href={`/${workspaceId}/agent?thread=${run.threadId}`} className="underline hover:text-text">
+            <Link href={`/${workspaceId}/agent?thread=${run.threadId}`} className={OUTLINE_BTN}>
               {t("Open conversation")}
             </Link>
           )}
-          {open && (
-            <button
-              type="button"
-              disabled={busy}
-              onClick={() => act(() => cancelDelegationAction(workspaceId, issueId))}
-              data-delegation-cancel
-              className="underline hover:text-text disabled:opacity-50"
-            >
-              {t("Cancel")}
-            </button>
-          )}
-        </div>
+          <button type="button" disabled={busy} onClick={cancel} data-delegation-cancel className={TEXT_BTN}>
+            {t("Cancel")}
+          </button>
+        </>
       )}
+      {state === "review" && (
+        <>
+          <button
+            type="button"
+            disabled={busy}
+            data-delegation-approve
+            onClick={() => act(() => reviewDelegationAction(workspaceId, issueId, "approve"))}
+            className={PRIMARY_BTN}
+          >
+            <CircleCheck size={13} />
+            {t("Approve")}
+          </button>
+          <button
+            type="button"
+            disabled={busy}
+            data-delegation-changes
+            onClick={() => setChanges((open) => !open)}
+            className={OUTLINE_BTN}
+          >
+            {t("Request changes")}
+          </button>
+          <button
+            type="button"
+            disabled={busy}
+            data-delegation-retry
+            onClick={() => act(() => reviewDelegationAction(workspaceId, issueId, "retry"))}
+            className={TEXT_BTN}
+          >
+            <RotateCcw size={12} />
+            {t("Retry")}
+          </button>
+        </>
+      )}
+      {(state === "failed" || (state === "changes_requested" && !open)) && (
+        <button
+          type="button"
+          disabled={busy}
+          data-delegation-retry-failed
+          onClick={() => act(() => reviewDelegationAction(workspaceId, issueId, "retry", note))}
+          className={OUTLINE_BTN}
+        >
+          <RotateCcw size={13} />
+          {t("Retry")}
+        </button>
+      )}
+      {state === "cancelled" && panel.canDelegate && !closed && (
+        <button
+          type="button"
+          onClick={() => setForm(true)}
+          data-delegation-open
+          className={OUTLINE_BTN}
+        >
+          <Bot size={13} />
+          {t("Delegate again")}
+        </button>
+      )}
+    </>
+  );
 
+  const extras = (
+    <>
       {run?.pending.map((card) => (
         <div key={card.requestId} className="flex flex-col gap-1 rounded-md border border-border p-2" data-delegation-card>
           <span className="text-text">{card.message}</span>
@@ -212,48 +320,12 @@ export function DelegationRow({
           </div>
         </div>
       ))}
-
       {run?.error && (
         <p className="flex items-start gap-1 text-danger">
           <TriangleAlert size={12} className="mt-0.5 shrink-0" />
           {run.error}
         </p>
       )}
-
-      {review && (
-        <div className="flex flex-wrap items-center gap-1.5" data-delegation-review>
-          <button
-            type="button"
-            disabled={busy}
-            data-delegation-approve
-            onClick={() => act(() => reviewDelegationAction(workspaceId, issueId, "approve"))}
-            className={buttonClass}
-          >
-            <CircleCheck size={13} />
-            {t("Approve")}
-          </button>
-          <button
-            type="button"
-            disabled={busy}
-            data-delegation-changes
-            onClick={() => setChanges((open) => !open)}
-            className={buttonClass}
-          >
-            {t("Request changes")}
-          </button>
-          <button
-            type="button"
-            disabled={busy}
-            data-delegation-retry
-            onClick={() => act(() => reviewDelegationAction(workspaceId, issueId, "retry"))}
-            className={buttonClass}
-          >
-            <RotateCcw size={13} />
-            {t("Retry")}
-          </button>
-        </div>
-      )}
-
       {changes && review && (
         <div className="flex flex-col gap-1.5 rounded-md border border-border p-2" data-delegation-changes-form>
           <textarea
@@ -262,7 +334,7 @@ export function DelegationRow({
             rows={2}
             aria-label={t("What should change?")}
             placeholder={t("What should change?")}
-            className="resize-y rounded-md border border-border bg-bg px-2 py-1 text-small text-text"
+            className="resize-y rounded-lg border border-border-strong bg-bg px-2 py-1 text-small text-text"
           />
           <button
             type="button"
@@ -275,8 +347,80 @@ export function DelegationRow({
           </button>
         </div>
       )}
+    </>
+  );
 
-      {failedOrChanges && !review && (
+  return (
+    <div className="flex flex-col gap-1.5 text-small" data-testid="delegation-row">
+      {panel.agent ? (
+        <div className="overflow-hidden rounded-lg border border-border">
+          <div className="flex items-center gap-2.5 px-3 py-2">
+            <span
+              className={PILL}
+              style={STATE_TONE[state]}
+              data-delegation-status={state === "idle" ? "idle" : state}
+            >
+              {t(STATE_PILL[state])}
+            </span>
+            <div className="min-w-0 flex-1">
+              <p className="text-body leading-snug text-text">{phrase}</p>
+              <div className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-caption text-faint">
+                <span className="inline-flex min-w-0 items-center gap-1">
+                  <Bot size={11} className="shrink-0" />
+                  <span className="truncate text-muted" data-testid="delegation-agent">
+                    {panel.agent.name}
+                  </span>
+                </span>
+                {run?.source && (
+                  <span className={TAG} data-testid="delegation-source">
+                    {run.source === "api" ? t("Built-in API agent") : t("Desktop runner")}
+                    {run.fallback ? ` · ${t("fallback from runner")}` : ""}
+                  </span>
+                )}
+                {run?.subscription && (
+                  <span className={TAG} data-testid="delegation-subscription">
+                    {run.subscription.windows[0]
+                      ? t("{percent}% plan left", {
+                          percent: String(Math.round(run.subscription.windows[0].remainingPercent)),
+                        })
+                      : t("Plan: not reported")}
+                  </span>
+                )}
+                {run?.model && <span className="font-mono">{run.model}</span>}
+                {usage && usage.totalTokens > 0 && (
+                  <span className="font-variant-numeric tabular-nums" data-testid="delegation-tokens">
+                    {t("{count} tokens", { count: usage.totalTokens.toLocaleString() })}
+                  </span>
+                )}
+                {run?.threadId && state !== "running" && (
+                  <Link
+                    href={`/${workspaceId}/agent?thread=${run.threadId}`}
+                    className="underline-offset-2 hover:text-text hover:underline"
+                  >
+                    {t("Open conversation")}
+                  </Link>
+                )}
+              </div>
+            </div>
+            {rowActions && <div className="flex shrink-0 items-center gap-1.5">{rowActions}</div>}
+          </div>
+          {(run?.pending.length ?? 0) > 0 || run?.error || (changes && review) ? (
+            <div className="flex flex-col gap-2 border-t border-border px-3 py-2">{extras}</div>
+          ) : null}
+        </div>
+      ) : (
+        extras
+      )}
+
+      {panel.agent?.source === "harness" && !panel.online && (
+        <p className="rounded-lg border border-border px-3 py-2 text-small text-muted">
+          {t(
+            "The runner is offline. This agent falls back to the built-in API agent when you have a model API."
+          )}
+        </p>
+      )}
+
+      {!panel.agent && failedOrChanges && !review && (
         <button
           type="button"
           disabled={busy}
@@ -289,15 +433,15 @@ export function DelegationRow({
         </button>
       )}
 
-      {panel.canDelegate && !closed && !open && !form && (
-        <button type="button" onClick={() => setForm(true)} data-delegation-open className={buttonClass}>
+      {panel.canDelegate && !closed && !form && !panel.run && (
+        <button type="button" onClick={() => setForm(true)} data-delegation-open className="flex w-fit items-center gap-1.5 text-small text-muted transition-colors hover:text-text">
           <Bot size={13} />
           {t(panel.agent ? "Delegate again" : "Delegate to an agent")}
         </button>
       )}
 
       {panel.canDelegate && !closed && form && (
-        <div className="flex flex-col gap-1.5 rounded-md border border-border p-2" data-delegation-form>
+        <div className="flex flex-col gap-1.5 rounded-lg border border-border p-2" data-delegation-form>
           <div className="flex flex-wrap items-center gap-1.5">
             <select
               value={picked}
@@ -341,7 +485,7 @@ export function DelegationRow({
             rows={2}
             aria-label={t("Anything the agent should know (optional)")}
             placeholder={t("Anything the agent should know (optional)")}
-            className="resize-y rounded-md border border-border bg-bg px-2 py-1 text-small text-text"
+            className="resize-y rounded-lg border border-border-strong bg-bg px-2 py-1 text-small text-text"
           />
           <div className="flex gap-1.5">
             <button

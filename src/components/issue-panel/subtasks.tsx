@@ -6,11 +6,11 @@ import type { IssueChild } from "@/lib/issues";
 import { useT } from "@/components/i18n-context";
 
 export function Subtasks({
-  children,
+  tasks,
   busy,
   onAdd,
 }: {
-  children: IssueChild[];
+  tasks: IssueChild[];
   busy: boolean;
   onAdd: (title: string) => Promise<boolean>;
 }) {
@@ -27,7 +27,7 @@ export function Subtasks({
   return (
     <div className="space-y-2" data-testid="subtasks">
       <div className="text-small font-medium text-muted">{t("Subtasks")}</div>
-      {children.map((child) => (
+      {tasks.map((child) => (
         <div key={child.id} className="flex items-baseline gap-2 text-small">
           <span className="shrink-0 text-faint">{child.identifier}</span>
           <span className="min-w-0 truncate text-text">{child.title}</span>
@@ -51,7 +51,7 @@ export function Subtasks({
           type="button"
           disabled={!title.trim() || busy}
           onClick={() => void submit()}
-          className="shrink-0 rounded-md bg-accent px-2.5 py-1 text-small font-medium text-white transition-colors hover:bg-accent-hover disabled:opacity-40"
+          className="inline-flex items-center justify-center gap-1.5 whitespace-nowrap h-[30px] rounded-lg px-2.5 text-small shrink-0 bg-accent font-medium text-white transition-colors hover:bg-accent-hover disabled:opacity-40"
         >
           {t("Add a subtask")}
         </button>

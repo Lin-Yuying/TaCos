@@ -4,19 +4,20 @@ import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Command } from "cmdk";
 import { useUI } from "@/components/ui-context";
+import { useContentColumnOffset } from "@/components/ui/modal";
 import { Search } from "lucide-react";
 import { StatusIcon, STATUS_META } from "@/components/icons";
 import { updateIssueAction } from "@/app/actions";
 import { STATUS_ORDER } from "@/lib/constants";
 import type { SearchHit } from "@/lib/search";
-import { timeAgo } from "@/lib/format";
-import { useLocale, useT } from "@/components/i18n-context";
+import { useT } from "@/components/i18n-context";
 import { SearchHitLabel, SearchKindIcon } from "@/components/search-result";
 import { useSearchRecents, type RecentItem } from "@/lib/search-recents";
 import {
   GROUP_LABELS,
   GROUP_ORDER,
   PREFIXES,
+  KIND_GROUP,
   kindsForGroup,
   parseSearchInput,
   removeSearchToken,
@@ -38,7 +39,7 @@ export function CommandPalette({ workspaceId }: { workspaceId: string }) {
 
 function PaletteInner({ workspaceId }: { workspaceId: string }) {
   const t = useT();
-  const locale = useLocale();
+  const paletteOffset = useContentColumnOffset(true);
   const { setPaletteOpen, openIssue, openPage, focused, setComposerOpen, scope } = useUI();
   const router = useRouter();
   const inputRef = useRef<HTMLInputElement>(null);
@@ -151,22 +152,29 @@ function PaletteInner({ workspaceId }: { workspaceId: string }) {
     }
   }
 
-  const groups = GROUP_ORDER.map((group) => ({
-    group,
-    hits: results.filter((hit) => kindsForGroup(group).includes(hit.kind)),
-  })).filter((entry) => entry.hits.length > 0);
+  const ordered = GROUP_ORDER.flatMap((group) =>
+    results.filter((hit) => kindsForGroup(group).includes(hit.kind))
+  );
 
   return (
     <>
       <div className="fixed inset-0 z-40 bg-black/40" onClick={close} />
-      <div className="fixed inset-x-0 top-[12vh] z-50 mx-auto w-[620px] max-w-[94vw]">
+      <div
+        className="fixed left-1/2 top-[12vh] z-50 w-[620px] max-w-[94vw] -translate-x-1/2"
+        style={{ left: `calc(50% + ${paletteOffset}px)` }}
+      >
         <Command
           loop
           shouldFilter={false}
           data-testid="command-palette"
           className="cmdk-palette overflow-hidden rounded-xl border border-border bg-overlay shadow-2xl shadow-black/15"
         >
-          <div className="border-b border-border">
+          <div className="relative border-b border-border">
+            <Search
+              size={15}
+              aria-hidden
+              className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-faint"
+            />
             <Command.Input
               ref={inputRef}
               data-testid="palette-input"
@@ -174,39 +182,11 @@ function PaletteInner({ workspaceId }: { workspaceId: string }) {
               value={query}
               onValueChange={setQuery}
               placeholder={t("Search or jump to…")}
+              className="!pl-10 outline-none"
+              // The global :focus-visible ring is unlayered, so a utility class cannot remove
+              // it; the palette already marks focus by opening itself, so the input stays flat.
+              style={{ outline: "none" }}
             />
-            <div
-              data-testid="palette-hints"
-              className="flex flex-wrap items-center gap-1 px-3 pb-2.5"
-            >
-              {PREFIXES.map((entry) => (
-                <button
-                  key={entry.key}
-                  type="button"
-                  data-testid={`palette-prefix-${entry.key}`}
-                  onClick={() => insertPrefix(entry.key)}
-                  className={`rounded border px-1.5 py-0.5 text-caption ${
-                    parsed.prefix === entry.key
-                      ? "border-accent bg-elevated text-text"
-                      : "border-border text-faint hover:text-text"
-                  }`}
-                >
-                  <span className="font-mono">{entry.key}</span> {t(entry.label)}
-                </button>
-              ))}
-              <button
-                type="button"
-                data-testid="palette-quick-me"
-                onClick={() => {
-                  setQuery(query.trim() ? `${query.trim()} @me` : "@me");
-                  inputRef.current?.focus();
-                }}
-                className="rounded border border-border px-1.5 py-0.5 font-mono text-caption text-faint hover:text-text"
-              >
-                @me
-              </button>
-              <span className="ml-auto text-caption text-faint">@me @none @done</span>
-            </div>
             {(parsed.prefix || activeFilters.length > 0) && (
               <div
                 data-testid="palette-active-filters"
@@ -217,7 +197,7 @@ function PaletteInner({ workspaceId }: { workspaceId: string }) {
                     type="button"
                     data-testid="palette-scope"
                     onClick={removeScope}
-                    className="rounded-full bg-elevated px-2 py-0.5 text-caption text-text"
+                    className="rounded-lg bg-elevated px-2 py-0.5 text-caption text-text"
                   >
                     {t(GROUP_LABELS[parsed.group])} ×
                   </button>
@@ -231,7 +211,7 @@ function PaletteInner({ workspaceId }: { workspaceId: string }) {
                       setQuery(removeSearchToken(query, token));
                       inputRef.current?.focus();
                     }}
-                    className="rounded-full bg-elevated px-2 py-0.5 font-mono text-caption text-text"
+                    className="rounded-lg bg-elevated px-2 py-0.5 font-mono text-caption text-text"
                   >
                     {token} ×
                   </button>
@@ -391,9 +371,9 @@ function PaletteInner({ workspaceId }: { workspaceId: string }) {
                     </span>
                   </Command.Item>
                 )}
-                {groups.map(({ group, hits }) => (
-                  <Command.Group key={group} heading={t(GROUP_LABELS[group])}>
-                    {hits.map((hit) => (
+                {ordered.length > 0 && (
+                  <Command.Group heading={t("Search results")}>
+                    {ordered.map((hit) => (
                       <Command.Item
                         key={`${hit.kind}:${hit.id}`}
                         value={`${hit.kind} ${hit.id}`}
@@ -406,34 +386,30 @@ function PaletteInner({ workspaceId }: { workspaceId: string }) {
                           query={content}
                           showKind={false}
                           trailing={
-                            <span
-                              suppressHydrationWarning
-                              className="shrink-0 text-caption text-faint"
-                            >
-                              {timeAgo(hit.updatedAt, locale)}
+                            <span className="shrink-0 text-caption text-faint">
+                              {t(GROUP_LABELS[KIND_GROUP[hit.kind]])}
                             </span>
                           }
                         />
                       </Command.Item>
                     ))}
+                    <Command.Item
+                      value="search all results"
+                      data-testid="palette-see-all"
+                      onSelect={searchAll}
+                    >
+                      <Search size={13} className="shrink-0 text-faint" />
+                      <span className="min-w-0 flex-1 truncate">
+                        {t("Search all results for “{query}”", { query: content })}
+                      </span>
+                    </Command.Item>
                   </Command.Group>
-                ))}
-                <Command.Group heading={t("Search")}>
-                  <Command.Item
-                    value="search all results"
-                    data-testid="palette-see-all"
-                    onSelect={searchAll}
-                  >
-                    <Search size={13} className="shrink-0 text-faint" />
-                    <span className="min-w-0 flex-1 truncate">
-                      {t("Search all results for “{query}”", { query: content })}
-                    </span>
-                    <span className="shrink-0 text-caption text-faint">↵</span>
-                  </Command.Item>
-                </Command.Group>
+                )}
               </>
             ) : null}
 
+            {content && (
+            <>
             <Command.Group heading={t("Commands")}>
               <Command.Item
                 value="new task create"
@@ -443,7 +419,8 @@ function PaletteInner({ workspaceId }: { workspaceId: string }) {
                   close();
                 }}
               >
-                <span className="text-accent">+</span> {t("New task")}
+                <span className="min-w-0 flex-1 truncate">{t("New task")}</span>
+                <kbd className="rounded border border-border bg-elevated px-1 font-mono text-caption text-faint">C</kbd>
               </Command.Item>
               {focused &&
                 STATUS_ORDER.map((status) => (
@@ -476,7 +453,6 @@ function PaletteInner({ workspaceId }: { workspaceId: string }) {
                     close();
                   }}
                 >
-                  <span className="text-muted">⧉</span>{" "}
                   {t("Copy identifier ({ref})", { ref: focused.ref })}
                 </Command.Item>
               )}
@@ -534,6 +510,8 @@ function PaletteInner({ workspaceId }: { workspaceId: string }) {
                 {t("Go to Settings")}
               </Command.Item>
             </Command.Group>
+            </>
+            )}
           </Command.List>
           <div className="flex flex-wrap items-center gap-3 border-t border-border px-3 py-2 text-caption text-faint">
             <span>
@@ -548,7 +526,6 @@ function PaletteInner({ workspaceId }: { workspaceId: string }) {
               <kbd className="rounded border border-border bg-elevated px-1 font-mono">esc</kbd>{" "}
               {t("close")}
             </span>
-            <span className="ml-auto">{t("Search results and commands are separate.")}</span>
           </div>
         </Command>
       </div>

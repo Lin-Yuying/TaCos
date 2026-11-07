@@ -1,7 +1,9 @@
 "use client";
 
+import { BTN, BTN_PRIMARY, CHIP, ICON_BTN } from "@/lib/page-chrome";
+import { MODAL_BODY, MODAL_FOOT, MODAL_HEAD, MODAL_TITLE, Modal } from "@/components/ui/modal";
 import { useEffect, useMemo, useState } from "react";
-import { Bell, BellOff, Copy, MoreHorizontal, Pencil, Star, Trash2 } from "lucide-react";
+import { Bell, BellOff, Copy, MoreHorizontal, Pencil, Star, Trash2, X } from "lucide-react";
 import { Menu } from "@/components/menu";
 import { useT } from "@/components/i18n-context";
 import { useUI } from "@/components/ui-context";
@@ -25,8 +27,9 @@ import {
   updateTaskViewSubscriptionAction,
 } from "@/app/task-view-subscription-actions";
 
-const triggerClass =
-  "flex items-center gap-1 rounded-md px-2 py-1 text-small text-muted transition-colors hover:bg-elevated hover:text-text";
+const triggerClass = CHIP;
+
+export const SAVE_VIEW_EVENT = "tacos:save-view";
 
 /**
  * Saved views for the current list: shared workspace/project views first, then the
@@ -60,6 +63,7 @@ export function TaskViews({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [open, setOpen] = useState(false);
+  const [saving, setSaving] = useState(false);
   const [expanded, setExpanded] = useState<string | null>(null);
   const [renaming, setRenaming] = useState<string | null>(null);
   const [renameName, setRenameName] = useState("");
@@ -68,6 +72,12 @@ export function TaskViews({
     () => ({ scope, projectId: projectId ?? null, context }),
     [scope, projectId, context]
   );
+
+  useEffect(() => {
+    const openSave = () => setSaving(true);
+    window.addEventListener(SAVE_VIEW_EVENT, openSave);
+    return () => window.removeEventListener(SAVE_VIEW_EVENT, openSave);
+  }, []);
 
   async function refresh() {
     const [result, subscriptionResult] = await Promise.all([
@@ -148,6 +158,7 @@ export function TaskViews({
         await refresh();
         onSelect(result.data);
         setOpen(false);
+        setSaving(false);
       } else setError(result.error);
     } catch {
       setError(t("Could not save. Retry."));
@@ -172,7 +183,7 @@ export function TaskViews({
   }
 
   async function remove(view: TaskViewSummary) {
-    if (!(await confirm(t("Delete the view “{name}”?", { name: view.name })))) return;
+    if (!(await confirm(t("Delete the view “{name}”?", { name: view.name }), { action: t("Delete") }))) return;
     await act(async () => {
       const result = await deleteTaskViewAction(workspaceId, view.id);
       if (result.ok && active?.id === view.id) onSelect(null);
@@ -186,6 +197,31 @@ export function TaskViews({
   ].filter((group) => group.views.length > 0);
 
   return (
+    <>
+    <Modal open={saving} bare onClose={() => setSaving(false)} title={t("Save view")} className="max-w-[420px]">
+      <form onSubmit={(event) => { event.preventDefault(); void save(); }}>
+        <div className={MODAL_HEAD}>
+          <h2 className={MODAL_TITLE}>{t("Save view")}</h2>
+          <button type="button" onClick={() => setSaving(false)} aria-label={t("Close")} className={`${ICON_BTN} !size-[26px]`}><X size={14} /></button>
+        </div>
+        <div className={MODAL_BODY}>
+          <label className="flex flex-col gap-1 text-small font-medium">
+            {t("View name")}
+            <input autoFocus disabled={busy} value={name} onChange={(event) => setName(event.target.value)} className="h-[34px] rounded-lg border border-border-strong bg-bg px-2.5 text-body font-normal" />
+          </label>
+          <p className="text-small text-muted">{t("Save the current filters and display as a view.")}</p>
+          <label className="flex items-center gap-1.5 text-small text-muted">
+            <input type="checkbox" checked={shared} onChange={(event) => setShared(event.target.checked)} />
+            {t("Share with everyone")}
+          </label>
+          {error ? <p role="alert" className="text-small text-danger">{t(error)}</p> : null}
+        </div>
+        <div className={MODAL_FOOT}>
+          <button type="button" onClick={() => setSaving(false)} className={BTN}>{t("Cancel")}</button>
+          <button type="submit" disabled={busy || !name.trim()} className={BTN_PRIMARY}>{t("Save")}</button>
+        </div>
+      </form>
+    </Modal>
     <Menu
       width={400}
       open={open}
@@ -237,7 +273,7 @@ export function TaskViews({
                     >
                       {view.name}
                       {view.isDefault ? (
-                        <span className="ml-2 rounded-full border border-border px-1.5 py-px text-caption text-faint">
+                        <span className="inline-flex h-[18px] items-center rounded-[5px] px-1.5 whitespace-nowrap ml-2 border border-border text-caption text-faint">
                           {t("Default")}
                         </span>
                       ) : null}
@@ -314,7 +350,7 @@ export function TaskViews({
                         aria-label={t("New name for {name}", { name: view.name })}
                         value={renameName}
                         onChange={(event) => setRenameName(event.target.value)}
-                        className="min-w-0 flex-1 rounded border border-border bg-bg p-1"
+                        className="h-[34px] rounded-lg px-2.5 min-w-0 flex-1 border border-border-strong bg-bg p-1 text-body"
                       />
                       <button disabled={busy || !renameName.trim()} type="submit">
                         {t("Save")}
@@ -464,7 +500,7 @@ export function TaskViews({
                 placeholder={t("View name")}
                 value={name}
                 onChange={(event) => setName(event.target.value)}
-                className="min-w-0 flex-1 rounded border border-border bg-bg p-1"
+                className="h-[34px] rounded-lg px-2.5 min-w-0 flex-1 border border-border-strong bg-bg p-1 text-body"
               />
               <button type="submit" disabled={busy || !name.trim()}>
                 {t("Save view")}
@@ -488,5 +524,6 @@ export function TaskViews({
         </div>
       )}
     </Menu>
+    </>
   );
 }

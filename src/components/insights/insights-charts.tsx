@@ -18,59 +18,32 @@ const CANCELED_COLOR = STATUS_META.canceled.color;
 export function ThroughputChart({ weeks }: { weeks: InsightWeekPoint[] }) {
   const t = useT();
   const locale = useLocale();
-  const total = weeks.reduce((sum, week) => sum + week.created + week.completed + week.canceled, 0);
-  if (weeks.length === 0 || total === 0) {
-    return (
-      <EmptyNote testId="insight-throughput-empty">
-        {t("No created, completed or canceled tasks in this range.")}
-      </EmptyNote>
-    );
+  if (!weeks.some((week) => week.created || week.completed || week.canceled)) {
+    return <EmptyNote testId="insight-throughput-empty">{t("No created, completed or canceled tasks in this range.")}</EmptyNote>;
   }
-  const max = Math.max(1, ...weeks.map((week) => Math.max(week.created, week.completed, week.canceled)));
-  const series = [
-    { key: "created", label: "Created", color: "var(--color-accent)" },
-    { key: "completed", label: "Completed", color: DONE_COLOR },
-    { key: "canceled", label: "Canceled", color: CANCELED_COLOR },
-  ] as const;
+  const max = Math.max(1, ...weeks.map((week) => week.completed));
   return (
     <div data-testid="insight-throughput-chart">
       <div
-        className="flex h-40 items-end gap-1.5 overflow-x-auto pb-1"
+        className="flex h-[170px] items-end gap-0.5 border-b border-border-strong"
         role="img"
-        aria-label={t("Bar chart of created, completed and canceled tasks per week.")}
+        aria-label={t("Bar chart of completed tasks per week.")}
       >
-        {weeks.map((week) => (
-          <div key={week.weekStart} className="flex min-w-[16px] flex-1 flex-col items-center gap-1">
-            <div className="flex h-32 w-full items-end justify-center gap-[2px]">
-              {series.map((item) => {
-                const value = week[item.key];
-                return (
-                  <div key={item.key} className="flex h-full w-full max-w-[10px] items-end">
-                    <div
-                      className="w-full rounded-t"
-                      style={{
-                        height: value === 0 ? "0px" : `${Math.max(2, (value / max) * 100)}%`,
-                        backgroundColor: item.color,
-                      }}
-                      title={t("{label}: {count}", { label: t(item.label), count: value })}
-                    />
-                  </div>
-                );
-              })}
+        {weeks.map((week) => {
+          const label = t("{week}: {count} completed", { week: formatDay(week.weekStart, locale), count: week.completed });
+          return (
+            <div key={week.weekStart} className="flex h-full min-w-0 flex-1 items-end" title={label}>
+              <i
+                className="mx-auto block w-full max-w-[26px] rounded-t bg-text transition-colors hover:bg-muted"
+                style={{ height: `${(week.completed / max) * 100}%` }}
+              />
             </div>
-            <span className="whitespace-nowrap text-caption text-faint">
-              {formatDay(week.weekStart, locale)}
-            </span>
-          </div>
-        ))}
+          );
+        })}
       </div>
-      <div className="mt-1 flex flex-wrap items-center gap-3 text-caption text-muted">
-        {series.map((item) => (
-          <span key={item.key} className="inline-flex items-center gap-1">
-            <span className="h-2 w-2 rounded-sm" style={{ backgroundColor: item.color }} />
-            {t(item.label)}
-          </span>
-        ))}
+      <div className="flex justify-between pt-1 text-caption text-faint">
+        <span>{formatDay(weeks[0].weekStart, locale)}</span>
+        <span>{formatDay(weeks[weeks.length - 1].weekStart, locale)}</span>
       </div>
     </div>
   );

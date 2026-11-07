@@ -74,6 +74,7 @@ export function DocUpdatesPanel({
   compact,
   beforeRestore,
   onRestored,
+  onPreview,
   onClose,
 }: {
   workspaceId: string;
@@ -83,6 +84,8 @@ export function DocUpdatesPanel({
   compact: boolean;
   beforeRestore: () => Promise<void>;
   onRestored: (page: DocPage) => void;
+  // Beside a document the chosen version's changes show in the document's place.
+  onPreview?: (change: PageVersionChange | null) => void;
   onClose: () => void;
 }) {
   const t = useT();
@@ -96,6 +99,8 @@ export function DocUpdatesPanel({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const groups = useMemo(() => (versions ? groupDocUpdates(versions) : null), [versions]);
+  useEffect(() => { onPreview?.(compact ? null : change); }, [change, compact, onPreview]);
+  useEffect(() => () => onPreview?.(null), [onPreview]);
 
   async function load() {
     const result = await listPageVersionsAction(workspaceId, pageId);
@@ -107,8 +112,12 @@ export function DocUpdatesPanel({
     let live = true;
     void listPageVersionsAction(workspaceId, pageId).then((result) => {
       if (!live) return;
-      if (result.ok) setVersions(result.data);
-      else setError(result.error);
+      if (result.ok) {
+        setVersions(result.data);
+        const first = groupDocUpdates(result.data)[0];
+        const newest = first?.versions[0];
+        if (!compact && first && newest) void open(newest.id, (first.versions[first.versions.length - 1] ?? newest).id);
+      } else setError(result.error);
     });
     return () => {
       live = false;
@@ -159,78 +168,90 @@ export function DocUpdatesPanel({
           <X size={14} />
         </button>
       </div>
-      <div className="min-h-0 flex-1 overflow-y-auto p-2">
-        {error && <div className="px-1 pb-2 text-small text-danger">{t(error)}</div>}
-        {versions === null && !error && <p className="p-2 text-small text-faint">{t("Loading…")}</p>}
-        <input aria-label={t("Search versions")} placeholder={t("Search versions")} value={query} onChange={e=>{setQuery(e.target.value);setLimit(30);}} className="mb-2 w-full rounded border border-border bg-bg p-1 text-small"/>
-        {error&&<button onClick={()=>void load()} className="text-small">{t("Retry")}</button>}
-        {groups?.length === 0 && <p className="px-1 py-2 text-body text-faint">{t("No updates yet.")}</p>}
+      <div className="shrink-0 px-3 py-2">
+        <input aria-label={t("Search versions")} placeholder={t("Search versions")} value={query} onChange={e=>{setQuery(e.target.value);setLimit(30);}} className="h-[34px] rounded-lg px-2.5 w-full border border-border-strong bg-bg text-text placeholder:text-faint text-body"/>
+      </div>
+      <div className="min-h-0 flex-1 overflow-y-auto">
+        {error && <div className="px-3 pb-2 text-small text-danger">{t(error)} <button onClick={()=>void load()} className="underline">{t("Retry")}</button></div>}
+        {versions === null && !error && <p className="px-3 py-2 text-small text-faint">{t("Loading…")}</p>}
+        {groups?.length === 0 && <p className="px-3 py-2 text-body text-faint">{t("No updates yet.")}</p>}
         {groups?.filter(group=>group.versions.some(version=>`${versionLabel(version,t)} ${version.seq} ${version.updatedAt} ${version.title}`.toLowerCase().includes(query.toLowerCase()))).slice(0,limit).map((group) => {
           const newest = group.versions[0];
           if (!newest) return null;
           const oldest = group.versions[group.versions.length - 1] ?? newest;
           const multiple = group.versions.length > 1;
           const people = editorsOf(group.versions);
+          const isCurrent = group.versions.some((version) => version.id === current);
+          const byAgent = !multiple && newest.via === "mcp" && newest.reason === "edit";
+          const who = multiple
+            ? editorsLabel(people, t)
+            : byAgent
+              ? t("{name}'s Agent", { name: newest.actor?.displayName || t("Someone") })
+              : versionLabel(newest, t);
           return (
-            <div key={group.id} className="rounded-md">
-              <button
-                type="button"
-                onClick={() => void (selected === group.id ? (selectedRef.current=null,setSelected(null)) : open(newest.id, oldest.id))}
-                aria-expanded={selected === group.id}
-                className={`flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-small transition-colors hover:bg-elevated/60 ${
-                  selected === group.id ? "bg-elevated/60" : ""
-                }`}
-              >
-                {multiple ? (
-                  <EditorFaces people={people} />
-                ) : (
-                  newest.actor && (
-                    <AssigneeAvatar displayName={newest.actor.displayName} avatar={newest.actor.avatar} size={16} />
-                  )
-                )}
-                <span className="min-w-0 flex-1 truncate text-text">
-                  {multiple ? editorsLabel(people, t) : versionLabel(newest, t)}
-                </span>
-                {!multiple && newest.via === "mcp" && (
-                  <span className="shrink-0 rounded border border-border px-1 text-caption text-muted">Agent</span>
-                )}
-                <span className="shrink-0 text-caption text-faint">{timeAgo(group.updatedAt, locale)}</span>
-              </button>
-              {selected === group.id && change && (
-                <div className="px-2 pb-3 pt-1">
-                  {change.beforeTitle !== change.title && (
-                    <p className="pb-1 text-small text-muted">
-                      {t("Title: {before} → {after}", { before: change.beforeTitle, after: change.title })}
-                    </p>
+            <div key={group.id} className="border-b border-border">
+              <div className={`flex items-center gap-2 px-3 py-2 transition-colors ${selected === group.id ? "bg-elevated" : "hover:bg-elevated/60"}`}>
+                <button
+                  type="button"
+                  onClick={() => void (selected === group.id ? (selectedRef.current=null,setSelected(null),setChange(null)) : open(newest.id, oldest.id))}
+                  aria-expanded={selected === group.id}
+                  className="flex min-w-0 flex-1 items-center gap-2 text-left"
+                >
+                  {multiple ? (
+                    <EditorFaces people={people} />
+                  ) : (
+                    newest.actor && (
+                      <AssigneeAvatar displayName={newest.actor.displayName} avatar={newest.actor.avatar} size={16} />
+                    )
                   )}
-                  <DiffLines before={change.beforeDoc} after={change.doc} />
-                  <div className="mt-2 flex items-center gap-2 text-small text-faint">
-                    {multiple
-                      ? t("Versions {from} to {to}", { from: oldest.seq, to: newest.seq })
-                      : t("Version {n}", { n: newest.seq })}
-                    {newest.id === current && <span>· {t("Current")}</span>}
-                    {canEdit && !multiple && newest.id === current && newest.via === "mcp" && newest.reason === "edit" && (
-                      <button
-                        type="button"
-                        data-doc-undo-agent
-                        disabled={busy}
-                        onClick={() => void restore(newest.id, undoAgentEditAction)}
-                        className="ml-auto rounded-md border border-border px-2 py-1 text-small font-medium text-muted hover:border-border-strong hover:text-text"
-                      >
-                        {t("Undo this Agent edit")}
-                      </button>
-                    )}
-                    {canEdit && !multiple && newest.id !== current && (
-                      <button
-                        type="button"
-                        disabled={busy}
-                        onClick={() => void restore(newest.id)}
-                        className="ml-auto rounded-md border border-border px-2 py-1 text-small font-medium text-muted hover:border-border-strong hover:text-text"
-                      >
-                        {t("Restore this version")}
-                      </button>
-                    )}
-                  </div>
+                  <span className="min-w-0 flex-1">
+                    <span className="flex items-center gap-1.5 text-body text-text">
+                      <span className="tabular-nums">
+                        {multiple
+                          ? t("Versions {from} to {to}", { from: oldest.seq, to: newest.seq })
+                          : t("Version {n}", { n: newest.seq })}
+                      </span>
+                      {isCurrent && <span className="shrink-0 rounded bg-surface px-1 text-caption text-muted">{t("Current")}</span>}
+                    </span>
+                    <span className="block truncate text-small text-muted">
+                      {who} · <span suppressHydrationWarning>{timeAgo(group.updatedAt, locale)}</span>
+                    </span>
+                  </span>
+                </button>
+                {canEdit && byAgent && isCurrent && (
+                  <button
+                    type="button"
+                    data-doc-undo-agent
+                    disabled={busy}
+                    onClick={() => {selectedRef.current=newest.id;void restore(newest.id, undoAgentEditAction);}}
+                    className="inline-flex items-center justify-center gap-1.5 whitespace-nowrap h-[30px] rounded-lg px-2.5 text-small shrink-0 border border-border font-medium bg-bg text-text hover:bg-active"
+                  >
+                    {t("Undo this Agent edit")}
+                  </button>
+                )}
+                {canEdit && !isCurrent && (
+                  <button
+                    type="button"
+                    disabled={busy}
+                    onClick={() => {selectedRef.current=newest.id;void restore(newest.id);}}
+                    className="inline-flex items-center justify-center gap-1.5 whitespace-nowrap h-[30px] rounded-lg px-2.5 text-small shrink-0 border border-border font-medium bg-bg text-text hover:bg-active"
+                  >
+                    {t("Restore this version")}
+                  </button>
+                )}
+              </div>
+              {selected === group.id && (compact || multiple) && (
+                <div className="px-3 pb-3 pt-1">
+                  {compact && change && (
+                    <>
+                      {change.beforeTitle !== change.title && (
+                        <p className="pb-1 text-small text-muted">
+                          {t("Title: {before} → {after}", { before: change.beforeTitle, after: change.title })}
+                        </p>
+                      )}
+                      <DiffLines before={change.beforeDoc} after={change.doc} />
+                    </>
+                  )}
                   {multiple && (
                     <ul className="mt-2 flex flex-col gap-1">
                       {group.versions.map((version) => (
@@ -245,13 +266,13 @@ export function DocUpdatesPanel({
                           <span className="min-w-0 flex-1 truncate text-text">
                             {version.actor?.displayName || t("Someone")}
                           </span>
-                          <span className="shrink-0 text-caption text-faint">{t("Version {n}", { n: version.seq })}</span>
+                          <span className="shrink-0 text-caption text-faint tabular-nums">{t("Version {n}", { n: version.seq })}</span>
                           {canEdit && version.id !== current && (
                             <button
                               type="button"
                               disabled={busy}
-                        onClick={() => {selectedRef.current=version.id;void restore(version.id);}}
-                              className="shrink-0 rounded-md border border-border px-2 py-1 text-small font-medium text-muted hover:border-border-strong hover:text-text"
+                              onClick={() => {selectedRef.current=version.id;void restore(version.id);}}
+                              className="inline-flex items-center justify-center gap-1.5 whitespace-nowrap h-[30px] rounded-lg px-2.5 text-small shrink-0 border border-border font-medium bg-bg text-text hover:bg-active"
                             >
                               {t("Restore this version")}
                             </button>
@@ -265,7 +286,7 @@ export function DocUpdatesPanel({
             </div>
           );
         })}
-        {groups&&groups.length>limit&&<button onClick={()=>setLimit(n=>n+30)} className="p-2 text-small">{t("Load more")}</button>}
+        {groups&&groups.length>limit&&<div className="flex justify-center p-2"><button type="button" onClick={()=>setLimit(n=>n+30)} className="inline-flex items-center justify-center gap-1.5 whitespace-nowrap h-[30px] rounded-lg px-2.5 text-small border border-border font-medium bg-bg text-text hover:bg-active">{t("Load more")}</button></div>}
       </div>
     </aside></SidePanel>
   );

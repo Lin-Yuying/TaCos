@@ -13,10 +13,8 @@ import { useT } from "@/components/i18n-context";
 
 export function NewProjectDialog({
   workspaceId,
-  workspaceName,
 }: {
   workspaceId: string;
-  workspaceName: string;
 }) {
   const t = useT();
   const modifier=usePrimaryModifier();
@@ -29,6 +27,7 @@ export function NewProjectDialog({
 
   useEffect(() => {
     if (!projectComposerOpen) return;
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- the form resets each time the dialog opens
     setError(null);
     setBusy(false);
   }, [projectComposerOpen]);
@@ -62,7 +61,7 @@ export function NewProjectDialog({
   }
 
   return (
-    <Modal open={projectComposerOpen} onClose={() => {if(!busy)setProjectComposerOpen(false);}} title={t("New project")}>
+    <Modal open={projectComposerOpen} onClose={() => {if(!busy)setProjectComposerOpen(false);}} title={t("New project")} className="max-w-[420px] !p-0">
         <div
           className="rounded-xl border border-border bg-overlay shadow-2xl shadow-black/15"
           onKeyDown={(e) => {
@@ -72,11 +71,8 @@ export function NewProjectDialog({
             }
           }}
         >
-          <div className="flex items-center justify-between border-b border-border px-4 py-2 text-small text-faint">
-            <span>
-              {workspaceName} <span className="mx-1">›</span>
-              <span className="text-muted">{t("New project")}</span>
-            </span>
+          <div className="flex items-center justify-between border-b border-border px-4 py-3">
+            <h2 className="text-lead font-semibold text-text">{t("New project")}</h2>
             <button
               type="button"
               onClick={() => setProjectComposerOpen(false)}
@@ -93,14 +89,14 @@ export function NewProjectDialog({
               value={name}
               onChange={(e) => setName(e.target.value)}
               placeholder={t("Project name")}
-              className="w-full bg-transparent text-title font-semibold placeholder:text-faint focus:outline-none"
+              className="h-[34px] rounded-lg px-2.5 w-full border border-border-strong bg-bg text-body text-text placeholder:text-faint focus:border-border-strong focus:outline-none"
             />
             <textarea
               value={description}
               onChange={(e) => setDescription(e.target.value)}
               rows={2}
               placeholder={t("Add a short summary…")}
-              className="mt-1 w-full resize-none bg-transparent text-body leading-relaxed text-muted placeholder:text-faint focus:outline-none"
+              className="mt-2 w-full resize-none rounded-lg border border-border-strong bg-bg px-2.5 py-1.5 text-body leading-relaxed text-text placeholder:text-faint focus:border-border-strong focus:outline-none"
             />
             <p className="mt-2 text-small text-faint">
               {t("An icon colour is chosen for you — change it later from the project overview.")}
@@ -112,7 +108,7 @@ export function NewProjectDialog({
             <button
               type="button"
               onClick={() => setProjectComposerOpen(false)}
-              className="rounded-md px-2.5 py-1.5 text-body text-muted transition-colors hover:text-text"
+              className="inline-flex items-center justify-center gap-1.5 whitespace-nowrap h-[30px] rounded-lg px-2.5 text-small border border-border text-text transition-colors bg-bg hover:bg-active"
             >
               {t("Cancel")}
             </button>
@@ -120,7 +116,7 @@ export function NewProjectDialog({
               type="button"
               onClick={() => void submit()}
               disabled={!name.trim() || busy}
-              className="rounded-md bg-accent px-3 py-1.5 text-body font-medium text-white transition-colors hover:bg-accent-hover disabled:opacity-40"
+              className="inline-flex items-center justify-center gap-1.5 whitespace-nowrap h-[30px] rounded-lg px-2.5 text-small bg-accent font-medium text-white transition-colors hover:bg-accent-hover disabled:opacity-40"
             >
               {t("Create project")}
               <span className="ml-2 text-caption opacity-75">{modifier}↵</span>

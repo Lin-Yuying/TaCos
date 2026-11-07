@@ -1,7 +1,7 @@
 "use client";
 
 import { SuggestionMenu } from "./ui/suggestion-menu";
-import { type RefObject, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
+import { Fragment, type RefObject, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { useRouter } from "next/navigation";
 import { EditorContent, NodeViewWrapper, ReactNodeViewRenderer, useEditor, type Editor, type Range } from "@tiptap/react";
 import type { NodeViewProps } from "@tiptap/react";
@@ -39,6 +39,9 @@ import {
   Strikethrough,
   Table as TableIcon,
   Type,
+  Check,
+  MoreHorizontal,
+  X,
 } from "lucide-react";
 import { AssigneeAvatar } from "@/components/issue-table";
 import { DocMention, PageEmbed, PageRef, documentExtensions } from "@/lib/editor/extensions";
@@ -53,7 +56,9 @@ import { outlineHeadings } from "@/lib/doc-outline";
 import { anchorFromSelection, anchorRanges } from "@/lib/editor/anchors";
 import type { DocAnchor } from "@/lib/doc-anchor";
 import type { DocCollab } from "@/components/use-doc-collab";
-import { CodeLanguageMenu } from "@/components/code-block-controls";
+import { CodeLanguageMenu, setLineNumbers, useLineNumbers } from "@/components/code-block-controls";
+import { CodeView, codeViewKey } from "@/lib/editor/code-view";
+import { Menu, MenuItem } from "@/components/menu";
 import { useT } from "@/components/i18n-context";
 
 type SlashCommand = {
@@ -124,8 +129,26 @@ const TABLE_EDITS: { label: string; run: (editor: Editor) => void }[] = [
   { label: "Delete this column", run: (editor) => editor.chain().focus().deleteColumn().run() },
 ];
 
-function TableEditButtons({ editor }: { editor: Editor }) {
+function TableEditButtons({ editor, vertical = false }: { editor: Editor; vertical?: boolean }) {
   const t = useT();
+  if (vertical)
+    return (
+      <div data-testid="doc-table-actions" className="w-[196px] p-0.5">
+        <div className="px-2 pb-1 pt-0.5 text-caption text-faint">{t("Table")}</div>
+        {TABLE_EDITS.map((action) => (
+          <button
+            key={action.label}
+            type="button"
+            aria-label={t(action.label)}
+            onMouseDown={(event) => event.preventDefault()}
+            onClick={() => action.run(editor)}
+            className="flex w-full rounded px-2 py-1.5 text-left text-body text-text transition-colors hover:bg-elevated"
+          >
+            {t(action.label)}
+          </button>
+        ))}
+      </div>
+    );
   const groups = [TABLE_EDITS.slice(0, 2), TABLE_EDITS.slice(2)];
   return (
     <>
@@ -148,6 +171,84 @@ function TableEditButtons({ editor }: { editor: Editor }) {
         </span>
       ))}
     </>
+  );
+}
+
+const EDITOR_TOOL = "flex items-center gap-1 rounded-md px-2 py-1 text-small text-muted transition-colors hover:bg-elevated hover:text-text";
+
+/** The caret's code block: a language chip and ⋯, which opens the block's actions in place. */
+function CodeBlockMenu({ editor }: { editor: Editor }) {
+  const t = useT();
+  // The menu belongs to one block: moving the caret to another block closes it.
+  const [openAt, setOpenAt] = useState<number | null>(null);
+  const [copied, setCopied] = useState(false);
+  const [, redraw] = useState(0);
+  const view = codeViewKey.getState(editor.state);
+  const showNumbers = useLineNumbers();
+  const caretBlock = () => (editor.state.selection.$from.depth > 0 ? editor.state.selection.$from.before() : -1);
+  const blockPos = caretBlock();
+  const open = openAt === blockPos;
+  const language = (
+    <CodeLanguageMenu
+      lang={String(editor.getAttributes("codeBlock").language ?? "")}
+      onChange={(lang) =>
+        editor.chain().focus().updateAttributes("codeBlock", { language: lang || null }).run()
+      }
+    />
+  );
+  const toggleCollapsed = () => {
+    editor.view.dispatch(editor.state.tr.setMeta(codeViewKey, { toggle: caretBlock() }));
+    redraw((value) => value + 1);
+  };
+  const item = "flex w-full rounded px-2 py-1 text-left text-body text-text hover:bg-elevated";
+  if (!open)
+    return (
+      <div className="flex items-center gap-0.5">
+        {language}
+        <button
+          type="button"
+          aria-label={t("Code block")}
+          title={t("Code block")}
+          onMouseDown={(event) => event.preventDefault()}
+          onClick={() => setOpenAt(caretBlock())}
+          className="rounded p-1 text-muted hover:bg-elevated hover:text-text"
+        >
+          <MoreHorizontal size={14} />
+        </button>
+      </div>
+    );
+  return (
+    <div role="menu" aria-label={t("Code block")} className="w-[220px] p-0.5" onMouseDown={(event) => event.preventDefault()}>
+      <div className="flex items-center justify-between px-2 pb-1 pt-0.5 text-caption text-faint">
+        {t("Code block")}
+        <button type="button" aria-label={t("Close")} onClick={() => setOpenAt(null)} className="rounded p-0.5 text-muted hover:bg-elevated hover:text-text"><X size={12} /></button>
+      </div>
+      <button
+        type="button"
+        role="menuitem"
+        className={item}
+        onClick={() => {
+          const text = editor.state.selection.$from.parent.textContent;
+          void navigator.clipboard?.writeText(text).then(() => {
+            setCopied(true);
+            window.setTimeout(() => setCopied(false), 1200);
+          }).catch(() => {});
+        }}
+      >
+        {t(copied ? "Copied" : "Copy code")}
+      </button>
+      <button type="button" role="menuitem" className={item} onClick={toggleCollapsed}>
+        {t(view?.collapsed.includes(blockPos) ? "Expand code" : "Collapse code")}
+      </button>
+      <div className="flex items-center justify-between gap-2 px-2 py-0.5 text-body text-text">
+        {t("Change language")}
+        {language}
+      </div>
+      <button type="button" role="menuitemcheckbox" aria-checked={showNumbers} className={`${item} items-center justify-between`} onClick={() => setLineNumbers(!showNumbers)}>
+        {t("Show line numbers")}
+        {showNumbers && <Check size={13} />}
+      </button>
+    </div>
   );
 }
 
@@ -221,16 +322,16 @@ function SelectionStyleButtons({ editor }: { editor: Editor }) {
             autoFocus
             value={linkDraft}
             onChange={(event) => setLinkDraft(event.target.value)}
-            placeholder={t("Web address")}
+            placeholder="https://"
             aria-label={t("Web address")}
-            className="min-w-0 flex-1 rounded border border-border bg-bg px-1 py-0.5 text-small text-text"
+            className="h-[34px] rounded-lg px-2.5 min-w-0 flex-1 border border-border-strong bg-bg text-text text-body"
           />
           <button
             type="submit"
             disabled={documentLinkHref(linkDraft) === null}
             className="rounded px-1.5 py-1 text-small text-muted transition-colors hover:bg-elevated hover:text-text disabled:opacity-40"
           >
-            {t("Add link")}
+            {t("Add")}
           </button>
           {editor.isActive("link") && (
             <button
@@ -240,9 +341,11 @@ function SelectionStyleButtons({ editor }: { editor: Editor }) {
                 editor.chain().focus().extendMarkRange("link").unsetLink().run();
                 setLinkDraft(null);
               }}
-              className="rounded px-1.5 py-1 text-small text-muted transition-colors hover:bg-elevated hover:text-text"
+              aria-label={t("Remove link")}
+              title={t("Remove link")}
+              className="rounded p-1 text-muted transition-colors hover:bg-elevated hover:text-text"
             >
-              {t("Remove link")}
+              <X size={13} />
             </button>
           )}
         </form>
@@ -497,6 +600,7 @@ export function DocumentEditor({
   placeholder,
   pages,
   editable = true,
+  mentionWarning = null,
   anchors = NO_ANCHORS,
   members = NO_MEMBERS,
   viewerId = null,
@@ -519,6 +623,8 @@ export function DocumentEditor({
   pages?: PageContext;
   // A reader who cannot edit still sees the same page and can select text to comment on.
   editable?: boolean;
+  // Set on a private document: whoever "@" picks other than the owner cannot read it.
+  mentionWarning?: { ownerId: string; onShare?: () => void } | null;
   anchors?: EditorAnchor[];
   // Who "@" offers; the viewer comes last.
   members?: Member[];
@@ -568,10 +674,12 @@ export function DocumentEditor({
   useEffect(()=>()=>{for(const item of uploadsRef.current)item.controller.abort();},[]);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  // eslint-disable-next-line react-hooks/immutability -- the editor extension reads these live values outside React
   useEffect(() => {
     onChangeRef.current = onChange;
     pagesRef.current = pages;
     embedPages.update(pages);
+    // eslint-disable-next-line react-hooks/immutability -- the editor extension reads these live values outside React
     embedPages.open = (id: string) => {
       const ctx = pagesRef.current;
       if (!ctx) return;
@@ -624,6 +732,7 @@ export function DocumentEditor({
 
   const mention = useMemo(
     () =>
+      // eslint-disable-next-line react-hooks/refs -- the editor extension reads these live values outside React
       DocMention.configure({
         suggestion: {
           char: "@",
@@ -796,11 +905,12 @@ export function DocumentEditor({
     return true;
   };
 
+  const showCodeNumbers = useLineNumbers();
   const editor = useEditor({
     immediatelyRender: false,
     extensions: [
       ...documentExtensions({ sharedHistory: Boolean(collab), mention, embed, pageRef }),
-      Placeholder.configure({ placeholder: placeholder ?? "" }), UploadMarkers, slash, pageLink, headings, CommentAnchors.configure({ store: anchorStore }),
+      Placeholder.configure({ placeholder: placeholder ?? "" }), UploadMarkers, CodeView, slash, pageLink, headings, CommentAnchors.configure({ store: anchorStore }),
       ...(collab
         ? [
             Collaboration.configure({ document: collab.doc }),
@@ -834,6 +944,10 @@ export function DocumentEditor({
       onChangeRef.current(next);
     },
   });
+  // The block's numbers follow the same remembered choice as code in Markdown.
+  useEffect(() => {
+    if (editor && !editor.isDestroyed) editor.view.dispatch(editor.state.tr.setMeta(codeViewKey, { lineNumbers: showCodeNumbers }));
+  }, [editor, showCodeNumbers]);
 
   useEffect(() => { if (editorRef) editorRef.current = editor;onEditorReady?.(editor); return () => { if (editorRef) editorRef.current = null;onEditorReady?.(null); }; }, [editor, editorRef,onEditorReady]);
 
@@ -1079,10 +1193,10 @@ export function DocumentEditor({
           shouldShow={({ editor: current, state, view }) =>
             state.selection.empty && current.isActive("table") && view.hasFocus()
           }
-          className="flex max-w-[320px] flex-wrap items-center gap-0.5 rounded-md border border-border bg-overlay p-0.5 shadow-md"
+          className="rounded-md border border-border bg-overlay p-0.5 shadow-md"
           data-testid="doc-table-menu"
         >
-          <TableEditButtons editor={editor} />
+          <TableEditButtons editor={editor} vertical />
         </BubbleMenu>
       )}
       {editor && editable && (
@@ -1092,15 +1206,10 @@ export function DocumentEditor({
           shouldShow={({ editor: current, view, element }) =>
             current.isActive("codeBlock") && (view.hasFocus() || element.contains(document.activeElement))
           }
-          className="flex items-center rounded-md border border-border bg-overlay px-1 py-0.5 shadow-md"
+          className="rounded-md border border-border bg-overlay p-0.5 shadow-md"
           data-testid="doc-code-menu"
         >
-          <CodeLanguageMenu
-            lang={String(editor.getAttributes("codeBlock").language ?? "")}
-            onChange={(lang) =>
-              editor.chain().focus().updateAttributes("codeBlock", { language: lang || null }).run()
-            }
-          />
+          <CodeBlockMenu editor={editor} />
         </BubbleMenu>
       )}
       <input
@@ -1115,9 +1224,40 @@ export function DocumentEditor({
           if (files.length) insertRef.current(files);
         }}
       />
-      {editable&&editor&&<div className="mb-2 flex flex-wrap gap-2 border-b border-border pb-1 text-small text-muted"><details><summary className="cursor-pointer">{t("Insert block")} · /</summary><div className="flex flex-wrap gap-1">{COMMANDS.map(command=><button key={command.label} type="button" onClick={()=>command.run(editor,{from:editor.state.selection.from,to:editor.state.selection.from})} className="rounded px-2 py-1 hover:bg-elevated">{t(command.label)}</button>)}</div></details>{editor.isActive("table")&&<div className="flex flex-wrap gap-1">{([
+      {editable&&editor&&(
+        <div className="mb-2 flex flex-wrap items-center gap-1 border-b border-border pb-1">
+          <Menu width={240} trigger={`${t("Insert block")} · /`} triggerClassName={EDITOR_TOOL} className="max-[600px]:contents">
+            {(close)=>(
+              <div className="max-h-[380px] overflow-y-auto">
+                <div className="px-2 pb-1 pt-1 text-caption text-faint">{t("Insert")}</div>
+                {COMMANDS.map(command=>(
+                  <MenuItem key={command.label} onSelect={()=>{close();window.setTimeout(()=>command.run(editor,{from:editor.state.selection.from,to:editor.state.selection.from}),20);}}>
+                    <command.icon size={14}/>
+                    <span className="min-w-0 flex-1 truncate">{t(command.label)}</span>
+                  </MenuItem>
+                ))}
+              </div>
+            )}
+          </Menu>
+          {editor.isActive("table")&&(
+            <Menu width={200} trigger={t("Table")} triggerClassName={EDITOR_TOOL}>
+              {(close)=>(
+                <>
+                  <div className="px-2 pb-1 pt-1 text-caption text-faint">{t("Table")}</div>
+                  {([
         ["Add row",()=>editor.chain().focus().addRowAfter().run()], ["Delete row",()=>editor.chain().focus().deleteRow().run()], ["Add column",()=>editor.chain().focus().addColumnAfter().run()], ["Delete column",()=>editor.chain().focus().deleteColumn().run()], ["Toggle header",()=>editor.chain().focus().toggleHeaderRow().run()], ["Merge cells",()=>editor.chain().focus().mergeCells().run()], ["Split cell",()=>editor.chain().focus().splitCell().run()], ["Delete table",()=>editor.chain().focus().deleteTable().run()]
-      ] as const).map(([label,run])=><button key={label} type="button" onClick={()=>run()} className="rounded px-2 py-1 hover:bg-elevated">{t(label)}</button>)}</div>}</div>}
+                  ] as const).map(([label,run],index)=>(
+                    <Fragment key={label}>
+                      {index===4&&<div className="my-1 h-px bg-border"/>}
+                      <MenuItem onSelect={()=>{close();window.setTimeout(()=>run(),20);}}>{t(label)}</MenuItem>
+                    </Fragment>
+                  ))}
+                </>
+              )}
+            </Menu>
+          )}
+        </div>
+      )}
       {uploads.length>0&&<div className="mb-2 space-y-1 text-small" aria-live="polite">{uploads.map(item=><div key={item.id} className="flex flex-wrap items-center gap-2"><span>{item.file.name}: {t(item.status)} {item.status==="uploading"?`${item.progress}%`:""}</span>{item.error&&<span role="alert" className="text-danger">{t(item.error)}</span>}{["queued","uploading"].includes(item.status)?<button type="button" onClick={()=>{item.controller.abort();uploadsRef.current=uploadsRef.current.map(row=>row.id===item.id?{...row,status:"cancelled"}:row);setUploads(uploadsRef.current);}}>{t("Cancel")}</button>:<><button type="button" onClick={()=>{if(editor&&!editor.isDestroyed)editor.view.dispatch(editor.state.tr.setMeta(uploadMarkersKey,{remove:item.id}));uploadsRef.current=uploadsRef.current.filter(row=>row.id!==item.id);setUploads(uploadsRef.current);}}>{t("Dismiss")}</button>{item.status!=="done"&&<button type="button" disabled={!editable} onClick={()=>void runUpload.current(item)}>{t("Retry")}</button>}</>}</div>)}</div>}
       <EditorContent editor={editor} />
       {marginCounts.map((group) => (
@@ -1157,6 +1297,7 @@ export function DocumentEditor({
       )}
       {mentionMenu && mentionMenu.items.length > 0 && (
         <SuggestionMenu rect={mentionMenu.rect} context={editor?.view.dom} testId="doc-mention-menu">
+          <div className="px-2 pb-1 pt-1 text-caption text-faint">{t("Mentions")}</div>
           {mentionMenu.items.map((member, index) => (
             <button
               key={member.id}
@@ -1176,6 +1317,16 @@ export function DocumentEditor({
               <span className="truncate text-small text-faint">@{member.username}</span>
             </button>
           ))}
+          {mentionWarning && mentionMenu.items[mentionMenu.selected] && mentionMenu.items[mentionMenu.selected].id !== mentionWarning.ownerId && (
+            <div className="mt-1 flex items-center gap-2 border-t border-border px-2 pb-1 pt-1.5 text-small text-muted">
+              <span className="min-w-0 flex-1">{t("{names} cannot see this document.", { names: mentionMenu.items[mentionMenu.selected].displayName })}</span>
+              {mentionWarning.onShare && (
+                <button type="button" onMouseDown={(event) => { event.preventDefault(); mentionWarning.onShare?.(); }} className="inline-flex items-center justify-center gap-1.5 whitespace-nowrap h-[30px] rounded-lg px-2.5 text-small shrink-0 border border-border font-medium text-text bg-bg hover:bg-active">
+                  {t("Share with workspace")}
+                </button>
+              )}
+            </div>
+          )}
         </SuggestionMenu>
       )}
       {pageMenu && pageMenu.items.length > 0 && (
@@ -1204,6 +1355,7 @@ export function DocumentEditor({
       )}
       {menu && menu.items.length > 0 && (
         <SuggestionMenu rect={menu.rect} context={editor?.view.dom}>
+          <div className="px-2 pb-1 pt-1 text-caption text-faint">{t("Insert")}</div>
           {menu.items.map((command, index) => (
             <button
               key={command.label}

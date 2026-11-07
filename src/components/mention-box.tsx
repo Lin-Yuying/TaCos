@@ -18,6 +18,7 @@ export function MentionBox({
   page,
   isOwner,
   onShare,
+  placeholder,
 }: {
   value: string;
   members?: Member[];
@@ -29,6 +30,7 @@ export function MentionBox({
   page?: { shared: boolean; createdBy: string };
   isOwner?: boolean;
   onShare?: () => void;
+  placeholder?: string;
 }) {
   const t = useT();
   const box = useRef<HTMLTextAreaElement>(null);
@@ -141,7 +143,7 @@ export function MentionBox({
             onSubmit();
           }
         }}
-        placeholder={t("Leave a comment… Type @ to mention someone")}
+        placeholder={placeholder ?? t("Leave a comment… Type @ to mention someone")}
         rows={2}
         className="w-full resize-none bg-transparent text-body text-text placeholder:text-faint"
       />
@@ -150,7 +152,7 @@ export function MentionBox({
           type="button"
           disabled={!value.trim() || busy}
           onClick={onSubmit}
-          className="rounded-md bg-accent px-2.5 py-1 text-small font-medium text-white transition-colors hover:bg-accent-hover disabled:opacity-40"
+          className="inline-flex items-center justify-center gap-1.5 whitespace-nowrap h-[30px] rounded-lg px-2.5 text-small bg-accent font-medium text-white transition-colors hover:bg-accent-hover disabled:opacity-40"
         >
           {t("Comment")}
         </button>

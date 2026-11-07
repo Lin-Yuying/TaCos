@@ -126,6 +126,8 @@ export type Issue = {
   parentId: string | null;
   projectKey: string;
   projectName: string;
+  projectColor: string;
+  projectIcon: string | null;
   assignees: Assignee[];
   // YYYY-MM-DD, chosen from the calendar in the task panel
   dueDate: string | null;
@@ -1965,6 +1967,8 @@ async function toIssueRows(workspaceId: string, rows: IssueRow[]): Promise<Issue
       parentId: row.parentId ?? null,
       projectKey: project?.key ?? "?",
       projectName: project?.name ?? "Unknown",
+      projectColor: project?.color ?? DEFAULT_PROJECT_COLOR,
+      projectIcon: project?.icon ?? null,
       assignees: assigneesByIssue.get(row.id) ?? [],
       dueDate: row.dueDate ?? null,
       estimate: row.estimate ?? null,
@@ -3876,6 +3880,7 @@ export type PendingReviewIssue = {
   status: Status;
   projectName: string;
   projectColor: string;
+  projectIcon: string | null;
   publishedBy: string | null;
   publisherName: string | null;
   createdVia: Via;
@@ -3898,6 +3903,7 @@ export async function listPendingReview(workspaceId: string): Promise<PendingRev
       status: issues.status,
       projectName: projects.name,
       projectColor: projects.color,
+      projectIcon: projects.icon,
       publishedBy: issues.publishedBy,
       publisherName: users.displayName,
       createdVia: issues.createdVia,
@@ -3939,6 +3945,7 @@ export async function listPendingReview(workspaceId: string): Promise<PendingRev
     status: row.status as Status,
     projectName: row.projectName ?? "(no project)",
     projectColor: row.projectColor ?? DEFAULT_PROJECT_COLOR,
+    projectIcon: row.projectIcon ?? null,
     createdVia: row.createdVia as Via,
     reviewCommentCount: threads.get(row.id)?.count ?? 0,
     latestReviewCommentId: threads.get(row.id)?.latest ?? null,
@@ -4001,6 +4008,8 @@ export async function deleteIssue(
     parentId: row.parentId ?? null,
     projectKey: "",
     projectName: "",
+    projectColor: DEFAULT_PROJECT_COLOR,
+    projectIcon: null,
     assignees: [],
     dueDate: row.dueDate ?? null,
     estimate: row.estimate ?? null,
@@ -4058,6 +4067,7 @@ export type TrashedIssue = {
   projectId: string;
   projectName: string;
   projectColor: string;
+  projectIcon: string | null;
 };
 
 export async function listTrashedIssues(workspaceId: string): Promise<TrashedIssue[]> {
@@ -4072,6 +4082,7 @@ export async function listTrashedIssues(workspaceId: string): Promise<TrashedIss
       projectId: issues.projectId,
       projectName: projects.name,
       projectColor: projects.color,
+      projectIcon: projects.icon,
     })
     .from(issues)
     .leftJoin(projects, eq(projects.id, issues.projectId))
@@ -4087,6 +4098,7 @@ export async function listTrashedIssues(workspaceId: string): Promise<TrashedIss
     projectId: row.projectId,
     projectName: row.projectName ?? "(no project)",
     projectColor: row.projectColor ?? DEFAULT_PROJECT_COLOR,
+    projectIcon: row.projectIcon ?? null,
   }));
 }
 

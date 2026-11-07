@@ -2,14 +2,16 @@
 
 import { DebouncedInput } from "./ui/debounced-input";
 import { Menu, MenuItem } from "@/components/menu";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { Search, X } from "lucide-react";
+import { Filter, Plus, Search, X } from "lucide-react";
+import { useUI } from "@/components/ui-context";
 import { LayoutToggle } from "@/components/issue-layout";
 import { STATUS_META } from "@/lib/constants";
 import type { Status } from "@/lib/constants";
 import { useT } from "@/components/i18n-context";
-import { PAGE_INSET } from "@/lib/page-chrome";
+import { SAVE_VIEW_EVENT } from "@/components/task-views";
+import { BTN_PRIMARY, CHIP, KBD, PAGE_INSET, SEARCH_FIELD, vtab } from "@/lib/page-chrome";
 
 type View = "all" | "active" | "open" | "agent" | "delegated" | Status;
 
@@ -59,9 +61,14 @@ export function ListHeader({
 }) {
   const t = useT();
   const router = useRouter();
+  const { phoneTaskToolsOpen: toolsOpen, setPhoneTaskToolsOpen, setComposerOpen } = useUI();
   const [value, setValue] = useState(q);
 
-  useEffect(() => setValue(q), [q]);
+  const [seenQ, setSeenQ] = useState(q);
+  if (q !== seenQ) {
+    setSeenQ(q);
+    setValue(q);
+  }
 
   const buildUrl = (over: Record<string, string | undefined>) => {
     const sp = new URLSearchParams();
@@ -92,7 +99,7 @@ export function ListHeader({
             : t("All Tasks")
       : t(TITLES[view] ?? "Tasks");
   const quickViewActive: Record<(typeof QUICK_VIEWS)[number]["key"], boolean> = {
-    all: view === "all" && !assigneeParam,
+    all: !["active", "agent", "delegated"].includes(view) && !assigneeParam,
     active: view === "active",
     unassigned: view === "all" && assigneeParam === "none",
     agent: view === "agent",
@@ -100,18 +107,27 @@ export function ListHeader({
   };
 
   return (
-    <header className={`flex h-12 shrink-0 items-center gap-2 overflow-hidden border-b border-border ${PAGE_INSET}`}>
-      {/* The title hangs from the same 52px column as the project page's "All tasks",
-          so switching between the two lists doesn't shift the heading sideways. */}
+    <header className={`flex min-h-[52px] shrink-0 items-center gap-2 overflow-hidden border-b border-border ${PAGE_INSET} max-[600px]:min-h-11 max-[600px]:flex-wrap max-[600px]:py-2 max-[600px]:pl-3 max-[600px]:pr-3`}>
       {/* Shrinks last: the person's name and the count stay readable while the search
           field gives up width as the detail panel eats into the list. */}
-      <h1 className="min-w-[72px] shrink-[0.25] truncate text-body font-semibold">{heading}</h1>
-      <span className="shrink-0 rounded-full bg-elevated px-2 py-0.5 text-caption text-muted">
+      <h1 className="min-w-[72px] shrink-[0.25] truncate text-lead font-semibold max-[600px]:flex-1">{heading}</h1>
+      <button
+        type="button"
+        onClick={() => setPhoneTaskToolsOpen(!toolsOpen)}
+        aria-label={t("Filter")}
+        aria-expanded={toolsOpen}
+        title={t("Filter")}
+        className={`hidden size-7 shrink-0 items-center justify-center rounded-md transition-colors hover:bg-elevated hover:text-text max-[600px]:flex ${toolsOpen ? "bg-elevated text-text" : "text-muted"}`}
+      >
+        <Filter size={15} />
+      </button>
+      {toolsOpen && <span aria-hidden="true" className="order-1 hidden basis-full max-[600px]:block" />}
+      <span className="shrink-0 text-small text-faint max-[600px]:hidden">
         {count}
       </span>
       <div
         data-task-quick-views
-        className="hidden shrink-0 items-center gap-0.5 rounded-full border border-border bg-elevated/40 p-0.5 @min-[640px]:flex"
+        className="ml-1.5 hidden shrink-0 items-center gap-0.5 @min-[860px]:flex"
       >
         {QUICK_VIEWS.map((item) => {
           const on = quickViewActive[item.key];
@@ -121,22 +137,19 @@ export function ListHeader({
               type="button"
               onClick={() => router.replace(buildUrl(item.overrides), { scroll: false })}
               aria-pressed={on}
-              className={`flex h-6 items-center rounded-full px-2 text-small transition-colors ${
-                on
-                  ? "bg-bg text-text shadow-[0_1px_2px_rgba(0,0,0,0.06)]"
-                  : "text-muted hover:text-text"
-              }`}
+              className={vtab(on)}
             >
               {t(item.label)}
             </button>
           );
         })}
+        <button type="button" aria-label={t("Save view")} title={t("Save view")} onClick={() => window.dispatchEvent(new Event(SAVE_VIEW_EVENT))} className="flex size-[26px] items-center justify-center rounded-md text-muted transition-colors hover:bg-elevated hover:text-text"><Plus size={14} /></button>
       </div>
-      <div className="shrink-0 @min-[640px]:hidden">
+      <div className={`shrink-0 @min-[860px]:hidden ${toolsOpen ? "max-[600px]:order-2" : "max-[600px]:hidden"}`}>
         <Menu
           width={200}
           trigger={<span className="text-small">{t("Views")}</span>}
-          triggerClassName="flex h-7 shrink-0 items-center rounded-full border border-border bg-elevated/40 px-2 text-small text-muted transition-colors hover:text-text"
+          triggerClassName={CHIP}
         >
           {(close) => (
             <>
@@ -157,7 +170,7 @@ export function ListHeader({
         </Menu>
       </div>
       {projectName && (
-        <span className="hidden max-w-[140px] shrink-0 truncate rounded-full bg-elevated px-2 py-0.5 text-caption text-muted @min-[420px]:inline">
+        <span className="hidden max-w-[140px] shrink-0 truncate rounded-[5px] bg-elevated px-1.5 py-0.5 text-caption text-muted @min-[420px]:inline">
           {projectName}
         </span>
       )}
@@ -165,19 +178,19 @@ export function ListHeader({
         <button
           type="button"
           onClick={() => router.replace(buildUrl({ label: undefined }), { scroll: false })}
-          className="hidden max-w-[140px] shrink-0 items-center gap-1 truncate rounded-full bg-elevated px-2 py-0.5 text-caption text-muted hover:text-text @min-[420px]:flex"
+          className="hidden max-w-[140px] shrink-0 items-center gap-1 truncate rounded-[5px] bg-elevated px-1.5 py-0.5 text-caption text-muted hover:text-text @min-[420px]:flex"
         >
           {t("label: {label}", { label })} <X size={11} className="shrink-0" />
         </button>
       )}
-      <div className="ml-auto flex min-w-0 shrink items-center gap-2">
-        <div className="flex w-40 min-w-[56px] shrink items-center gap-2 rounded-full border border-border bg-elevated/50 px-3 py-1.5 focus-within:border-border-strong">
-          <Search size={13} className="shrink-0 text-faint" />
+      <div className={`ml-auto flex min-w-0 shrink items-center gap-2 ${toolsOpen ? "max-[600px]:order-2" : "max-[600px]:hidden"}`}>
+        <div data-task-search className={`${SEARCH_FIELD} w-[190px] min-w-[56px] shrink ${value || toolsOpen ? "" : "max-[600px]:hidden"}`}>
+          <Search size={14} className="shrink-0" />
           <DebouncedInput
             value={value}
             onCommit={(value)=>{setValue(value);router.replace(buildUrl({q:value.trim()||undefined}),{scroll:false});}}
-            placeholder={t("Search tasks…")}
-            className="min-w-0 w-full bg-transparent text-body text-text placeholder:text-faint"
+            placeholder={t("Search tasks")}
+            className="min-w-0 w-full bg-transparent text-small text-text placeholder:text-muted"
           />
           {value && (
             <button
@@ -191,8 +204,12 @@ export function ListHeader({
               <X size={12} />
             </button>
           )}
+          {!value && <kbd className={KBD}>/</kbd>}
         </div>
         <LayoutToggle />
+        <button type="button" onClick={() => setComposerOpen(true)} className={`${BTN_PRIMARY} max-[600px]:hidden`}>
+          <Plus size={14} /> {t("New task")}
+        </button>
       </div>
     </header>
   );

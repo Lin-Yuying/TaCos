@@ -105,7 +105,7 @@ function DocPanel({
               setFailed(false); setMissing(false);
               setAttempt((n) => n + 1);
             }}
-            className="rounded-md border border-border px-2.5 py-1 text-small text-muted transition-colors hover:border-border-strong hover:text-text"
+            className="inline-flex items-center justify-center gap-1.5 whitespace-nowrap h-[30px] rounded-lg px-2.5 text-small border border-border transition-colors bg-bg text-text hover:bg-active"
           >
             {t("Retry")}
           </button>

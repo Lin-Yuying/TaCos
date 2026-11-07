@@ -34,7 +34,7 @@ export function Dependencies({
       <div className="flex items-center gap-2 text-small font-medium text-muted">
         <span>{t("Dependencies")}</span>
         {blocked ? (
-          <span data-testid="task-blocked" className="rounded-full bg-elevated px-2 py-0.5 text-caption text-danger">
+          <span data-testid="task-blocked" className="inline-flex h-[18px] items-center rounded-[5px] px-1.5 whitespace-nowrap bg-elevated text-caption text-danger">
             {t("Blocked")}
           </span>
         ) : null}
@@ -71,7 +71,7 @@ export function Dependencies({
           type="button"
           disabled={!identifier.trim() || busy}
           onClick={() => void submit()}
-          className="shrink-0 rounded-md bg-accent px-2.5 py-1 text-small font-medium text-white transition-colors hover:bg-accent-hover disabled:opacity-40"
+          className="inline-flex items-center justify-center gap-1.5 whitespace-nowrap h-[30px] rounded-lg px-2.5 text-small shrink-0 bg-accent font-medium text-white transition-colors hover:bg-accent-hover disabled:opacity-40"
         >
           {t("Add a dependency")}
         </button>

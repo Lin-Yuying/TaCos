@@ -20,6 +20,7 @@ export type AgentThread = {
   projectName: string;
   projectKey: string;
   projectColor: string;
+  projectIcon: string | null;
   title: string;
   engine: string;
   model: string;
@@ -171,6 +172,7 @@ export async function listAgentThreads(
       projectName: projects.name,
       projectKey: projects.key,
       projectColor: projects.color,
+      projectIcon: projects.icon,
       authorName: users.displayName,
       pinnedAt: agentThreadFlags.pinnedAt,
       unread: agentThreadFlags.unread,
@@ -243,6 +245,7 @@ function threadRow(
     projectName: string | null;
     projectKey: string | null;
     projectColor: string | null;
+    projectIcon: string | null;
     authorName: string;
     pinnedAt: string | null;
     unread: number | null;
@@ -260,6 +263,7 @@ function threadRow(
     projectName: meta.projectName ?? "",
     projectKey: meta.projectKey ?? "",
     projectColor: meta.projectColor ?? "",
+    projectIcon: meta.projectIcon ?? null,
     title: thread.title,
     engine: thread.engine,
     model: thread.model,
@@ -297,6 +301,7 @@ async function requireThreadRow(
       projectName: projects.name,
       projectKey: projects.key,
       projectColor: projects.color,
+      projectIcon: projects.icon,
       authorName: users.displayName,
       pinnedAt: agentThreadFlags.pinnedAt,
       unread: agentThreadFlags.unread,
@@ -376,6 +381,7 @@ async function requireThreadRow(
         projectName: row.projectName,
         projectKey: row.projectKey,
         projectColor: row.projectColor,
+        projectIcon: row.projectIcon,
         authorName: row.authorName,
         pinnedAt: row.pinnedAt,
         unread: row.unread,

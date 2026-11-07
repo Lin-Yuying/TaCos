@@ -135,7 +135,7 @@ export function SystemBackupSection({
           type="button"
           disabled={busy != null}
           onClick={() => void backupNow()}
-          className="rounded-md border border-border px-3 py-1.5 text-small transition-colors hover:text-text disabled:opacity-50"
+          className="inline-flex items-center justify-center gap-1.5 whitespace-nowrap h-[30px] rounded-lg px-2.5 text-small border border-border transition-colors disabled:opacity-50 bg-bg text-text hover:bg-active"
           data-testid="backup-now"
         >
           {busy === "backup" ? t("Backing up…") : t("Back up now")}
@@ -189,14 +189,14 @@ export function SystemBackupSection({
               max={90}
               value={retention}
               onChange={(event) => setRetention(event.target.value)}
-              className="w-20 rounded border border-border bg-bg px-2 py-1 text-body tabular-nums"
+              className="h-[34px] rounded-lg px-2.5 w-20 border border-border-strong bg-bg text-body tabular-nums"
             />
             <span>{t("days")}</span>
             <button
               type="button"
               disabled={busy != null || retention === String(snapshot.retentionDays)}
               onClick={() => void saveRetention()}
-              className="rounded border border-border px-2 py-1 transition-colors hover:text-text disabled:opacity-50"
+              className="inline-flex items-center justify-center gap-1.5 whitespace-nowrap h-[30px] rounded-lg px-2.5 text-small border border-border transition-colors disabled:opacity-50 bg-bg text-text hover:bg-active"
             >
               {t("Save")}
             </button>
@@ -314,19 +314,19 @@ export function SystemBackupSection({
       >
         {target && (
           <div className="space-y-3" data-testid="restore-dialog">
-            <h2 className="text-title font-semibold text-danger">{t("Restore this backup?")}</h2>
+            <h2 className="text-title font-semibold">{t("Restore this backup?")}</h2>
+            <div className="text-body text-muted">
+              <p>{t("A safety backup is created automatically before anything is replaced.")}</p>
+              <p>{t("The server must be restarted after the restore.")}</p>
+            </div>
             <p className="text-body">
               {t(
                 "This replaces the current database with the backup from {when}. Everyone else must stop editing first. Changes made after the safety backup are lost.",
                 { when: when(target.createdAt, locale) }
               )}
             </p>
-            <div className="rounded-md border border-border bg-surface px-3 py-2 text-small">
-              <p>{t("A safety backup is created automatically before anything is replaced.")}</p>
-              <p>{t("The server must be restarted after the restore.")}</p>
-              <p className="mt-1 font-mono">{t("Backup version: {version}", {
-                version: target.version ?? t("unknown"),
-              })}</p>
+            <div className="rounded-md border border-border bg-surface px-3 py-2 text-small tabular-nums">
+              {when(target.createdAt, locale)} · {t("version {version}", { version: target.version ?? t("unknown") })} · {target.integrity === "ok" ? t("verified") : t("not verified")}
             </div>
             <label className="block text-small" htmlFor="restore-confirm">
               {t("Type {phrase} to confirm", { phrase: gate.requiredPhrase })}
@@ -337,7 +337,7 @@ export function SystemBackupSection({
               autoFocus
               value={phrase}
               onChange={(event) => setPhrase(event.target.value)}
-              className="w-full rounded border border-border bg-bg px-2 py-1 text-body font-mono"
+              className="h-[34px] rounded-lg px-2.5 w-full border border-border-strong bg-bg text-body"
               data-testid="restore-confirm"
             />
             <div className="flex justify-end gap-2 pt-1">
@@ -348,7 +348,7 @@ export function SystemBackupSection({
                   setTarget(null);
                   setPhrase("");
                 }}
-                className="rounded-md border border-border px-3 py-1.5 text-small"
+                className="inline-flex items-center justify-center gap-1.5 whitespace-nowrap h-[30px] rounded-lg px-2.5 text-small border border-border bg-bg text-text hover:bg-active"
               >
                 {t("Cancel")}
               </button>

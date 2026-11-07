@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { Bot, Check, ChevronDown, ListChecks, LoaderCircle, Sparkles, X } from "lucide-react";
+import { Bot, Check, ChevronDown, LoaderCircle, Sparkles, X } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { createIssueAction } from "@/app/actions";
 import { generateTasksAction } from "@/app/ai-actions";
@@ -43,7 +43,12 @@ export function AiEditPanel({
   onClose,
   onAccept,
   onTasks,
+  inline = false,
+  placeholder,
 }: {
+  // Sits in the page's flow instead of floating over it.
+  inline?: boolean;
+  placeholder?: string;
   workspaceId: string;
   x: number;
   y: number;
@@ -144,8 +149,8 @@ export function AiEditPanel({
     <div
       data-overview-pop
       data-ai-panel
-      style={{ left, top }}
-      className="fixed z-50 w-[400px] max-w-[calc(100vw-24px)] rounded-xl border border-border bg-bg p-3 shadow-[0_12px_40px_rgba(0,0,0,0.18)]"
+      style={inline ? undefined : target.mode === "document" ? { left: "50%", top: 120, transform: "translateX(-50%)" } : { left, top }}
+      className={inline ? "mt-4 w-full rounded-xl border border-border bg-bg p-3" : `fixed z-50 max-h-[85dvh] max-w-[calc(100vw-24px)] overflow-y-auto rounded-xl border border-border bg-bg p-3 shadow-[0_12px_40px_rgba(0,0,0,0.18)] ${target.mode === "document" ? "w-[520px]" : "w-[400px]"}`}
     >
       <div className="mb-2 flex items-center gap-1.5">
         <Sparkles size={13} className="text-accent" />
@@ -217,38 +222,14 @@ export function AiEditPanel({
               close();
               router.push(`/${workspaceId}/agent`);
             }}
-            className="flex items-center gap-1 rounded-md bg-accent px-2.5 py-1 text-small font-medium text-white transition-opacity hover:opacity-90"
+            className="inline-flex items-center justify-center gap-1.5 whitespace-nowrap h-[30px] rounded-lg px-2.5 text-small bg-accent font-medium text-white hover:bg-accent-hover"
           >
             <Bot size={12} /> {t("Open Agent in Work mode")}
           </button>
         </div>
       ) : (
         <>
-      <div className="grid grid-cols-2 gap-1">
-        {AI_EDIT_ACTIONS.map((entry) => (
-          <button
-            key={entry.id}
-            type="button"
-            disabled={busy}
-            onClick={() => void run(entry.id)}
-            className="rounded-md border border-border px-2 py-1 text-left text-small text-muted transition-colors hover:border-border-strong hover:text-text disabled:opacity-40"
-          >
-            {t(entry.label)}
-          </button>
-        ))}
-        {target.allowContinue && (
-          <button
-            type="button"
-            disabled={busy}
-            onClick={() => void run("continue")}
-            className="col-span-2 rounded-md border border-border px-2 py-1 text-left text-small text-muted transition-colors hover:border-border-strong hover:text-text disabled:opacity-40"
-          >
-            {t("Continue writing from the end")}
-          </button>
-        )}
-      </div>
-
-      <div className="mt-2 flex items-center gap-1.5">
+      <div className="flex items-center gap-1.5">
         <input
           ref={inputRef}
           value={instruction}
@@ -259,29 +240,71 @@ export function AiEditPanel({
               if (instruction.trim() && !busy) void run("custom");
             }
           }}
-          placeholder={t("Or tell the AI what to change…")}
-          className="min-w-0 flex-1 rounded-md border border-border bg-elevated/40 px-2 py-1.5 text-small text-text placeholder:text-faint focus:border-border-strong"
+          aria-label={t("Tell the AI what to change…")}
+          placeholder={placeholder ?? t("Tell the AI what to change…")}
+          className="h-[34px] rounded-lg px-2.5 min-w-0 flex-1 border border-border-strong bg-elevated/40 text-text placeholder:text-faint focus:border-border-strong text-body"
         />
         <button
           type="button"
           disabled={busy || !instruction.trim()}
           onClick={() => void run("custom")}
-          className="shrink-0 rounded-md bg-accent px-2.5 py-1.5 text-small font-medium text-white transition-opacity hover:opacity-90 disabled:opacity-40"
+          className="inline-flex items-center justify-center gap-1.5 whitespace-nowrap h-[30px] rounded-lg px-2.5 text-small shrink-0 bg-accent font-medium text-white disabled:opacity-40 hover:bg-accent-hover"
         >
           {t("Run")}
         </button>
       </div>
 
+      <div className="mt-1.5">
+        {AI_EDIT_ACTIONS.map((entry) => (
+          <button
+            key={entry.id}
+            type="button"
+            disabled={busy}
+            onClick={() => void run(entry.id)}
+            className="flex w-full rounded-md px-2 py-1.5 text-left text-body text-text transition-colors hover:bg-elevated disabled:opacity-40"
+          >
+            {t(entry.label)}
+          </button>
+        ))}
+        {target.allowContinue && (
+          <button
+            type="button"
+            disabled={busy}
+            onClick={() => void run("continue")}
+            className="flex w-full rounded-md px-2 py-1.5 text-left text-body text-text transition-colors hover:bg-elevated disabled:opacity-40"
+          >
+            {t("Continue writing from the end")}
+          </button>
+        )}
+              {onTasks && target.allowTasks && (
+          <button type="button" onClick={onTasks} className="flex w-full rounded-md px-2 py-1.5 text-left text-body text-text transition-colors hover:bg-elevated disabled:opacity-40">
+            {t("Turn into tasks")}
+          </button>
+        )}
+        {target.mode === "document" && (
+          <button
+            type="button"
+            onClick={() => {
+              close();
+              router.push(`/${workspaceId}/agent`);
+            }}
+            className="flex w-full rounded-md px-2 py-1.5 text-left text-body text-text transition-colors hover:bg-elevated disabled:opacity-40"
+          >
+            {t("Open in Agent")}
+          </button>
+        )}
+      </div>
+
       {error && <div className="mt-2 text-small text-danger">{t(error)}</div>}
 
-      {(busy || result) && (
+      {(inline || busy || result) && (
         <div className="mt-2">
           <textarea
             value={result}
             onChange={(event) => setResult(event.target.value)}
             rows={7}
             aria-label={t("AI result")}
-            className="w-full resize-y rounded-md border border-border bg-bg px-2 py-1.5 font-mono text-small leading-relaxed text-text focus:border-border-strong focus:outline-none"
+            className="w-full resize-y rounded-lg border border-border-strong bg-bg px-2 py-1.5 text-small leading-relaxed text-text focus:border-border-strong focus:outline-none"
           />
           {busy && (
             <div className="mt-1 flex items-center gap-1 text-caption text-faint">
@@ -294,21 +317,13 @@ export function AiEditPanel({
         </>
       )}
 
+      {(inline || busy || result) && (
       <div className="mt-2.5 flex items-center gap-2">
-        {onTasks && target.allowTasks && !tooLong && (
-          <button
-            type="button"
-            onClick={onTasks}
-            className="flex items-center gap-1 text-small text-muted transition-colors hover:text-text"
-          >
-            <ListChecks size={12} /> {t("Turn into tasks")}
-          </button>
-        )}
         <div className="ml-auto flex items-center gap-1.5">
           <button
             type="button"
             onClick={close}
-            className="rounded-md border border-border px-2 py-1 text-small text-muted transition-colors hover:text-text"
+            className="inline-flex items-center justify-center gap-1.5 whitespace-nowrap h-[30px] rounded-lg px-2.5 text-small border border-border transition-colors bg-bg text-text hover:bg-active"
           >
             {t("Cancel")}
           </button>
@@ -317,13 +332,14 @@ export function AiEditPanel({
               type="button"
               disabled={busy || !result.trim()}
               onClick={() => onAccept(result.trim(), action ?? "custom",sourceRef.current)}
-              className="flex items-center gap-1 rounded-md bg-accent px-2.5 py-1 text-small font-medium text-white transition-opacity hover:opacity-90 disabled:opacity-40"
+              className="inline-flex items-center justify-center gap-1.5 whitespace-nowrap h-[30px] rounded-lg px-2.5 text-small bg-accent font-medium text-white disabled:opacity-40 hover:bg-accent-hover"
             >
               <Check size={11} /> {target.acceptLabel}
             </button>
           )}
         </div>
       </div>
+      )}
     </div>
   );
 }
@@ -427,7 +443,7 @@ export function AiTaskDialog({
       >
         <header className="flex items-center gap-2 border-b border-border px-4 py-2.5">
           <Sparkles size={14} className="text-accent" />
-          <span className="text-body font-semibold">{t("Generate tasks with AI")}</span>
+          <span className="text-lead font-semibold">{t("Generate tasks with AI")}</span>
           <button
             type="button"
             onClick={onClose}
@@ -445,14 +461,14 @@ export function AiTaskDialog({
             onChange={(event) => setPrompt(event.target.value)}
             rows={3}
             placeholder={t("Describe the work, for example: 把微信登录的联调拆成几个任务，包含接口、前端和回归测试")}
-            className="w-full resize-y rounded-lg border border-border bg-bg px-3 py-2 text-body leading-relaxed text-text placeholder:text-faint focus:border-border-strong focus:outline-none"
+            className="w-full resize-y rounded-lg border border-border-strong bg-bg px-3 py-2 text-body leading-relaxed text-text placeholder:text-faint focus:border-border-strong focus:outline-none"
           />
           <div className="flex items-center gap-2">
             <button
               type="button"
               onClick={() => void generate()}
               disabled={!prompt.trim() || busy || creating}
-              className="flex items-center gap-1.5 rounded-md bg-accent px-3 py-1.5 text-small font-medium text-white transition-opacity hover:opacity-90 disabled:opacity-40"
+              className="inline-flex items-center justify-center gap-1.5 whitespace-nowrap h-[30px] rounded-lg px-2.5 text-small bg-accent font-medium text-white disabled:opacity-40 hover:bg-accent-hover"
             >
               {busy ? <LoaderCircle size={12} className="animate-spin" /> : <Sparkles size={12} />}
               {busy ? t("Thinking…") : t(tasks ? "Regenerate" : "Generate")}
@@ -508,7 +524,7 @@ export function AiTaskDialog({
           <button
             type="button"
             onClick={onClose}
-            className="rounded-md border border-border px-3 py-1.5 text-small text-muted transition-colors hover:text-text"
+            className="inline-flex items-center justify-center gap-1.5 whitespace-nowrap h-[30px] rounded-lg px-2.5 text-small border border-border transition-colors bg-bg text-text hover:bg-active"
           >
             {t("Cancel")}
           </button>
@@ -516,7 +532,7 @@ export function AiTaskDialog({
             type="button"
             onClick={() => void create()}
             disabled={creating || picked.size === 0}
-            className="rounded-md bg-accent px-3 py-1.5 text-small font-medium text-white transition-opacity hover:opacity-90 disabled:opacity-40"
+            className="inline-flex items-center justify-center gap-1.5 whitespace-nowrap h-[30px] rounded-lg px-2.5 text-small bg-accent font-medium text-white disabled:opacity-40 hover:bg-accent-hover"
           >
             {creating
               ? t("Creating…")

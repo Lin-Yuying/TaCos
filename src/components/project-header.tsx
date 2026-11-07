@@ -1,6 +1,7 @@
 "use client";
 
 import type { ReactNode } from "react";
+import { PAGE_HEADER, PAGE_INSET, PAGE_TITLE } from "@/lib/page-chrome";
 import { Star } from "lucide-react";
 import { ProjectIcon } from "@/components/icons";
 import { Menu } from "@/components/menu";
@@ -35,7 +36,6 @@ export function ProjectHeader({
   onPickIcon,
   onTab,
   onToggleFavorite,
-  meta,
   metaMenu,
 }: {
   project: { id: string; name: string; color: string; icon: string | null };
@@ -51,7 +51,6 @@ export function ProjectHeader({
   onToggleFavorite: () => void;
   // Properties and Resources sit under the pills so the header reads top to bottom:
   // title, tabs, then what the project is made of.
-  meta?: ReactNode;
   // Restores a row the reader folded away; only rendered while one is hidden.
   metaMenu?: ReactNode;
 }) {
@@ -59,19 +58,18 @@ export function ProjectHeader({
   const workspaceId = useParams<{ workspaceId: string }>().workspaceId;
   const mark = <ProjectIcon color={project.color} icon={project.icon} size={22} />;
   return (
-    <header className="shrink-0 border-b border-border px-4 pb-3 pt-3">
-      {/* Every header row hangs from the card's own gutter, so the pills and the
-          properties line up under the icon rather than one column in. */}
-      <div className="flex items-center gap-2.5">
+    <header className={`${PAGE_HEADER} ${PAGE_INSET}`}>
+      <div className="flex min-w-0 items-center gap-2.5">
         {canPickIcon ? (
           <Menu
-            width={232}
+            width={252}
             triggerClassName="shrink-0 rounded-md p-0.5 transition-colors hover:bg-elevated"
             trigger={<span title={t("Change icon")}>{mark}</span>}
           >
             {(close) => (
               <div className="p-1">
-                <div className="grid grid-cols-6 gap-1">
+                <div className="px-1 pb-1 text-caption text-faint">{t("Change icon")}</div>
+                <div className="grid grid-cols-7 gap-0.5">
                   {ICONS.map((emoji) => (
                     <button
                       key={emoji}
@@ -93,7 +91,7 @@ export function ProjectHeader({
                       close();
                       onPickIcon(null);
                     }}
-                    className="mt-1 w-full rounded px-2 py-1.5 text-left text-small text-muted transition-colors hover:bg-elevated hover:text-text"
+                    className="mt-1 w-full border-t border-border rounded px-2 py-1.5 text-left text-small text-muted transition-colors hover:bg-elevated hover:text-text"
                   >
                     {t("Use the cube instead")}
                   </button>
@@ -104,7 +102,7 @@ export function ProjectHeader({
         ) : (
           <span className="shrink-0 p-0.5">{mark}</span>
         )}
-        <h1 className="truncate text-heading font-semibold tracking-tight">{project.name}</h1>
+        <h1 className={PAGE_TITLE}>{project.name}</h1>
         <WatchControl workspaceId={workspaceId} scopeType="project" scopeId={project.id} compact />
         <button
           type="button"
@@ -119,7 +117,7 @@ export function ProjectHeader({
           <Star size={15} className={favorite ? "fill-[#f5b21a]" : ""} />
         </button>
       </div>
-      <nav className="mt-2 flex items-center gap-1.5">
+      <nav className="flex flex-wrap items-center gap-1 @min-[720px]:mx-auto">
         {TABS.filter((item) => item.key !== "overview" || canViewOverview).map((item) => {
           const active = item.key === tab;
           return (
@@ -128,10 +126,10 @@ export function ProjectHeader({
               type="button"
               onClick={() => onTab(item.key)}
               aria-current={active ? "page" : undefined}
-              className={`flex items-center gap-1.5 rounded-full border px-3 py-1 text-small transition-colors ${
+              className={`flex items-center gap-1.5 rounded-md px-2.5 py-1 text-small transition-colors ${
                 active
-                  ? "border-transparent bg-elevated font-medium text-text"
-                  : "border-border text-muted hover:border-border-strong hover:text-text"
+                  ? "bg-elevated font-medium text-text"
+                  : "text-muted hover:text-text"
               }`}
             >
               {t(item.label)}
@@ -144,10 +142,12 @@ export function ProjectHeader({
             </button>
           );
         })}
-        {/* A folded properties row costs no height, so its way back lives here. */}
-        {metaMenu && <div className="ml-auto">{metaMenu}</div>}
       </nav>
-      {meta}
+      {/* The overview's panels and the way back for a folded properties row. */}
+      <div className="ml-auto flex items-center gap-0.5">
+        <span id="project-header-tools" className="contents" />
+        {metaMenu}
+      </div>
     </header>
   );
 }

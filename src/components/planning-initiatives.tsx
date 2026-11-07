@@ -1,10 +1,11 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { createPortal } from "react-dom";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ExternalLink, Pencil, Plus, Search, Trash2, X } from "lucide-react";
-import { AssigneeAvatar } from "@/components/issue-table";
+import { ExternalLink, Search, Trash2, X } from "lucide-react";
+import { ProjectIcon } from "@/components/icons";
 import { Modal } from "@/components/ui/modal";
 import { useT, useLocale } from "@/components/i18n-context";
 import { useUI } from "@/components/ui-context";
@@ -22,7 +23,6 @@ import {
   FieldLabel,
   Pill,
   PriorityText,
-  ProgressBar,
   inputClass,
   primaryButton,
   quietButton,
@@ -49,6 +49,9 @@ type Draft = {
   projectIds: string[];
   resources: Array<{ title: string; url: string }>;
 };
+
+const COMPACT_FIELD =
+  "rounded-md border border-border bg-bg px-2 py-1 text-small text-text";
 
 function emptyDraft(): Draft {
   return {
@@ -107,6 +110,7 @@ export function PlanningInitiatives({
   const [draft, setDraft] = useState<Draft | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const [toolsHost, setToolsHost] = useState<HTMLElement | null>(null);
 
   const shown = useMemo(() => {
     const needle = query.trim().toLowerCase();
@@ -150,9 +154,14 @@ export function PlanningInitiatives({
     router.refresh();
   }
 
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setToolsHost(document.getElementById("planning-header-tools"));
+  }, []);
+
   async function remove() {
     if (!draft?.id) return;
-    const ok = await confirm(t("Delete this initiative? Its projects and tasks stay."));
+    const ok = await confirm(t("Delete this initiative? Its projects and tasks stay."), { action: t("Delete") });
     if (!ok) return;
     setSaving(true);
     const result = await deleteInitiativeAction(workspaceId, draft.id);
@@ -168,7 +177,21 @@ export function PlanningInitiatives({
 
 
   return (
-    <div className="space-y-4">
+    <div className="mx-auto max-w-[880px] space-y-4">
+      {toolsHost && createPortal(
+        <button
+          type="button"
+          onClick={() => {
+            setDraft(emptyDraft());
+            setError(null);
+          }}
+          className={`${primaryButton} ml-2`}
+          data-testid="initiative-new"
+        >
+          {t("New initiative")}
+        </button>,
+        toolsHost,
+      )}
       <div className="flex flex-wrap items-center gap-2">
         <div className="flex min-w-[180px] flex-1 items-center gap-2 rounded-md border border-border bg-elevated/40 px-2 py-1.5 focus-within:border-border-strong">
           <Search size={13} className="shrink-0 text-faint" />
@@ -209,17 +232,6 @@ export function PlanningInitiatives({
             </option>
           ))}
         </select>
-        <button
-          type="button"
-          onClick={() => {
-            setDraft(emptyDraft());
-            setError(null);
-          }}
-          className={`${primaryButton} flex items-center gap-1`}
-          data-testid="initiative-new"
-        >
-          <Plus size={13} /> {t("New initiative")}
-        </button>
       </div>
 
       {shown.length === 0 ? (
@@ -247,99 +259,84 @@ export function PlanningInitiatives({
               data-testid="initiative-row"
               className="rounded-lg border border-border p-4"
             >
-              <div className="flex flex-wrap items-start gap-2">
-                <h2 className="min-w-0 text-lead font-semibold">{initiative.name}</h2>
+              <div className="flex flex-wrap items-center gap-2">
+                <h2 className="min-w-0 text-body font-semibold">{initiative.name}</h2>
                 <Pill color={INITIATIVE_STATUS_META[initiative.status].color}>
                   {t(INITIATIVE_STATUS_META[initiative.status].label)}
                 </Pill>
                 <PriorityText priority={initiative.priority} />
-                <div className="ml-auto flex shrink-0 items-center gap-3">
-                  {initiative.ownerName && (
-                    <span className="flex items-center gap-1.5 text-small text-muted">
-                      <AssigneeAvatar
-                        displayName={initiative.ownerName}
-                        avatar={initiative.ownerAvatar}
-                        size={16}
-                      />
-                      {initiative.ownerName}
-                    </span>
-                  )}
-                  {initiative.targetDate && (
-                    <span className="text-small text-faint">
-                      {t("Target {date}", { date: formatDay(initiative.targetDate, locale) })}
-                    </span>
-                  )}
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setDraft(draftFrom(initiative));
-                      setError(null);
-                    }}
-                    aria-label={t("Edit {name}", { name: initiative.name })}
-                    title={t("Edit")}
-                    className="rounded p-1 text-faint transition-colors hover:bg-elevated hover:text-text"
-                    data-testid="initiative-edit"
-                  >
-                    <Pencil size={13} />
-                  </button>
-                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setDraft(draftFrom(initiative));
+                    setError(null);
+                  }}
+                  aria-label={t("Edit {name}", { name: initiative.name })}
+                  className={`${quietButton} ml-auto !px-2 !py-0.5 !text-small`}
+                  data-testid="initiative-edit"
+                >
+                  {t("Edit")}
+                </button>
               </div>
+              <p className="mt-1 text-small text-faint">
+                {initiative.targetDate
+                  ? t("Target {date}", { date: formatDay(initiative.targetDate, locale) })
+                  : t("No target date")}
+                {initiative.ownerName && ` · ${t("Owner {name}", { name: initiative.ownerName })}`}
+              </p>
               {initiative.description && (
-                <p className="mt-1 line-clamp-2 text-small leading-relaxed text-muted">
+                <p className="mt-1.5 line-clamp-2 text-body leading-relaxed text-text">
                   {initiative.description}
                 </p>
               )}
-              <div className="mt-3 flex items-center gap-2">
-                <ProgressBar percent={initiative.progress.percent} className="max-w-xs flex-1" />
-                <span className="text-caption text-faint tabular-nums">
-                  {t("{done}/{total} done", {
-                    done: initiative.progress.done,
-                    total: initiative.progress.total,
-                  })}
-                </span>
-                <span className="text-caption text-faint tabular-nums">
-                  {initiative.progress.percent}%
-                </span>
-              </div>
-              <div className="mt-2 flex flex-wrap items-center gap-1.5">
-                {initiative.projects.map((project) => (
-                  <Link
-                    key={project.id}
-                    href={`/${workspaceId}/projects/${project.id}?tab=timeline`}
-                    className="inline-flex items-center gap-1 rounded border border-border px-1.5 py-0.5 text-caption hover:border-border-strong"
-                  >
+              {initiative.projects.length === 0 ? (
+                <p className="mt-1.5 text-small text-faint">{t("No projects linked")}</p>
+              ) : (
+                <div className="mt-2 divide-y divide-border border-t border-border">
+                  {initiative.projects.map((project) => (
+                    <Link
+                      key={project.id}
+                      href={`/${workspaceId}/projects/${project.id}?tab=timeline`}
+                      className="flex items-center gap-2 py-1.5 text-body transition-colors hover:text-text"
+                    >
+                      <span className="flex w-4 shrink-0 items-center justify-center">
+                        <ProjectIcon color={project.color} icon={project.icon} size={13} />
+                      </span>
+                      <span className="min-w-0 flex-1 truncate">{project.name}</span>
+                      <span className="shrink-0 text-small text-faint tabular-nums">
+                        {t("{done}/{total} done", {
+                          done: project.progress.done,
+                          total: project.progress.total,
+                        })}
+                      </span>
+                    </Link>
+                  ))}
+                </div>
+              )}
+              {(initiative.labels.length > 0 || initiative.resources.length > 0) && (
+                <div className="mt-2 flex flex-wrap items-center gap-1.5">
+                  {initiative.labels.map((label) => (
                     <span
-                      className="h-1.5 w-1.5 rounded-full"
-                      style={{ backgroundColor: project.color }}
-                    />
-                    {project.name}
-                    <span className="text-faint tabular-nums">{project.progress.percent}%</span>
-                  </Link>
-                ))}
-                {initiative.projects.length === 0 && (
-                  <span className="text-caption text-faint">{t("No projects linked")}</span>
-                )}
-                {initiative.labels.map((label) => (
-                  <span
-                    key={label.id}
-                    className="rounded-full border px-1.5 py-0.5 text-caption"
-                    style={{ borderColor: `${label.color}55`, color: label.color }}
-                  >
-                    {label.name}
-                  </span>
-                ))}
-                {initiative.resources.map((resource) => (
-                  <a
-                    key={resource.url}
-                    href={resource.url}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="inline-flex items-center gap-0.5 text-caption text-muted underline decoration-border underline-offset-2 hover:text-text"
-                  >
-                    {resource.title} <ExternalLink size={10} />
-                  </a>
-                ))}
-              </div>
+                      key={label.id}
+                      className="inline-flex h-[18px] items-center rounded-[5px] px-1.5 whitespace-nowrap border text-caption"
+                      style={{ borderColor: `${label.color}55`, color: label.color }}
+                    >
+                      {label.name}
+                    </span>
+                  ))}
+                  {initiative.resources.map((resource) => (
+                    <a
+                      key={resource.url}
+                      href={resource.url}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="inline-flex items-center gap-0.5 text-caption text-muted underline decoration-border underline-offset-2 hover:text-text"
+                    >
+                      {resource.title} <ExternalLink size={10} />
+                    </a>
+                  ))}
+                </div>
+              )}
             </article>
           ))}
         </div>
@@ -351,11 +348,11 @@ export function PlanningInitiatives({
           if (!saving) setDraft(null);
         }}
         title={draft?.id ? t("Edit initiative") : t("New initiative")}
-        className="max-w-[760px]"
+        className="max-w-[480px] !p-0"
       >
         {draft && (
-          <div className="space-y-3" data-testid="initiative-editor">
-            <div className="flex items-center justify-between gap-2">
+          <div data-testid="initiative-editor">
+            <div className="flex items-center justify-between gap-2 border-b border-border px-4 py-3">
               <h2 className="text-lead font-semibold">
                 {draft.id ? t("Edit initiative") : t("New initiative")}
               </h2>
@@ -363,11 +360,12 @@ export function PlanningInitiatives({
                 type="button"
                 onClick={() => setDraft(null)}
                 aria-label={t("Close")}
-                className="text-faint hover:text-text"
+                className="rounded p-1 text-faint transition-colors hover:bg-elevated hover:text-text"
               >
                 <X size={14} />
               </button>
             </div>
+            <div className="space-y-3 p-4">
             {error && <div className="rounded border border-danger/40 p-2 text-small text-danger">{error}</div>}
             <label className="block space-y-1">
               <FieldLabel>{t("Name")}</FieldLabel>
@@ -384,19 +382,18 @@ export function PlanningInitiatives({
               <textarea
                 value={draft.description}
                 onChange={(event) => setDraft({ ...draft, description: event.target.value })}
-                rows={3}
+                rows={2}
                 className={inputClass}
               />
             </label>
-            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-              <label className="block space-y-1">
-                <FieldLabel>{t("Status")}</FieldLabel>
+            <div className="flex flex-wrap items-center gap-1.5">
                 <select
                   value={draft.status}
                   onChange={(event) =>
                     setDraft({ ...draft, status: event.target.value as InitiativeStatus })
                   }
-                  className={`${selectClass} w-full`}
+                  aria-label={t("Status")}
+                  className={COMPACT_FIELD}
                   data-testid="initiative-status"
                 >
                   {INITIATIVE_STATUSES.map((value) => (
@@ -405,15 +402,13 @@ export function PlanningInitiatives({
                     </option>
                   ))}
                 </select>
-              </label>
-              <label className="block space-y-1">
-                <FieldLabel>{t("Priority")}</FieldLabel>
                 <select
                   value={draft.priority}
                   onChange={(event) =>
                     setDraft({ ...draft, priority: Number(event.target.value) as Priority })
                   }
-                  className={`${selectClass} w-full`}
+                  aria-label={t("Priority")}
+                  className={COMPACT_FIELD}
                 >
                   {[0, 1, 2, 3, 4].map((value) => (
                     <option key={value} value={value}>
@@ -421,13 +416,11 @@ export function PlanningInitiatives({
                     </option>
                   ))}
                 </select>
-              </label>
-              <label className="block space-y-1">
-                <FieldLabel>{t("Owner")}</FieldLabel>
                 <select
                   value={draft.ownerId}
                   onChange={(event) => setDraft({ ...draft, ownerId: event.target.value })}
-                  className={`${selectClass} w-full`}
+                  aria-label={t("Owner")}
+                  className={COMPACT_FIELD}
                 >
                   <option value="">{t("No owner")}</option>
                   {members.map((member) => (
@@ -436,25 +429,22 @@ export function PlanningInitiatives({
                     </option>
                   ))}
                 </select>
-              </label>
-              <label className="block space-y-1">
-                <FieldLabel>{t("Target date")}</FieldLabel>
                 <input
                   type="date"
                   value={draft.targetDate}
                   onChange={(event) => setDraft({ ...draft, targetDate: event.target.value })}
-                  className={inputClass}
+                  aria-label={t("Target date")}
+                  className={COMPACT_FIELD}
                 />
-              </label>
             </div>
             <div className="space-y-1">
               <FieldLabel>{t("Projects")}</FieldLabel>
-              <div className="max-h-40 overflow-y-auto rounded-md border border-border p-2" data-testid="initiative-projects">
+              <div className="max-h-40 divide-y divide-border overflow-y-auto rounded-lg border border-border" data-testid="initiative-projects">
                 {projects.length === 0 ? (
                   <p className="text-small text-faint">{t("No projects yet.")}</p>
                 ) : (
                   projects.map((project) => (
-                    <label key={project.id} className="flex items-center gap-2 py-0.5 text-body">
+                    <label key={project.id} className="flex items-center gap-2 px-3 py-1.5 text-body hover:bg-elevated/50">
                       <input
                         type="checkbox"
                         data-testid="initiative-project"
@@ -499,7 +489,7 @@ export function PlanningInitiatives({
                               : [...draft.labelIds, label.id],
                           })
                         }
-                        className={`rounded-full border px-2 py-0.5 text-caption transition-colors ${
+                        className={`rounded-lg border px-2 py-0.5 text-caption transition-colors ${
                           on ? "border-border-strong bg-elevated text-text" : "border-border text-muted"
                         }`}
                       >
@@ -563,7 +553,8 @@ export function PlanningInitiatives({
                 </button>
               </div>
             </div>
-            <div className="flex items-center justify-end gap-2 pt-1">
+            </div>
+            <div className="flex items-center justify-end gap-2 border-t border-border px-4 py-3">
               {draft.id && (isAdmin || initiatives.find((row) => row.id === draft.id)?.createdBy === currentUserId) && (
                 <button
                   type="button"
@@ -572,7 +563,7 @@ export function PlanningInitiatives({
                   className="mr-auto flex items-center gap-1 rounded-md px-2 py-1.5 text-small text-faint transition-colors hover:bg-elevated hover:text-danger"
                   data-testid="initiative-delete"
                 >
-                  <Trash2 size={12} /> {t("Delete")}
+                  {t("Delete")}
                 </button>
               )}
               <button type="button" onClick={() => setDraft(null)} className={quietButton} disabled={saving}>

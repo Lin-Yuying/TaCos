@@ -3,9 +3,11 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { BellOff, Check, ChevronDown, ChevronRight, Clock, Search, Settings2 } from "lucide-react";
+import { Bell, Check, ChevronDown, ChevronRight, Clock, Inbox, MoreHorizontal, Search, X } from "lucide-react";
+import { AssigneeAvatar } from "@/components/issue-table";
 import { useUI, NOTIFICATIONS_READ } from "@/components/ui-context";
 import { Menu, MenuItem } from "@/components/menu";
+import { Modal } from "@/components/ui/modal";
 import {
   clearNotificationsAction,
   deleteNotificationAction,
@@ -29,7 +31,8 @@ import type {
 import { parseLegacyNotificationBody, type NotificationData } from "@/lib/notification-data";
 import { timeAgo } from "@/lib/format";
 import { useLocale, useT } from "@/components/i18n-context";
-import { PAGE_INSET } from "@/lib/page-chrome";
+import { EmptyState } from "@/components/ui/empty-state";
+import { BTN, BTN_GHOST, FILTER_BAR, ICON_BTN, LINE, LINE_SUB, PAGE_HEADER, PAGE_INSET, PAGE_TITLE, SEARCH_FIELD, SEGMENTED, segment } from "@/lib/page-chrome";
 
 type EventGroup = { id: string; label: string };
 type Props = {
@@ -187,6 +190,8 @@ export function NotificationsView({
   const [selected, setSelected] = useState(-1);
   const [snoozing, setSnoozing] = useState<string | null>(null);
   const [prefsOpen, setPrefsOpen] = useState(false);
+  const [phoneSearch, setPhoneSearch] = useState(false);
+  const [mutedOpen, setMutedOpen] = useState(false);
   const [busy, setBusy] = useState<string[]>([]);
   const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -316,7 +321,7 @@ export function NotificationsView({
 
   async function clearAll() {
     if (!items.length) return;
-    if (!(await confirm(t("Clear all {count} notifications? You can undo this.", { count: items.length })))) return;
+    if (!(await confirm(t("Clear all {count} notifications?", { count: items.length }), { body: t("You can undo this."), action: t("Clear all") }))) return;
     const ids = items.map((item) => item.id);
     const ok = await perform("all", () => clearNotificationsAction(workspaceId));
     if (!ok) return;
@@ -415,16 +420,16 @@ export function NotificationsView({
   }, [groups, expanded]);
 
   // Read the latest values inside the window listener without re-registering it.
-  const latest = useRef({ visibleRows, selected, prefsOpen });
+  const latest = useRef({ visibleRows, selected, prefsOpen, mutedOpen });
   useEffect(() => {
-    latest.current = { visibleRows, selected, prefsOpen };
+    latest.current = { visibleRows, selected, prefsOpen, mutedOpen };
   });
 
   useEffect(() => {
     function onKey(event: KeyboardEvent) {
       const target = event.target as HTMLElement | null;
       if (target && (target.tagName === "INPUT" || target.tagName === "TEXTAREA" || target.isContentEditable)) return;
-      if (latest.current.prefsOpen) return;
+      if (latest.current.prefsOpen || latest.current.mutedOpen) return;
       const rows = latest.current.visibleRows;
       const item = latest.current.selected >= 0 ? rows[latest.current.selected] : null;
       if (event.key === "j" || event.key === "ArrowDown") {
@@ -468,26 +473,38 @@ export function NotificationsView({
 
   return (
     <div className="flex-1 overflow-y-auto">
-      <header className={`flex h-12 shrink-0 items-center gap-3 border-b border-border ${PAGE_INSET}`}>
-        <h1 className="text-body font-semibold">{t("Inbox")}</h1>
-        <span className="rounded-full bg-elevated px-2 py-0.5 text-caption text-muted">
+      <header className={`${PAGE_HEADER} ${PAGE_INSET} max-[600px]:min-h-11 max-[600px]:pl-3 max-[600px]:pr-3`}>
+        <h1 className={`${PAGE_TITLE} max-[600px]:flex-1`}>{t("Inbox")}</h1>
+        <span className="tabular-nums text-small text-faint">
           {t("{count} unread", { count: counts.unread })}
         </span>
-        <div className="ml-auto flex items-center gap-2">
-          <form onSubmit={submitSearch} className="relative flex items-center">
-            <Search size={13} className="pointer-events-none absolute left-2 text-faint" />
-            <input
-              value={query}
-              onChange={(event) => setQuery(event.target.value)}
-              placeholder={t("Search notifications…")}
-              className="h-8 w-48 rounded-md border border-border bg-elevated/40 pl-7 pr-2 text-small text-text placeholder:text-faint focus:border-border-strong"
-            />
-          </form>
+        <div className="hidden max-[600px]:block">
+          <Menu
+            width={220}
+            align="right"
+            triggerClassName="flex size-7 items-center justify-center rounded-md text-muted transition-colors hover:bg-elevated hover:text-text"
+            trigger={<span aria-label={t("More")} title={t("More")}><MoreHorizontal size={15} /></span>}
+          >
+            {(close) => (
+              <>
+                <MenuItem disabled={counts.unread === 0 || busySet.has("all")} onSelect={() => { close(); void markAll(); }}>{t("Mark all read")}</MenuItem>
+                {items.length > 0 && <MenuItem danger disabled={busySet.has("all")} onSelect={() => { close(); void clearAll(); }}>{t("Clear all")}</MenuItem>}
+                <div className="my-1 h-px bg-border" />
+                <MenuItem onSelect={() => { close(); setPhoneSearch((open) => !open); }}>{t("Search notifications…")}</MenuItem>
+                <MenuItem onSelect={() => { close(); setPrefsOpen((open) => !open); }}>{t("Notification preferences")}</MenuItem>
+                <MenuItem onSelect={() => { close(); setMutedOpen(true); }}>{t("Muted tasks and documents")}</MenuItem>
+                <MenuItem onSelect={() => { close(); router.push(`/${workspaceId}/review`); }}>{t("Open the review queue")}</MenuItem>
+                <p className="px-2 py-1 text-caption text-faint">{t("Notifications are kept for 90 days.")}</p>
+              </>
+            )}
+          </Menu>
+        </div>
+        <div className="ml-auto flex items-center gap-2 max-[600px]:hidden">
           <button
             type="button"
             onClick={() => void markAll()}
             disabled={counts.unread === 0 || busySet.has("all")}
-            className="rounded-md border border-border px-2.5 py-1 text-small text-muted transition-colors hover:text-text disabled:opacity-40"
+            className={BTN}
           >
             {t("Mark all read")}
           </button>
@@ -496,7 +513,7 @@ export function NotificationsView({
               type="button"
               onClick={() => void clearAll()}
               disabled={busySet.has("all")}
-              className="rounded-md border border-border px-2.5 py-1 text-small text-muted transition-colors hover:border-danger/40 hover:text-danger disabled:opacity-40"
+              className="inline-flex items-center justify-center gap-1.5 whitespace-nowrap h-[30px] rounded-lg px-2.5 text-small border border-border transition-colors hover:border-danger/40 hover:text-danger disabled:opacity-40 bg-bg text-text hover:bg-active"
             >
               {t("Clear all")}
             </button>
@@ -505,40 +522,62 @@ export function NotificationsView({
             type="button"
             onClick={() => setPrefsOpen((open) => !open)}
             aria-label={t("Notification preferences")}
-            className={`rounded-md border px-2 py-1 text-small transition-colors ${prefsOpen ? "border-border-strong text-text" : "border-border text-muted hover:text-text"}`}
+            aria-pressed={prefsOpen}
+            className={`${ICON_BTN} ${prefsOpen ? "bg-elevated text-text" : ""}`}
           >
-            <Settings2 size={14} />
+            <Bell size={14} />
+          </button>
+          <button
+            type="button"
+            onClick={() => setMutedOpen(true)}
+            aria-label={t("Muted tasks and documents")}
+            data-inbox-muted-open
+            className={ICON_BTN}
+          >
+            <MoreHorizontal size={14} />
           </button>
         </div>
       </header>
 
-      <div className={`flex items-center gap-1 border-b border-border pb-2 pt-2 ${PAGE_INSET}`} data-inbox-tabs>
+      <div className={`${FILTER_BAR} max-[600px]:flex-nowrap max-[600px]:overflow-x-auto max-[600px]:px-3`} data-inbox-tabs>
+        <div className={SEGMENTED} role="group">
         {TABS.map((entry) => (
           <button
             key={entry.id}
             type="button"
             onClick={() => goTab(entry.id)}
             data-testid={`inbox-tab-${entry.id}`}
-            className={`flex items-center gap-1.5 rounded-full px-2.5 py-1 text-small transition-colors ${
-              tab === entry.id ? "bg-elevated font-medium text-text" : "text-muted hover:text-text"
-            }`}
+            className={segment(tab === entry.id)}
           >
-            {t(entry.label)}
-            <span className="text-caption text-faint">{counts[entry.key]}</span>
+            {t(entry.label)} {counts[entry.key]}
           </button>
         ))}
-        {tab === "reviews" ? (
-          <Link
-            href={`/${workspaceId}/review`}
-            data-testid="inbox-review-queue-link"
-            className="ml-auto text-caption text-muted underline decoration-border underline-offset-2 hover:text-text"
-          >
-            {t("Open the review queue")}
-          </Link>
-        ) : (
-          <span className="ml-auto text-caption text-faint">{t("Notifications are kept for 90 days.")}</span>
-        )}
+        </div>
+        <div className="ml-auto max-[600px]:hidden">
+          <form onSubmit={submitSearch} className={`${SEARCH_FIELD} w-52`}>
+            <Search size={13} className="shrink-0 text-faint" />
+            <input
+              value={query}
+              onChange={(event) => setQuery(event.target.value)}
+              placeholder={t("Search notifications…")}
+              aria-label={t("Search notifications…")}
+              className="min-w-0 flex-1 bg-transparent text-small text-text placeholder:text-faint"
+            />
+          </form>
+        </div>
       </div>
+
+      {(phoneSearch || query) && (
+        <form onSubmit={submitSearch} className="relative hidden items-center border-b border-border px-3 py-2 max-[600px]:flex">
+          <Search size={13} className="pointer-events-none absolute left-5 text-faint" />
+          <input
+            value={query}
+            onChange={(event) => setQuery(event.target.value)}
+            placeholder={t("Search notifications…")}
+            className="h-[34px] rounded-lg px-2.5 h-8 w-full border border-border-strong bg-elevated/40 pl-7 pr-2 text-text placeholder:text-faint focus:border-border-strong text-body"
+          />
+        </form>
+      )}
 
       {error && <p role="alert" className={`py-2 text-small text-danger ${PAGE_INSET}`}>{error}</p>}
 
@@ -560,20 +599,6 @@ export function NotificationsView({
               </label>
             ))}
           </div>
-          <div className="space-y-1">
-            <span className="font-medium">{t("Muted tasks and documents")}</span>
-            {mutes.length === 0 ? (
-              <p className="text-faint">{t("Nothing muted.")}</p>
-            ) : (
-              mutes.map((muteRow) => (
-                <div key={`${muteRow.scopeType}:${muteRow.scopeId}`} className="flex items-center gap-2">
-                  <BellOff size={12} className="text-faint" />
-                  <span className="min-w-0 flex-1 truncate text-muted">{muteRow.label || muteRow.scopeId}</span>
-                  <button type="button" onClick={() => void unmute(muteRow)} className="text-caption text-faint hover:text-text">{t("Unmute")}</button>
-                </div>
-              ))
-            )}
-          </div>
         </div>
       )}
 
@@ -589,7 +614,7 @@ export function NotificationsView({
                 const item = items.find((row) => row.id === snoozing);
                 if (item) void snooze(item, preset.at);
               }}
-              className="rounded-full border border-border px-2 py-0.5 text-caption text-muted hover:text-text"
+              className="inline-flex items-center justify-center gap-1.5 whitespace-nowrap h-[30px] rounded-lg px-2.5 text-small border border-border bg-bg text-text hover:bg-active"
             >
               {preset.label}
             </button>
@@ -598,11 +623,13 @@ export function NotificationsView({
         </div>
       )}
 
-      <div className={`divide-y divide-border pb-8 ${PAGE_INSET}`}>
+      <div>
         {items.length === 0 && (
-          <div className="p-6 text-body text-faint">
-            {initialQuery ? t("No notifications match this search.") : t("Nothing yet — you'll see mentions, assignments, and comments here.")}
-          </div>
+          <EmptyState
+            icon={initialQuery ? <Search size={16} /> : <Inbox size={16} />}
+            title={initialQuery ? t("No notifications match this search.") : t("Your inbox is empty")}
+            hint={initialQuery ? undefined : t("Nothing yet — you'll see mentions, assignments, and comments here.")}
+          />
         )}
         {groups.map((group) => {
           const head = group.rows[0];
@@ -613,31 +640,66 @@ export function NotificationsView({
               <button
                 type="button"
                 onClick={() => setExpanded((old) => ({ ...old, [group.key]: !open }))}
-                className="flex w-full items-center gap-2 py-2.5 text-left"
+                className={`${LINE} w-full text-left`}
               >
                 {open ? <ChevronDown size={13} className="text-faint" /> : <ChevronRight size={13} className="text-faint" />}
                 <span className="h-1.5 w-1.5 shrink-0 rounded-full" style={{ background: group.rows.some((row) => row.state === "unread") ? "var(--color-accent)" : "transparent" }} />
-                <span className="min-w-0 flex-1 truncate text-small text-text">{sentence(head, t)}</span>
+                <span className="flex size-[22px] shrink-0 items-center justify-center">
+                  {dataFor(head).actorName && <AssigneeAvatar displayName={dataFor(head).actorName ?? ""} size={22} />}
+                </span>
+                <span className="min-w-0 flex-1 truncate">{sentence(head, t)}</span>
                 <span className="hidden min-w-0 max-w-[35%] truncate text-caption text-faint @min-[640px]:block">{groupTitle(head, t)}</span>
-                <span className="rounded-full bg-elevated px-1.5 py-0.5 text-caption text-muted">{group.rows.length}</span>
+                <span className="inline-flex h-[18px] items-center rounded-[5px] px-1.5 whitespace-nowrap bg-elevated text-caption text-muted">{group.rows.length}</span>
               </button>
               {open && group.rows.map((item) => renderRow(item))}
             </div>
           );
         })}
         {nextCursor && (
-          <div className="pt-4">
+          <div className={`pt-4 ${PAGE_INSET}`}>
             <button
               type="button"
               onClick={() => void loadMore()}
               disabled={loadingMore}
-              className="rounded-md border border-border px-3 py-1.5 text-small text-muted hover:text-text disabled:opacity-40"
+              className="inline-flex items-center justify-center gap-1.5 whitespace-nowrap h-[30px] rounded-lg px-2.5 text-small border border-border disabled:opacity-40 bg-bg text-text hover:bg-active"
             >
               {loadingMore ? t("Loading…") : t("Load more")}
             </button>
           </div>
         )}
       </div>
+
+      <div className={`flex min-h-11 flex-wrap items-center gap-2.5 py-2 text-small text-faint ${PAGE_INSET} max-[600px]:hidden`}>
+        <span>{t("Notifications are kept for 90 days.")}</span>
+        <Link
+          href={`/${workspaceId}/review`}
+          data-testid="inbox-review-queue-link"
+          className={`${BTN_GHOST} ml-auto`}
+        >
+          {t("Open the review queue")}
+        </Link>
+      </div>
+
+      <Modal open={mutedOpen} onClose={() => setMutedOpen(false)} title={t("Muted tasks and documents")} className="max-w-[440px]">
+        <div className="rounded-xl border border-border bg-overlay shadow-2xl shadow-black/15" data-inbox-muted>
+          <div className="flex items-center justify-between border-b border-border px-4 py-3">
+            <h2 className="text-lead font-semibold text-text">{t("Muted tasks and documents")}</h2>
+            <button type="button" aria-label={t("Close")} onClick={() => setMutedOpen(false)} className="rounded p-1 text-faint transition-colors hover:bg-elevated hover:text-text"><X size={14} /></button>
+          </div>
+          <div className="max-h-[60dvh] divide-y divide-border overflow-y-auto">
+            {mutes.length === 0 ? (
+              <p className="px-4 py-3 text-body text-faint">{t("Nothing muted.")}</p>
+            ) : (
+              mutes.map((muteRow) => (
+                <div key={`${muteRow.scopeType}:${muteRow.scopeId}`} className="flex items-center gap-2 px-4 py-2">
+                  <span className="min-w-0 flex-1 truncate text-body text-text">{muteRow.label || muteRow.scopeId}</span>
+                  <button type="button" onClick={() => void unmute(muteRow)} className="inline-flex items-center justify-center gap-1.5 whitespace-nowrap h-[30px] rounded-lg px-2.5 text-small shrink-0 border border-border transition-colors bg-bg text-text hover:bg-active">{t("Unmute")}</button>
+                </div>
+              ))
+            )}
+          </div>
+        </div>
+      </Modal>
 
       {undo && (
         <div className="fixed bottom-6 left-1/2 z-50 flex -translate-x-1/2 items-center gap-3 rounded-lg border border-border bg-overlay px-3 py-2 text-small text-text shadow-xl" data-inbox-undo>
@@ -672,7 +734,7 @@ export function NotificationsView({
       <div
         key={item.id}
         data-inbox-read={unread ? "false" : "true"}
-        className={`group flex items-start gap-2 py-2.5 transition-colors ${isSelected ? "bg-elevated/60" : "hover:bg-elevated/40"}`}
+        className={`group ${LINE} ${isSelected ? "bg-active" : ""}`}
       >
         <button
           type="button"
@@ -682,33 +744,37 @@ export function NotificationsView({
             event.stopPropagation();
             void toggleRead(item);
           }}
-          className="mt-1.5 flex h-4 w-4 shrink-0 items-center justify-center rounded-full border border-border text-transparent hover:border-accent hover:text-accent"
+          className="flex h-4 w-4 shrink-0 items-center justify-center rounded-full text-transparent hover:text-faint"
           data-inbox-dot
         >
           {unread ? <span className="h-1.5 w-1.5 rounded-full bg-accent" /> : <Check size={10} />}
         </button>
+        <span className="flex size-[22px] shrink-0 items-center justify-center">
+          {dataFor(item).actorName && <AssigneeAvatar displayName={dataFor(item).actorName ?? ""} size={22} />}
+        </span>
         <button type="button" onClick={() => open(item)} className="min-w-0 flex-1 text-left">
-          <span className={`block truncate text-body ${unread ? "font-medium text-text" : "text-muted"}`}>
+          <span className={`block truncate text-body ${unread ? "text-text" : "text-muted"}`}>
             {sentence(item, t)}
           </span>
-          <span className="block truncate text-caption text-faint">
-            {groupTitle(item, t)} · <span suppressHydrationWarning>{timeAgo(item.createdAt, locale)}</span>
+          <span className={`block truncate ${LINE_SUB}`}>
+            {groupTitle(item, t)}
             {muted ? ` · ${t("Muted")}` : ""}
+            <span className="hidden max-[600px]:inline" suppressHydrationWarning> · {timeAgo(item.createdAt, locale)}</span>
           </span>
         </button>
-        {item.state === "done" && <span className="mt-1 rounded-full bg-elevated px-1.5 py-0.5 text-caption text-muted">{t("Done")}</span>}
+        <span className="shrink-0 text-small tabular-nums text-faint max-[600px]:hidden" suppressHydrationWarning>{timeAgo(item.createdAt, locale)}</span>
+        {item.state === "done" && <span className="inline-flex h-[18px] items-center rounded-[5px] px-1.5 whitespace-nowrap mt-1 bg-elevated text-caption text-muted">{t("Done")}</span>}
         <Menu
           width={200}
           align="right"
           trigger={<span className="text-muted">…</span>}
-          triggerClassName="shrink-0 rounded p-1 text-faint opacity-0 transition-opacity hover:bg-elevated hover:text-text focus-visible:opacity-100 group-hover:opacity-100"
+          triggerClassName="shrink-0 rounded p-1 text-faint opacity-0 transition-opacity hover:bg-elevated hover:text-text focus-visible:opacity-100 group-hover:opacity-100 max-[600px]:opacity-100"
         >
           {(close) => (
             <>
               <MenuItem onSelect={() => { close(); void toggleRead(item); }}>
                 {unread ? t("Mark read") : t("Mark unread")}
               </MenuItem>
-              <MenuItem onSelect={() => { close(); void markDone(item); }}>{t("Done")}</MenuItem>
               <MenuItem onSelect={() => { close(); setSnoozing(item.id); }}>{t("Snooze…")}</MenuItem>
               {item.pageId && (
                 <MenuItem onSelect={() => { close(); void mute(item, "page", item.pageId!, item.pageTitle ?? t("Document")); }}>
@@ -725,6 +791,7 @@ export function NotificationsView({
                   {t("Mute this project")}
                 </MenuItem>
               )}
+              <MenuItem onSelect={() => { close(); void markDone(item); }}>{t("Done")}</MenuItem>
               <MenuItem danger onSelect={() => { close(); void remove(item); }}>{t("Delete")}</MenuItem>
             </>
           )}
