@@ -1,4 +1,5 @@
 "use client";
+import { PAGE_HEADER, PAGE_INSET } from "@/lib/page-chrome";
 import { SafeImage } from "./safe-image";
 
 import { DetailNavigation } from "@/components/detail-navigation";
@@ -480,16 +481,8 @@ export function DocPageView({
 
   return (
     <div ref={root} data-document-root className="flex min-h-0 flex-1 flex-col">
-      <header className="flex h-11 shrink-0 items-center gap-2 border-b border-border px-4 text-small text-muted">
+      <header className={`${PAGE_HEADER} ${PAGE_INSET} text-small text-muted`}>
         <DetailNavigation kind="document" id={page.id} workspaceId={workspaceId} panel={!!onClose} fallback={refs.map(ref=>ref.id)}/>
-        <span
-          className="flex shrink-0 items-center gap-1"
-          title={shared ? t("Shared with the workspace") : t("Private")}
-        >
-          {shared ? <Users size={13} /> : <Lock size={13} />}
-          {!compact && (shared ? t("Shared with the workspace") : t("Private"))}
-        </span>
-        {!compact && <span className="text-faint">·</span>}
         <span className="flex min-w-0 flex-1 items-center gap-2">
           <nav data-doc-breadcrumb className="flex min-w-0 items-center gap-1 truncate">
             <Link href={`/${workspaceId}/docs`} className="shrink-0 hover:text-text">
@@ -512,6 +505,13 @@ export function DocPageView({
               </span>
             ))}
           </nav>
+          <span
+            className="flex shrink-0 items-center gap-1 rounded-full bg-elevated px-1.5 py-0.5 text-caption text-muted"
+            title={shared ? t("Shared with the workspace") : t("Private")}
+          >
+            {shared ? <Users size={11} /> : <Lock size={11} />}
+            {!compact && (shared ? t("Shared with the workspace") : t("Private"))}
+          </span>
           {/* A shared document says whose it is right where it says what it is. */}
           {author && (
             <span data-doc-author className="flex shrink-0 items-center gap-1 text-small text-muted">
