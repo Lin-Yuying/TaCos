@@ -112,6 +112,8 @@ body {
 }
 
 :focus-visible { outline: 2px solid var(--color-accent); outline-offset: 2px; }
+/* 16px stops iOS Safari zooming the page when a field takes focus. */
+@media (max-width: 600px) { input, textarea, select { font-size: 16px; } }
 [role="menuitem"]:focus-visible { outline-offset: -2px; }
 
 /* cmdk */

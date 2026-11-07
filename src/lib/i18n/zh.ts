@@ -2,6 +2,8 @@
 // `{name}` placeholders must survive translation unchanged. Grouped by the file that
 // first uses a string; `npm run i18n:check` lists keys used in code but missing here.
 const zh: Record<string, string> = {
+  "More": "更多",
+  "Main navigation": "主导航",
   "This page could not be found": "找不到这个页面",
   "It may have been deleted, the link may be wrong, or it may not be shared with you.": "它可能已被删除、链接有误，或没有共享给你。",
   "It may have been deleted, or the link may be wrong.": "它可能已被删除，或链接有误。",

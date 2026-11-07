@@ -225,7 +225,7 @@ export function NewIssueDialog({ workspaceId }: { workspaceId: string }) {
   }
 
   return (
-    <Modal open={composerOpen} onClose={() => {if(!busy)setComposerOpen(false);}} title={t("New task")}>
+    <Modal open={composerOpen} onClose={() => {if(!busy)setComposerOpen(false);}} title={t("New task")} className="max-w-[640px] max-[600px]:h-dvh max-[600px]:max-h-dvh max-[600px]:w-screen max-[600px]:max-w-none max-[600px]:rounded-none max-[600px]:border-0">
       <fieldset disabled={busy}>
         <div
           className="rounded-xl border border-border bg-overlay shadow-2xl shadow-black/15"

@@ -42,6 +42,6 @@ State per item: `todo`, `pass` (commit plus cheap checks: `npx tsc --noEmit`, `n
 | 32 | Shared states: empty, loading, load error, not found, no access, deleted workspace, reconnect, storage full, toast, confirm | EmptyStates, LoadingList, LoadingDoc, LoadError, NotFound, NoAccess, WsDeleted, Reconnect, StorageFull, Toasts, Confirm, SearchNoResult | pass |
 | 33 | Desktop screens | DesktopSetup, DesktopStarting, DesktopOffline, DesktopUpdate, DesktopUpdateStates, DesktopImport | pass |
 | 34 | Narrow window (720) | Narrow720, Narrow720Panel | pass |
-| 35 | Phone: bottom navigation, drawer, full-screen task/doc/new-task/search | PhoneTasks, PhoneTask, PhoneDrawer, PhoneInbox, PhoneAgent, PhoneSearch, PhoneNewTask, PhoneDoc | todo |
+| 35 | Phone: bottom navigation, drawer, full-screen task/doc/new-task/search | PhoneTasks, PhoneTask, PhoneDrawer, PhoneInbox, PhoneAgent, PhoneSearch, PhoneNewTask, PhoneDoc | pass |
 | 36 | Batch end-to-end run and screenshots (real models, fresh data dir) | all | todo |
 | 37 | Fresh-context review, PR | all | todo |

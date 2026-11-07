@@ -66,6 +66,7 @@ import { IssuePanelHost } from "@/components/issue-panel";
 import { DetailLayout } from "@/components/ui/detail-layout";
 import { DocPanelHost } from "@/components/doc-panel";
 import { UserMenu, type UserInfo } from "@/components/user-menu";
+import { PhoneNav } from "@/components/phone-nav";
 import { useUI, NOTIFICATIONS_READ } from "@/components/ui-context";
 import { DEFAULT_PROJECT_COLOR, STATUS_META, STATUS_ORDER } from "@/lib/constants";
 import type { Member, Project } from "@/lib/issues";
@@ -1973,6 +1974,7 @@ export function WorkspaceShell({
   return (
     <div className="flex h-full flex-col">
       <DesktopOpenFiles workspaceId={workspace.id} />
+      <div className="contents max-[600px]:hidden">
       <Suspense fallback={<div className="h-12 shrink-0 bg-surface" />}>
         <TabBar
           workspace={workspace}
@@ -1985,6 +1987,7 @@ export function WorkspaceShell({
           onToggleRail={toggleRail}
         />
       </Suspense>
+      </div>
 
       <div className="flex min-h-0 flex-1 bg-surface">
         {/*
@@ -1994,7 +1997,7 @@ export function WorkspaceShell({
         */}
         <aside
           style={{ width: sidebarWidth }}
-          className="relative flex shrink-0 flex-col bg-surface"
+          className="relative flex shrink-0 flex-col bg-surface max-[600px]:hidden"
         >
           {rail ? (
             <SidebarRail
@@ -2083,7 +2086,7 @@ export function WorkspaceShell({
           grey surface, and everything you are actually working on sits in a white card
           with its own border and rounded corners, floating in a small gutter.
         */}
-        <main className="flex min-w-0 flex-1 flex-col p-2 pt-1">
+        <main className="flex min-w-0 flex-1 flex-col p-2 pt-1 max-[600px]:p-0">
           {/* The list and the issue are separate cards with a gutter, the way Linear
               splits a view from its detail pane — not one card cut by a divider. */}
           <DetailLayout detail={<><IssuePanelHost workspaceId={workspace.id} currentUserId={user.id} /><DocPanelHost workspaceId={workspace.id} /></>}>
@@ -2091,6 +2094,18 @@ export function WorkspaceShell({
           </DetailLayout>
         </main>
       </div>
+
+      <Suspense fallback={null}>
+        <PhoneNav
+          workspaceId={workspace.id}
+          workspaceName={workspace.name}
+          projects={projects}
+          account={<UserMenu user={user} adminUrl={user.siteRole === "admin" ? "/admin" : workspace.role === "admin" ? `/admin/${workspace.id}` : null} />}
+          unread={unread ?? 0}
+          agentAllowed={agentAllowed}
+          hidden={hiddenSections}
+        />
+      </Suspense>
 
       <LiveRefresh workspaceId={workspace.id} />
       {inviteOpen && (

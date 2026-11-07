@@ -30,7 +30,7 @@ export function DetailLayout({ children, detail }: { children: ReactNode; detail
       if (active && !narrow && !panelExpanded && size && size >= 320) remember(Math.round(size));
     }}>
       <Panel id="workspace-list" minSize={active && !narrow && !panelExpanded ? 360 : 0} collapsible defaultSize="100%">
-        <div inert={active && (narrow || panelExpanded)} className="@container flex h-full min-h-0 flex-col overflow-hidden rounded-xl border border-border bg-bg">{children}</div>
+        <div inert={active && (narrow || panelExpanded)} className="@container flex h-full min-h-0 flex-col overflow-hidden rounded-xl border border-border max-[600px]:rounded-none max-[600px]:border-0 bg-bg">{children}</div>
       </Panel>
       <Separator disabled={!active || narrow || panelExpanded} onDoubleClick={reset} onKeyDown={(e) => { if (e.key === "Home") reset(); }} aria-label={t("Resize detail panel")} className={active && !narrow && !panelExpanded ? "w-2 shrink-0 rounded hover:bg-accent/20 focus-visible:bg-accent/20" : "w-0"} />
       <Panel id="workspace-detail" panelRef={panel} defaultSize={0} minSize={active ? 320 : 0} maxSize={narrow || panelExpanded ? "100%" : 800} collapsible>
