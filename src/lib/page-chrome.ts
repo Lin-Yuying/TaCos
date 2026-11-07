@@ -15,3 +15,8 @@ export const PAGE_INSET = `${PAGE_LEFT} ${PAGE_RIGHT}`;
 
 /** Board view: same left edge, minimal right pad so columns use the card width. */
 export const PAGE_BOARD = `${PAGE_LEFT} pr-2 py-3`;
+
+// Settings pages sit beside the settings navigation: left-aligned, title in the scroll area.
+export const SETTINGS_SCROLL = "min-h-0 min-w-0 flex-1 overflow-auto";
+export const SETTINGS_PAGE = "space-y-6 px-5 pb-10 pt-6";
+export const SETTINGS_TITLE = "text-title font-semibold";

@@ -1,10 +1,9 @@
 "use client";
-import Link from "next/link";
 import { safeAction } from "@/lib/ui/safe-action";
 
 import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { useRouter } from "next/navigation";
-import { ChevronRight, Copy, Check, Pencil, RefreshCw, Trash2, Upload } from "lucide-react";
+import { Copy, Check, Pencil, RefreshCw, Trash2, Upload } from "lucide-react";
 import {
   createApiKeyAction,
   createProjectAction,
@@ -31,9 +30,9 @@ import {
   checkHarnessUpdatesAction,
 } from "@/app/ai-actions";
 import type { AiSettingsView, ModelKeysView } from "@/lib/ai-constants";
-import { SettingsNavigation } from "@/components/settings-navigation";
+import { SettingsPanel, useSettingsPage } from "@/components/settings-shell";
 import { useUI } from "@/components/ui-context";
-import { PAGE_INSET, PAGE_TITLE } from "@/lib/page-chrome";
+import { SETTINGS_PAGE, SETTINGS_SCROLL } from "@/lib/page-chrome";
 import { ModelKeysSection } from "@/components/model-keys-section";
 import { AgentSettingsSection } from "@/components/agent-settings-section";
 import { AgentUsageSection } from "@/components/agent-usage-section";
@@ -149,7 +148,6 @@ export function SettingsView({
   serverMode,
   harness,
   isOwner,
-  isInstanceAdmin,
   nextWorkspaceHref,
   deletedWorkspaces,
   pageTemplates,
@@ -176,7 +174,6 @@ export function SettingsView({
   serverMode: boolean;
   harness: HarnessSettingsView;
   isOwner: boolean;
-  isInstanceAdmin: boolean;
   nextWorkspaceHref: string;
   deletedWorkspaces: DeletedWorkspace[];
   pageTemplates: PageTemplate[];
@@ -192,6 +189,8 @@ export function SettingsView({
   const locale = useLocale();
   const {confirm,density,setDensity}=useUI();
   const root=useRef<HTMLDivElement>(null);
+  const settingsPage=useSettingsPage();
+  useEffect(()=>{root.current?.scrollTo({top:0});},[settingsPage]);
   const memberLocks=useRef(new Set<string>());
   const [memberBusy,setMemberBusy]=useState<string[]>([]),[memberErrors,setMemberErrors]=useState<Record<string,string>>({}),[visibilityError,setVisibilityError]=useState<string|null>(null),[visibilityBusy,setVisibilityBusy]=useState(false);
   async function memberChange(id:string,work:()=>Promise<{ok:boolean;error?:string}>){if(memberLocks.current.has(id))return;memberLocks.current.add(id);setMemberBusy([...memberLocks.current]);try{const result=await work();if(!result.ok)throw new Error(result.error);setMemberErrors(old=>{const next={...old};delete next[id];return next;});router.refresh();}catch(error){setMemberErrors(old=>({...old,[id]:error instanceof Error?error.message:"Could not save. Retry."}));}finally{memberLocks.current.delete(id);setMemberBusy([...memberLocks.current]);}}
@@ -592,71 +591,9 @@ export function SettingsView({
     : null;
 
   return (
-    <div ref={root} className={`flex-1 overflow-y-auto pb-10 pt-6 ${PAGE_INSET}`}>
-      <SettingsNavigation root={root}/><div className="space-y-10">
-        <header className="flex flex-wrap items-center gap-3">
-          <h1 className={PAGE_TITLE}>{t("Workspace settings")}</h1><Link className="text-small text-muted underline" href={`/${workspace.id}/settings/storage`}>{t("Storage and recovery")}</Link>
-          {(isAdmin || isOwner) && (
-            <>
-              <Link className="text-small text-muted underline" href={`/${workspace.id}/settings/export`} data-testid="settings-export-link">
-                {t("Export")}
-              </Link>
-              <Link className="text-small text-muted underline" href={`/${workspace.id}/settings/import`} data-testid="settings-import-link">
-                {t("Import")}
-              </Link>
-            </>
-          )}
-          {isInstanceAdmin && <Link className="text-small text-muted underline" href={`/${workspace.id}/settings/system`}>{t("System")}</Link>}
-          <span className="rounded-full bg-elevated px-2 py-0.5 text-caption text-muted">
-            {workspace.name}
-          </span>
-        </header>
-
-        <section className="space-y-3">
-          <h2 className="text-body font-semibold">{t("Workspace icon")}</h2>
-          <div className="flex items-center gap-4 rounded-lg border border-border p-4">
-            <WorkspaceMark icon={icon} className="h-14 w-14" />
-            <div className="min-w-0 flex-1">
-              <div className="text-body font-medium">{workspace.name}</div>
-              {isAdmin && (
-                <div className="mt-2 flex items-center gap-2">
-                  <label
-                    className={`inline-flex cursor-pointer items-center gap-1 rounded-md border border-border px-2 py-1 text-small text-muted transition-colors hover:text-text ${
-                      busy ? "pointer-events-none opacity-50" : ""
-                    }`}
-                  >
-                    <Upload size={12} /> {icon ? t("Change image") : t("Upload image")}
-                    <input
-                      type="file"
-                      accept="image/png,image/jpeg,image/webp"
-                      className="hidden"
-                      onChange={(e) => {
-                        void uploadIcon(e.target.files?.[0]);
-                        e.target.value = "";
-                      }}
-                    />
-                  </label>
-                  {icon && (
-                    <button
-                      type="button"
-                      onClick={() => void clearIcon()}
-                      className="rounded-md px-2 py-1 text-small text-faint transition-colors hover:text-danger"
-                    >
-                      {t("Remove")}
-                    </button>
-                  )}
-                </div>
-              )}
-              {iconError && <div className="mt-1 text-small text-danger">{t(iconError)}</div>}
-            </div>
-          </div>
-          <p className="text-small leading-relaxed text-faint">
-            {isAdmin
-              ? t("Shown next to the workspace name in the sidebar and the switcher. Without an image, the otter is used. Cropped to a square and resized to 128×128 in the browser.")
-              : t("Only workspace admins can change this icon. Without an image, the otter is used.")}
-          </p>
-        </section>
-
+    <div ref={root} className={SETTINGS_SCROLL}>
+      <div className={`max-w-[720px] ${SETTINGS_PAGE}`}>
+        <SettingsPanel id="profile" title={t("Profile and display")}>
         <section className="space-y-3">
           <h2 className="text-body font-semibold">{t("Your profile")}</h2>
           <div className="flex items-center gap-4 rounded-lg border border-border p-4">
@@ -742,7 +679,6 @@ export function SettingsView({
             {t("Your picture shows as a circle next to your name in issue rows, timelines and the member list. Uploaded images are cropped to a square and resized to 128×128 in the browser before being saved.")}
           </p>
         </section>
-
         <section className="space-y-3"><h2 className="text-body font-semibold">{t("Display density")}</h2><div className="flex gap-2 text-body">{(["comfortable","compact"] as const).map(value=><button key={value} aria-pressed={density===value} onClick={()=>setDensity(value)} className={`rounded border border-border px-3 py-1 ${density===value?"bg-elevated":""}`}>{t(value==="compact"?"Compact":"Comfortable")}</button>)}</div></section>
         <section className="space-y-3">
           <h2 className="text-body font-semibold">{t("Language")}</h2>
@@ -777,7 +713,56 @@ export function SettingsView({
             {t("Task content, documents and replies from the API or MCP server are not translated.")}
           </p>
         </section>
+        </SettingsPanel>
 
+        <SettingsPanel id="general" title={t("Basics and icon")}>
+        <section className="space-y-3">
+          <h2 className="text-body font-semibold">{t("Workspace icon")}</h2>
+          <div className="flex items-center gap-4 rounded-lg border border-border p-4">
+            <WorkspaceMark icon={icon} className="h-14 w-14" />
+            <div className="min-w-0 flex-1">
+              <div className="text-body font-medium">{workspace.name}</div>
+              {isAdmin && (
+                <div className="mt-2 flex items-center gap-2">
+                  <label
+                    className={`inline-flex cursor-pointer items-center gap-1 rounded-md border border-border px-2 py-1 text-small text-muted transition-colors hover:text-text ${
+                      busy ? "pointer-events-none opacity-50" : ""
+                    }`}
+                  >
+                    <Upload size={12} /> {icon ? t("Change image") : t("Upload image")}
+                    <input
+                      type="file"
+                      accept="image/png,image/jpeg,image/webp"
+                      className="hidden"
+                      onChange={(e) => {
+                        void uploadIcon(e.target.files?.[0]);
+                        e.target.value = "";
+                      }}
+                    />
+                  </label>
+                  {icon && (
+                    <button
+                      type="button"
+                      onClick={() => void clearIcon()}
+                      className="rounded-md px-2 py-1 text-small text-faint transition-colors hover:text-danger"
+                    >
+                      {t("Remove")}
+                    </button>
+                  )}
+                </div>
+              )}
+              {iconError && <div className="mt-1 text-small text-danger">{t(iconError)}</div>}
+            </div>
+          </div>
+          <p className="text-small leading-relaxed text-faint">
+            {isAdmin
+              ? t("Shown next to the workspace name in the sidebar and the switcher. Without an image, the otter is used. Cropped to a square and resized to 128×128 in the browser.")
+              : t("Only workspace admins can change this icon. Without an image, the otter is used.")}
+          </p>
+        </section>
+        </SettingsPanel>
+
+        <SettingsPanel id="members" title={t("Members")}>
         <section className="space-y-3">
           <h2 className="text-body font-semibold">
             {t("Members ({count})", { count: members.length })}
@@ -854,7 +839,9 @@ export function SettingsView({
             </div>
           </div>
         </section>
+        </SettingsPanel>
 
+        <SettingsPanel id="visibility" title={t("Task visibility")}>
         <section className="space-y-3">
           <h2 className="text-body font-semibold">{t("Task visibility")}</h2>{visibilityError&&<p role="alert" className="text-small text-danger">{t(visibilityError)}</p>}
           <div className="flex items-center gap-4 rounded-lg border border-border p-4">
@@ -892,7 +879,9 @@ export function SettingsView({
               : t("Only workspace admins can change who sees tasks.")}
           </p>
         </section>
+        </SettingsPanel>
 
+        <SettingsPanel id="projects" title={t("Projects")}>
         <section className="space-y-3">
           <h2 className="text-body font-semibold">{t("Projects")}</h2>
           <div className="divide-y divide-border rounded-lg border border-border">
@@ -978,7 +967,9 @@ export function SettingsView({
           </div>
           {projError && <div className="text-small text-danger">{t(projError)}</div>}
         </section>
+        </SettingsPanel>
 
+        <SettingsPanel id="page-templates" title={t("Page templates")}>
         <section id="page-templates" className="scroll-mt-6 space-y-3">
           <h2 className="text-body font-semibold">{t("Page templates")}</h2>
           <PageTemplatesManager
@@ -987,7 +978,9 @@ export function SettingsView({
             canManage={canManagePageTemplates}
           />
         </section>
+        </SettingsPanel>
 
+        <SettingsPanel id="cycles" title={t("Cycle settings")}>
         <section id="cycles" className="scroll-mt-6 space-y-3">
           <h2 className="text-body font-semibold">{t("Cycle settings")}</h2>
           <CycleSettingsSection
@@ -997,7 +990,9 @@ export function SettingsView({
             isAdmin={isAdmin}
           />
         </section>
+        </SettingsPanel>
 
+        <SettingsPanel id="automations" title={t("Automations")}>
         <section id="automations" className="scroll-mt-6 space-y-3" data-testid="automation-settings">
           <h2 className="text-body font-semibold">{t("Automations")}</h2>
           <AutomationSettingsSection
@@ -1013,7 +1008,9 @@ export function SettingsView({
             agents={agents}
           />
         </section>
+        </SettingsPanel>
 
+        <SettingsPanel id="labels" title={t("Labels")}>
         <section id="labels" className="scroll-mt-6 space-y-3">
           <h2 className="text-body font-semibold">{t("Labels")}</h2>
           <p className="text-small leading-relaxed text-faint">
@@ -1021,7 +1018,9 @@ export function SettingsView({
           </p>
           <LabelsManager workspaceId={workspace.id} initialLabels={labels} embedded />
         </section>
+        </SettingsPanel>
 
+        <SettingsPanel id="agent" title={t("Harness and model API")}>
         <section className="space-y-3" data-testid="harness-settings">
           <div className="flex flex-wrap items-center gap-2">
             <h2 className="text-body font-semibold">{t("Harness")}</h2>
@@ -1135,27 +1134,13 @@ export function SettingsView({
             <p className="text-small text-faint">{t("Only a workspace admin can change harness toggles.")}</p>
           )}
         </section>
-
         <AgentSettingsSection
           workspaceId={workspace.id}
           agents={agents}
           projects={projects}
           isAdmin={isAdmin}
         />
-
-        <AgentUsageSection usage={agentUsage} />
-
         <ModelKeysSection workspaceId={workspace.id} view={modelKeys} serverMode={serverMode} />
-
-        <details className="group/advanced" data-testid="settings-advanced">
-          <summary className="flex cursor-pointer list-none items-center gap-1.5 text-body font-semibold [&::-webkit-details-marker]:hidden">
-            <ChevronRight size={14} className="text-muted transition-transform group-open/advanced:rotate-90" />
-            {t("Advanced")}
-          </summary>
-          <p className="mt-1 text-small text-faint">
-            {t("Proxy, REST API keys and MCP server. Only needed to connect other tools to TaCos or to get through a filtered network.")}
-          </p>
-          <div className="mt-4 space-y-8">
               {isAdmin && (
                 <div className="space-y-3 rounded-lg border border-border p-3">
                   <label className="block space-y-1 text-small text-muted">
@@ -1185,6 +1170,13 @@ export function SettingsView({
                   {aiNotice && <div className="text-small text-muted">{aiNotice}</div>}
                 </div>
               )}
+        </SettingsPanel>
+
+        <SettingsPanel id="usage" title={t("Agent usage")}>
+        <AgentUsageSection usage={agentUsage} />
+        </SettingsPanel>
+
+        <SettingsPanel id="access" title={t("Agent access: REST and MCP")}>
             <section className="space-y-3">
               <h2 className="text-body font-semibold">{t("Agent access — REST API keys")}</h2>
               <p className="text-body leading-relaxed text-muted">
@@ -1482,10 +1474,10 @@ export function SettingsView({
                 {t("The remote endpoint is stateless: every request carries the Bearer key, and the key's scopes and project allowlist apply to every tool call.")}
               </p>
             </section>
-          </div>
-        </details>
+        </SettingsPanel>
 
         {isOwner && (
+        <SettingsPanel id="danger" title={t("Danger zone")}>
           <section className="space-y-3">
             <h2 className="text-body font-semibold text-danger">{t("Danger zone")}</h2>
             <div className="flex items-center gap-3 rounded-lg border border-danger/40 bg-danger/5 p-4">
@@ -1512,7 +1504,9 @@ export function SettingsView({
               </button>
             </div>
           </section>
+        </SettingsPanel>
         )}
+
 
         {/* Scoped to workspaces this user owns, so it can render even in someone
             else's settings page. */}

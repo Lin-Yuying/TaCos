@@ -1,7 +1,6 @@
 "use client";
 
-import Link from "next/link";
-import { PAGE_TITLE } from "@/lib/page-chrome";
+import { SETTINGS_PAGE, SETTINGS_SCROLL, SETTINGS_TITLE } from "@/lib/page-chrome";
 import { useState } from "react";
 import { Download, RefreshCw } from "lucide-react";
 import { systemSnapshotAction } from "@/app/ops-actions";
@@ -166,11 +165,11 @@ export function SystemView({
   ];
 
   return (
-    <div className="min-w-0 flex-1 overflow-auto p-6" data-testid="system-page">
-      <div className="mx-auto max-w-5xl space-y-8">
+    <div className={SETTINGS_SCROLL} data-testid="system-page">
+      <div className={`max-w-[720px] ${SETTINGS_PAGE}`}>
         <header className="flex flex-wrap items-center gap-3">
           <div className="min-w-0">
-            <h1 className={PAGE_TITLE}>{t("System")}</h1>
+            <h1 className={SETTINGS_TITLE}>{t("System")}</h1>
             <p className="text-small text-muted">{t("Instance health, backups, updates and runners.")}</p>
           </div>
           <span
@@ -190,9 +189,6 @@ export function SystemView({
               <RefreshCw size={12} className={busy ? "animate-spin" : undefined} />
               {t("Refresh")}
             </button>
-            <Link className="text-small text-muted underline" href={`/${workspaceId}/settings`}>
-              {t("Settings")}
-            </Link>
           </div>
         </header>
 

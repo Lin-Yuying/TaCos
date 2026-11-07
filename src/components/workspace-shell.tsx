@@ -1266,7 +1266,7 @@ function SidebarRail({
         />
         <RailLink
           href={`/${workspaceId}/settings`}
-          active={pathname.endsWith("/settings")}
+          active={/\/settings(\/|$)/.test(pathname)}
           label={t("Settings")}
           icon={<Settings size={16} />}
           labeled={labeled}
@@ -1531,7 +1531,7 @@ function tabMeta(
       return { label: project.name, icon: <ProjectIcon color={project.color} icon={project.icon} size={13} /> };
     return { label: t("Project"), icon: <ProjectIcon color={DEFAULT_PROJECT_COLOR} size={13} /> };
   }
-  if (pathname.endsWith("/settings")) return { label: t("Settings"), icon: <Settings size={13} /> };
+  if (/\/settings(\/|$)/.test(pathname)) return { label: t("Settings"), icon: <Settings size={13} /> };
   if (pathname.endsWith("/agent")) return { label: t("Agent"), icon: <Bot size={13} /> };
   if (pathname.endsWith("/labels")) return { label: t("Labels"), icon: <Tag size={13} /> };
   if (pathname.endsWith("/trash")) return { label: t("Trash"), icon: <Trash2 size={13} /> };
@@ -2056,7 +2056,7 @@ export function WorkspaceShell({
                 </NavItem>
                 <NavItem
                   href={`/${workspace.id}/settings`}
-                  active={pathname.endsWith("/settings")}
+                  active={/\/settings(\/|$)/.test(pathname)}
                   icon={<Settings size={14} />}
                 >
                   {t("Settings")}

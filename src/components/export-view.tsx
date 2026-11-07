@@ -1,7 +1,6 @@
 "use client";
 
-import Link from "next/link";
-import { PAGE_TITLE } from "@/lib/page-chrome";
+import { SETTINGS_PAGE, SETTINGS_SCROLL, SETTINGS_TITLE } from "@/lib/page-chrome";
 import { useEffect, useState } from "react";
 import { useT } from "./i18n-context";
 import { timeAgo } from "@/lib/format";
@@ -100,14 +99,9 @@ export function ExportView({
     ? (job.summary.attachments as { omittedCount?: number }).omittedCount ?? 0
     : 0;
   return (
-    <div className="min-w-0 flex-1 overflow-auto p-6" data-testid="export-page">
-      <div className="mx-auto max-w-3xl space-y-8">
-        <header className="flex flex-wrap items-center gap-3">
-          <h1 className={PAGE_TITLE}>{t("Export workspace")}</h1>
-          <Link className="ml-auto text-small text-muted underline" href={`/${workspaceId}/settings`}>
-            {t("Settings")}
-          </Link>
-        </header>
+    <div className={SETTINGS_SCROLL} data-testid="export-page">
+      <div className={`max-w-[640px] ${SETTINGS_PAGE}`}>
+        <h1 className={SETTINGS_TITLE}>{t("Export workspace")}</h1>
 
         <section className="space-y-3 rounded-lg border border-border p-4">
           <p className="text-body text-muted">

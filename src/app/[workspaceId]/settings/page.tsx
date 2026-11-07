@@ -85,7 +85,6 @@ async function View({ params }: { params: Promise<{ workspaceId: string }> }) {
       serverMode={isServerMode()}
       harness={harness}
       isOwner={ws.workspace.createdBy === ws.user.id}
-      isInstanceAdmin={user.siteRole === "admin"}
       nextWorkspaceHref={next ? `/${next.id}` : "/onboarding"}
       deletedWorkspaces={deletedWorkspaces}
       pageTemplates={pageTemplates}
