@@ -8,7 +8,7 @@ import { EntityRow,usePinned } from "@/components/ui/entity-row";
 import { PersonalOrder } from "@/components/personal-order";
 import { RecentDocuments } from "@/components/recent-documents";
 import Link from "next/link";
-import { tabIdentity } from "@/lib/ui/tabs";
+import { fitTabs, placeInTabs, tabIdentity } from "@/lib/ui/tabs";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import {
   Suspense,
@@ -1537,6 +1537,11 @@ function tabMeta(
   if (pathname.endsWith("/trash")) return { label: t("Trash"), icon: <Trash2 size={13} /> };
   if (pathname.endsWith("/review")) return { label: t("Review"), icon: <ShieldCheck size={13} /> };
   if (pathname.endsWith("/help")) return { label: t("Help"), icon: <CircleHelp size={13} /> };
+  if (pathname.endsWith("/search")) return { label: t("Search"), icon: <Search size={13} /> };
+  if (pathname.startsWith(`/${workspace.id}/planning`))
+    return { label: t("Planning"), icon: <CalendarRange size={13} /> };
+  if (pathname.startsWith(`/${workspace.id}/insights`))
+    return { label: t("Insights"), icon: <ChartNoAxesColumn size={13} /> };
   if (pathname.endsWith("/activity"))
     return { label: t("Activity"), icon: <Activity size={13} /> };
   if (pathname.endsWith("/notifications"))
@@ -1551,6 +1556,9 @@ function tabMeta(
   if (pathname === `/${workspace.id}/docs`) return { label: t("Documents"), icon: <FileText size={13} /> };
   return { label: t("Tasks"), icon: <List size={13} /> };
 }
+
+const TAB_MIN_WIDTH = 68;
+const TAB_ROOM_DEFAULT = 8;
 
 function TabBar({
   workspace,
@@ -1575,7 +1583,7 @@ function TabBar({
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
-  const { setPaletteOpen, scope } = useUI();
+  const { paletteOpen, setPaletteOpen, scope } = useUI();
   const modifier=usePrimaryModifier();
   const [recentTabs,setRecentTabs]=useStoredJson<string[]>(`tacos.tabs.closed.${scope}`,[]);
   const [fixedTabs,setFixedTabs]=useStoredJson<string[]>(`tacos.tabs.fixed.${scope}`,[]);
@@ -1585,6 +1593,10 @@ function TabBar({
   // sit next to it in the strip — a doc opened from an Overview goes back to that Overview.
   const cameFrom = useRef<string | null>(null);
   const lastKey = useRef<string | null>(null);
+  // Set while a page is being opened as a new tab instead of replacing the current one.
+  const openAsNew = useRef(false);
+  const stripRef = useRef<HTMLDivElement>(null);
+  const [tabRoom, setTabRoom] = useState(TAB_ROOM_DEFAULT);
   // Where the app sits when nothing is open. It is deliberately not a tab: the strip
   // is empty, and this page offers the ways back in.
   const startKey = `/${workspace.id}/start`;
@@ -1622,14 +1634,54 @@ function TabBar({
     if (current === justClosed.current) return;
     if (current === startKey) return;
     if (tabs.includes(current)) return;
-    const existing = tabs.findIndex((key) => sameTab(key, current));
-    if (existing >= 0) {
-      setTabs(tabs.map((key, i) => (i === existing ? current : key)));
-      return;
-    }
-    setTabs([...tabs, current]);
+    const next = placeInTabs(tabs, current, {
+      from: cameFrom.current,
+      fixed: fixedTabs,
+      newTab: openAsNew.current,
+    });
+    openAsNew.current = false;
+    setTabs(next);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [current, tabs]);
+
+  // Cmd/Ctrl-click on any link in the workspace opens it in a new tab of this strip.
+  useEffect(() => {
+    const onClick = (event: MouseEvent) => {
+      if (event.defaultPrevented || event.button !== 0 || !(event.metaKey || event.ctrlKey)) return;
+      const link = (event.target as Element | null)?.closest?.("a[href]") as HTMLAnchorElement | null;
+      if (!link || link.target === "_blank") return;
+      const url = new URL(link.href);
+      if (url.origin !== window.location.origin) return;
+      if (!url.pathname.startsWith(`/${workspace.id}`)) return;
+      event.preventDefault();
+      event.stopPropagation();
+      openAsNew.current = true;
+      router.push(`${url.pathname}${url.search}`);
+    };
+    document.addEventListener("click", onClick, true);
+    return () => document.removeEventListener("click", onClick, true);
+  }, [router, workspace.id]);
+
+  // The + button opens a new tab through the palette; closing the palette without a
+  // choice must not make the next ordinary link open a new tab.
+  useEffect(() => {
+    if (paletteOpen || !openAsNew.current) return;
+    const timer = setTimeout(() => {
+      openAsNew.current = false;
+    }, 1000);
+    return () => clearTimeout(timer);
+  }, [paletteOpen]);
+
+  // Tabs narrow to their minimum first; only what still does not fit moves behind +N.
+  useEffect(() => {
+    const strip = stripRef.current;
+    if (!strip) return;
+    const measure = () => setTabRoom(Math.floor(strip.clientWidth / TAB_MIN_WIDTH));
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(strip);
+    return () => observer.disconnect();
+  }, []);
 
   useEffect(() => {
     if (tabs === null) return;
@@ -1658,6 +1710,7 @@ function TabBar({
   }, [tabs, projects, pages, workspace.id]);
 
   const visible = tabs ?? [];
+  const { shown: shownTabs, hidden: hiddenTabs } = fitTabs(visible, current, tabRoom);
 
   function closeTab(key: string) {
     if(fixedTabs.includes(key))return;
@@ -1725,13 +1778,13 @@ function TabBar({
         </button>
       </div>
 
-      <div className="app-tabstrip flex min-w-0 flex-1 items-center gap-1.5 overflow-x-auto pl-1.5">
-        {visible.map((key) => {
+      <div ref={stripRef} className="app-tabstrip flex min-w-0 flex-1 items-center gap-1 overflow-hidden pl-1.5">
+        {shownTabs.map((key) => {
           const { label, icon } = tabMeta(key, workspace, projects, members, pages, t);
           const isActive = key === current;
           return (
             <ContextMenu.Root key={key}><ContextMenu.Trigger asChild><div
-              className={`app-tab group flex h-8 w-[128px] shrink-0 min-w-0 items-center gap-1.5 rounded-lg border px-2 text-small transition-colors ${
+              className={`app-tab group flex h-8 min-w-[64px] max-w-[168px] flex-1 items-center gap-1.5 rounded-lg border px-2 text-small transition-colors ${
                 isActive
                   ? "border-border bg-bg font-medium text-text shadow-[0_1px_2px_rgba(0,0,0,0.05)]"
                   : "border-transparent text-muted hover:bg-elevated/70 hover:text-text"
@@ -1766,13 +1819,16 @@ function TabBar({
         })}
       </div>
 
-      <Menu align="right" width={300} trigger={<span aria-label={t("Open tabs")}>▾</span>} triggerClassName="rounded px-2 py-1 text-muted">{close=><>{visible.map(key=><MenuItem key={key} onSelect={()=>{close();router.push(key);}}>{tabMeta(key,workspace,projects,members,pages,t).label}</MenuItem>)}{recentTabs.length>0&&<div className="border-t border-border px-2 py-1 text-small text-faint">{t("Recently closed")}</div>}{recentTabs.map(key=><MenuItem key={key} onSelect={()=>{close();setRecentTabs(previous=>previous.filter(item=>item!==key));router.push(key);}}>{tabMeta(key,workspace,projects,members,pages,t).label}</MenuItem>)}</>}</Menu>
+      <Menu align="right" width={300} trigger={<span aria-label={t("Open tabs")} className="tabular-nums">{hiddenTabs.length>0?`+${hiddenTabs.length}`:"▾"}</span>} triggerClassName="rounded px-2 py-1 text-small text-muted hover:bg-elevated hover:text-text">{close=><>{visible.map(key=><MenuItem key={key} onSelect={()=>{close();router.push(key);}}>{tabMeta(key,workspace,projects,members,pages,t).label}</MenuItem>)}{recentTabs.length>0&&<div className="border-t border-border px-2 py-1 text-small text-faint">{t("Recently closed")}</div>}{recentTabs.map(key=><MenuItem key={key} onSelect={()=>{close();setRecentTabs(previous=>previous.filter(item=>item!==key));router.push(key);}}>{tabMeta(key,workspace,projects,members,pages,t).label}</MenuItem>)}</>}</Menu>
 
       <DesktopAppUpdateButton />
 
       <button
         type="button"
-        onClick={() => setPaletteOpen(true)}
+        onClick={() => {
+          openAsNew.current = true;
+          setPaletteOpen(true);
+        }}
         title={t("Open something ({key}K)",{key:modifier})}
         aria-label={t("Open something")}
         className="ml-1.5 shrink-0 rounded-md p-1.5 text-muted transition-colors hover:bg-elevated hover:text-text"
