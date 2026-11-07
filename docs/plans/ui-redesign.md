@@ -22,26 +22,48 @@ State per item: `todo`, `pass` (commit plus cheap checks: `npx tsc --noEmit`, `n
 | 12 | Start screen | Start | pass |
 | 13 | Inbox | Inbox, InboxRowMenu, InboxMuted | pass |
 | 14 | Activity | Activity | pass |
-| 15 | Search page and palette | Search, SearchLanding, SearchNoResult, CommandPalette, CommandPaletteEmpty | pass |
-| 16 | Agent page | Agent, AgentSetup, AgentPermission, AgentModel, AgentSkills, ThreadMenu | pass |
-| 17 | Project overview and meta | Project, ProjectSelection, ProjectComments, ProjectHistory, ProjectAi, ProjectMenus, ProjectResource, NewProject | pass |
+| 15 | Search page and palette | Search, SearchLanding, SearchNoResult, CommandPalette, CommandPaletteEmpty | partial |
+| 16 | Agent page | Agent, AgentSetup, AgentPermission, AgentModel, AgentSkills, ThreadMenu | partial |
+| 17 | Project overview and meta | Project, ProjectSelection, ProjectComments, ProjectHistory, ProjectAi, ProjectMenus, ProjectResource, NewProject | partial |
 | 18 | Project tasks and timeline | ProjectTasks, ProjectTimeline, MilestoneEdit | pass |
-| 19 | Documents index | DocsIndex, DocsImport, DocsImportResult | pass |
-| 20 | Document page | Doc, DocUpdates, DocMenus, DocOptions, DocShare, WatchMenu, MoveDoc, DocComments, DocOutline, DocLinks, DocFind, AiEdit, ReviewChanges, RestoreConfirm, EditorMenus, EditorBlocks | pass |
+| 19 | Documents index | DocsIndex, DocsImport, DocsImportResult | partial |
+| 20 | Document page | Doc, DocUpdates, DocMenus, DocOptions, DocShare, WatchMenu, MoveDoc, DocComments, DocOutline, DocLinks, DocFind, AiEdit, ReviewChanges, RestoreConfirm, EditorMenus, EditorBlocks | partial |
 | 21 | Person page | Person | pass |
-| 22 | Planning: cycles | Planning, PlanningOff, CycleAdd, CycleComplete | pass |
-| 23 | Planning: roadmap and initiatives | Roadmap, Initiatives, InitiativeEdit | pass |
+| 22 | Planning: cycles | Planning, PlanningOff, CycleAdd, CycleComplete | partial |
+| 23 | Planning: roadmap and initiatives | Roadmap, Initiatives, InitiativeEdit | partial |
 | 24 | Insights: four stats, one filter row, chart/table toggle | Insights | pass |
-| 25 | Settings shell: grouped left navigation, Storage, Export, Import and System inside it | SettingsNav, Storage, ExportPage, ImportPage, ImportPreview, System | pass |
-| 26 | Settings: profile, general, members, visibility, projects | SettingsProfile, SettingsGeneral, SettingsMembers, Invite, SettingsVisibility, SettingsProjects | pass |
-| 27 | Settings: templates, cycles, automation, labels | SettingsTemplates, SettingsCycles, SettingsAutomation, RuleEdit, SettingsLabels | pass |
-| 28 | Settings: Agent, usage, access, danger | SettingsAgent, AgentEdit, SettingsUsage, SettingsAccess, SettingsDanger | pass |
+| 25 | Settings shell: grouped left navigation, Storage, Export, Import and System inside it | SettingsNav, Storage, ExportPage, ImportPage, ImportPreview, System | partial |
+| 26 | Settings: profile, general, members, visibility, projects | SettingsProfile, SettingsGeneral, SettingsMembers, Invite, SettingsVisibility, SettingsProjects | partial |
+| 27 | Settings: templates, cycles, automation, labels | SettingsTemplates, SettingsCycles, SettingsAutomation, RuleEdit, SettingsLabels | partial |
+| 28 | Settings: Agent, usage, access, danger | SettingsAgent, AgentEdit, SettingsUsage, SettingsAccess, SettingsDanger | partial |
 | 29 | Trash and Help | Trash, Help | pass |
 | 30 | Entry: login, register, onboarding, join | Login, Register, Onboarding, OnboardingJoin, Join, JoinInvalid | pass |
 | 31 | Admin: instance and workspace | Admin, AdminWs | pass |
-| 32 | Shared states: empty, loading, load error, not found, no access, deleted workspace, reconnect, storage full, toast, confirm | EmptyStates, LoadingList, LoadingDoc, LoadError, NotFound, NoAccess, WsDeleted, Reconnect, StorageFull, Toasts, Confirm, SearchNoResult | pass |
-| 33 | Desktop screens | DesktopSetup, DesktopStarting, DesktopOffline, DesktopUpdate, DesktopUpdateStates, DesktopImport | pass |
-| 34 | Narrow window (720) | Narrow720, Narrow720Panel | pass |
-| 35 | Phone: bottom navigation, drawer, full-screen task/doc/new-task/search | PhoneTasks, PhoneTask, PhoneDrawer, PhoneInbox, PhoneAgent, PhoneSearch, PhoneNewTask, PhoneDoc | pass |
-| 36 | Batch end-to-end run and screenshots (real models, fresh data dir) | all | pass |
-| 37 | Fresh-context review, PR | all | pass |
+| 32 | Shared states: empty, loading, load error, not found, no access, deleted workspace, reconnect, storage full, toast, confirm | EmptyStates, LoadingList, LoadingDoc, LoadError, NotFound, NoAccess, WsDeleted, Reconnect, StorageFull, Toasts, Confirm, SearchNoResult | partial |
+| 33 | Desktop screens | DesktopSetup, DesktopStarting, DesktopOffline, DesktopUpdate, DesktopUpdateStates, DesktopImport | partial |
+| 34 | Narrow window (720) | Narrow720, Narrow720Panel | partial |
+| 35 | Phone: bottom navigation, drawer, full-screen task/doc/new-task/search | PhoneTasks, PhoneTask, PhoneDrawer, PhoneInbox, PhoneAgent, PhoneSearch, PhoneNewTask, PhoneDoc | partial |
+| 36 | Batch end-to-end run and screenshots (real models, fresh data dir) | all | partial |
+| 37 | Fresh-context review, PR | all | partial |
+
+## Open gaps
+
+`pass` above means every listed board was compared and done. `partial` items still have these boards open:
+
+- 15: CommandPalette, CommandPaletteEmpty
+- 16: Agent, AgentSetup, AgentModel, AgentSkills, ThreadMenu
+- 17: ProjectSelection, ProjectComments, ProjectHistory, ProjectAi, ProjectMenus
+- 19: DocsImport, DocsImportResult (not compared board by board)
+- 20: DocUpdates, DocMenus, DocOptions, DocShare, WatchMenu, MoveDoc, DocComments, DocOutline, DocLinks, DocFind, AiEdit, ReviewChanges, RestoreConfirm, EditorMenus, EditorBlocks
+- 22: Planning (four stats), PlanningOff, CycleAdd, CycleComplete
+- 23: Initiatives (new-initiative position), InitiativeEdit
+- 25: ExportPage, ImportPage, ImportPreview
+- 26: Invite
+- 27: SettingsAutomation (runs, rule changes, dry run), SettingsTemplates
+- 28: SettingsAgent, AgentEdit, SettingsAccess
+- 32: confirm verbs and body, storage-full notice, clear-filters action, shared LoadError
+- 33: DesktopUpdateStates, DesktopImport open action
+- 34: Narrow720Panel (overlay width)
+- 35: PhoneDoc, PhoneInbox, PhoneAgent, PhoneTasks (44px rows, filter icon)
+- 36: re-run after the gaps close
+- 37: re-review after the gaps close; PR is draft until then
