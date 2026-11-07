@@ -1,5 +1,6 @@
 import { ensureRevisions } from "./revisions";
 import { parseLegacyNotificationBody } from "../lib/notification-data";
+import { TacosError } from "../lib/tacos-error";
 import { DATA_DIR } from "@/lib/data-dir";
 import Database from "better-sqlite3";
 import { drizzle } from "drizzle-orm/better-sqlite3";
@@ -19,6 +20,28 @@ CREATE TABLE IF NOT EXISTS attachment_reference_checks(workspace_id TEXT PRIMARY
 CREATE TABLE IF NOT EXISTS attachment_reclaim_candidates(attachment_id TEXT PRIMARY KEY,unreferenced_since TEXT NOT NULL);
 CREATE TABLE IF NOT EXISTS runner_event_batches(run_id TEXT NOT NULL,sequence INTEGER NOT NULL,body TEXT NOT NULL,accepted INTEGER NOT NULL DEFAULT 0,created_at TEXT NOT NULL,PRIMARY KEY(run_id,sequence));
 CREATE TABLE IF NOT EXISTS maintenance_jobs(id TEXT PRIMARY KEY,owner TEXT NOT NULL,lease_until INTEGER NOT NULL,state TEXT NOT NULL,completed INTEGER NOT NULL DEFAULT 0,error TEXT,updated_at TEXT NOT NULL);
+-- U-12: backup runs and the settings that control them. A restore replaces this table with
+-- the backup's copy, so the files on disk are the source of truth for what can be restored.
+CREATE TABLE IF NOT EXISTS backup_runs (
+  id TEXT PRIMARY KEY,
+  kind TEXT NOT NULL,
+  status TEXT NOT NULL,
+  path TEXT NOT NULL DEFAULT '',
+  version TEXT NOT NULL DEFAULT '',
+  integrity TEXT NOT NULL DEFAULT '',
+  db_bytes INTEGER NOT NULL DEFAULT 0,
+  uploads_bytes INTEGER NOT NULL DEFAULT 0,
+  sha256 TEXT,
+  error TEXT,
+  started_at TEXT NOT NULL,
+  finished_at TEXT
+);
+CREATE INDEX IF NOT EXISTS backup_runs_started_idx ON backup_runs (started_at);
+CREATE TABLE IF NOT EXISTS ops_settings (
+  key TEXT PRIMARY KEY,
+  value TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
 CREATE TABLE IF NOT EXISTS file_cleanup(id TEXT PRIMARY KEY,created_at TEXT NOT NULL,error TEXT);
 CREATE TABLE IF NOT EXISTS personal_task_views (
  workspace_id TEXT NOT NULL,user_id TEXT NOT NULL,scope TEXT NOT NULL,name TEXT NOT NULL,value TEXT NOT NULL,
@@ -1967,9 +1990,48 @@ function createDb() {
   return drizzle(sqlite, { schema });
 }
 
-const globalDb = globalThis as unknown as { __tacosDb?: TacosDb };
+const globalDb = globalThis as unknown as {
+  __tacosDb?: TacosDb;
+  __tacosDbMaintenance?: string | null;
+};
+
+/**
+ * U-12: while a restore replaces the database file, every request fails fast instead of
+ * reading a half-written file. The restorer closes the handle before setting this.
+ */
+export function setDbMaintenance(message: string | null): void {
+  globalDb.__tacosDbMaintenance = message;
+}
+
+export function dbMaintenanceMessage(): string | null {
+  return globalDb.__tacosDbMaintenance ?? null;
+}
+
+/**
+ * Close the cached handle so the file can be replaced. The next getDb() opens it again.
+ * Returns an error message when the handle could not be closed; the restorer then aborts
+ * instead of replacing a database another connection still has open.
+ */
+export function closeDb(): string | null {
+  try {
+    globalDb.__tacosDb?.$client.pragma("wal_checkpoint(TRUNCATE)");
+  } catch {
+    // A checkpoint failure must not block a restore; the WAL files are removed with the swap.
+  }
+  try {
+    globalDb.__tacosDb?.$client.close();
+  } catch (error) {
+    return error instanceof Error ? error.message : "could not close the database";
+  }
+  delete globalDb.__tacosDb;
+  return null;
+}
 
 export function getDb(): TacosDb {
+  const maintenance = globalDb.__tacosDbMaintenance;
+  if (maintenance) {
+    throw new TacosError(maintenance, 503, "Try again when the restore finishes.");
+  }
   if (!globalDb.__tacosDb) globalDb.__tacosDb = createDb();
   return globalDb.__tacosDb;
 }

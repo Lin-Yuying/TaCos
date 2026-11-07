@@ -1,7 +1,8 @@
 # U-02: Insights and analytics
 
-Status: plan for a future PR (after the current #77-#80). No implementation
-started. Written 2026-11-06.
+Status: implemented 2026-11-06 on `feat/insights` (three feature commits plus
+checks/docs). No snapshot table was needed. Written 2026-11-06; implementation
+record at the end.
 
 ## Why
 
@@ -23,18 +24,27 @@ The data for the first version already exists:
 
 ## Current implementation
 
-- No analytics tables, aggregation queries, dashboards, saved reports or CSV
-  export exist. Task views are personal saved filters (`personal_task_views`),
-  not reports.
-- Raw data available today: `issues` (status, priority, due, claim, created/
-  updated/deleted), `issue_assignees`, `comments`, `events` (created,
-  status_changed, priority_changed, assignee_changed, labels_changed,
-  reordered, blocker), `blockers`, `agent_runs` / `agent_steps` /
-  `agent_threads`.
-- Data added by the plans: token usage (#79), automation runs (#80),
-  cycles/milestones (U-03).
-- Search/views exist but are filtering surfaces, not analytics; no time-in-
-  status history beyond `events`.
+- `src/lib/insights.ts` aggregates every metric on demand from the existing
+  tables; `src/lib/insights.shared.ts` holds the payload types, saved filters,
+  timezone-independent helpers and formatters shared with the browser.
+- `/insights` renders filters, metric cards, accessible SVG charts (throughput
+  bars, lead/cycle scatter, burn-up), a task table, and project, cycle,
+  milestone, Agent/token and automation panels, with empty/loading/error and
+  partial-history states.
+- A report can be saved as a shared workspace view through U-09's `task_views`
+  table (`definition.insight`), copied as a link, or exported as CSV from the
+  same rows the table renders.
+- Raw data used: `issues` (status, assignees, claim, created/updated/deleted,
+  estimate, cycle/milestone, delegation), `events` (status and review),
+  `comments` (review decisions), `blockers`, `agent_runs` / `agent_usage`,
+  `automation_runs`, `cycles`, `project_milestones`.
+- `check-insights-metrics.ts` is a hand-computed fixture; `check-insights-export.ts`
+  proves CSV shape and access. Both run under `npm run check:harness`.
+- No snapshot table: on-demand aggregation fits the workspace size. The page
+  clamps a range to one year and reports when the newest 5,000 tasks were the
+  scan (it does not silently present a partial total as complete). If a real
+  workspace outgrows that budget, `insight_daily` remains the documented next
+  step.
 
 ## Researched best practice
 
@@ -189,3 +199,53 @@ lists, not a separate query language.
 - New `src/components/insights/` (metric cards, charts, filters, table).
 - Workspace/project/agent page wiring; CSV export route.
 - `src/lib/i18n/zh.ts`, README, new checks.
+
+
+## Implementation record (2026-11-06)
+
+Branch `feat/insights`, three feature commits plus checks/docs:
+`feat(insights): on-demand metrics aggregation layer`,
+`feat(insights): workspace insights page with charts and panels`,
+`feat(insights): shared reports, copy link and CSV export`.
+
+Decisions as implemented:
+
+1. Cycle time starts at the first `in_progress` (or creation when a task starts
+   in progress); lead time starts at creation. Claiming is not part of either.
+2. Sub-tasks count as separate tasks (`metrics.subtaskCreated` shows the share).
+3. On demand only; no `insight_daily`. The scan cap and the table cap are
+   explicit `partial` notices.
+4. Task-flow metrics first; Agent/token and automation panels ship in the same
+   PR after them.
+5. Reports are shared with workspace members through `task_views`; a personal
+   view is not a copyable report link. No guest or external sharing.
+6. CSV only for v1.
+7. Day boundaries use `TACOS_TIMEZONE` (fallback: server zone); canceled and
+   deleted tasks are excluded from time measures and deleted tasks from every
+   total. Week buckets start on Monday.
+8. Empty/loading/error/partial states are explicit. Charts are accessible SVG
+   (aria labels plus text summaries and legends) with no chart dependency;
+   filters have their own full-width row so they never squeeze the chart area
+   at 1100 or 640.
+
+Acceptance mapping:
+
+1. Metric cards and the table match `check-insights-metrics.ts`; the fixture
+   covers created/completed/canceled/WIP, lead, cycle, review latency, workload,
+   delegation, tokens and automation runs.
+2. Time measures come from status events; the fixture pins US Pacific and UTC
+   boundaries, DST midnights, a deleted task and a canceled task.
+3. Agent/usage and automation panels show data when present and a clear empty
+   state when `#79`/`#80` rows do not exist in the range.
+4. Save view, copy link and CSV export reuse U-09 permissions; the export
+   check proves a member's file excludes a project they cannot see, even when
+   the URL guesses its id.
+5. Project, cycle and milestone panels are computed from the same filtered
+   dataset as the workspace totals.
+6. Task lists ignore report rows (`listTaskViews` filters them), and the full
+   check harness plus build run before the PR.
+
+Not built (out of scope): query builder, custom formulas, forecasting,
+billing/USD reconciliation, scheduled email reports and external channels.
+Not tested by the implementer: real browser E2E and screenshots (the Lead runs
+those), and a wide-range performance profile on a production-sized database.

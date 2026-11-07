@@ -604,6 +604,7 @@ export function SettingsView({
               </Link>
             </>
           )}
+          {isAdmin && <Link className="text-small text-muted underline" href={`/${workspace.id}/settings/system`}>{t("System")}</Link>}
           <span className="rounded-full bg-elevated px-2 py-0.5 text-caption text-muted">
             {workspace.name}
           </span>
