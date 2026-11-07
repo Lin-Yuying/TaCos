@@ -24,7 +24,7 @@ State per item: `todo`, `pass` (commit plus cheap checks: `npx tsc --noEmit`, `n
 | 14 | Activity | Activity | pass |
 | 15 | Search page and palette | Search, SearchLanding, SearchNoResult, CommandPalette, CommandPaletteEmpty | pass |
 | 16 | Agent page | Agent, AgentSetup, AgentPermission, AgentModel, AgentSkills, ThreadMenu | pass |
-| 17 | Project overview and meta | Project, ProjectSelection, ProjectComments, ProjectHistory, ProjectAi, ProjectMenus, ProjectResource, NewProject | todo |
+| 17 | Project overview and meta | Project, ProjectSelection, ProjectComments, ProjectHistory, ProjectAi, ProjectMenus, ProjectResource, NewProject | pass |
 | 18 | Project tasks and timeline | ProjectTasks, ProjectTimeline, MilestoneEdit | todo |
 | 19 | Documents index | DocsIndex, DocsImport, DocsImportResult | todo |
 | 20 | Document page | Doc, DocUpdates, DocMenus, DocOptions, DocShare, WatchMenu, MoveDoc, DocComments, DocOutline, DocLinks, DocFind, AiEdit, ReviewChanges, RestoreConfirm, EditorMenus, EditorBlocks | todo |

@@ -92,7 +92,7 @@ function MetaLabel({ label, onHide }: { label: string; onHide: () => void }) {
       onClick={onHide}
       aria-label={t("Hide {section}", { section: label.toLowerCase() })}
       title={t("Hide {section}", { section: label.toLowerCase() })}
-      className="flex w-20 shrink-0 items-center gap-1 rounded text-left text-small leading-[22px] text-faint transition-colors hover:text-muted"
+      className="flex shrink-0 items-center gap-1 rounded text-left text-small leading-[22px] text-faint transition-colors hover:text-muted"
     >
       <ChevronDown size={11} className="shrink-0" />
       {label}
@@ -303,9 +303,9 @@ export function ProjectMeta({
   if (!showProperties && !showResources) return null;
 
   return (
-    <div className="mt-3 flex min-w-0 flex-col gap-2 text-body">
+    <div className="flex min-w-0 flex-col gap-4 text-body">
       {showProperties && (
-        <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5">
+        <div className="flex flex-col gap-2">
           <MetaLabel label={t("Properties")} onHide={() => rows.toggle("properties")} />
           <div className="flex min-w-0 flex-1 flex-wrap items-center gap-x-3 gap-y-1.5">
             {lead && (
@@ -441,7 +441,7 @@ export function ProjectMeta({
         </div>
       )}
       {showResources && (
-        <div className="flex flex-wrap items-start gap-x-3 gap-y-2">
+        <div className="flex flex-col gap-2">
           <MetaLabel label={t("Resources")} onHide={() => rows.toggle("resources")} />
           <div className="flex min-w-0 flex-1 flex-wrap items-center gap-1.5">
             {resources.map((resource) => {

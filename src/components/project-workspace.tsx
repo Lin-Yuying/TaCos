@@ -148,24 +148,6 @@ export function ProjectWorkspace({
 
         }}
         onToggleFavorite={toggleFavorite}
-        meta={
-          // Overview grants and resources are overview-only facts: without a grant the
-          // reader never saw these rows, so the header keeps it that way.
-          access.canView && tab==="overview" ? (
-            <ProjectMeta
-              workspaceId={workspaceId}
-              projectId={project.id}
-              createdBy={project.createdBy}
-              members={members}
-              workspaceMembers={workspaceMembers}
-              documents={documents}
-              resources={resources}
-              access={access}
-              grants={grants}
-              rows={metaRows}
-            />
-          ) : undefined
-        }
         metaMenu={
           access.canView && tab==="overview" ? (
             <MetaRowsMenu hidden={metaRows.hidden} onToggle={metaRows.toggle} />
@@ -173,18 +155,40 @@ export function ProjectWorkspace({
         }
       />
       {tab === "overview" ? (
-        <ProjectOverview
-          workspaceId={workspaceId}
-          project={project}
-          issues={issues}
-          pages={pages}
-          trashedTitles={trashedTitles}
-          access={access}
-          comments={comments}
-          edits={edits}
-          unseenDocEdits={unseenDocEdits}
-          currentUserId={currentUserId}
-        />
+        // Overview grants and resources are overview-only facts: without a grant the
+        // reader never sees this column.
+        <div className="@container flex min-h-0 min-w-0 flex-1 flex-col">
+          <div className="flex min-h-0 flex-1 flex-col @min-[800px]:flex-row">
+            <ProjectOverview
+              workspaceId={workspaceId}
+              project={project}
+              issues={issues}
+              pages={pages}
+              trashedTitles={trashedTitles}
+              access={access}
+              comments={comments}
+              edits={edits}
+              unseenDocEdits={unseenDocEdits}
+              currentUserId={currentUserId}
+            />
+            {access.canView && metaRows.hidden.length < 2 && (
+              <aside data-testid="project-properties" className="order-first max-h-[40%] shrink-0 overflow-y-auto border-b border-border p-4 @min-[800px]:order-none @min-[800px]:max-h-none @min-[800px]:w-[280px] @min-[800px]:border-b-0 @min-[800px]:border-l">
+                <ProjectMeta
+                  workspaceId={workspaceId}
+                  projectId={project.id}
+                  createdBy={project.createdBy}
+                  members={members}
+                  workspaceMembers={workspaceMembers}
+                  documents={documents}
+                  resources={resources}
+                  access={access}
+                  grants={grants}
+                  rows={metaRows}
+                />
+              </aside>
+            )}
+          </div>
+        </div>
       ) : tab === "timeline" ? (
         <ProjectTimeline
           workspaceId={workspaceId}

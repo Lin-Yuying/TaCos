@@ -1,7 +1,7 @@
 "use client";
 
 import type { ReactNode } from "react";
-import { PAGE_INSET, PAGE_TITLE } from "@/lib/page-chrome";
+import { PAGE_HEADER, PAGE_INSET, PAGE_TITLE } from "@/lib/page-chrome";
 import { Star } from "lucide-react";
 import { ProjectIcon } from "@/components/icons";
 import { Menu } from "@/components/menu";
@@ -36,7 +36,6 @@ export function ProjectHeader({
   onPickIcon,
   onTab,
   onToggleFavorite,
-  meta,
   metaMenu,
 }: {
   project: { id: string; name: string; color: string; icon: string | null };
@@ -52,7 +51,6 @@ export function ProjectHeader({
   onToggleFavorite: () => void;
   // Properties and Resources sit under the pills so the header reads top to bottom:
   // title, tabs, then what the project is made of.
-  meta?: ReactNode;
   // Restores a row the reader folded away; only rendered while one is hidden.
   metaMenu?: ReactNode;
 }) {
@@ -60,10 +58,8 @@ export function ProjectHeader({
   const workspaceId = useParams<{ workspaceId: string }>().workspaceId;
   const mark = <ProjectIcon color={project.color} icon={project.icon} size={22} />;
   return (
-    <header className={`shrink-0 border-b border-border pb-3 ${PAGE_INSET}`}>
-      {/* Every header row hangs from the card's own gutter, so the pills and the
-          properties line up under the icon rather than one column in. */}
-      <div className="flex min-h-[52px] items-center gap-2.5">
+    <header className={`${PAGE_HEADER} ${PAGE_INSET}`}>
+      <div className="flex min-w-0 items-center gap-2.5">
         {canPickIcon ? (
           <Menu
             width={232}
@@ -120,7 +116,7 @@ export function ProjectHeader({
           <Star size={15} className={favorite ? "fill-[#f5b21a]" : ""} />
         </button>
       </div>
-      <nav className="mt-2 flex items-center gap-1.5">
+      <nav className="flex flex-wrap items-center gap-1 @min-[720px]:mx-auto">
         {TABS.filter((item) => item.key !== "overview" || canViewOverview).map((item) => {
           const active = item.key === tab;
           return (
@@ -129,10 +125,10 @@ export function ProjectHeader({
               type="button"
               onClick={() => onTab(item.key)}
               aria-current={active ? "page" : undefined}
-              className={`flex items-center gap-1.5 rounded-full border px-3 py-1 text-small transition-colors ${
+              className={`flex items-center gap-1.5 rounded-md px-2.5 py-1 text-small transition-colors ${
                 active
-                  ? "border-transparent bg-elevated font-medium text-text"
-                  : "border-border text-muted hover:border-border-strong hover:text-text"
+                  ? "bg-elevated font-medium text-text"
+                  : "text-muted hover:text-text"
               }`}
             >
               {t(item.label)}
@@ -145,10 +141,9 @@ export function ProjectHeader({
             </button>
           );
         })}
-        {/* A folded properties row costs no height, so its way back lives here. */}
-        {metaMenu && <div className="ml-auto">{metaMenu}</div>}
       </nav>
-      {meta}
+      {/* A folded properties row costs no height, so its way back lives here. */}
+      {metaMenu && <div className="ml-auto">{metaMenu}</div>}
     </header>
   );
 }
