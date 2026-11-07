@@ -195,6 +195,7 @@ export function IssueLayout({
     () => selected.filter((id) => shownIds.has(id)),
     [selected, shownIds]
   );
+  const [columnsSlot, setColumnsSlot] = useState<HTMLElement | null>(null);
   const selection = useMemo<TaskSelection>(
     () => ({
       mode: selecting,
@@ -357,6 +358,7 @@ export function IssueLayout({
           saving={savingDisplay}
           error={displayError}
         />
+          {layout === "table" && <span ref={setColumnsSlot} className="contents" />}
         </>}
         trailing={<>
           {!serverQuery && shown.length !== issues.length && <span className="text-small tabular-nums text-faint">{`${shown.length} / ${issues.length}`}</span>}
@@ -395,6 +397,7 @@ export function IssueLayout({
           onViewChange={setView}
           properties={display.properties}
           selection={selection}
+          columnsSlot={columnsSlot}
         />
       ) : layout === "calendar" ? (
         <TaskCalendar workspaceId={workspaceId} issues={shown} />

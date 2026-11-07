@@ -5,6 +5,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { EntityRow } from "@/components/ui/entity-row";
 import { useScrollMemory } from "@/lib/ui/scroll-memory";
 import { useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { columnSizingFeature, columnResizingFeature, createColumnHelper, tableFeatures, useTable } from "@tanstack/react-table";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import { ArrowDown, ArrowUp } from "lucide-react";
@@ -66,6 +67,7 @@ export function TaskGrid({
   onViewChange,
   properties = ALL_PROPERTIES,
   selection,
+  columnsSlot,
 }: {
   workspaceId: string;
   currentUserId:string;
@@ -76,6 +78,8 @@ export function TaskGrid({
   onViewChange: (next: TaskView) => void;
   properties?: ViewProperty[];
   selection?: TaskSelection;
+  // Where the Columns menu goes: the toolbar, so the grid does not add a third row.
+  columnsSlot?: HTMLElement | null;
 }) {
   const t = useT();
   const [memberQuery,setMemberQuery]=useState("");
@@ -204,7 +208,7 @@ export function TaskGrid({
 
   return (
     <div data-task-grid ref={scroller} className="min-h-0 flex-1 overflow-auto text-small">
-      <div className="sticky left-0 flex border-b border-border bg-bg px-2 py-1"><Menu trigger={t("Columns")}>{()=> <div className="max-h-80 overflow-auto p-2 text-small">{columns.map(column=><div key={column.id} className="flex items-center gap-2 py-1"><label className="flex flex-1 gap-2"><input type="checkbox" checked={!settings.hidden.includes(String(column.id))} onChange={e=>setSettings(old=>({...old,hidden:e.target.checked?old.hidden.filter(id=>id!==column.id):[...old.hidden,String(column.id)]}))}/>{String(column.header)}</label><button aria-label={t("Move up")} onClick={()=>reorder(String(column.id),-1)}>↑</button><button aria-label={t("Move down")} onClick={()=>reorder(String(column.id),1)}>↓</button><button aria-pressed={settings.frozen.includes(String(column.id))} onClick={()=>setSettings(old=>({...old,frozen:old.frozen.includes(String(column.id))?old.frozen.filter(id=>id!==column.id):[...old.frozen,String(column.id)]}))}>{t("Freeze")}</button></div>)}<button onClick={()=>setSettings({sizes:{},hidden:[],order:[],frozen:[]})}>{t("Reset columns")}</button></div>}</Menu></div>
+      {columnsSlot&&createPortal(<Menu width={300} triggerClassName="flex items-center gap-1 rounded-md px-2 py-1 text-small text-muted transition-colors hover:bg-elevated hover:text-text" trigger={t("Columns")}>{()=> <div className="max-h-80 overflow-auto p-2 text-small">{columns.map(column=><div key={column.id} className="flex items-center gap-2 py-1"><label className="flex flex-1 gap-2"><input type="checkbox" checked={!settings.hidden.includes(String(column.id))} onChange={e=>setSettings(old=>({...old,hidden:e.target.checked?old.hidden.filter(id=>id!==column.id):[...old.hidden,String(column.id)]}))}/>{String(column.header)}</label><button type="button" className="rounded px-1 text-muted hover:bg-elevated hover:text-text" aria-label={t("Move up")} onClick={()=>reorder(String(column.id),-1)}>↑</button><button type="button" className="rounded px-1 text-muted hover:bg-elevated hover:text-text" aria-label={t("Move down")} onClick={()=>reorder(String(column.id),1)}>↓</button><button type="button" className="rounded px-1 text-muted hover:bg-elevated hover:text-text aria-pressed:bg-elevated aria-pressed:text-text" aria-pressed={settings.frozen.includes(String(column.id))} onClick={()=>setSettings(old=>({...old,frozen:old.frozen.includes(String(column.id))?old.frozen.filter(id=>id!==column.id):[...old.frozen,String(column.id)]}))}>{t("Freeze")}</button></div>)}<button type="button" className="mt-1 w-full rounded border-t border-border px-1 pt-2 text-left text-muted hover:text-text" onClick={()=>setSettings({sizes:{},hidden:[],order:[],frozen:[]})}>{t("Reset columns")}</button></div>}</Menu>,columnsSlot)}
       {error && <div className="sticky left-0 px-4 py-1 text-small text-danger">{t(error)}</div>}
       <div style={{ width, minWidth: "100%" }}>
         {table.getHeaderGroups().map((group) => (
