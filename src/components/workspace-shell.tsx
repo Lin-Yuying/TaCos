@@ -23,6 +23,7 @@ import { createPortal } from "react-dom";
 import {
   Activity,
   CalendarRange,
+  ChartNoAxesColumn,
   Hand,
   Bot,
   Boxes,
@@ -304,6 +305,16 @@ function SidebarNav({
           testId="nav-planning"
         >
           {t("Planning")}
+        </NavItem>
+      </div>
+      <div className="pb-1">
+        <NavItem
+          href={`/${workspaceId}/insights`}
+          active={pathname.startsWith(`/${workspaceId}/insights`)}
+          icon={<ChartNoAxesColumn size={14} />}
+          testId="nav-insights"
+        >
+          {t("Insights")}
         </NavItem>
       </div>
       <div className="pb-1">
@@ -1044,6 +1055,14 @@ function SidebarRail({
           icon={<CalendarRange size={16} />}
           labeled={labeled}
           testId="nav-planning"
+        />
+        <RailLink
+          href={`/${workspaceId}/insights`}
+          active={pathname.startsWith(`/${workspaceId}/insights`)}
+          label={t("Insights")}
+          icon={<ChartNoAxesColumn size={16} />}
+          labeled={labeled}
+          testId="nav-insights"
         />
         <RailLink
           href={`/${workspaceId}/search`}

@@ -44,11 +44,25 @@ import {
   normalizeInsightConfig,
   parseInsightSavedConfig,
   weekStartDay,
+  type InsightAgentPanel,
+  type InsightAssignee,
+  type InsightAutomationPanel,
+  type InsightAutomationRuleRow,
+  type InsightBurnupPoint,
+  type InsightCycleRow,
+  type InsightData,
+  type InsightMetrics,
+  type InsightMilestoneRow,
+  type InsightModelRow,
   type InsightNotice,
+  type InsightProjectRow,
+  type InsightRange,
   type InsightSavedConfig,
+  type InsightTaskRow,
+  type InsightTaskStatus,
+  type InsightWeekPoint,
+  type InsightWorkloadRow,
 } from "@/lib/insights.shared";
-
-export type InsightTaskStatus = "todo" | "in_progress" | "done" | "canceled";
 
 const STATUSES: InsightTaskStatus[] = ["todo", "in_progress", "done", "canceled"];
 
@@ -61,212 +75,6 @@ const REVIEW_EVENT_TYPES = [
 
 const DAY_MS = 86_400_000;
 
-export type InsightRange = { from: string; to: string; timeZone: string };
-
-export type InsightAssignee = {
-  id: string;
-  displayName: string;
-  avatar: string | null;
-};
-
-export type InsightTaskRow = {
-  id: string;
-  identifier: string;
-  title: string;
-  status: InsightTaskStatus;
-  statusAtEnd: InsightTaskStatus;
-  projectId: string;
-  projectName: string;
-  projectColor: string;
-  assignees: InsightAssignee[];
-  createdAt: string;
-  completedAt: string | null;
-  canceledAt: string | null;
-  leadDays: number | null;
-  cycleDays: number | null;
-  delegatedAgentId: string | null;
-  delegatedAgentName: string | null;
-  estimate: number | null;
-  parentId: string | null;
-  createdInRange: boolean;
-  completedInRange: boolean;
-  canceledInRange: boolean;
-  activeAtEnd: boolean;
-  blocked: boolean;
-};
-
-export type InsightMetrics = {
-  created: number;
-  completed: number;
-  canceled: number;
-  wip: number;
-  leadTimeDays: number | null;
-  leadSample: number;
-  cycleTimeDays: number | null;
-  cycleSample: number;
-  reviewLatencyHours: number | null;
-  reviewSample: number;
-  throughputPerWeek: number;
-  delegationCoverage: number | null;
-  delegatedCompleted: number;
-  delegatedActive: number;
-  blockedActive: number;
-  blockersReported: number;
-  subtaskCreated: number;
-  reviewApprovals: number;
-  reviewChanges: number;
-};
-
-export type InsightWeekPoint = {
-  weekStart: string;
-  created: number;
-  completed: number;
-  canceled: number;
-};
-
-export type InsightBurnupPoint = {
-  day: string;
-  scope: number;
-  completed: number;
-  canceled: number;
-};
-
-export type InsightWorkloadRow = {
-  assigneeId: string | null;
-  name: string;
-  avatar: string | null;
-  active: number;
-  completed: number;
-  estimateActive: number | null;
-  unsizedActive: number;
-};
-
-export type InsightProjectRow = {
-  projectId: string;
-  name: string;
-  color: string;
-  icon: string | null;
-  created: number;
-  completed: number;
-  canceled: number;
-  active: number;
-  leadTimeDays: number | null;
-  cycleTimeDays: number | null;
-};
-
-export type InsightCycleRow = {
-  id: string;
-  number: number;
-  name: string;
-  startsAt: string;
-  endsAt: string;
-  status: string;
-  tasks: number;
-  doneNow: number;
-  completed: number;
-  active: number;
-  canceled: number;
-  estimate: number;
-  unsized: number;
-};
-
-export type InsightMilestoneRow = {
-  id: string;
-  projectId: string;
-  projectName: string;
-  projectColor: string;
-  name: string;
-  targetDate: string | null;
-  tasks: number;
-  doneNow: number;
-  active: number;
-  completed: number;
-  overdue: number;
-};
-
-export type InsightAgentUsageRow = {
-  agentId: string | null;
-  agentName: string;
-  runs: number;
-  usageRuns: number;
-  inputTokens: number;
-  outputTokens: number;
-  cachedTokens: number;
-  reasoningTokens: number;
-  totalTokens: number;
-};
-
-export type InsightModelRow = {
-  engine: string;
-  model: string;
-  usageRuns: number;
-  totalTokens: number;
-};
-
-export type InsightAgentPanel = {
-  available: boolean;
-  usageAvailable: boolean;
-  runs: number;
-  done: number;
-  failed: number;
-  cancelled: number;
-  running: number;
-  review: number;
-  completionRate: number | null;
-  delegatedCompleted: number;
-  delegatedActive: number;
-  coverage: number | null;
-  inputTokens: number;
-  outputTokens: number;
-  cachedTokens: number;
-  reasoningTokens: number;
-  totalTokens: number;
-  byAgent: InsightAgentUsageRow[];
-  byModel: InsightModelRow[];
-  bySource: { source: string; usageRuns: number; totalTokens: number }[];
-};
-
-export type InsightAutomationRuleRow = {
-  ruleId: string;
-  ruleName: string;
-  runs: number;
-  failures: number;
-  success: number;
-};
-
-export type InsightAutomationPanel = {
-  available: boolean;
-  scopedToViewer: boolean;
-  runs: number;
-  success: number;
-  partial: number;
-  failed: number;
-  running: number;
-  failureRate: number | null;
-  medianDurationMs: number | null;
-  byRule: InsightAutomationRuleRow[];
-};
-
-export type InsightData = {
-  range: InsightRange;
-  filters: InsightSavedConfig;
-  taskFiltersActive: boolean;
-  metrics: InsightMetrics;
-  weeks: InsightWeekPoint[];
-  burnup: InsightBurnupPoint[];
-  workload: InsightWorkloadRow[];
-  projects: InsightProjectRow[];
-  cycles: InsightCycleRow[];
-  milestones: InsightMilestoneRow[];
-  agents: InsightAgentPanel;
-  automations: InsightAutomationPanel;
-  rows: InsightTaskRow[];
-  rowTotal: number;
-  partial: boolean;
-  notices: InsightNotice[];
-  generatedAt: string;
-};
-
 export type AggregateInsightOptions = {
   // Tests pin the zone; the page uses the workspace's configured display zone.
   timeZone?: string;
@@ -274,6 +82,21 @@ export type AggregateInsightOptions = {
   maxTasks?: number;
   maxRows?: number;
 };
+
+export type {
+  InsightAgentPanel,
+  InsightAutomationPanel,
+  InsightBurnupPoint,
+  InsightCycleRow,
+  InsightData,
+  InsightMilestoneRow,
+  InsightProjectRow,
+  InsightRange,
+  InsightTaskRow,
+  InsightTaskStatus,
+  InsightWeekPoint,
+  InsightWorkloadRow,
+} from "@/lib/insights.shared";
 
 // ---------------------------------------------------------------------------
 // Timezone boundaries
@@ -783,8 +606,11 @@ export async function aggregateInsights(
       projectColor: project?.color ?? "#8b5cf6",
       assignees: assigneesByIssue.get(issue.id) ?? [],
       createdAt: issue.createdAt,
+      createdDay: zoneDayOf(issue.createdAt, timeZone),
       completedAt: completionAt,
+      completedDay: completionAt ? zoneDayOf(completionAt, timeZone) : null,
       canceledAt: canceledInRange ? lastTerminalAt : null,
+      canceledDay: canceledInRange && lastTerminalAt ? zoneDayOf(lastTerminalAt, timeZone) : null,
       leadDays: leadDays === null ? null : Math.round(leadDays * 100) / 100,
       cycleDays: cycleDays === null ? null : Math.round(cycleDays * 100) / 100,
       delegatedAgentId: issue.delegatedAgentId,
