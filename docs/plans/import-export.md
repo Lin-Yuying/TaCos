@@ -1,7 +1,9 @@
 # U-05: Import, export and data portability
 
-Status: plan for a future PR. No implementation started. Written 2026-11-06
-(loop round 4).
+Status: implemented on `feat/import-export` (2026-11-06). Four commits: canonical export,
+import, Settings/permissions UI, and checks/docs. The Lead still runs the browser E2E and
+the 1440/1100 screenshot review (UI gate, decision 7). See "Implementation status" at the
+end.
 
 ## Why
 
@@ -159,3 +161,40 @@ moves. Import also unlocks migration from Notion/Linear/Markdown.
 - `src/app/api/export/*`, `src/app/api/import/*`; CLI script.
 - Settings → Export/Import pages; progress UI.
 - `src/lib/i18n/zh.ts`, README/runbook, new checks.
+
+## Implementation status
+
+| Item | State | Evidence |
+| --- | --- | --- |
+| Canonical ZIP: `workspace.json`, `manifest.json`, `tasks.csv`, Markdown docs, attachment bytes/manifest, schema version | done | `check-export-roundtrip.ts` reads every entry and imports it |
+| No secrets in the archive; API keys as names/scopes/projects only | done | `check-export-secrets.ts` scans password/hash, key/hash, model key, AI key, runner token, session and join code |
+| Streaming export (issues/comments paged, docs/attachments streamed), attachment cap/opt-out | done | `src/lib/export/workspace.ts`; zip reads verified with `unzip -t`; opt-out asserted in the roundtrip check |
+| In-process export job, progress, owner/admin permission, audit event | done | `transfer_jobs` row + polling route; `export_started/completed/failed` events |
+| Signed download URL with TTL | done | HMAC token, 15 minutes, re-checks session and workspace role; token scoped to one job |
+| Export API and CLI (`npm run export -- <workspace>`) | done | `POST/GET /api/export/workspace`, `POST` records the actor; CLI writes the same archive and `cli:export` audit |
+| Markdown folder / Notion export import with page tree, database CSV, relative images | done | `check-import-markdown.ts` (nested page, CSV, image rewrite, unsupported file, conflicts/unmapped) |
+| Task CSV import with header aliases, quoted cells, delimiter detection, parents, unmapped fields | done | `check-import-csv.ts` |
+| Canonical export import (round trip) | done | `check-export-roundtrip.ts` compares projects, tasks, fields, labels, comments, page comments, dependencies, documents, attachments and cover |
+| Dry-run preview: counts, conflicts, unmapped fields, warnings, ignored sections | done | Preview endpoint parses without writing; UI shows each list; tests assert preview counts equal applied counts |
+| Import into a new workspace only, hidden until complete, full rollback on failure | done | `apply.ts` sets `deleted_at` while building; rollback test forces an insert failure and asserts no workspace/task/document rows remain |
+| Idempotent rerun: fingerprint returns the first workspace | done | Roundtrip and Markdown checks create a completed job and assert no second workspace |
+| Attachments default on with cap and opt-out | done | `TACOS_TRANSFER_ATTACHMENT_MAX_MB` (1024 default); opt-out/cap asserted in both import checks |
+| Settings → Export/Import pages with progress, preview, errors/rollback and stable testids | done | `src/components/export-view.tsx`, `import-view.tsx`; testids listed in the runbook; 1440/1100 review pending Lead |
+| Import API for automation | not built | Decision 5. Preview/apply routes are session-scoped UI endpoints, not a public contract |
+| Notion block/database property fidelity, Linear/Asana importers, continuous sync, real-time backup | not built | Out of scope |
+| Browser E2E and 1440/1100 screenshots | pending Lead | UI gate, decision 7 |
+
+Implementation notes:
+
+- Canonical import was added beyond the "Markdown + CSV first" decision because
+  acceptance criterion 2 requires importing an export into a fresh instance. It uses the
+  same planner and apply path as the Markdown importer.
+- Saved views, automation rules and API keys are present in `workspace.json` for future
+  consumers but are not recreated by import; the preview lists them under "Not imported".
+  API keys cannot be recreated without their secrets, by design.
+- Task comments and page comments are inserted as historical rows without firing new
+  notifications; the new workspace's Inbox is cleared after a successful import.
+- The ZIP implementation covers standard 32-bit STORE/DEFLATE archives; ZIP64 is
+  rejected with an explicit error (4 GB / 65,535-entry limit).
+- The import upload is bounded by `TACOS_IMPORT_MAX_MB` (256 MB default). The preview
+  endpoint is internal and session-authenticated; no `/api/v1` import surface exists.

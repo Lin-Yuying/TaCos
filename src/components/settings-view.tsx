@@ -592,8 +592,18 @@ export function SettingsView({
   return (
     <div ref={root} className={`flex-1 overflow-y-auto pb-10 pt-6 ${PAGE_INSET}`}>
       <SettingsNavigation root={root}/><div className="space-y-10">
-        <header className="flex items-center gap-3">
+        <header className="flex flex-wrap items-center gap-3">
           <h1 className="text-lead font-semibold">{t("Workspace settings")}</h1><Link className="text-small text-muted underline" href={`/${workspace.id}/settings/storage`}>{t("Storage and recovery")}</Link>
+          {(isAdmin || isOwner) && (
+            <>
+              <Link className="text-small text-muted underline" href={`/${workspace.id}/settings/export`} data-testid="settings-export-link">
+                {t("Export")}
+              </Link>
+              <Link className="text-small text-muted underline" href={`/${workspace.id}/settings/import`} data-testid="settings-import-link">
+                {t("Import")}
+              </Link>
+            </>
+          )}
           {isAdmin && <Link className="text-small text-muted underline" href={`/${workspace.id}/settings/system`}>{t("System")}</Link>}
           <span className="rounded-full bg-elevated px-2 py-0.5 text-caption text-muted">
             {workspace.name}
