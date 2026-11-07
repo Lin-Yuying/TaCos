@@ -99,9 +99,8 @@ export function AdminConsole({
 
   async function remove(member: SiteMember) {
     const ok = await confirm(
-      t("Delete {name} (@{username})?", { name: member.displayName, username: member.username }) +
-        "\n\n" +
-        t("Their issues stay but become unassigned, and their comments stay without an author.")
+      t("Delete {name} (@{username})?", { name: member.displayName, username: member.username }),
+      { body: t("Their issues stay but become unassigned, and their comments stay without an author."), action: t("Delete") }
     );
     if (!ok) return;
     const result = await safeAction(async()=>adminDeleteMemberAction(member.id));

@@ -172,7 +172,7 @@ export function TaskViews({
   }
 
   async function remove(view: TaskViewSummary) {
-    if (!(await confirm(t("Delete the view “{name}”?", { name: view.name })))) return;
+    if (!(await confirm(t("Delete the view “{name}”?", { name: view.name }), { action: t("Delete") }))) return;
     await act(async () => {
       const result = await deleteTaskViewAction(workspaceId, view.id);
       if (result.ok && active?.id === view.id) onSelect(null);

@@ -65,17 +65,17 @@ export function TrashView({
   }
   async function restoreProject(project:TrashedProject) {await perform(project.id,()=>restoreProjectAction(workspaceId,project.id),`/${workspaceId}/projects/${project.id}`);}
   async function purgeProject(project:TrashedProject) {
-    if(!await confirm(t('Delete "{name}" and its {count} tasks permanently? This cannot be undone.',{name:project.name,count:project.issueCount})))return;
+    if(!await confirm(t('Delete "{name}" and its {count} tasks permanently?',{name:project.name,count:project.issueCount}),{ body: t("This cannot be undone."), action: t("Delete permanently") }))return;
     await perform(project.id,()=>purgeProjectAction(workspaceId,project.id));
   }
   async function restoreIssue(issue:TrashedIssue) {await perform(issue.id,()=>restoreIssueAction(workspaceId,issue.id),entityHref(workspaceId,{kind:"task",id:issue.id}));}
   async function purgeIssue(issue:TrashedIssue) {
-    if(!await confirm(t('Delete "{name}" permanently? This cannot be undone.',{name:issue.title})))return;
+    if(!await confirm(t('Delete "{name}" permanently?',{name:issue.title}),{ body: t("This cannot be undone."), action: t("Delete permanently") }))return;
     await perform(issue.id,()=>purgeIssueAction(workspaceId,issue.id));
   }
   async function restoreDoc(doc:TrashedPage) {await perform(doc.id,()=>restorePageAction(workspaceId,doc.id),entityHref(workspaceId,{kind:"document",id:doc.id}));}
   async function purgeDoc(doc:TrashedPage) {
-    if(!await confirm(t('Delete "{name}" and everything inside it permanently? This cannot be undone.',{name:doc.title})))return;
+    if(!await confirm(t('Delete "{name}" and everything inside it permanently?',{name:doc.title}),{ body: t("This cannot be undone."), action: t("Delete permanently") }))return;
     await perform(doc.id,()=>purgePageAction(workspaceId,doc.id));
   }
 

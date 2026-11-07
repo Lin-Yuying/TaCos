@@ -45,7 +45,7 @@ export function LabelsManager({
   }
 
   async function remove(label: LabelWithCount) {
-    if (!await confirm(t('Delete label "{name}"? It will be removed from all issues.', { name: label.name }))) return;
+    if (!await confirm(t('Delete label "{name}"?', { name: label.name }), { body: t("It will be removed from all issues."), action: t("Delete") })) return;
     if(busy)return;setBusy(true);try{const result=await safeAction(async()=>deleteLabelAction(workspaceId,label.id));if(!result.ok)setError(result.error);else router.refresh();}catch{setError("Could not save. Retry.");}finally{setBusy(false);}
   }
 

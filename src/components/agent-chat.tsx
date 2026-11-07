@@ -795,9 +795,10 @@ function SkillManager({
     if (
       !await confirm(
         t(
-          'Delete the skill "{name}"? Its folder is removed from this machine, so every workspace using it loses it.',
+          'Delete the skill "{name}"?',
           { name: skillToken(skill) }
-        )
+        ),
+        { body: t("Its folder is removed from this machine, so every workspace using it loses it."), action: t("Delete") }
       )
     )
       return;
@@ -2295,7 +2296,7 @@ function Conversation({
             </p>
           )}
           {error && <TurnError error={error} />}
-          {failedText!==null&&<div className="mb-2 flex gap-3 text-small"><button disabled={busy} onClick={()=>{setInput(failedText);box.current?.focus();}}>{t("Edit failed message")}</button>{failedAttachments.length>0&&<span>{failedAttachments.map(file=>file.name).join(", ")}</span>}{!failedAccepted&&<button disabled={busy} onClick={()=>void (async()=>{if(await confirm(t("Send this request again? Check the conversation first; the previous request may already have run.")))await send(failedText,failedAttachments);})()}>{t("Retry")}</button>}{failedAccepted&&<span>{t("The request started. Review its results before sending another request.")}</span>}<button onClick={()=>void navigator.clipboard.writeText(failedText).then(()=>toast(t("Copied"))).catch(()=>toast(t("Could not copy the link")))}>{t("Copy")}</button></div>}
+          {failedText!==null&&<div className="mb-2 flex gap-3 text-small"><button disabled={busy} onClick={()=>{setInput(failedText);box.current?.focus();}}>{t("Edit failed message")}</button>{failedAttachments.length>0&&<span>{failedAttachments.map(file=>file.name).join(", ")}</span>}{!failedAccepted&&<button disabled={busy} onClick={()=>void (async()=>{if(await confirm(t("Send this request again?"),{ body: t("Check the conversation first; the previous request may already have run."), action: t("Send again"), tone: "primary" }))await send(failedText,failedAttachments);})()}>{t("Retry")}</button>}{failedAccepted&&<span>{t("The request started. Review its results before sending another request.")}</span>}<button onClick={()=>void navigator.clipboard.writeText(failedText).then(()=>toast(t("Copied"))).catch(()=>toast(t("Could not copy the link")))}>{t("Copy")}</button></div>}
           <Composer
             workspaceId={workspaceId}
             value={input}

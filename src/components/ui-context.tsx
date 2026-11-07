@@ -15,6 +15,7 @@ import { PERSONAL_STATE_CHANGED, type PersonalPin } from "@/lib/ui/entity-action
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { exportLocalDrafts, useStoredJson } from "@/lib/use-stored-json";
 import { ConfirmDialog, type ConfirmOptions } from "@/components/ui/confirmation";
+import { X } from "lucide-react";
 import { useT } from "@/components/i18n-context";
 import type { Priority, Status } from "@/lib/constants";
 
@@ -215,6 +216,7 @@ export function UIProvider({
   const [layout, setLayoutState] = useStoredJson<IssueLayout>(layoutKey, "list");
   const [toasts, setToasts] = useState<{ id: number; message: string; action?: ToastAction }[]>([]);
   const toastSeq = useRef(0);
+  const [storageFull, setStorageFull] = useState(false);
 
   const toast = useCallback((message: string, action?: ToastAction) => {
     const id = ++toastSeq.current;
@@ -226,10 +228,10 @@ export function UIProvider({
   // Native history participates in Next navigation without reloading the list.
   useEffect(() => { setOpenIssueId(params.get("issue"));setOpenPageId(params.get("issue")?null:params.get("doc")); }, [params]);
   useEffect(() => {
-    const failed = () => toast(t("Local storage is full. Keep this page open and copy your draft."),{label:t("Export"),run:()=>exportLocalDrafts(scope)});
+    const failed = () => setStorageFull(true);
     window.addEventListener("tacos:storage-error", failed);
     return () => window.removeEventListener("tacos:storage-error", failed);
-  }, [t, toast,scope]);
+  }, []);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -296,6 +298,13 @@ export function UIProvider({
       {children}
       <ConfirmDialog message={confirmation?.message ?? null} options={confirmation?.options} onFinish={(ok) => { confirmation?.resolve(ok); setConfirmation(null); }} />
       <div className="pointer-events-none fixed bottom-6 left-1/2 z-50 flex -translate-x-1/2 flex-col items-center gap-1.5">
+        {storageFull && (
+          <div role="alert" className="pointer-events-auto flex w-max max-w-[92vw] items-center gap-2 rounded-lg border border-border bg-bg px-3 py-2 text-small text-text shadow-[0_6px_20px_rgba(0,0,0,0.12)]">
+            <span className="min-w-0 flex-1">{t("Local storage is full. Keep this page open and copy your draft.")}</span>
+            <button type="button" onClick={() => exportLocalDrafts(scope)} className="shrink-0 rounded-md border border-border px-2 py-1 text-small text-muted transition-colors hover:bg-elevated hover:text-text">{t("Export")}</button>
+            <button type="button" aria-label={t("Close")} onClick={() => setStorageFull(false)} className="shrink-0 rounded-md p-1 text-faint transition-colors hover:bg-elevated hover:text-text"><X size={13} /></button>
+          </div>
+        )}
         {toasts.map((entry) => (
           <div
             key={entry.id}

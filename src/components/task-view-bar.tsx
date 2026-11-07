@@ -98,6 +98,25 @@ function inputType(key: string, fields: TaskField[]): string {
   return type === "date" ? "date" : type === "number" ? "number" : "text";
 }
 
+/** Reads the active filters as words, for the "nothing matches" state. */
+export function filterSummary(
+  view: TaskView,
+  fields: TaskField[],
+  issues: IssueWithLabels[],
+  t: (text: string) => string,
+  choices?:{projects:string[];members:{id:string;displayName:string}[]}
+): string {
+  return view.filters
+    .map((filter) => {
+      const field = fields.find((candidate) => fieldKey(candidate.id) === filter.key);
+      const name = field?.name ?? t((BUILTIN_LABEL as Record<string, string>)[filter.key] ?? filter.key);
+      if (filter.op === "empty" || filter.op === "not_empty") return `${name} ${t(OP_LABEL[filter.op])}`;
+      const value = choicesFor(filter.key, fields, issues, t, choices)?.find((choice) => choice.value === filter.value)?.label ?? filter.value ?? "";
+      return `${name} ${t(OP_LABEL[filter.op])} ${value}`;
+    })
+    .join("; ");
+}
+
 export function TaskViewBar({
   workspaceId,
   view,
@@ -171,7 +190,7 @@ export function TaskViewBar({
   async function removeField(id: string) {
     const impact = await taskFieldImpactAction(workspaceId,id);
     if(!impact.ok){setError(impact.error);return;}
-    if(!await confirm(t("Disable this field on {count} tasks? Values are kept and can be restored.",{count:impact.data})))return;
+    if(!await confirm(t("Disable this field on {count} tasks?",{count:impact.data}),{ body: t("Values are kept and can be restored."), action: t("Disable") }))return;
     const result = await deleteTaskFieldAction(workspaceId, id);
     if (result.ok) {onFieldsChanged();toast(t("Field disabled"),{label:t("Undo"),run:async()=>{const restored=await restoreTaskFieldAction(workspaceId,id);if(!restored.ok)setError(restored.error);else onFieldsChanged();}});}
     else setError(result.error);

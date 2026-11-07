@@ -248,7 +248,7 @@ export function AutomationSettingsSection({
 
   async function remove(rule: AutomationRuleView) {
     if (busy) return;
-    if (!(await confirm(t("Delete the rule “{name}”? Its run log stays.", { name: rule.name })))) {
+    if (!(await confirm(t("Delete the rule “{name}”?", { name: rule.name }), { body: t("Its run log stays."), action: t("Delete") }))) {
       return;
     }
     setBusy(true);

@@ -218,7 +218,7 @@ export function NewIssueDialog({ workspaceId }: { workspaceId: string }) {
   }
 
   async function removeTemplate(template: TaskTemplate) {
-    if (!(await confirm(t("Delete the template “{name}”?", { name: template.name })))) return;
+    if (!(await confirm(t("Delete the template “{name}”?", { name: template.name }), { action: t("Delete") }))) return;
     const result = await deleteTaskTemplateAction(workspaceId, template.id);
     if (result.ok) setTemplates((current) => current.filter((item) => item.id !== template.id));
     else setError(result.error);

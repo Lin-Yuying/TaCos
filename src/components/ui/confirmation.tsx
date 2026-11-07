@@ -22,7 +22,7 @@ export function ConfirmDialog({ message, options, onFinish }: { message: string 
           <X size={14} />
         </button>
       </div>
-      {options?.body && <p className="px-4 pb-3 text-body text-muted">{options.body}</p>}
+      {options?.body && <p className="whitespace-pre-line px-4 pb-3 text-body text-muted">{options.body}</p>}
       <div className="flex justify-end gap-2 border-t border-border px-4 py-3">
         <button type="button" autoFocus onClick={() => onFinish(false)} className="rounded-md border border-border px-3 py-1.5 text-small text-muted transition-colors hover:text-text">
           {t("Cancel")}

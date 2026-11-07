@@ -213,7 +213,7 @@ export function DocPageView({
 
   async function useTheirs() {
     if (!conflict) return;
-    if (!(await confirm(t("Discard your unsaved text?")))) return;
+    if (!(await confirm(t("Discard your unsaved text?"), { action: t("Discard") }))) return;
     revision.current = conflict.revision;
     conflicted.current = false;
     pending.current = null;
@@ -304,7 +304,7 @@ export function DocPageView({
   async function commentAction(work:()=>Promise<{ok:boolean;data?:PageComment[];error?:string}>):Promise<boolean>{if(commentRunning.current)return false;commentRunning.current=true;setCommentBusy(true);try{const result=await work();if(!result.ok){setCommentsError(result.error??"Could not save. Retry.");return false;}if(result.data)mergeComments(result.data);setCommentsError(null);return true;}catch{setCommentsError("Could not save. Retry.");return false;}finally{commentRunning.current=false;setCommentBusy(false);}}
   async function addComment(body:string,parentId?:string){if(!body.trim())return false;const ok=await commentAction(()=>addPageCommentAction(workspaceId,page.id,{body,anchor:parentId?null:draftAnchor,parentId}));if(ok)setDraftAnchor(null);return ok;}
   async function resolveComment(id:string,resolved:boolean){await commentAction(()=>setPageCommentResolvedAction(workspaceId,page.id,id,resolved));}
-  async function removeComment(id:string){if(!await confirm(t("Delete this comment? You can restore it here.")))return;await commentAction(()=>removePageCommentAction(workspaceId,page.id,id));}
+  async function removeComment(id:string){if(!await confirm(t("Delete this comment?"), { body: t("You can restore it here."), action: t("Delete") }))return;await commentAction(()=>removePageCommentAction(workspaceId,page.id,id));}
 
   async function saveTitle() {
     const next = title.trim();
@@ -365,7 +365,7 @@ export function DocPageView({
   }
 
   async function toggleShared() {
-    if(!await confirm(t("Change sharing for this document and all its children?")))return;
+    if(!await confirm(t("Change sharing for this document and all its children?"), { action: t("Change sharing"), tone: "primary" }))return;
     const result = await setPageSharedAction(workspaceId, page.id, !shared);
     if (!result.ok) {
       setError(result.error);
@@ -376,7 +376,7 @@ export function DocPageView({
   }
 
   async function removePage() {
-    if (!(await confirm(t("Move “{title}” and everything inside it to the Trash?", { title: page.title })))) return;
+    if (!(await confirm(t("Move “{title}” to Trash?", { title: page.title }), { body: t("Child pages move with it. You can restore it from the Trash."), action: t("Move to Trash") }))) return;
     const result = await deletePageAction(workspaceId, page.id);
     if (!result.ok) {
       setError(result.error);

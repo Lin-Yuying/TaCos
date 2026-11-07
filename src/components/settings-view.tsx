@@ -396,7 +396,7 @@ export function SettingsView({
 
   async function rotateKey(key: ApiKeyRecord) {
     if (rotatingKeyId) return;
-    if (!await confirm(t('Rotate key "{name}"? The old key stops working immediately.', { name: key.name }))) return;
+    if (!await confirm(t('Rotate key "{name}"?', { name: key.name }), { body: t("The old key stops working immediately."), action: t("Rotate") })) return;
     setRotatingKeyId(key.id);
     const result = await safeAction(async()=>rotateApiKeyAction(workspace.id, key.id));
     setRotatingKeyId(null);
@@ -410,7 +410,7 @@ export function SettingsView({
   }
 
   async function revokeKey(key: ApiKeyRecord) {
-    if (!await confirm(t("Revoke key \"{name}\"? Agents using it will lose access.", { name: key.name }))) return;
+    if (!await confirm(t("Revoke key \"{name}\"?", { name: key.name }), { body: t("Agents using it will lose access."), action: t("Revoke") })) return;
     try{const result=await safeAction(async()=>revokeApiKeyAction(workspace.id,key.id));if(!result.ok)setKeyError(result.error);else router.refresh();}catch{setKeyError("Could not save. Retry.");}
   }
 
@@ -446,9 +446,8 @@ export function SettingsView({
   async function removeProject(project: Project) {
     if (
       !await confirm(
-        t("Move project \"{name}\" and its issues to the Trash? You can restore it from there.", {
-          name: project.name,
-        })
+        t("Move project \"{name}\" and its issues to the Trash?", { name: project.name }),
+        { body: t("You can restore it from there."), action: t("Move to Trash") }
       )
     )
       return;
@@ -799,7 +798,7 @@ export function SettingsView({
                       type="button"
                       disabled={memberBusy.includes(member.id)}
                       onClick={async () => {
-                        if (await confirm(t("Remove {name} from this workspace?", { name: member.displayName }))) {
+                        if (await confirm(t("Remove {name} from this workspace?", { name: member.displayName }), { action: t("Remove") })) {
                           void memberChange(member.id,()=>removeMemberAction(workspace.id,member.id));
                         }
                       }}

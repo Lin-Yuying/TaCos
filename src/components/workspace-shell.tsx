@@ -640,9 +640,8 @@ function WorkspaceSwitcher({
   async function leaveWorkspace() {
     if (
       !await confirm(
-        t('Leave "{name}"? A workspace admin has to invite you back with a join code.', {
-          name: workspace.name,
-        })
+        t('Leave "{name}"?', { name: workspace.name }),
+        { body: t("A workspace admin has to invite you back with a join code."), action: t("Leave") }
       )
     )
       return;

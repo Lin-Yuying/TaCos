@@ -319,7 +319,7 @@ export function NotificationsView({
 
   async function clearAll() {
     if (!items.length) return;
-    if (!(await confirm(t("Clear all {count} notifications? You can undo this.", { count: items.length })))) return;
+    if (!(await confirm(t("Clear all {count} notifications?", { count: items.length }), { body: t("You can undo this."), action: t("Clear all") }))) return;
     const ids = items.map((item) => item.id);
     const ok = await perform("all", () => clearNotificationsAction(workspaceId));
     if (!ok) return;

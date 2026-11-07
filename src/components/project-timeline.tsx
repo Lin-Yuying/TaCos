@@ -167,7 +167,7 @@ export function ProjectTimeline({
 
   async function remove() {
     if (!draft?.id) return;
-    const ok = await confirm(t("Delete this milestone? Its tasks stay in the project and lose the milestone."));
+    const ok = await confirm(t("Delete this milestone?"), { body: t("Its tasks stay in the project and lose the milestone."), action: t("Delete") });
     if (!ok) return;
     setSaving(true);
     const result = await deleteMilestoneAction(workspaceId, projectId, draft.id);

@@ -20,7 +20,7 @@ import { IssueBoard } from "@/components/issue-board";
 import { IssueTable } from "@/components/issue-table";
 import { useUI, type IssueLayout as Layout, type TaskSelection } from "@/components/ui-context";
 import { TaskGrid } from "@/components/task-grid";
-import { TaskViewBar } from "@/components/task-view-bar";
+import { TaskViewBar, filterSummary } from "@/components/task-view-bar";
 import type { IssueWithLabels } from "@/lib/issues";
 import { BOARD_STATUS_ORDER, STATUS_ORDER } from "@/lib/constants";
 import {
@@ -382,7 +382,20 @@ export function IssueLayout({
         exportDisabled={pending}
       />
       {shown.length === 0 ? (
-        <EmptyState title={t("No tasks match this filter")} />
+        <EmptyState
+          title={t("No tasks match this filter")}
+          hint={view.filters.length > 0 ? t("Current filters: {filters}", { filters: filterSummary(view, fields, pageIssues, t, choices) }) : undefined}
+        >
+          {view.filters.length > 0 && (
+            <button
+              type="button"
+              onClick={() => setView({ ...view, filters: [] })}
+              className="rounded-md border border-border px-2 py-1 text-small text-muted transition-colors hover:bg-elevated hover:text-text"
+            >
+              {t("Clear filters")}
+            </button>
+          )}
+        </EmptyState>
       ) : layout === "board" ? (
         <IssueBoard issues={shown} workspaceId={workspaceId} currentUserId={currentUserId} manualOrder={isManualOrder(effectiveView)} groups={groups} grouping={grouping} properties={display.properties} selection={selection} />
       ) : layout === "table" ? (

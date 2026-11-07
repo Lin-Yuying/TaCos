@@ -75,6 +75,7 @@ export function ThreadMenu({
     if (
       await confirm(
         t("Delete “{title}” and its history?", { title: thread.title }),
+        { action: t("Delete") },
       )
     )
       await run(

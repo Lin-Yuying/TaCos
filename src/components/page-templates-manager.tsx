@@ -76,7 +76,7 @@ export function PageTemplatesManager({
   }
 
   async function remove(template: PageTemplate) {
-    if (!(await confirm(t("Delete the template “{name}”?", { name: template.name })))) return;
+    if (!(await confirm(t("Delete the template “{name}”?", { name: template.name }), { action: t("Delete") }))) return;
     setBusy(true);
     setError(null);
     const result = await safeAction(async () => deletePageTemplateAction(workspaceId, template.id));

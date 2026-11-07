@@ -94,7 +94,7 @@ export function DocShareMenu({
     };
   }, [workspaceId, pageId,attempt]);
 
-  async function change(work:()=>Promise<{ok:boolean;error?:string}>,done?:()=>void,confirmChange=true){if(running.current)return;running.current=true;setBusy(true);try{if(confirmChange&&!await confirm(t("Change permissions for this document and all its children?")))return;const result=await work();if(!result.ok){setError(result.error??"Could not save. Retry.");return;}done?.();setError(null);}catch{setError("Could not save. Retry.");}finally{running.current=false;setBusy(false);}}
+  async function change(work:()=>Promise<{ok:boolean;error?:string}>,done?:()=>void,confirmChange=true){if(running.current)return;running.current=true;setBusy(true);try{if(confirmChange&&!await confirm(t("Change permissions for this document and all its children?"),{ action: t("Change permissions"), tone: "primary" }))return;const result=await work();if(!result.ok){setError(result.error??"Could not save. Retry.");return;}done?.();setError(null);}catch{setError("Could not save. Retry.");}finally{running.current=false;setBusy(false);}}
   async function changeLevel(next:PageLevel){await change(()=>setPageShareLevelAction(workspaceId,pageId,next),()=>setLevel(next));}
   async function changePerson(userId:string,next:PageLevel|null){await change(()=>setPageMemberLevelAction(workspaceId,pageId,userId,next),()=>setPeople(current=>{const rest={...current};delete rest[userId];return next?{...rest,[userId]:next}:rest;}));}
 

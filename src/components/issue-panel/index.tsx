@@ -167,7 +167,7 @@ function IssuePanel({
   }
 
   async function remove() {
-    if (!detail || !(await confirm(t("Move “{title}” to Trash?", {title:detail.title})))) return;
+    if (!detail || !(await confirm(t("Move “{title}” to Trash?", {title:detail.title}), { body: t("You can restore it from the Trash."), action: t("Move to Trash") }))) return;
     const result = await deleteIssueAction(workspaceId, detail.id);
     if (!result.ok) {
       setError(result.error);

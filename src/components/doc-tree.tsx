@@ -279,7 +279,7 @@ export function DocTree({ workspaceId, pages }: { workspaceId: string; pages: Pa
       const preview=await previewPageMoveAction(workspaceId,pageId,target);
       if(!preview.ok){setError(preview.error);return;}
       const impact=preview.data;
-      if(impact.requiresConfirmation&&!(await confirm(t("Move this document and {count} children? Visibility: {visibility}; permission: {level}; project: {project}.",{count:impact.descendantCount,visibility:t(impact.shared?"Shared":"Private"),level:impact.level,project:impact.projectId??t("None")}))))return;
+      if(impact.requiresConfirmation&&!(await confirm(t("Move this document and {count} children?",{count:impact.descendantCount}),{body:t("Visibility: {visibility}; permission: {level}; project: {project}.",{visibility:t(impact.shared?"Shared":"Private"),level:impact.level,project:impact.projectId??t("None")}),action:t("Move"),tone:"primary"})))return;
       const result = await movePageAction(workspaceId, pageId, {...target,confirmedImpact:impact.token});
     if (result.ok) {
       setError(null);

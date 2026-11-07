@@ -50,7 +50,7 @@ export function EntityRow({ kind, id, title, children }: { kind: EntityKind; id:
     catch { setError(t("Could not save. Retry.")); } finally { setBusy(false); }
   }
   async function remove() {
-    if (!(await confirm(t("Move “{title}” to Trash?", {title})))) return;
+    if (!(await confirm(t("Move “{title}” to Trash?", {title}), { body: t("You can restore it from the Trash."), action: t("Move to Trash") }))) return;
     await run(async () => {
       const result = kind === "document" ? await deletePageAction(workspaceId, id) : kind === "project" ? await trashProjectAction(workspaceId, id) : await deleteIssueAction(workspaceId, id);
       if (result.ok) {

@@ -58,9 +58,10 @@ export function TaskFieldManager({ workspaceId, open, onOpenChange: setOpen }: {
         if (
           !(await confirm(
             t(
-              "Disable this field on {count} tasks? Values are kept and can be restored.",
+              "Disable this field on {count} tasks?",
               { count: impact.data },
             ),
+            { body: t("Values are kept and can be restored."), action: t("Disable") },
           ))
         )
           return;

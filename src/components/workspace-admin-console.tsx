@@ -74,7 +74,8 @@ export function WorkspaceAdminConsole({
   async function remove(member: Member) {
     if (busy) return;
     const ok = await confirm(
-      t("Remove {name} from {workspace}?", { name: member.displayName, workspace: workspace.name })
+      t("Remove {name} from {workspace}?", { name: member.displayName, workspace: workspace.name }),
+      { action: t("Remove") }
     );
     if (!ok) return;
     setBusy(true);
