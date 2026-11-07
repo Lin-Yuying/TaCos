@@ -178,7 +178,7 @@ export function ThreadMenu({
           if (!busy) setMoving(false);
         }}
       >
-        <h2 className="text-title">{t("Move to project")}</h2>
+        <h2 className="text-lead font-semibold">{t("Move to project")}</h2>
         <select
           disabled={busy}
           aria-label={t("Move to project")}
@@ -245,7 +245,7 @@ export function ThreadMenu({
           if (!busy) setRenaming(false);
         }}
       >
-        <h2 className="text-title">{t("Rename")}</h2>
+        <h2 className="text-lead font-semibold">{t("Rename")}</h2>
         <form
           onSubmit={(e) => {
             e.preventDefault();

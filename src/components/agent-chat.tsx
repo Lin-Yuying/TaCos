@@ -288,14 +288,14 @@ function ApprovalPanel({
           {card.params}
         </pre>
       )}
-      <div className="mt-2.5 flex flex-wrap items-center justify-end gap-2">
+      <div className="mt-2.5 flex flex-wrap items-center gap-2">
         <button
           type="button"
-          onClick={() => onAnswer(card.requestId, "decline")}
+          onClick={() => onAnswer(card.requestId, "accept")}
           disabled={busy}
-          className="rounded-md border border-border px-2.5 py-1 text-small text-muted transition-colors hover:border-border-strong hover:text-text disabled:opacity-50"
+          className="rounded-md bg-accent px-2.5 py-1 text-small font-medium text-white transition-opacity hover:opacity-90 disabled:opacity-50"
         >
-          {t("Deny")}
+          {t("Allow once")}
         </button>
         <button
           type="button"
@@ -308,11 +308,11 @@ function ApprovalPanel({
         </button>
         <button
           type="button"
-          onClick={() => onAnswer(card.requestId, "accept")}
+          onClick={() => onAnswer(card.requestId, "decline")}
           disabled={busy}
-          className="rounded-md bg-accent px-2.5 py-1 text-small font-medium text-white transition-opacity hover:opacity-90 disabled:opacity-50"
+          className="rounded-md px-2.5 py-1 text-small text-muted transition-colors hover:bg-elevated hover:text-text disabled:opacity-50"
         >
-          {t("Allow once")}
+          {t("Deny")}
         </button>
       </div>
     </div>
