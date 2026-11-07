@@ -225,7 +225,11 @@ export async function deleteIssueAction(workspaceId: string, idOrIdentifier: str
   return run<string>(async () => {
     const { user } = await requireWorkspace(workspaceId);
     await assertSeesIssue(workspaceId, idOrIdentifier, user.id);
-    const deleted = await deleteIssue(workspaceId, idOrIdentifier);
+    const deleted = await deleteIssue(workspaceId, idOrIdentifier, {
+      kind: "user",
+      userId: user.id,
+      displayName: user.displayName,
+    });
     refresh(workspaceId);
     return deleted.id;
   });
@@ -235,7 +239,11 @@ export async function restoreIssueAction(workspaceId: string, issueId: string) {
   return run<void>(async () => {
     const { user } = await requireWorkspace(workspaceId);
     await assertSeesIssue(workspaceId, issueId, user.id);
-    await restoreIssue(workspaceId, issueId);
+    await restoreIssue(workspaceId, issueId, {
+      kind: "user",
+      userId: user.id,
+      displayName: user.displayName,
+    });
     refresh(workspaceId);
   });
 }

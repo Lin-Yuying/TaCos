@@ -1,4 +1,5 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import { version as packageVersion } from "../package.json";
 import { z } from "zod";
 import {
   addComment,
@@ -166,7 +167,7 @@ const itemSchema = z.record(z.string(), z.unknown());
 
 export function createMcpServer(options: CreateMcpServerOptions): McpServer {
   const { workspaceId, actor, readOnly, allowedProjectIds, toolFilter, viewerId, userId } = options;
-  const server = new McpServer({ name: "tacos", version: "0.3.0" });
+  const server = new McpServer({ name: "tacos", version: packageVersion });
 
   function enabled(name: string): boolean {
     if (toolFilter !== null && !toolFilter.includes(name)) return false;
@@ -533,7 +534,7 @@ export function createMcpServer(options: CreateMcpServerOptions): McpServer {
       async ({ id }) =>
         guard(async () => {
           await assertIssueAllowed(id);
-          return ok({ deleted: (await deleteIssue(workspaceId, id)).identifier });
+          return ok({ deleted: (await deleteIssue(workspaceId, id, actor)).identifier });
         })
     );
   }
@@ -1034,7 +1035,7 @@ export function createMcpServer(options: CreateMcpServerOptions): McpServer {
             const project = await getProject(workspaceId, row.projectId);
             throw projectAllowedError(project?.key ?? row.projectId);
           }
-          return ok({ restored: await restoreIssue(workspaceId, row.id) });
+          return ok({ restored: await restoreIssue(workspaceId, row.id, actor) });
         })
     );
   }

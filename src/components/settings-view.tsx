@@ -149,6 +149,7 @@ export function SettingsView({
   serverMode,
   harness,
   isOwner,
+  isInstanceAdmin,
   nextWorkspaceHref,
   deletedWorkspaces,
   pageTemplates,
@@ -175,6 +176,7 @@ export function SettingsView({
   serverMode: boolean;
   harness: HarnessSettingsView;
   isOwner: boolean;
+  isInstanceAdmin: boolean;
   nextWorkspaceHref: string;
   deletedWorkspaces: DeletedWorkspace[];
   pageTemplates: PageTemplate[];
@@ -604,7 +606,7 @@ export function SettingsView({
               </Link>
             </>
           )}
-          {isAdmin && <Link className="text-small text-muted underline" href={`/${workspace.id}/settings/system`}>{t("System")}</Link>}
+          {isInstanceAdmin && <Link className="text-small text-muted underline" href={`/${workspace.id}/settings/system`}>{t("System")}</Link>}
           <span className="rounded-full bg-elevated px-2 py-0.5 text-caption text-muted">
             {workspace.name}
           </span>

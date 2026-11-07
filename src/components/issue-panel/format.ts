@@ -69,6 +69,10 @@ export function eventText(event: ActivityEvent, t: Translate, locale: Locale): s
       return t("deleted a comment");
     case "comment_restored":
       return t("restored a comment");
+    case "deleted":
+      return t("moved the task to Trash");
+    case "restored":
+      return t("restored the task");
     case "comment_resolved":
       return t("resolved a comment thread");
     case "comment_reopened":

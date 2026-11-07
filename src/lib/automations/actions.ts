@@ -4,7 +4,7 @@ import { and, eq, inArray } from "drizzle-orm";
 import { getDb } from "@/db/client";
 import { workspaceMembers } from "@/db/schema";
 import { TacosError } from "@/lib/tacos-error";
-import { addComment, createIssue, notify, updateIssue, type IssueWithLabels } from "@/lib/issues";
+import { addComment, createIssue, getProject, notify, updateIssue, type IssueWithLabels } from "@/lib/issues";
 import { delegateTask } from "@/lib/agent-delegation";
 import { createPage } from "@/lib/pages";
 import { STATUS_META } from "@/lib/constants";
@@ -113,9 +113,11 @@ export async function executeAutomationAction(
             )
           );
         const current = new Set(recipients.map((row) => row.userId));
+        const projectId = context.issue?.projectId ?? null;
         let delivered = 0;
         for (const userId of action.userIds) {
           if (!current.has(userId)) continue;
+          if (projectId && !(await getProject(context.event.workspaceId, projectId, userId))) continue;
           await notify({
             workspaceId: context.event.workspaceId,
             userId,

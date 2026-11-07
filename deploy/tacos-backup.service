@@ -6,4 +6,5 @@ Type=oneshot
 User=tacos
 Group=tacos
 WorkingDirectory=/opt/tacos/app
+EnvironmentFile=-/etc/tacos/env
 ExecStart=/opt/tacos/node/bin/node /opt/tacos/deploy/backup.mjs

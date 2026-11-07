@@ -94,6 +94,8 @@ async function main() {
     doc: "## Section\n\nHello **world**\n\n![](https://example.com/x.png)\n",
   });
   await db.update(schema.pages).set({ shared: 1 }).where(eq(schema.pages.id, mainPage.id));
+  db.insert(schema.projectMembers).values({ projectId: project.id, userId: "member", createdAt: now }).run();
+  db.insert(schema.pageAccess).values({ pageId: mainPage.id, userId: "member", level: "view" }).run();
   const childPage = await pagesLib.createPage(workspace.id, "owner", { parentId: mainPage.id, title: "Onboarding", doc: "Start here." });
   await pageCommentsLib.addPageComment(workspace.id, mainPage.id, "owner", { body: "Page comment" });
 
@@ -147,7 +149,8 @@ async function main() {
   const exportedJson = JSON.parse((await reader.read(reader.list().find((entry) => entry.name === "workspace.json")!)).toString("utf8")) as {
     workspace: { membersSeeAllTasks: boolean };
     issues: Array<{ title: string; blockedBy: string[]; parentId: string | null; labels: string[]; fieldValues: Record<string, string> }>;
-    pages: Array<{ title: string; shared: boolean }>;
+    projects: Array<{ name: string; members: Array<{ username: string }> }>;
+    pages: Array<{ title: string; shared: boolean; access: Array<{ username: string; level: string }> }>;
     comments: Array<{ body: string; parentId: string | null }>;
   };
   assert.equal(exportedJson.workspace.membersSeeAllTasks, false);
@@ -159,6 +162,11 @@ async function main() {
   assert.equal(exportedParent?.blockedBy.length, 1, "the dependency points at the child");
   assert.ok(exportedJson.comments.some((comment) => comment.body === "A reply" && comment.parentId));
   assert.ok(exportedJson.pages.some((page) => page.title === "Handbook" && page.shared));
+  assert.deepEqual(exportedJson.projects[0]?.members, [{ username: "member", createdAt: now }], "project membership is exported");
+  assert.ok(
+    exportedJson.pages.some((page) => page.title === "Handbook" && page.access.some((entry) => entry.username === "member" && entry.level === "view")),
+    "page access overrides are exported"
+  );
   await reader.close();
 
   const sourceFingerprint = "roundtrip-source-hash";
@@ -264,6 +272,24 @@ async function main() {
   assert.ok(handbook && onboarding);
   assert.equal(handbook.shared, 1);
   assert.equal(handbook.doc, "## Section\n\nHello **world**\n\n![](https://example.com/x.png)\n");
+  const importedProjectMembers = await db
+    .select()
+    .from(schema.projectMembers)
+    .where(eq(schema.projectMembers.projectId, targetProjects[0].id));
+  assert.deepEqual(
+    importedProjectMembers.map((row) => row.userId),
+    ["member"],
+    "project membership survives the round trip"
+  );
+  const importedPageAccess = await db
+    .select()
+    .from(schema.pageAccess)
+    .where(eq(schema.pageAccess.pageId, handbook.id));
+  assert.deepEqual(
+    importedPageAccess.map((row) => ({ userId: row.userId, level: row.level })),
+    [{ userId: "member", level: "view" }],
+    "per-page access overrides survive the round trip"
+  );
   assert.equal(onboarding.parentId, handbook.id);
   assert.equal(onboarding.doc, "Start here.");
   const targetPageComments = await db.select().from(schema.pageComments).where(eq(schema.pageComments.workspaceId, target));

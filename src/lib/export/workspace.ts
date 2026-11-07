@@ -13,8 +13,10 @@ import {
   issueLabels,
   issues,
   labels,
+  pageAccess,
   pageComments,
   pages,
+  projectMembers,
   projects,
   taskFieldValues,
   taskFields,
@@ -485,6 +487,24 @@ export async function writeWorkspaceExport(
     .orderBy(asc(projects.createdAt));
   const projectKeys = new Map(projectRows.map((row) => [row.id, row.key]));
   const projectNames = new Map(projectRows.map((row) => [row.id, row.name]));
+  const projectMemberRows =
+    projectRows.length > 0
+      ? await db
+          .select({
+            projectId: projectMembers.projectId,
+            username: users.username,
+            createdAt: projectMembers.createdAt,
+          })
+          .from(projectMembers)
+          .innerJoin(users, eq(users.id, projectMembers.userId))
+          .where(inArray(projectMembers.projectId, projectRows.map((row) => row.id)))
+      : [];
+  const projectMembersByName = new Map<string, { username: string; createdAt: string }[]>();
+  for (const row of projectMemberRows) {
+    const list = projectMembersByName.get(row.projectId) ?? [];
+    list.push({ username: row.username, createdAt: row.createdAt });
+    projectMembersByName.set(row.projectId, list);
+  }
   const projectExport: ExportProject[] = projectRows.map((row) => ({
     id: row.id,
     name: row.name,
@@ -495,6 +515,7 @@ export async function writeWorkspaceExport(
     doc: row.doc,
     createdBy: (row.createdBy && people.get(row.createdBy)) || null,
     createdAt: row.createdAt,
+    members: projectMembersByName.get(row.id) ?? [],
   }));
 
   const labelRows = await db
@@ -515,6 +536,20 @@ export async function writeWorkspaceExport(
     .orderBy(asc(pages.position), asc(pages.createdAt));
   const docPaths = buildDocPaths(pageRows);
   const pageIds = new Set(pageRows.map((page) => page.id));
+  const pageAccessRows =
+    pageIds.size > 0
+      ? await db
+          .select({ pageId: pageAccess.pageId, username: users.username, level: pageAccess.level })
+          .from(pageAccess)
+          .innerJoin(users, eq(users.id, pageAccess.userId))
+          .where(inArray(pageAccess.pageId, [...pageIds]))
+      : [];
+  const pageAccessByName = new Map<string, { username: string; level: "view" | "edit" }[]>();
+  for (const row of pageAccessRows) {
+    const list = pageAccessByName.get(row.pageId) ?? [];
+    list.push({ username: row.username, level: row.level === "edit" ? "edit" : "view" });
+    pageAccessByName.set(row.pageId, list);
+  }
   const pageExport: ExportPage[] = pageRows.map((row) => ({
     id: row.id,
     parentId: row.parentId && pageIds.has(row.parentId) ? row.parentId : null,
@@ -524,6 +559,7 @@ export async function writeWorkspaceExport(
     markdownPath: docPaths.get(row.id)!,
     shared: row.shared === 1,
     shareLevel: row.shareLevel,
+    access: pageAccessByName.get(row.id) ?? [],
     position: row.position,
     createdBy: people.get(row.createdBy) ?? "",
     templateName: row.templateName ?? null,
