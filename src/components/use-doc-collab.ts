@@ -47,6 +47,9 @@ export function useDocCollab(workspaceId:string,pageId:string):DocCollab {
       current.on("authenticationFailed",()=>{if(!closed)setState({status:"connecting",error:"Collaboration access expired. Reload to sign in again."});});
       show();
     })().catch(()=>{if(!closed)setState({status:"connecting",error:"Could not connect to collaboration. Retry."});});
-    return()=>{closed=true;if(handshake)clearTimeout(handshake);provider?.destroy();closeCache?.();doc?.destroy();};
+    // Next keeps a page it navigated away from and shows it again on the way back, with this state
+    // still holding the document destroyed here. An editor bound to it takes typing that never
+    // reaches the server, so the page starts over from connecting.
+    return()=>{closed=true;if(handshake)clearTimeout(handshake);provider?.destroy();closeCache?.();doc?.destroy();setState({status:"connecting"});};
   },[workspaceId,pageId,scope]);return state;
 }

@@ -951,7 +951,7 @@ export function DocPageView({
               <DocumentEditor
                 editorRef={editorRef}
                 onEditorReady={setActiveEditor}
-                key={sharing ? "shared" : "alone"}
+                key={sharing ? collab.doc.guid : "alone"}
                 collab={sharing ? collab : undefined}
                 value={doc}
                 onChange={editDoc}
