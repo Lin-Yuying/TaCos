@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { EditorContent, NodeViewWrapper, ReactNodeViewRenderer, useEditor, type Editor, type Range } from "@tiptap/react";
 import type { NodeViewProps } from "@tiptap/react";
 import { DragHandle } from "@tiptap/extension-drag-handle-react";
+import * as Context from "@radix-ui/react-context-menu";
 import type { EditorState } from "@tiptap/pm/state";
 import { BubbleMenu } from "@tiptap/react/menus";
 import { Extension } from "@tiptap/core";
@@ -58,7 +59,6 @@ import type { DocAnchor } from "@/lib/doc-anchor";
 import type { DocCollab } from "@/components/use-doc-collab";
 import { CodeLanguageMenu, setLineNumbers, useLineNumbers } from "@/components/code-block-controls";
 import { CodeView, codeViewKey } from "@/lib/editor/code-view";
-import { Menu, MenuItem } from "@/components/menu";
 import { useT } from "@/components/i18n-context";
 
 type SlashCommand = {
@@ -94,6 +94,22 @@ const COMMANDS: SlashCommand[] = [
   } },
   { label: "Divider", hint: "Visual break", keywords: "hr line rule separator 分割线", icon: Minus, run: (e, r) => e.chain().focus().deleteRange(r).setHorizontalRule().run() },
 ];
+
+function ContextItem({ children, onSelect, disabled }: { children: React.ReactNode; onSelect: () => void; disabled?: boolean }) {
+  return (
+    <Context.Item
+      disabled={disabled}
+      onSelect={onSelect}
+      className="flex cursor-default items-center gap-2 rounded px-2 py-1.5 text-text outline-none data-[highlighted]:bg-elevated data-[disabled]:text-faint"
+    >
+      {children}
+    </Context.Item>
+  );
+}
+
+function Shortcut({ keys }: { keys: string }) {
+  return <span className="ml-auto pl-4 text-caption text-faint">{keys}</span>;
+}
 
 function matchCommands(query: string): SlashCommand[] {
   const needle = query.trim().toLowerCase();
@@ -174,7 +190,6 @@ function TableEditButtons({ editor, vertical = false }: { editor: Editor; vertic
   );
 }
 
-const EDITOR_TOOL = "flex items-center gap-1 rounded-md px-2 py-1 text-small text-muted transition-colors hover:bg-elevated hover:text-text";
 
 /** The caret's code block: a language chip and ⋯, which opens the block's actions in place. */
 function CodeBlockMenu({ editor }: { editor: Editor }) {
@@ -668,6 +683,8 @@ export function DocumentEditor({
   const anchorClickRef = useRef(onAnchorClick);
   const uploadRef = useRef(onUpload);
   const [uploads,setUploads]=useState<UploadItem[]>([]);
+  // What the right-click landed on: an image to download, a table to edit, a selection to cut.
+  const [contextAt,setContextAt]=useState<{image:string|null;table:boolean;range:boolean}|null>(null);
   const uploadsRef=useRef<UploadItem[]>([]);
   const uploadRuns=useRef(new Map<string,AbortController>());
   const runUpload=useRef<(item:UploadItem)=>Promise<void>>(async()=>{});
@@ -1224,42 +1241,76 @@ export function DocumentEditor({
           if (files.length) insertRef.current(files);
         }}
       />
-      {editable&&editor&&(
-        <div className="mb-2 flex flex-wrap items-center gap-1 border-b border-border pb-1">
-          <Menu width={240} trigger={`${t("Insert block")} · /`} triggerClassName={EDITOR_TOOL} className="max-[600px]:contents">
-            {(close)=>(
-              <div className="max-h-[380px] overflow-y-auto">
-                <div className="px-2 pb-1 pt-1 text-caption text-faint">{t("Insert")}</div>
-                {COMMANDS.map(command=>(
-                  <MenuItem key={command.label} onSelect={()=>{close();window.setTimeout(()=>command.run(editor,{from:editor.state.selection.from,to:editor.state.selection.from}),20);}}>
-                    <command.icon size={14}/>
-                    <span className="min-w-0 flex-1 truncate">{t(command.label)}</span>
-                  </MenuItem>
-                ))}
-              </div>
-            )}
-          </Menu>
-          {editor.isActive("table")&&(
-            <Menu width={200} trigger={t("Table")} triggerClassName={EDITOR_TOOL}>
-              {(close)=>(
+      {/* Blocks are inserted with "/" or from the right-click menu, and a table is edited from
+          its bubble menu or the right-click menu, so the editor has no toolbar row above it. */}
+      {uploads.some(item=>item.status!=="done")&&<div className="mb-2 space-y-1 text-small text-muted" aria-live="polite">{uploads.filter(item=>item.status!=="done").map(item=><div key={item.id} className="flex flex-wrap items-center gap-2"><span>{t(item.status==="uploading"?"Uploading {name} {progress}%":item.status==="queued"?"Waiting to upload {name}":item.status==="failed"?"Could not upload {name}":"Upload of {name} cancelled",{name:item.file.name,progress:String(item.progress)})}</span>{item.error&&<span role="alert" className="text-danger">{t(item.error)}</span>}{["queued","uploading"].includes(item.status)?<button type="button" onClick={()=>{item.controller.abort();uploadsRef.current=uploadsRef.current.map(row=>row.id===item.id?{...row,status:"cancelled"}:row);setUploads(uploadsRef.current);}}>{t("Cancel")}</button>:<><button type="button" onClick={()=>{if(editor&&!editor.isDestroyed)editor.view.dispatch(editor.state.tr.setMeta(uploadMarkersKey,{remove:item.id}));uploadsRef.current=uploadsRef.current.filter(row=>row.id!==item.id);setUploads(uploadsRef.current);}}>{t("Dismiss")}</button>{item.status!=="done"&&<button type="button" disabled={!editable} onClick={()=>void runUpload.current(item)}>{t("Retry")}</button>}</>}</div>)}</div>}
+      <Context.Root onOpenChange={(open)=>{if(!open)setContextAt(null);}}>
+        <Context.Trigger asChild disabled={!editable||!editor}>
+          <div onContextMenuCapture={(event)=>{
+            // Shift + right-click keeps the browser's own menu (spelling, inspect).
+            if(event.shiftKey||!editor||!editable){event.stopPropagation();return;}
+            const view=editor.view;
+            const target=event.target as HTMLElement;
+            const picture=target.closest("img");const image=picture?(picture.dataset.originalSrc||picture.getAttribute("src")):null;
+            const at=view.posAtCoords({left:event.clientX,top:event.clientY});
+            const {from,to}=editor.state.selection;
+            if(at&&(from===to||at.pos<from||at.pos>to))editor.commands.setTextSelection(at.pos);
+            setContextAt({image,table:editor.isActive("table"),range:!editor.state.selection.empty});
+          }}>
+            <EditorContent editor={editor} />
+          </div>
+        </Context.Trigger>
+        {editor&&contextAt&&(
+          <Context.Portal>
+            <Context.Content collisionPadding={8} onCloseAutoFocus={(event)=>{event.preventDefault();editor.view.focus();}} className="z-[90] max-h-[80dvh] min-w-52 overflow-y-auto rounded-lg border border-border bg-overlay p-1 text-body shadow-xl" data-testid="doc-context-menu">
+              <ContextItem disabled={!contextAt.range} onSelect={()=>{editor.view.focus();document.execCommand("cut");}}>{t("Cut")}<Shortcut keys="⌘X"/></ContextItem>
+              <ContextItem disabled={!contextAt.range} onSelect={()=>{editor.view.focus();document.execCommand("copy");}}>{t("Copy")}<Shortcut keys="⌘C"/></ContextItem>
+              <ContextItem onSelect={()=>void navigator.clipboard.readText().then(text=>{if(text)editor.chain().focus().insertContent(text).run();}).catch(()=>undefined)}>{t("Paste as plain text")}<Shortcut keys="⌘⇧V"/></ContextItem>
+              {onComment&&(
                 <>
-                  <div className="px-2 pb-1 pt-1 text-caption text-faint">{t("Table")}</div>
-                  {([
-        ["Add row",()=>editor.chain().focus().addRowAfter().run()], ["Delete row",()=>editor.chain().focus().deleteRow().run()], ["Add column",()=>editor.chain().focus().addColumnAfter().run()], ["Delete column",()=>editor.chain().focus().deleteColumn().run()], ["Toggle header",()=>editor.chain().focus().toggleHeaderRow().run()], ["Merge cells",()=>editor.chain().focus().mergeCells().run()], ["Split cell",()=>editor.chain().focus().splitCell().run()], ["Delete table",()=>editor.chain().focus().deleteTable().run()]
-                  ] as const).map(([label,run],index)=>(
-                    <Fragment key={label}>
-                      {index===4&&<div className="my-1 h-px bg-border"/>}
-                      <MenuItem onSelect={()=>{close();window.setTimeout(()=>run(),20);}}>{t(label)}</MenuItem>
-                    </Fragment>
-                  ))}
+                  <Context.Separator className="my-1 h-px bg-border"/>
+                  <ContextItem onSelect={()=>{
+                    const {$from,from,to,empty}=editor.state.selection;
+                    const anchor=empty?anchorFromSelection(editor.state.doc,$from.start(),$from.end()):anchorFromSelection(editor.state.doc,from,to);
+                    if(anchor)onComment(anchor);
+                  }}>{t("Comment")}</ContextItem>
                 </>
               )}
-            </Menu>
-          )}
-        </div>
-      )}
-      {uploads.length>0&&<div className="mb-2 space-y-1 text-small" aria-live="polite">{uploads.map(item=><div key={item.id} className="flex flex-wrap items-center gap-2"><span>{item.file.name}: {t(item.status)} {item.status==="uploading"?`${item.progress}%`:""}</span>{item.error&&<span role="alert" className="text-danger">{t(item.error)}</span>}{["queued","uploading"].includes(item.status)?<button type="button" onClick={()=>{item.controller.abort();uploadsRef.current=uploadsRef.current.map(row=>row.id===item.id?{...row,status:"cancelled"}:row);setUploads(uploadsRef.current);}}>{t("Cancel")}</button>:<><button type="button" onClick={()=>{if(editor&&!editor.isDestroyed)editor.view.dispatch(editor.state.tr.setMeta(uploadMarkersKey,{remove:item.id}));uploadsRef.current=uploadsRef.current.filter(row=>row.id!==item.id);setUploads(uploadsRef.current);}}>{t("Dismiss")}</button>{item.status!=="done"&&<button type="button" disabled={!editable} onClick={()=>void runUpload.current(item)}>{t("Retry")}</button>}</>}</div>)}</div>}
-      <EditorContent editor={editor} />
+              <Context.Separator className="my-1 h-px bg-border"/>
+              <Context.Sub>
+                <Context.SubTrigger className="flex cursor-default items-center gap-2 rounded px-2 py-1.5 outline-none data-[highlighted]:bg-elevated data-[state=open]:bg-elevated">{t("Insert")}<ChevronRight size={13} className="ml-auto text-faint"/></Context.SubTrigger>
+                <Context.Portal>
+                  <Context.SubContent collisionPadding={8} className="z-[91] max-h-[70dvh] min-w-48 overflow-y-auto rounded-lg border border-border bg-overlay p-1 text-body shadow-xl">
+                    {COMMANDS.map(command=>(
+                      <ContextItem key={command.label} onSelect={()=>window.setTimeout(()=>command.run(editor,{from:editor.state.selection.to,to:editor.state.selection.to}),20)}>
+                        <command.icon size={14}/>{t(command.label)}
+                      </ContextItem>
+                    ))}
+                  </Context.SubContent>
+                </Context.Portal>
+              </Context.Sub>
+              {contextAt.table&&(
+                <Context.Sub>
+                  <Context.SubTrigger className="flex cursor-default items-center gap-2 rounded px-2 py-1.5 outline-none data-[highlighted]:bg-elevated data-[state=open]:bg-elevated">{t("Table")}<ChevronRight size={13} className="ml-auto text-faint"/></Context.SubTrigger>
+                  <Context.Portal>
+                    <Context.SubContent collisionPadding={8} className="z-[91] min-w-44 rounded-lg border border-border bg-overlay p-1 text-body shadow-xl">
+                      {([["Add row",()=>editor.chain().focus().addRowAfter().run()],["Delete row",()=>editor.chain().focus().deleteRow().run()],["Add column",()=>editor.chain().focus().addColumnAfter().run()],["Delete column",()=>editor.chain().focus().deleteColumn().run()],["Toggle header",()=>editor.chain().focus().toggleHeaderRow().run()],["Delete table",()=>editor.chain().focus().deleteTable().run()]] as const).map(([label,run])=>(
+                        <ContextItem key={label} onSelect={()=>window.setTimeout(()=>run(),20)}>{t(label)}</ContextItem>
+                      ))}
+                    </Context.SubContent>
+                  </Context.Portal>
+                </Context.Sub>
+              )}
+              {contextAt.image&&(
+                <>
+                  <Context.Separator className="my-1 h-px bg-border"/>
+                  <ContextItem onSelect={()=>{const link=document.createElement("a");link.href=contextAt.image!;link.download="";link.click();}}>{t("Download original")}</ContextItem>
+                </>
+              )}
+            </Context.Content>
+          </Context.Portal>
+        )}
+      </Context.Root>
       {marginCounts.map((group) => (
         <button
           key={group.from}

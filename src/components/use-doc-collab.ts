@@ -11,7 +11,7 @@ function socketUrl(){const scheme=location.protocol==="https:"?"wss":"ws";return
 export function useDocCollab(workspaceId:string,pageId:string):DocCollab {
   const {scope}=useUI();const [state,setState]=useState<DocCollab>({status:"connecting"});
   useEffect(()=>{
-    let closed=false;let provider:HocuspocusProvider|null=null;let closeCache:CollabCacheHandle|null=null;let doc:Y.Doc|null=null;let handshake:ReturnType<typeof setTimeout>|null=null;
+    let closed=false;let provider:HocuspocusProvider|null=null;let closeCache:CollabCacheHandle|null=null;let doc:Y.Doc|null=null;let handshake:ReturnType<typeof setTimeout>|null=null;let unwarn:(()=>void)|null=null;
     const cacheKey=`tacos.collab.v1.${scope}.${pageId}`;
     void (async()=>{
       const result=await getCollabSessionAction(workspaceId,pageId).catch(()=>null);
@@ -43,6 +43,14 @@ export function useDocCollab(workspaceId:string,pageId:string):DocCollab {
         if(!synced&&currentDoc.getXmlFragment("default").length===0)return;
         setState({status:synced&&connected?"live":"reconnecting",doc:currentDoc,provider:current,user,peers,pending:current.unsyncedChanges,storageError});
       };
+      // In a browser, closing or reloading the tab while edits are still on their way asks
+      // first. The desktop app has no such dialog (a cancelled unload would only keep the
+      // window from closing), and the local cache keeps the edits and sends them the next
+      // time the page opens either way.
+      if(!("tacosDesktop" in window)){
+        const warn=(event:BeforeUnloadEvent)=>{if(current.unsyncedChanges>0){event.preventDefault();event.returnValue="";}};
+        window.addEventListener("beforeunload",warn);unwarn=()=>window.removeEventListener("beforeunload",warn);
+      }
       current.on("synced",()=>{synced=true;if(handshake)clearTimeout(handshake);show();});current.on("status",({status}:{status:string})=>{connected=status==="connected";show();});current.on("awarenessChange",show);current.on("unsyncedChanges",show);
       current.on("authenticationFailed",()=>{if(!closed)setState({status:"connecting",error:"Collaboration access expired. Reload to sign in again."});});
       show();
@@ -50,6 +58,6 @@ export function useDocCollab(workspaceId:string,pageId:string):DocCollab {
     // Next keeps a page it navigated away from and shows it again on the way back, with this state
     // still holding the document destroyed here. An editor bound to it takes typing that never
     // reaches the server, so the page starts over from connecting.
-    return()=>{closed=true;if(handshake)clearTimeout(handshake);provider?.destroy();closeCache?.();doc?.destroy();setState({status:"connecting"});};
+    return()=>{closed=true;if(handshake)clearTimeout(handshake);unwarn?.();provider?.destroy();closeCache?.();doc?.destroy();setState({status:"connecting"});};
   },[workspaceId,pageId,scope]);return state;
 }

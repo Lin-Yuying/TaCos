@@ -567,7 +567,8 @@ export function MarkdownBlock({
             referrerPolicy="no-referrer"
             className="max-h-[520px] max-w-full rounded-lg border border-border bg-elevated object-contain"
           />
-          {block.alt && (
+          {/* A pasted screenshot's alt is its file name ("image.png"); that is not a caption. */}
+          {block.alt && !/^[^\s/]+\.(png|jpe?g|gif|webp|heic|bmp|svg)$/i.test(block.alt.trim()) && (
             <figcaption className="mt-1 text-small text-faint">{block.alt}</figcaption>
           )}
         </figure>
