@@ -326,6 +326,7 @@ export async function delegateTask(input: {
 }): Promise<DelegationPanel> {
   const detail = await loadIssue(input.workspaceId, input.issueId, input.userId);
   const issue = detail.issue;
+  if (issue.reviewStatus !== "approved") throw new TacosError("This task is waiting for review", 409);
   if (issue.status === "done" || issue.status === "canceled") {
     throw new TacosError("This task is already closed", 409);
   }

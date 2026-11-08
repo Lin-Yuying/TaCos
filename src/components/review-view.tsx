@@ -27,7 +27,7 @@ export function ReviewView({ workspaceId, issues }: { workspaceId: string; issue
   return (
     <div className="flex min-h-0 flex-1 flex-col">
       <p className={PAGE_HINT}>
-          {t("Tasks that an agent published wait here. Approve one to let anyone claim it. Reject one to remove it from the board.")}
+          {t("Tasks that an agent published wait here. Open one to read or edit it. Approve it to put it in the pool and notify its assignees; reject it to remove it from the board.")}
         </p>
       <div className="min-h-0 flex-1 overflow-y-auto pb-10">
         {error && <div role="alert" className={`pb-3 text-small text-danger ${PAGE_INSET}`}>{error}</div>}
@@ -42,8 +42,20 @@ export function ReviewView({ workspaceId, issues }: { workspaceId: string; issue
                   <StatusIcon status={issue.status} size={14} />
                 </span>
                 <span className={`shrink-0 ${LINE_SUB}`}>{issueRef(issue)}</span>
-                <div className="min-w-[200px] flex-1">
+                {/* The row opens the task: read it, fix its title, description or fields, and
+                    approve or request changes from the panel's review bar. */}
+                <button
+                  type="button"
+                  onClick={() => openIssue(issue.id)}
+                  data-testid="review-open-task"
+                  className="min-w-[200px] flex-1 text-left"
+                >
                   <div className="truncate">{issue.title}</div>
+                  {issue.description.trim() && (
+                    <div className={`mt-0.5 line-clamp-2 whitespace-pre-line ${LINE_SUB}`}>
+                      {issue.description.replace(/[#*_`>[\]!]/g, "").trim().slice(0, 240)}
+                    </div>
+                  )}
                   <div className={`mt-0.5 flex min-w-0 items-center gap-1.5 ${LINE_SUB}`}>
                     <ProjectIcon color={issue.projectColor} icon={issue.projectIcon} size={12} />
                     <span className="truncate">{issue.projectName}</span>
@@ -55,8 +67,11 @@ export function ReviewView({ workspaceId, issues }: { workspaceId: string; issue
                       })}
                     </span>
                   </div>
-                </div>
+                </button>
                 <div className="flex shrink-0 items-center gap-1">
+                  <button type="button" onClick={() => openIssue(issue.id)} className={BTN}>
+                    {t("View and edit")}
+                  </button>
                   <button
                     type="button"
                     onClick={() => openIssue(issue.id, issue.latestReviewCommentId ?? undefined)}
