@@ -206,6 +206,20 @@ html[data-desktop] .app-windowbar .app-tab {
   -webkit-app-region: no-drag;
 }
 
+/* A tab added to the strip slides open from nothing to its width. */
+@keyframes app-tab-enter {
+  from { min-width: 0; max-width: 0; padding-left: 0; padding-right: 0; opacity: 0; }
+}
+
+.app-tab-enter {
+  overflow: hidden;
+  animation: app-tab-enter 160ms ease-out;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .app-tab-enter { animation: none; }
+}
+
 html[data-desktop] .app-topbar {
   -webkit-app-region: drag;
 }
