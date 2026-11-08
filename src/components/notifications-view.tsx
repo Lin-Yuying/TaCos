@@ -199,10 +199,13 @@ export function NotificationsView({
   const undoTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const pending = useRef(new Set<string>());
 
+  // Rows read while Unread is open stay where they are until the tab changes. Dropping them on the
+  // refresh moved the list under the reader and lost the row they had just opened.
+  const keptRead = useRef(new Set<string>());
+
   // Re-sync after router.refresh(): the server owns the authoritative rows and counts.
   useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    setItems(initialItems);
+    setItems((old) => keepReadRows(old, initialItems, keptRead.current));
     setNextCursor(initialNextCursor);
     setCounts(initialCounts);
     setPrefs(initialPrefs);
@@ -265,6 +268,7 @@ export function NotificationsView({
       unread ? markNotificationReadAction(workspaceId, item.id) : markNotificationUnreadAction(workspaceId, item.id)
     );
     if (!ok) return;
+    if (unread && tab === "unread") keptRead.current.add(item.id);
     patch(item.id, { state: unread ? "read" : "unread", readAt: unread ? new Date().toISOString() : null });
     applyCounts({
       unread: unread ? -1 : 1,
@@ -352,6 +356,7 @@ export function NotificationsView({
   }
 
   function goTab(next: NotificationTab) {
+    keptRead.current.clear();
     setTab(next);
     setSelected(-1);
     const params = new URLSearchParams({ tab: next });
@@ -637,21 +642,25 @@ export function NotificationsView({
           const open = Boolean(expanded[group.key]);
           return (
             <div key={group.key} data-inbox-group>
+              {/* The header names the task or document; the notifications sit under it, so the
+                  newest one is not shown twice when the group is open. */}
               <button
                 type="button"
                 onClick={() => setExpanded((old) => ({ ...old, [group.key]: !open }))}
-                className={`${LINE} w-full text-left`}
+                className={`${LINE} w-full text-left focus-visible:bg-active focus-visible:outline-none`}
               >
-                {open ? <ChevronDown size={13} className="text-faint" /> : <ChevronRight size={13} className="text-faint" />}
+                {open ? <ChevronDown size={13} className="shrink-0 text-faint" /> : <ChevronRight size={13} className="shrink-0 text-faint" />}
                 <span className="h-1.5 w-1.5 shrink-0 rounded-full" style={{ background: group.rows.some((row) => row.state === "unread") ? "var(--color-accent)" : "transparent" }} />
-                <span className="flex size-[22px] shrink-0 items-center justify-center">
-                  {dataFor(head).actorName && <AssigneeAvatar displayName={dataFor(head).actorName ?? ""} size={22} />}
+                <span className="min-w-0 flex-1">
+                  <span className={`block truncate text-body ${group.rows.some((row) => row.state === "unread") ? "text-text" : "text-muted"}`}>{groupTitle(head, t)}</span>
+                  <span className={`block truncate ${LINE_SUB}`}>
+                    {open ? t("{count} updates", { count: String(group.rows.length) }) : sentence(head, t)}
+                  </span>
                 </span>
-                <span className="min-w-0 flex-1 truncate">{sentence(head, t)}</span>
-                <span className="hidden min-w-0 max-w-[35%] truncate text-caption text-faint @min-[640px]:block">{groupTitle(head, t)}</span>
+                <span className="shrink-0 text-small tabular-nums text-faint max-[600px]:hidden" suppressHydrationWarning>{timeAgo(head.createdAt, locale)}</span>
                 <span className="inline-flex h-[18px] items-center rounded-[5px] px-1.5 whitespace-nowrap bg-elevated text-caption text-muted">{group.rows.length}</span>
               </button>
-              {open && group.rows.map((item) => renderRow(item))}
+              {open && <div className="[&>div]:!pl-12">{group.rows.map((item) => renderRow(item, true))}</div>}
             </div>
           );
         })}
@@ -721,7 +730,8 @@ export function NotificationsView({
     </div>
   );
 
-  function renderRow(item: NotificationRow) {
+  // Rows inside an open group skip the task line: the group header above already names the task.
+  function renderRow(item: NotificationRow, inGroup = false) {
     const unread = item.state === "unread";
     const flatIndex = visibleRows.indexOf(item);
     const isSelected = flatIndex >= 0 && flatIndex === selected;
@@ -756,10 +766,10 @@ export function NotificationsView({
           <span className={`block truncate text-body ${unread ? "text-text" : "text-muted"}`}>
             {sentence(item, t)}
           </span>
-          <span className={`block truncate ${LINE_SUB}`}>
-            {groupTitle(item, t)}
-            {muted ? ` · ${t("Muted")}` : ""}
-            <span className="hidden max-[600px]:inline" suppressHydrationWarning> · {timeAgo(item.createdAt, locale)}</span>
+          <span className={`${inGroup && !muted ? "hidden max-[600px]:block" : "block"} truncate ${LINE_SUB}`}>
+            {inGroup ? (muted ? t("Muted") : "") : groupTitle(item, t)}
+            {!inGroup && muted ? ` · ${t("Muted")}` : ""}
+            <span className="hidden max-[600px]:inline" suppressHydrationWarning>{inGroup && !muted ? "" : " · "}{timeAgo(item.createdAt, locale)}</span>
           </span>
         </button>
         <span className="shrink-0 text-small tabular-nums text-faint max-[600px]:hidden" suppressHydrationWarning>{timeAgo(item.createdAt, locale)}</span>
@@ -799,4 +809,19 @@ export function NotificationsView({
       </div>
     );
   }
+}
+
+// The server's rows, in the order already on screen, plus the rows read here that the server no
+// longer lists. Rows the server added go on top, where it puts them.
+function keepReadRows(shown: NotificationRow[], server: NotificationRow[], kept: Set<string>): NotificationRow[] {
+  if (kept.size === 0) return server;
+  const fresh = new Map(server.map((row) => [row.id, row]));
+  const seen = new Set(shown.map((row) => row.id));
+  const merged: NotificationRow[] = server.filter((row) => !seen.has(row.id));
+  for (const row of shown) {
+    const next = fresh.get(row.id);
+    if (next) merged.push(next);
+    else if (kept.has(row.id)) merged.push(row);
+  }
+  return merged;
 }

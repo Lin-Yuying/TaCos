@@ -2124,6 +2124,8 @@ async function issueConditions(workspaceId: string, filters: ListFilters) {
     conditions.push(
       sql`(${issues.claimedBy} = ${filters.assigneeId} OR EXISTS (SELECT 1 FROM issue_assignees WHERE issue_assignees.issue_id = ${issues.id} AND issue_assignees.user_id = ${filters.assigneeId}))`
     );
+    // A task waiting for review is nobody's task yet; it joins the pool once approved.
+    conditions.push(eq(issues.reviewStatus, "approved"));
   }
   if (filters.q) {
     const pattern = likePattern(filters.q);
@@ -2925,9 +2927,13 @@ export async function createIssue(
     ? await notifyMentions(workspaceId, id, description, actor)
     : new Set<string>();
 
-  for (const assigneeId of assigneeIds) {
-    if (assigneeId !== actorUserId) {
-      await notifyAssigned(workspaceId, id, title, assigneeId, actor);
+  // A task waiting for review reaches its assignees when it is approved; until then it is
+  // only in the review queue, so the inbox does not remind about it a second time.
+  if (reviewStatus === "approved") {
+    for (const assigneeId of assigneeIds) {
+      if (assigneeId !== actorUserId) {
+        await notifyAssigned(workspaceId, id, title, assigneeId, actor);
+      }
     }
   }
 
@@ -2936,8 +2942,10 @@ export async function createIssue(
   await notifyViewSubscribers(workspaceId, detail, "added", actor);
   // #80: a rule sees the finished task, its labels and its assignees.
   await emitTaskEvent(workspaceId, detail.issue, "task.created", actor);
-  for (const assigneeId of assigneeIds) {
-    await emitTaskEvent(workspaceId, detail.issue, "task.assigned", actor, { assigneeId });
+  if (reviewStatus === "approved") {
+    for (const assigneeId of assigneeIds) {
+      await emitTaskEvent(workspaceId, detail.issue, "task.assigned", actor, { assigneeId });
+    }
   }
   if (mentioned.size > 0) {
     await emitTaskEvent(workspaceId, detail.issue, "task.mention", actor, {
@@ -3016,6 +3024,14 @@ export async function updateIssue(
   if (patch.description !== undefined && patch.description !== row.description) {
     sets.description = patch.description;
     changes.push({ type: "description_changed", data: {} });
+  }
+  // A task an agent published waits for review before anyone works on it: no status
+  // change and no new assignee until a reviewer approves it.
+  if (
+    row.reviewStatus !== "approved" &&
+    ((patch.status !== undefined && patch.status !== row.status) || patch.assigneeIds !== undefined)
+  ) {
+    throw new TacosError("This task is waiting for review", 409);
   }
   if (patch.status !== undefined && patch.status !== row.status) {
     await assertCanChangeStatus(row, actor);
@@ -3975,13 +3991,28 @@ export async function reviewIssue(
     .where(and(eq(issues.workspaceId, workspaceId), eq(issues.id, row.id), eq(issues.reviewStatus, "pending")))
     .returning({ id: issues.id });
   if (updated.length === 0) throw new TacosError("This task is not waiting for review", 409);
-  await recordEvent(
-    row.id,
-    decision === "approve" ? "review_approved" : "review_rejected",
-    {},
-    actor ?? (await userActor(reviewerId))
-  );
+  const reviewer = actor ?? (await userActor(reviewerId));
+  await recordEvent(row.id, decision === "approve" ? "review_approved" : "review_rejected", {}, reviewer);
+  if (decision === "approve") await announceApprovedTask(workspaceId, row, reviewerId, reviewer);
   return { id: row.id, reviewStatus, reviewedBy: reviewerId, reviewedAt: now };
+}
+
+// Approval puts an agent-published task in the pool: its assignees hear about it now,
+// not at publish time, when it was only in the review queue.
+async function announceApprovedTask(workspaceId: string, row: IssueRow, reviewerId: string | null, reviewer: MutationActor) {
+  const assigned = await getDb()
+    .select({ userId: issueAssignees.userId })
+    .from(issueAssignees)
+    .where(eq(issueAssignees.issueId, row.id));
+  if (assigned.length === 0) return;
+  for (const { userId } of assigned) {
+    if (userId !== reviewerId) await notifyAssigned(workspaceId, row.id, row.title, userId, reviewer);
+  }
+  const detail = await getIssueDetail(workspaceId, row.id, reviewerId ?? undefined);
+  if (!detail) return;
+  for (const { userId } of assigned) {
+    await emitTaskEvent(workspaceId, detail.issue, "task.assigned", reviewer, { assigneeId: userId });
+  }
 }
 
 export async function deleteIssue(
@@ -4296,6 +4327,7 @@ export async function addComment(
       { commentId: id },
       actor
     );
+    if (resolvesGate) await announceApprovedTask(workspaceId, row, actorUserId, actor);
   }
 
   const detail = await commentDetail(workspaceId, row.id, actorUserId ?? undefined);
@@ -5371,7 +5403,9 @@ export async function workspacePulse(workspaceId: string, userId: string): Promi
 /** A single checkbox changes one relationship; another editor's choices survive. */
 export async function changeIssueCollection(workspaceId: string, id: string, change: {kind: "assignee" | "label"; value: string; selected: boolean}, actor: MutationActor): Promise<IssueDetail> {
   if (actor.kind !== "user") throw new TacosError("A member is required", 403);
-  if (!(await findVisibleIssueRow(workspaceId, id, actor.userId))) throw new TacosError("Task not found",404);
+  const visible = await findVisibleIssueRow(workspaceId, id, actor.userId);
+  if (!visible) throw new TacosError("Task not found",404);
+  if (change.kind === "assignee" && visible.reviewStatus !== "approved") throw new TacosError("This task is waiting for review", 409);
   const db = getDb();
   const memberMap = await membersById(workspaceId);
   let added: string | null = null;

@@ -35,7 +35,7 @@ export function PropertiesRow({
   return (
     <div className="-mx-2 -mt-1.5 flex flex-wrap items-center gap-2">
       <label
-        title={t("Estimate")}
+        title={t("Estimate: how much work the task takes, in points you choose (for example 1 for an hour, 3 for a day). Totals show up in Insights.")}
         className="flex items-center gap-1.5 rounded-md px-2 py-1 text-body text-muted transition-colors hover:bg-elevated hover:text-text"
       >
         <span className="text-faint">{t("Estimate")}</span>
@@ -84,6 +84,14 @@ export function PropertiesRow({
         )}
       </Menu>
 
+      {detail.reviewStatus !== "approved" ? (
+        <span
+          title={t("Assignees can change after the task is approved")}
+          className="flex items-center gap-1.5 rounded-md px-2 py-1 text-body text-faint"
+        >
+          {detail.assignees.length === 0 ? t("Unassigned") : detail.assignees.map((a) => a.displayName).join(", ")}
+        </span>
+      ) : (
       <Menu
         width={220}
         triggerClassName="flex items-center gap-1.5 rounded-md px-2 py-1 text-body text-muted transition-colors hover:bg-elevated hover:text-text"
@@ -149,6 +157,7 @@ export function PropertiesRow({
           </>
         )}
       </Menu>
+      )}
 
       {/* Labels are optional: once set they show as the labels themselves, and an
           empty issue keeps a quiet "+ Labels" affordance so adding one stays possible. */}

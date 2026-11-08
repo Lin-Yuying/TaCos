@@ -195,7 +195,10 @@ function IssuePanel({
     .filter((event) => event.type !== "commented")
     .sort((a, b) => a.createdAt.localeCompare(b.createdAt));
 
-  const canChangeStatus = detail.assignees.some(
+  // A task an agent published is not in the pool until a reviewer approves it, so nobody
+  // can move it along, reassign it or hand it to an agent before then.
+  const approved = detail.reviewStatus === "approved";
+  const canChangeStatus = approved && detail.assignees.some(
     (assignee) => assignee.id === currentUserId
   );
   // U-11: the newest marked review comment is the review state shown in the panel; the
@@ -252,11 +255,13 @@ function IssuePanel({
           onError={setError}
         />
 
-        <DelegationRow
-          workspaceId={workspaceId}
-          detail={detail}
-          onFinished={() => setFinished((count) => count + 1)}
-        />
+        {approved && (
+          <DelegationRow
+            workspaceId={workspaceId}
+            detail={detail}
+            onFinished={() => setFinished((count) => count + 1)}
+          />
+        )}
 
         <SourceChatRow workspaceId={workspaceId} threadId={detail.sourceThreadId} />
 

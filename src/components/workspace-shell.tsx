@@ -1515,6 +1515,8 @@ function tabMeta(
 
 const TAB_MIN_WIDTH = 96;
 const TAB_ROOM_DEFAULT = 8;
+// How long a tab takes to slide open or shut.
+const TAB_SLIDE_MS = 160;
 
 function TabBar({
   workspace,
@@ -1553,8 +1555,10 @@ function TabBar({
   const lastKey = useRef<string | null>(null);
   // Set while a page is being opened as a new tab instead of replacing the current one.
   const openAsNew = useRef(false);
-  // Which tab each tab replaced when a link was followed: closing it goes back there.
-  const replacedBy = useRef(new Map<string, string>());
+  // Closed tabs slide shut before the strip drops them, so the tabs behind close the gap smoothly.
+  const [leaving, setLeaving] = useState<string[]>([]);
+  // Tabs added after the strip first painted slide open; the ones restored on load do not.
+  const [fresh, setFresh] = useState<string[]>([]);
   const stripRef = useRef<HTMLDivElement>(null);
   const [tabRoom, setTabRoom] = useState(TAB_ROOM_DEFAULT);
   // Where the app sits when nothing is open. It is deliberately not a tab: the strip
@@ -1609,9 +1613,9 @@ function TabBar({
     openAsNew.current = false;
     const from = cameFrom.current;
     if (from && tabs.includes(from) && !next.includes(from)) {
-      replacedBy.current.set(current, from);
       setRecentTabs(previous=>[from,...previous.filter(item=>item!==from)].slice(0,20));
     }
+    setFresh(next.filter((key) => !tabs.includes(key)));
     setTabs(next);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [current, tabs]);
@@ -1698,26 +1702,22 @@ function TabBar({
   const { shown: shownTabs, hidden: hiddenTabs } = fitTabs(visible, current, tabRoom);
 
   function closeTab(key: string) {
-    if(fixedTabs.includes(key))return;
+    if (fixedTabs.includes(key) || leaving.includes(key)) return;
     setRecentTabs(previous=>[key,...previous.filter(item=>item!==key)].slice(0,20));
     const index = visible.indexOf(key);
-    const rest = visible.filter((t) => t !== key);
-    const source = replacedBy.current.get(key);
-    replacedBy.current.delete(key);
-    if (key === current && source && !rest.includes(source)) {
-      // The page this tab replaced takes its place again.
-      justClosed.current = key;
-      setRecentTabs(previous=>[key,...previous.filter(item=>item!==key&&item!==source)].slice(0,20));
-      setTabs(visible.map((item) => (item === key ? source : item)));
-      router.push(tabHref(source));
-      return;
-    }
-    setTabs(rest);
+    // Closing only removes the tab: the page it once replaced stays in Recently closed and
+    // does not come back in its slot. The tabs behind it move up to fill the gap.
+    const rest = visible.filter((item) => item !== key && !leaving.includes(item));
+    setLeaving((previous) => [...previous, key]);
+    setTimeout(() => {
+      setTabs((previous) => previous?.filter((item) => item !== key) ?? previous);
+      setLeaving((previous) => previous.filter((item) => item !== key));
+    }, TAB_SLIDE_MS);
     if (key !== current) return;
     justClosed.current = key;
-    // The tab this one was opened from is the way back; a strip neighbour is only the
-    // fallback when that tab has been closed too. Closing the last tab leaves nothing to
-    // show, so the workspace falls back to the start page instead of All Tasks.
+    // The tab this one was opened from is the way back; otherwise the tab that moves into
+    // this slot. Closing the last tab leaves nothing to show, so the workspace falls back
+    // to the start page instead of All Tasks.
     const back =
       cameFrom.current && cameFrom.current !== key && rest.includes(cameFrom.current)
         ? cameFrom.current
@@ -1780,7 +1780,8 @@ function TabBar({
           const isActive = key === current;
           return (
             <ContextMenu.Root key={key}><ContextMenu.Trigger asChild><div
-              className={`app-tab group flex h-[30px] min-w-[64px] max-w-[168px] items-center gap-1.5 rounded-lg px-2.5 text-small transition-colors ${
+              style={leaving.includes(key) ? { minWidth: 0, maxWidth: 0, paddingLeft: 0, paddingRight: 0, opacity: 0, overflow: "hidden", pointerEvents: "none" } : undefined}
+              className={`app-tab group flex h-[30px] min-w-[64px] max-w-[168px] items-center gap-1.5 rounded-lg px-2.5 text-small transition-[min-width,max-width,padding,opacity,background-color,color] duration-150 ease-out motion-reduce:transition-none ${fresh.includes(key) ? "app-tab-enter" : ""} ${
                 isActive
                   ? "bg-bg text-text shadow-[0_0_0_1px_var(--color-border)]"
                   : "text-muted hover:bg-elevated"
