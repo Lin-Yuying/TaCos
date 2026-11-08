@@ -42,3 +42,30 @@ are not in this release.
   (both answers stored).
 
 Not run: real Electron runtime for these fixes.
+
+## Release and deploy (done)
+
+- Tag `v2.5.1` points at `49090bb` ("release: v2.5.1") on main; merge `3dfc365` for
+  #101 precedes it. The tag workflow (Desktop installers, run 42469581956) completed
+  successfully and published seven assets: macOS arm64 DMG + updater ZIP +
+  `latest-mac.yml`, Windows x64 NSIS installer + `latest.yml`, Linux x64 AppImage, and
+  `TaCos-Server-2.5.1-linux-x64.tar.gz`.
+- Server deploy to `ubuntu@43.130.57.28`: manual backup
+  `/var/lib/tacos/backups/manual-pre-2.5.1`, installer pre-upgrade backup
+  `pre_upgrade-2026-11-08_10-57-41-27b3` (appVersion 2.5.0, integrity ok, sha256 in its
+  manifest). The release tarball was installed over `/opt/tacos/app`; the previous 2.5.0
+  stays at `/opt/tacos/app.old`.
+- Verified: `tacos.service` active with 0 restarts; `/api/health` reports
+  `version: 2.5.1`, `status: ok`, `integrity: ok`, schemaVersion 602, ~32.7 GB free;
+  `/login` and `/api/health` return 200; data counts unchanged from the pre-upgrade
+  baseline (7 users, 3 workspaces, 19 issues, 14 pages, 6 comments, 8 agent threads);
+  site-admin login reaches `/admin` and the instance console lists all 7 members.
+- Observed: the production `/admin` page logs one minified React hydration warning
+  (#418) in the automated run — the same observation as the 2.5.0 deploy; the page
+  renders correctly. Immediately after the deploy the journal shows a few "Failed to
+  find Server Action" errors from tabs opened before the upgrade; that is expected
+  Next.js stale-deployment behavior and clears after a refresh.
+- Not verified over the tunnel: workspace UI with a real member account (the site admin
+  is not a workspace member and member passwords are not known).
+- Rollback: `sudo /opt/tacos/deploy/rollback.sh` (refuses without a verified
+  pre-upgrade backup).
