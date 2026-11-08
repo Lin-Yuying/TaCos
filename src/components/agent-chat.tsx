@@ -969,6 +969,7 @@ function Composer({
   canManageSkills,
   onCreateSkill,
   onDeleteSkill,
+  queueWhileBusy,
 }: {
   workspaceId: string;
   value: string;
@@ -988,6 +989,8 @@ function Composer({
   canManageSkills?: boolean;
   onCreateSkill?: (input: SkillDraft) => Promise<SkillCreateResult>;
   onDeleteSkill?: (skill: AgentSkill) => Promise<SkillDeleteResult>;
+  // While a turn runs, Send takes the message anyway and the caller queues it.
+  queueWhileBusy?: boolean;
 }) {
   const t = useT();
   const {confirm}=useUI();
@@ -1119,7 +1122,7 @@ function Composer({
   const uploading = attachments.some((item) => !item.id);
 
   async function submitComposer() {
-    if (busy || uploading || submitDisabled) return;
+    if ((busy && !queueWhileBusy) || uploading || submitDisabled) return;
     const text = value.trim();
     if (!text && attachments.length === 0) return;
     const accepted = await onSubmit(
@@ -1133,6 +1136,8 @@ function Composer({
   }
 
   const canSend = Boolean(value.trim() || attachments.length) && !uploading;
+  // With text typed during a run the button queues it; with nothing typed it stops the run.
+  const stopping = Boolean(busy) && !(queueWhileBusy && canSend);
 
   return (
     <div
@@ -1274,7 +1279,7 @@ function Composer({
           }
           if (event.key === "Enter" && !event.shiftKey && !event.nativeEvent.isComposing) {
             event.preventDefault();
-            if (!busy) submitComposer();
+            if (!busy || queueWhileBusy) submitComposer();
           }
         }}
         className="max-h-[220px] min-h-[30px] w-full resize-none bg-transparent px-2.5 pt-2 text-body leading-relaxed outline-none placeholder:text-faint"
@@ -1285,7 +1290,7 @@ function Composer({
         <div className="flex flex-wrap items-center gap-x-0.5 gap-y-1 @[340px]:flex-nowrap">
           {!onNew && (<button
             type="button"
-            disabled={busy}
+            disabled={busy && !queueWhileBusy}
             onClick={() => fileInput.current?.click()}
             className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-muted transition-colors hover:bg-elevated hover:text-text disabled:opacity-40"
             aria-label={t("Attach files")}
@@ -1374,13 +1379,13 @@ function Composer({
             {actions}
             <button
               type="button"
-              onClick={() => (busy && onStop ? onStop() : submitComposer())}
-              disabled={!busy && (!canSend || submitDisabled)}
+              onClick={() => (stopping && onStop ? onStop() : submitComposer())}
+              disabled={!stopping && (!canSend || submitDisabled)}
               className="ml-auto flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[#0d0d0d] text-white transition-opacity hover:opacity-80 disabled:bg-elevated disabled:text-faint disabled:opacity-100"
-              aria-label={t(busy ? "Stop" : "Send")}
-              title={t(busy ? "Stop" : "Send")}
+              aria-label={t(stopping ? "Stop" : busy ? "Send after this reply" : "Send")}
+              title={t(stopping ? "Stop" : busy ? "Send after this reply" : "Send")}
             >
-              {busy ? <Square size={11} fill="currentColor" /> : <ArrowUp size={15} />}
+              {stopping ? <Square size={11} fill="currentColor" /> : <ArrowUp size={15} />}
             </button>
           </div>
         </div>
@@ -1967,6 +1972,8 @@ function Conversation({
   useEffect(()=>{if(!historyRestore)return;const frame=requestAnimationFrame(()=>{if(chatScroll.current)chatScroll.current.scrollTop+=chatScroll.current.scrollHeight-historyRestore.beforeHeight;});return()=>cancelAnimationFrame(frame);},[historyRestore]);
   const [input, setInput] = useDraft("agent", active.id, "");
   const [busy, setBusy] = useState(false);
+  // Messages sent while a turn runs wait here and go out one by one once it ends, as in Codex.
+  const [queued, setQueued] = useState<{ key: number; text: string; attachments: AgentAttachment[] }[]>([]);
   // H-COLLAB-13: a live refresh brings new server messages (another member's turn).
   // Take them when no turn of ours is running; a running turn owns the list, and a
   // snapshot from during that turn is stale for good, so it counts as seen. A reply is
@@ -2087,6 +2094,9 @@ function Conversation({
     const message = text.trim();
     if ((!message && attachments.length === 0) || running.current || turnTaken) return;
     running.current=true;setFollow(true);
+    // The message is in the conversation now, so the box empties right away. A failed turn
+    // offers "Edit failed message" to bring it back.
+    setInput(current=>current.trim()===message?"":current);
     setError(null);
     setApproval(null);
     setBusy(true);
@@ -2151,6 +2161,23 @@ function Conversation({
       box.current?.focus();
     }
   }
+
+  function submit(text: string, attachments: AgentAttachment[]) {
+    if (!running.current) return void send(text, attachments);
+    setQueued((list) => [...list, { key: Date.now() + Math.random(), text: text.trim(), attachments }]);
+    setInput("");
+    return true;
+  }
+  // The next queued message goes out when a turn ends well. A stopped or failed turn keeps
+  // the queue so nothing runs on top of a result nobody has looked at.
+  useEffect(() => {
+    if (busy || running.current || turnTaken || failedText !== null || queued.length === 0) return;
+    const [next, ...rest] = queued;
+    setQueued(rest);
+    void send(next.text, next.attachments);
+    // send is recreated each render; the queue and busy flags decide when to run.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [busy, queued, turnTaken, failedText]);
 
   // A conversation created from the empty-state composer hands its first message over in
   // sessionStorage: creating the thread navigates away from the component that typed it.
@@ -2316,11 +2343,51 @@ function Conversation({
           )}
           {error && <TurnError error={error} />}
           {failedText!==null&&<div className="mb-2 flex gap-3 text-small"><button disabled={busy} onClick={()=>{setInput(failedText);box.current?.focus();}}>{t("Edit failed message")}</button>{failedAttachments.length>0&&<span>{failedAttachments.map(file=>file.name).join(", ")}</span>}{!failedAccepted&&<button disabled={busy} onClick={()=>void (async()=>{if(await confirm(t("Send this request again?"),{ body: t("Check the conversation first; the previous request may already have run."), action: t("Send again"), tone: "primary" }))await send(failedText,failedAttachments);})()}>{t("Retry")}</button>}{failedAccepted&&<span>{t("The request started. Review its results before sending another request.")}</span>}<button onClick={()=>void navigator.clipboard.writeText(failedText).then(()=>toast(t("Copied"))).catch(()=>toast(t("Could not copy the link")))}>{t("Copy")}</button></div>}
+          {queued.length > 0 && (
+            <div className="mb-2 flex flex-col gap-1" data-testid="queued-messages">
+              {queued.map((item) => (
+                <div key={item.key} className="flex items-center gap-2 rounded-lg border border-border bg-surface px-3 py-1.5 text-small">
+                  <span className="shrink-0 text-faint">{t(failedText !== null ? "Waiting" : "Queued")}</span>
+                  <span className="min-w-0 flex-1 truncate text-text">{messageWithAttachments(item.text, item.attachments)}</span>
+                  {failedText !== null && !busy && (
+                    <button
+                      className="shrink-0 text-muted hover:text-text"
+                      onClick={() => {
+                        setQueued((list) => list.filter((entry) => entry.key !== item.key));
+                        setFailedText(null);
+                        void send(item.text, item.attachments);
+                      }}
+                    >
+                      {t("Send now")}
+                    </button>
+                  )}
+                  <button
+                    className="shrink-0 text-muted hover:text-text"
+                    onClick={() => {
+                      setQueued((list) => list.filter((entry) => entry.key !== item.key));
+                      setInput((current) => (current.trim() ? `${current}\n${item.text}` : item.text));
+                      box.current?.focus();
+                    }}
+                  >
+                    {t("Edit")}
+                  </button>
+                  <button
+                    aria-label={t("Remove")}
+                    className="shrink-0 text-faint hover:text-text"
+                    onClick={() => setQueued((list) => list.filter((entry) => entry.key !== item.key))}
+                  >
+                    <X size={12} />
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
           <Composer
             workspaceId={workspaceId}
             value={input}
             onChange={setInput}
-            onSubmit={(text, attachments) => void send(text, attachments)}
+            onSubmit={submit}
+            queueWhileBusy={!turnTaken}
             busy={busy}
             submitDisabled={turnTaken}
             onStop={() => abort.current?.abort()}
@@ -2336,13 +2403,13 @@ function Conversation({
                 <ApprovalChip
                   value={approvalMode}
                   onChange={(next) => void changeApproval(next)}
-                  disabled={busy || !active.mine}
+                  disabled={!active.mine}
                 />
                 <HarnessChip
                   options={options}
                   value={engine}
                   onChange={(next) => void chooseEngine(next)}
-                  disabled={busy || !active.mine}
+                  disabled={!active.mine}
                 />
                 <ModelChip
                   workspaceId={workspaceId}
@@ -2351,7 +2418,7 @@ function Conversation({
                   model={model}
                   effort={effort}
                   onModel={(nextModel, nextEffort) => void changeModel(nextModel, nextEffort)}
-                  disabled={busy || !active.mine}
+                  disabled={!active.mine}
                 />
               </>
             }
