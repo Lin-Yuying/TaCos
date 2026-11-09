@@ -25,8 +25,9 @@ export function tabHref(key: string): string {
   return `${key}${tabHashes.get(key) ?? ""}`;
 }
 
-// Following a link keeps the strip the same length: the page replaces the tab it was
-// opened from. A pinned tab stays put, and so does a tab opened on purpose as a new one.
+// Following a link inside a page keeps the strip the same length: the page replaces the tab
+// it was opened from. A pinned tab stays put, and so does a tab opened on purpose as a new
+// one — ⌘-click, the palette's +, or any sidebar entry.
 export function placeInTabs(
   tabs: string[],
   current: string,

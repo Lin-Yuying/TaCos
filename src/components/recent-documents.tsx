@@ -40,6 +40,7 @@ export function RecentDocuments({
         <Link
           key={page.id}
           href={`/${workspaceId}/docs/${page.id}`}
+          data-nav-new-tab=""
           className="flex h-[30px] items-center gap-[9px] rounded-[7px] px-2 text-body text-[#2b2b2b] hover:bg-elevated"
         >
           <span className="flex w-4 shrink-0 justify-center text-faint">
