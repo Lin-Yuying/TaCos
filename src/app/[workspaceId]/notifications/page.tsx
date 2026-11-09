@@ -1,5 +1,3 @@
-import { ListSkeleton } from "@/components/ui/skeleton";
-import { Suspense } from "react";
 import { connection } from "next/server";
 import { redirect } from "next/navigation";
 import { getSessionUser, requireWorkspace } from "@/lib/auth";
@@ -15,6 +13,12 @@ import { NotificationsView } from "@/components/notifications-view";
 
 const TABS: NotificationTab[] = ["unread", "mentions", "assigned", "reviews", "all"];
 
+// Deliberately no Suspense boundary: the inbox refreshes itself after every read, archive and
+// live pulse, and a boundary would swap the list for the skeleton each time — taking the row
+// the reader had just opened with it. The route blocks instead, so the client keeps the
+// current rows on screen until the next render arrives.
+export const instant = false;
+
 export default async function NotificationsPage({
   params,
   searchParams,
@@ -22,20 +26,8 @@ export default async function NotificationsPage({
   params: Promise<{ workspaceId: string }>;
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
-  return (
-    <Suspense fallback={<ListSkeleton />}>
-      <View params={params} searchParams={searchParams} />
-    </Suspense>
-  );
-}
-
-async function View({
-  params,
-  searchParams,
-}: {
-  params: Promise<{ workspaceId: string }>;
-  searchParams: Promise<Record<string, string | string[] | undefined>>;
-}) {
+  // Request time before anything else: the session check reads the clock, and a prerendered
+  // page would freeze that to build time.
   await connection();
   const { workspaceId } = await params;
   const query = await searchParams;

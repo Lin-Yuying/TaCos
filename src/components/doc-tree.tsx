@@ -116,6 +116,7 @@ function DocRow({
         <Link
           href={`/${workspaceId}/docs/${page.id}`}
           draggable={false}
+          data-nav-new-tab=""
           className="flex min-w-0 flex-1 items-center gap-1.5 py-1 pr-2"
         >
           <span className="flex w-4 shrink-0 items-center justify-center text-faint">

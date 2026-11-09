@@ -48,6 +48,21 @@ type Props = {
 };
 type Undo = { message: string; run: () => Promise<unknown> };
 
+// Rows read while Unread is open stay where they are until the reader opens another row, and
+// the list is only re-read from the server at that point. This has to outlive the component:
+// a server refresh re-mounts the view, and a ref would come back empty — dropping the row the
+// reader had just opened, which is exactly the flicker we are avoiding.
+type InboxMemory = { kept: Set<string>; pending: boolean };
+const inboxMemory = new Map<string, InboxMemory>();
+function memoryFor(workspaceId: string): InboxMemory {
+  let memory = inboxMemory.get(workspaceId);
+  if (!memory) {
+    memory = { kept: new Set(), pending: false };
+    inboxMemory.set(workspaceId, memory);
+  }
+  return memory;
+}
+
 const TABS: { id: NotificationTab; key: keyof NotificationCounts; label: string }[] = [
   { id: "unread", key: "unread", label: "Unread" },
   { id: "mentions", key: "mentions", label: "Mentions" },
@@ -198,14 +213,11 @@ export function NotificationsView({
   const [undo, setUndo] = useState<Undo | null>(null);
   const undoTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const pending = useRef(new Set<string>());
-
-  // Rows read while Unread is open stay where they are until the tab changes. Dropping them on the
-  // refresh moved the list under the reader and lost the row they had just opened.
-  const keptRead = useRef(new Set<string>());
+  const memory = useRef(memoryFor(workspaceId));
 
   // Re-sync after router.refresh(): the server owns the authoritative rows and counts.
   useEffect(() => {
-    setItems((old) => keepReadRows(old, initialItems, keptRead.current));
+    setItems((old) => keepReadRows(old, initialItems, memory.current.kept));
     setNextCursor(initialNextCursor);
     setCounts(initialCounts);
     setPrefs(initialPrefs);
@@ -268,7 +280,12 @@ export function NotificationsView({
       unread ? markNotificationReadAction(workspaceId, item.id) : markNotificationUnreadAction(workspaceId, item.id)
     );
     if (!ok) return;
-    if (unread && tab === "unread") keptRead.current.add(item.id);
+    if (unread && tab === "unread") {
+      memory.current.kept.add(item.id);
+      memory.current.pending = true;
+    } else {
+      memory.current.kept.delete(item.id);
+    }
     patch(item.id, { state: unread ? "read" : "unread", readAt: unread ? new Date().toISOString() : null });
     applyCounts({
       unread: unread ? -1 : 1,
@@ -276,7 +293,10 @@ export function NotificationsView({
       assigned: item.type === "assigned" ? (unread ? -1 : 1) : 0,
       reviews: item.type === "review_decision" ? (unread ? -1 : 1) : 0,
     });
-    refreshed();
+    // The badge updates now; the Unread list itself is re-read when the reader opens another
+    // row, so the row they just clicked does not slide out from under them.
+    window.dispatchEvent(new Event(NOTIFICATIONS_READ));
+    if (!unread) refreshed();
   }
 
   async function markDone(item: NotificationRow) {
@@ -350,13 +370,25 @@ export function NotificationsView({
   }
 
   function open(item: NotificationRow) {
-    if (item.state === "unread") void toggleRead(item);
+    // Rows read earlier leave the Unread list here, one click later than the read itself.
+    const flush = memory.current.pending;
+    memory.current.pending = false;
+    const reading = item.state === "unread" ? toggleRead(item) : null;
     if (item.pageId) openPage(item.pageId);
     else if (item.type !== "workspace_deleted" && item.issueId) openIssue(item.issueId);
+    if (!flush) return;
+    // Wait for this read to land, then take the server's list as it is: everything read so
+    // far drops out, including the row just opened.
+    void Promise.resolve(reading).then(() => {
+      memory.current.kept.clear();
+      memory.current.pending = false;
+      refreshed();
+    });
   }
 
   function goTab(next: NotificationTab) {
-    keptRead.current.clear();
+    memory.current.kept.clear();
+    memory.current.pending = false;
     setTab(next);
     setSelected(-1);
     const params = new URLSearchParams({ tab: next });

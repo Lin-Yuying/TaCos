@@ -121,6 +121,9 @@ function NavItem({
       href={href}
       title={title}
       data-testid={testId}
+      // Sidebar entries are destinations you keep alongside what you were reading, so they
+      // open their own tab instead of replacing the current one (see TabBar's click handler).
+      data-nav-new-tab=""
       aria-disabled={disabled || undefined}
       className={`flex h-[30px] items-center gap-[9px] rounded-[7px] px-2 transition-colors ${
         disabled
@@ -1626,8 +1629,22 @@ function TabBar({
       if (event.defaultPrevented || event.button !== 0) return;
       const link = (event.target as Element | null)?.closest?.("a[href]") as HTMLAnchorElement | null;
       if (!(event.metaKey || event.ctrlKey)) {
-        // An ordinary link after the palette closed without a choice stays in this tab.
-        if (link && !paletteOpen) openAsNew.current = false;
+        if (link && !paletteOpen) {
+          if (link.hasAttribute("data-nav-new-tab")) {
+            // A sidebar entry opens next to the page on screen; links inside a page still
+            // replace the tab they were followed from, so reading does not pile up tabs.
+            const url = new URL(link.href);
+            if (url.origin === window.location.origin) {
+              const params = new URLSearchParams(url.search);
+              params.sort();
+              const query = params.toString();
+              openAsNew.current = `${url.pathname}${query ? `?${query}` : ""}` !== lastKey.current;
+              return;
+            }
+          }
+          // An ordinary link after the palette closed without a choice stays in this tab.
+          openAsNew.current = false;
+        }
         return;
       }
       if (!link || link.target === "_blank") return;

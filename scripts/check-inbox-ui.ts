@@ -43,6 +43,10 @@ function main() {
   assert(page.includes("listNotificationPage"), "the page must use the paginated inbox query");
   assert(page.includes("notificationCounts"), "the page must compute tab counts");
   assert(page.includes("getNotificationPrefs") && page.includes("listNotificationMutes"), "preferences and mutes must load with the page");
+  // A refresh after every read would swap the list for the skeleton and drop the row the
+  // reader had just opened, so this route blocks instead of streaming behind a fallback.
+  assert(page.includes("export const instant = false"), "the inbox must opt out of instant navigation");
+  assert(!page.includes("<Suspense"), "the inbox must not hide the list behind a Suspense fallback");
 
   const actions = read("src/app/workspace-misc-actions.ts");
   for (const name of [
@@ -61,6 +65,8 @@ function main() {
   const shell = read("src/components/workspace-shell.tsx");
   assert(shell.includes("G then I opens the Inbox"), "the shell must document the G I shortcut");
   assert(shell.includes('event.key === "g"') && shell.includes('event.key === "i"'), "the shell must handle G then I");
+  // A sidebar entry is a second destination, not a replacement: it opens its own tab.
+  assert(shell.includes('data-nav-new-tab'), "sidebar entries must open their own tab");
 
   const schema = read("src/db/schema.ts");
   for (const column of ["snoozedUntil", "deletedAt", "state", "data"]) {
