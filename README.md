@@ -24,7 +24,7 @@ Requires Node.js 20.9+.
 
 ```bash
 npm install
-npm run dev          # http://localhost:3000
+npm run dev         
 ```
 
 The database lives at `data/tacos.db` and is created on first run.
