@@ -2,7 +2,7 @@
 
 # TaCos
 
-**Why the name TaCos? **
+**Why the name TaCos?**
 - Well, I like tacos 🌮, one of my favorite Mexican foods,
 - Ta stands for “獭” (otter) 🦦 in Chinese, the cutest animals in the world,
 - Co, abbreviation of “collaboration”.
