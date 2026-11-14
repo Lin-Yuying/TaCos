@@ -2,6 +2,11 @@
 
 # TaCos
 
+**Why the name TaCos? **
+- Well, I like tacos 🌮, one of my favorite Mexican foods,
+- Ta stands for “獭” (otter) 🦦 in Chinese, the cutest animals in the world,
+- Co, abbreviation of “collaboration”.
+
 A task tracker built for teams that work alongside AI agents. 
 
 TaCos is a fast, local-first tracker where humans and agents share the same backlog. 
