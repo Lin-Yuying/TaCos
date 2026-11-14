@@ -2,11 +2,6 @@
 
 # TaCos
 
-**Why the name TaCos?**
-- Well, I like tacos 🌮, one of my favorite Mexican foods,
-- Ta stands for “獭” (otter) 🦦 in Chinese, the cutest animals in the world,
-- Co, abbreviation of “collaboration”.
-
 A task tracker built for teams that work alongside AI agents. 
 
 TaCos is a fast, local-first tracker where humans and agents share the same backlog. 
@@ -538,6 +533,15 @@ electron/              thin desktop shell and bundled-server launcher
 
 Every mutation records an event with an actor (`you`, `api:<key-name>`, or `mcp`). The task panel merges comments and events into one timeline, so the history stays readable whether a human or an agent made the change.
 
+## **Why the name TaCos?**
+- Well, I like tacos 🌮, one of my favorite Mexican foods,
+- Ta stands for “獭” (otter) 🦦 in Chinese, the cutest animals in the world,
+- Co, abbreviation of “collaboration”.
+
+And that's why TaCos' icon features a little otter gazing up at the starry sky.
+
+
 ## License
 
 [MIT](LICENSE) © 2026 Zhenglin Chen, Yongqi Liu, Jiahao Xu, Xinyue Zhang and Yuying Lin. 
+
