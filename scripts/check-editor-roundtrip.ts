@@ -72,7 +72,13 @@ Paragraph below them.
   Indented paragraph.
 `;
 
-const SAMPLES: [string, string][] = [["syntax", SYNTAX]];
+const SAMPLES: [string, string][] = [
+  ["syntax", SYNTAX],
+  [
+    "subpage position",
+    `Paragraph above the subpage.\n\n[[Child page|page-child]]\n\nParagraph below the subpage.`,
+  ],
+];
 for (const file of ["README.md", "AGENTS.md", "docs/harness-contracts.md", "docs/windows-signing.md", "docs/plans/team-2.2.md"]) {
   SAMPLES.push([file, readFileSync(file, "utf8")]);
 }

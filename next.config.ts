@@ -4,8 +4,10 @@ const nextConfig: NextConfig = {
   // The desktop package ships this server build inside the app bundle, so a user can
   // run TaCos entirely on their own machine without Node installed.
   output: "standalone",
-  // Never trace the live SQLite file into a server bundle — it holds real accounts.
-  outputFileTracingExcludes: { "*": ["./data/**"] },
+  // Never trace accounts or previous installers into the next server bundle.
+  outputFileTracingExcludes: {
+    "*": ["./data/**", "./dist/**", "./release/**", "./release-standalone/**"],
+  },
   cacheComponents: true,
   partialPrefetching: true,
   experimental: {

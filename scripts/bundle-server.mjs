@@ -15,6 +15,7 @@ import {
 } from "node:fs";
 import { execFileSync } from "node:child_process";
 import path from "node:path";
+import { sanitizeServerPayload } from "./server-payload-hygiene.mjs";
 
 const root = path.resolve(import.meta.dirname, "..");
 const nextDir = path.join(root, ".next");
@@ -30,12 +31,6 @@ if (!existsSync(path.join(standaloneDir, "server.js"))) {
     "[bundle-server] .next/standalone/server.js is missing — run `npm run build` first."
   );
   process.exit(1);
-}
-
-function findFiles(dir, predicate) {
-  return readdirSync(dir, { recursive: true, withFileTypes: true })
-    .filter((entry) => entry.isFile() && predicate(entry.name))
-    .map((entry) => path.join(entry.parentPath || dir, entry.name));
 }
 
 function argValue(name) {
@@ -96,12 +91,12 @@ if (existsSync(path.join(root, "public"))) {
 // it a packaged server would answer every tool call with "the bridge is missing".
 cpSync(path.join(root, "scripts", "agent-mcp.mjs"), path.join(outDir, "agent-mcp.mjs"));
 
-// File tracing can still pick up the checkout's live database. A shipped copy would hand
-// the installer someone else's accounts, so drop it and refuse to finish if any survives.
-rmSync(path.join(outDir, "data"), { recursive: true, force: true });
-const leaked = findFiles(outDir, (name) => name.endsWith(".db") || name.endsWith(".db-wal"));
-if (leaked.length > 0) {
-  console.error(`[bundle-server] refusing to ship a database: ${leaked.join(", ")}`);
+// Next copies environment files after tracing, and tracing can still pick up the live
+// database. Neither belongs in an installer that other people will run.
+try {
+  sanitizeServerPayload(outDir);
+} catch (err) {
+  console.error(`[bundle-server] ${err && err.message ? err.message : err}`);
   process.exit(1);
 }
 

@@ -1,0 +1,17 @@
+{
+  "name": "tacos",
+  "owner": {
+    "name": "TaCos"
+  },
+  "metadata": {
+    "description": "TaCos tasks, comments and labels for coding agents.",
+    "version": "1.0.0"
+  },
+  "plugins": [
+    {
+      "name": "tacos",
+      "source": "./plugins/tacos",
+      "description": "Read and update TaCos tasks, comments and labels from Codex, Claude Code or any MCP client."
+    }
+  ]
+}

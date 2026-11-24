@@ -1,0 +1,26 @@
+{
+  "name": "tacos",
+  "description": "Read and update TaCos tasks, comments and labels from Claude Code.",
+  "version": "1.0.0",
+  "author": {
+    "name": "TaCos"
+  },
+  "homepage": "https://github.com/Lin-Yuying/TaCos/tree/main/plugins/tacos",
+  "repository": "https://github.com/Lin-Yuying/TaCos",
+  "license": "MIT",
+  "keywords": [
+    "tacos",
+    "tasks",
+    "issues",
+    "comments",
+    "mcp"
+  ],
+  "mcpServers": {
+    "tacos": {
+      "command": "node",
+      "args": [
+        "${CLAUDE_PLUGIN_ROOT}/mcp/tacos-mcp.mjs"
+      ]
+    }
+  }
+}

@@ -33,7 +33,7 @@
       }
       body {
         display: flex;
-        align-items: center;
+        align-items: flex-start;
         justify-content: center;
         background: #f9f9f9;
         padding: 24px;
@@ -232,6 +232,22 @@
       #ssh-form { margin-top: 8px; }
       #ssh-form input { width: 100%; box-sizing: border-box; margin-bottom: 10px; }
       #ssh-form button { margin-right: 8px; margin-top: 4px; }
+      #ssh-recent[hidden] { display: none; }
+      .ssh-history-heading { display: flex; align-items: center; justify-content: space-between; }
+      .ssh-history-heading .recent-label { width: auto; }
+      #ssh-form #ssh-clear-history {
+        margin: 0;
+        padding: 2px 0;
+        background: transparent;
+        color: var(--faint);
+        font: 11px/1.4 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      }
+      #ssh-form #ssh-clear-history:hover:not(:disabled),
+      #ssh-form #ssh-clear-history:focus-visible {
+        background: transparent;
+        color: var(--text);
+      }
+      #ssh-form #ssh-clear-history:focus-visible { outline: 2px solid var(--border-strong); outline-offset: 2px; }
       #ssh-key-text { width: 100%; box-sizing: border-box; margin-top: 10px; font: 12px ui-monospace, monospace; }
     </style>
   </head>
@@ -275,6 +291,13 @@
         <input id="ssh-target" type="text" spellcheck="false" autocomplete="off" placeholder="tacos@203.0.113.7" />
         <label for="ssh-port">Port on the server</label>
         <input id="ssh-port" type="text" inputmode="numeric" spellcheck="false" autocomplete="off" value="3200" />
+        <div id="ssh-recent" hidden>
+          <div class="ssh-history-heading">
+            <span class="recent-label">Recent SSH connections</span>
+            <button id="ssh-clear-history" type="button">Clear history</button>
+          </div>
+          <div class="recent" id="ssh-history-list"></div>
+        </div>
         <div class="error" id="ssh-error" role="alert"></div>
         <button id="ssh-submit" type="submit">Connect over SSH</button>
         <button id="ssh-key" type="button">Show my SSH key for the admin</button>

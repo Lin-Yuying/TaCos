@@ -43,6 +43,7 @@ import {
   formatBlockSpan,
   INDENT,
   occurrenceAt,
+  pageReferenceMarkdown,
   parseBlock,
   safeHref,
   setCodeLang,
@@ -1385,7 +1386,7 @@ export const MarkdownEditor = forwardRef<
     const area = areaRef.current;
     const pos = area?.selectionStart ?? draft.length;
     const anchor = Math.min(menu?.filterFrom ?? draft.lastIndexOf("\n", pos - 1) + 1, pos);
-    const link = `[[${ref.title}|${ref.id}]]`;
+    const link = pageReferenceMarkdown(ref.title, ref.id);
     const body = `${draft.slice(0, anchor)}${link}${draft.slice(pos)}`;
     const parsed = splitMarker(body);
     setMarker(parsed.marker);

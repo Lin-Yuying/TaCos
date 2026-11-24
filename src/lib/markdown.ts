@@ -47,11 +47,74 @@ const TODO = /^\s*[-*+]\s+\[( |x|X)\]\s+/;
 const QUOTE = /^\s*>\s?/;
 const FENCE = /^```(\w*)\s*$/;
 const DIVIDER = /^\s*(-{3,}|\*{3,}|_{3,})$/;
-const EMBED = /^\s*!\[\[([^\]\n|]+)(?:\|([^\]\n|]+))?\]\]\s*$/;
 const IMAGE = /^\s*!\[([^\]\n]*)\]\(\s*([^)\s]+)\s*\)\s*$/;
 
 // GFM lets a backslash take the meaning away from any ASCII punctuation character.
 export const ESCAPABLE = /[\\`*_{}[\]()#+\-.!~|>]/;
+
+export type PageReference = {
+  raw: string;
+  title: string;
+  pageId?: string;
+  embed: boolean;
+  start: number;
+  end: number;
+  titleOffset: number;
+};
+
+const PAGE_REFERENCE_AT = /(!?)\[\[((?:\\.|[^\\\]\n|])*)(?:\|((?:\\.|[^\\\]\n|])*))?\]\]/y;
+
+function decodePageReferencePart(value: string): string {
+  return value.replace(/\\([\\|\]rn])/g, (_match, char: string) =>
+    char === "n" ? "\n" : char === "r" ? "\r" : char
+  );
+}
+
+export function pageReferencePart(value: string): string {
+  return value.replace(/[\\|\]\r\n]/g, (char) =>
+    char === "\n" ? "\\n" : char === "\r" ? "\\r" : `\\${char}`
+  );
+}
+
+export function pageReferenceMarkdown(title: string, pageId?: string, embed = false): string {
+  const reference = `[[${pageReferencePart(title)}${pageId === undefined ? "" : `|${pageReferencePart(pageId)}`}]]`;
+  return embed ? `!${reference}` : reference;
+}
+
+export function pageReferenceAt(src: string, start: number): PageReference | null {
+  PAGE_REFERENCE_AT.lastIndex = start;
+  const match = PAGE_REFERENCE_AT.exec(src);
+  if (!match) return null;
+  const title = decodePageReferencePart(match[2]);
+  if (!title.trim()) return null;
+  const pageId = match[3] === undefined ? undefined : decodePageReferencePart(match[3]);
+  if (pageId !== undefined && !pageId.trim()) return null;
+  const rawTitle = match[2];
+  return {
+    raw: match[0],
+    title,
+    pageId,
+    embed: match[1] === "!",
+    start: match.index,
+    end: match.index + match[0].length,
+    titleOffset: (match[1] === "!" ? 3 : 2) + rawTitle.length - rawTitle.trimStart().length,
+  };
+}
+
+export function* pageReferences(src: string): Generator<PageReference> {
+  const pattern = new RegExp(PAGE_REFERENCE_AT.source, "g");
+  for (const match of src.matchAll(pattern)) {
+    const reference = pageReferenceAt(match[0], 0);
+    if (!reference) continue;
+    yield { ...reference, start: match.index, end: match.index + reference.raw.length };
+  }
+}
+
+function standalonePageEmbed(line: string): PageReference | null {
+  const source = line.trim();
+  const reference = pageReferenceAt(source, 0);
+  return reference?.embed && reference.end === source.length ? reference : null;
+}
 
 // Two spaces per level, the same convention Notion writes out when you press Tab.
 export const INDENT = "  ";
@@ -67,7 +130,7 @@ function markerKind(line: string): string | null {
   if (line.trim() === "") return null;
   // These always stand alone, so they break the run of lines being collected.
   if (FENCE.test(line) || HEADING.test(line) || DIVIDER.test(line.trim())) return null;
-  if (IMAGE.test(line) || EMBED.test(line)) return null;
+  if (IMAGE.test(line) || standalonePageEmbed(line)) return null;
   if (TODO.test(line)) return "todo";
   if (QUOTE.test(line)) return "quote";
   if (BULLET.test(line)) return "bullet";
@@ -108,7 +171,7 @@ export function splitBlocks(src: string): string[] {
       blocks.push(lines.slice(start, i).join("\n"));
       continue;
     }
-    if (HEADING.test(line) || DIVIDER.test(line.trim()) || EMBED.test(line) || IMAGE.test(line)) {
+    if (HEADING.test(line) || DIVIDER.test(line.trim()) || standalonePageEmbed(line) || IMAGE.test(line)) {
       blocks.push(line);
       i += 1;
       continue;
@@ -155,10 +218,10 @@ function tokenizeInline(text: string, depth = 0): InlineToken[] {
   let i = 0;
   // Closing delimiters are indexed once, including failed URL suffixes. Long runs
   // of unmatched opening brackets never rescan the remaining line.
-  const nextClose = new Int32Array(text.length + 1), nextLine = new Int32Array(text.length + 1), nextPipe = new Int32Array(text.length + 1);
-  let close=text.length, line=text.length, pipe=text.length;
-  nextClose[text.length]=nextLine[text.length]=nextPipe[text.length]=text.length;
-  for(let at=text.length-1;at>=0;at--){if(text[at]==="]")close=at;if(text[at]==="\n")line=at;if(text[at]==="|")pipe=at;nextClose[at]=close;nextLine[at]=line;nextPipe[at]=pipe;}
+  const nextClose = new Int32Array(text.length + 1), nextLine = new Int32Array(text.length + 1);
+  let close=text.length, line=text.length;
+  nextClose[text.length]=nextLine[text.length]=text.length;
+  for(let at=text.length-1;at>=0;at--){if(text[at]==="]")close=at;if(text[at]==="\n")line=at;nextClose[at]=close;nextLine[at]=line;}
   const urls = new Map<number, RegExpExecArray | null>();
 
   const flush = (end: number) => {
@@ -286,14 +349,19 @@ function tokenizeInline(text: string, depth = 0): InlineToken[] {
           else out.push({type:"link",text:label||href,href:safeHref(href),start:i,inner:i+1,end:closing+url[0].length});
           i=closing+url[0].length;continue;
         }
-        if(text[i+1]==="[" && text[closing+1]==="]"){
-          const separator=nextPipe[i+2];
-          const titleEnd=Math.min(separator,closing);
-          if(titleEnd>i+2 && (separator>=closing || (separator+1<closing && nextPipe[separator+1]>=closing))){
-            flush(i);const raw=text.slice(i+2,titleEnd),title=raw.trim();
-            out.push({type:"page",text:title,pageId:separator<closing?text.slice(separator+1,closing).trim():undefined,start:i,inner:i+2+raw.indexOf(title),end:closing+2});
-            i=closing+2;continue;
-          }
+        const reference = pageReferenceAt(text, i);
+        if (reference && !reference.embed) {
+          flush(i);
+          out.push({
+            type: "page",
+            text: reference.title,
+            pageId: reference.pageId,
+            start: i,
+            inner: i + reference.titleOffset,
+            end: reference.end,
+          });
+          i = reference.end;
+          continue;
         }
       }
     }
@@ -371,8 +439,17 @@ function splitTableRow(line: string): string[] {
   let escapedTail = false;
   for (let i = 0; i < text.length; i++) {
     const ch = text[i];
+    if (ch === "[" && text[i + 1] === "[") {
+      const reference = pageReferenceAt(text, i);
+      if (reference) {
+        cell += text.slice(i, reference.end);
+        i = reference.end - 1;
+        escapedTail = false;
+        continue;
+      }
+    }
     if (ch === "\\" && text[i + 1] === "|") {
-      cell += "|";
+      cell += "\\|";
       i += 1;
       escapedTail = true;
       continue;
@@ -474,12 +551,12 @@ export function parseBlock(raw: string): Block {
 
   if (DIVIDER.test(first.trim())) return { kind: "divider" };
 
-  const embed = EMBED.exec(first);
+  const embed = standalonePageEmbed(first);
   if (embed) {
     return {
       kind: "embed",
-      text: embed[1].trim(),
-      pageId: embed[2]?.trim(),
+      text: embed.title.trim(),
+      pageId: embed.pageId?.trim(),
       depth: indentDepth(first),
     };
   }

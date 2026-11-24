@@ -20,6 +20,8 @@ contextBridge.exposeInMainWorld("tacosDesktop", {
   connect: (url) => ipcRenderer.invoke("tacos:connect", url),
   connectSsh: (config) => ipcRenderer.invoke("tacos:connect-ssh", config),
   getSshConfig: () => ipcRenderer.invoke("tacos:get-ssh-config"),
+  getSshHistory: () => ipcRenderer.invoke("tacos:get-ssh-history"),
+  clearSshHistory: () => ipcRenderer.invoke("tacos:clear-ssh-history"),
   getSshPublicKey: () => ipcRenderer.invoke("tacos:ssh-public-key"),
   retry: () => ipcRenderer.invoke("tacos:retry"),
   changeServer: () => ipcRenderer.invoke("tacos:change-server"),

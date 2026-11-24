@@ -155,9 +155,46 @@ const sshError = document.getElementById("ssh-error");
 const sshSubmit = document.getElementById("ssh-submit");
 const sshKeyButton = document.getElementById("ssh-key");
 const sshKeyText = document.getElementById("ssh-key-text");
+const sshHistoryEl = document.getElementById("ssh-recent");
+const sshHistoryList = document.getElementById("ssh-history-list");
+const sshClearHistory = document.getElementById("ssh-clear-history");
+
+function renderSshHistory(items) {
+  const history = Array.isArray(items)
+    ? items.filter(
+        (value) =>
+          value &&
+          typeof value.target === "string" &&
+          value.target &&
+          Number.isInteger(Number(value.remotePort)) &&
+          Number(value.remotePort) > 0 &&
+          Number(value.remotePort) <= 65535
+      )
+    : [];
+  sshHistoryList.replaceChildren(
+    ...history.map(({ target, remotePort }) => {
+      const port = Number(remotePort);
+      const chip = document.createElement("button");
+      chip.type = "button";
+      chip.textContent = `${target} · ${port}`;
+      chip.title = `Connect to ${target} on port ${port}`;
+      chip.addEventListener("click", () => {
+        sshTarget.value = target;
+        sshPort.value = String(port);
+        sshTarget.focus();
+      });
+      return chip;
+    })
+  );
+  sshHistoryEl.hidden = history.length === 0;
+}
 
 async function initSsh() {
-  const saved = await window.tacosDesktop.getSshConfig();
+  const [saved, history] = await Promise.all([
+    window.tacosDesktop.getSshConfig(),
+    window.tacosDesktop.getSshHistory(),
+  ]);
+  renderSshHistory(history);
   if (!saved) return;
   sshTarget.value = saved.target;
   sshPort.value = String(saved.remotePort);
@@ -171,12 +208,25 @@ sshForm.addEventListener("submit", async (event) => {
   sshSubmit.textContent = "Connecting…";
   try {
     const result = await window.tacosDesktop.connectSsh({ target: sshTarget.value, remotePort: sshPort.value });
-    if (!result.ok) sshError.textContent = result.error;
+    if (!result.ok) {
+      sshError.textContent = result.error;
+    } else {
+      renderSshHistory(await window.tacosDesktop.getSshHistory());
+    }
   } catch {
     sshError.textContent = "Something went wrong while connecting.";
   }
   sshSubmit.disabled = false;
   sshSubmit.textContent = "Connect over SSH";
+});
+
+sshClearHistory.addEventListener("click", async () => {
+  try {
+    renderSshHistory(await window.tacosDesktop.clearSshHistory());
+    sshError.textContent = "";
+  } catch {
+    sshError.textContent = "Could not clear SSH history.";
+  }
 });
 
 sshKeyButton.addEventListener("click", async () => {

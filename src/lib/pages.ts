@@ -13,6 +13,7 @@ import { pageLinkTargets, replacePageLinks } from "./page-links";
 import { emitAutomationEvent } from "./automations/dispatch";
 import { followScope } from "./watchers";
 import { recordActivity } from "./activity";
+import { pageReferences } from "./markdown";
 
 async function activityActor(workspaceId: string, userId: string) {
   const [row] = await getDb()
@@ -1262,9 +1263,10 @@ export async function pageEmbedSources(
   const refs = await listPageRefs(workspaceId, viewerId);
   const lookup = pageLookup(refs);
   const ids = new Set<string>();
-  for (const match of doc.matchAll(/!\[\[([^\]\n|]+)(?:\|([^\]]+))?\]\]/g)) {
-    const byId = match[2] ? lookup[match[2].trim()] : undefined;
-    const byTitle = lookup[match[1].trim().toLowerCase()];
+  for (const reference of pageReferences(doc)) {
+    if (!reference.embed) continue;
+    const byId = reference.pageId ? lookup[reference.pageId.trim()] : undefined;
+    const byTitle = lookup[reference.title.trim().toLowerCase()];
     const target = byId ?? byTitle;
     if (target) ids.add(target.id);
   }

@@ -104,6 +104,7 @@ function NavItem({
   disabled,
   title,
   testId,
+  className,
   children,
 }: {
   href: string;
@@ -114,6 +115,7 @@ function NavItem({
   disabled?: boolean;
   title?: string;
   testId?: string;
+  className?: string;
   children: ReactNode;
 }) {
   return (
@@ -125,7 +127,7 @@ function NavItem({
       // open their own tab instead of replacing the current one (see TabBar's click handler).
       data-nav-new-tab=""
       aria-disabled={disabled || undefined}
-      className={`flex h-[30px] items-center gap-[9px] rounded-[7px] px-2 transition-colors ${
+      className={`flex h-[30px] items-center gap-[9px] rounded-[7px] px-2 transition-colors ${className ?? ""} ${
         disabled
           ? "cursor-not-allowed text-faint opacity-60"
           : active
@@ -147,14 +149,18 @@ function NavItem({
 
 function SectionHeader({
   label,
+  icon,
   open,
   onToggle,
   action,
+  labelClassName,
 }: {
   label: string;
+  icon?: ReactNode;
   open: boolean;
   onToggle: () => void;
   action?: ReactNode;
+  labelClassName?: string;
 }) {
   return (
     <div className="group/section mt-2.5 flex h-[26px] items-center justify-between pl-2 pr-1">
@@ -162,8 +168,9 @@ function SectionHeader({
         type="button"
         onClick={onToggle}
         aria-expanded={open}
-        className="flex min-w-0 items-center gap-1 text-small font-medium text-muted transition-colors hover:text-text"
+        className={`flex min-w-0 items-center gap-1 rounded px-1.5 py-0.5 ${labelClassName ?? "text-small"} font-medium uppercase tracking-wider text-faint transition-colors hover:text-muted`}
       >
+        {icon ? <span className="flex shrink-0 items-center justify-center">{icon}</span> : null}
         {label}
         <ChevronRight
           size={11}
@@ -272,7 +279,12 @@ function SidebarNav({
           href={`/${workspaceId}/search`}
           active={pathname.endsWith("/search")}
           icon={<Search size={16} />}
-          tag={<kbd className={KBD}>{modifier}K</kbd>}
+          className="group"
+          tag={
+            <kbd className={`${KBD} opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100`}>
+              {modifier}K
+            </kbd>
+          }
         >
           {t("Search")}
         </NavItem>
@@ -312,6 +324,8 @@ function SidebarNav({
       <div>
         <SectionHeader
           label={t("Tasks")}
+          icon={<LayoutList size={12} />}
+          labelClassName="text-body"
           open={open("tasks")}
           onToggle={() => toggleSection("tasks")}
         />
@@ -382,8 +396,10 @@ function SidebarNav({
       <div>
         <SectionHeader
           label={t("Projects")}
+          icon={<Boxes size={13} />}
           open={open("projects")}
           onToggle={() => toggleSection("projects")}
+          labelClassName="text-body"
           action={
             <button
               type="button"
@@ -429,6 +445,8 @@ function SidebarNav({
       <div>
         <SectionHeader
           label={t("Documents")}
+          icon={<FileText size={13} />}
+          labelClassName="text-body"
           open={open("documents")}
           onToggle={() => toggleSection("documents")}
           action={
@@ -735,11 +753,13 @@ function RailFlyout({
   label,
   icon,
   labeled,
+  labelClassName,
   children,
 }: {
   label: string;
   icon: ReactNode;
   labeled: boolean;
+  labelClassName?: string;
   children: (close: () => void) => ReactNode;
 }) {
   const [open, setOpen] = useState(false);
@@ -805,7 +825,7 @@ function RailFlyout({
         aria-expanded={open}
         className={
           labeled
-            ? `mt-1 flex h-6 items-center gap-2 rounded px-2 text-left text-small font-medium uppercase tracking-wider transition-colors ${
+            ? `mt-1 flex h-6 items-center gap-2 rounded px-2 text-left ${labelClassName ?? "text-small"} font-medium uppercase tracking-wider transition-colors ${
                 open ? "text-text" : "text-faint hover:text-muted"
               }`
             : `mt-0.5 flex h-7 w-8 items-center justify-center rounded-md transition-colors ${
@@ -837,7 +857,9 @@ function RailFlyout({
             }}
             className="fixed z-50 overflow-y-auto overflow-x-hidden rounded-lg border border-border bg-overlay p-1 shadow-xl shadow-black/10"
           >
-            <div className="px-2 pb-1 pt-1 text-small font-medium uppercase tracking-wider text-faint">
+            <div
+              className={`px-2 pb-1 pt-1 ${labelClassName ?? "text-small"} font-medium uppercase tracking-wider text-faint`}
+            >
               {label}
             </div>
             {children(close)}
@@ -1067,7 +1089,12 @@ function SidebarRail({
           </RailFlyout>
         )}
         {projects.length > 0 && (
-          <RailFlyout label={t("Projects")} icon={<Boxes size={15} />} labeled={labeled}>
+          <RailFlyout
+            label={t("Projects")}
+            icon={<Boxes size={15} />}
+            labeled={labeled}
+            labelClassName="text-body"
+          >
             {(close) =>
               shownProjects.map((project) => (
                 <RailFlyoutLink
@@ -1845,9 +1872,15 @@ function TabBar({
         }}
         title={t("Open something ({key}K)",{key:modifier})}
         aria-label={t("Open something")}
-        className={ICON_BTN}
+        className={`${ICON_BTN} group relative`}
       >
         <Plus size={16} />
+        <kbd
+          aria-hidden="true"
+          className="pointer-events-none absolute right-full mr-1.5 whitespace-nowrap rounded border border-border bg-surface px-1 py-0.5 font-mono text-caption text-faint opacity-0 shadow-sm transition-opacity group-hover:opacity-100 group-focus-within:opacity-100"
+        >
+          {modifier}K
+        </kbd>
       </button>
 
       <div className="ml-1 flex shrink-0 items-center gap-1">

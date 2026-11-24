@@ -16,6 +16,7 @@ const nodeNet = require("node:net");
 const { spawn, spawnSync } = require("node:child_process");
 const { initAppUpdater, getAppUpdateMenuItem } = require("./updater");
 const { createTunnel, parseTarget } = require("./ssh-tunnel");
+const { rememberedSshConnections, rememberSshConnection } = require("./ssh-history");
 const { adoptShellPath } = require("./shell-path");
 
 const DEFAULT_SERVER = "http://localhost:3000";
@@ -742,7 +743,17 @@ ipcMain.handle("tacos:connect-ssh", async (_event, raw) => {
   if (connecting) return { ok: false, error: "Already connecting — one moment." };
   connecting = true;
   try {
-    const config = { target: String(raw?.target || "").trim(), remotePort: Number(raw?.remotePort) || TUNNEL_REMOTE_PORT };
+    const rawPort = String(raw?.remotePort ?? "").trim();
+    const remotePort = rawPort ? Number(rawPort) : TUNNEL_REMOTE_PORT;
+    if (
+      (rawPort && !/^\d+$/.test(rawPort)) ||
+      !Number.isInteger(remotePort) ||
+      remotePort <= 0 ||
+      remotePort > 65535
+    ) {
+      throw new Error("Enter a port between 1 and 65535.");
+    }
+    const config = { target: String(raw?.target || "").trim(), remotePort };
     logLine(`ssh connect requested: ${config.target} port ${config.remotePort}`);
     const url = await startTunnel(config);
     const probe = await probeServer(url);
@@ -750,7 +761,12 @@ ipcMain.handle("tacos:connect-ssh", async (_event, raw) => {
       stopTunnel();
       return probe;
     }
-    writeSettings({ sshTunnel: config, serverUrl: url });
+    const settings = readSettings();
+    writeSettings({
+      sshTunnel: config,
+      serverUrl: url,
+      sshHistory: rememberSshConnection(settings, config),
+    });
     await openServer(url);
     return { ok: true };
   } catch (err) {
@@ -761,6 +777,11 @@ ipcMain.handle("tacos:connect-ssh", async (_event, raw) => {
 });
 
 ipcMain.handle("tacos:get-ssh-config", () => readSettings().sshTunnel || null);
+ipcMain.handle("tacos:get-ssh-history", () => rememberedSshConnections(readSettings()));
+ipcMain.handle("tacos:clear-ssh-history", () => {
+  writeSettings({ sshHistory: [] });
+  return [];
+});
 
 // The admin adds this line on the server. Made only when someone asks for it, and kept
 // apart from their own keys so that removing TaCos's access touches nothing else.

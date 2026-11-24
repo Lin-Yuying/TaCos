@@ -272,6 +272,21 @@ pagination → delete, then read-only and tool filters):
 npm run mcp:test
 ```
 
+## Plugin for Codex / Claude Code / other MCP clients
+
+`plugins/tacos/` is an installable plugin: a Codex plugin manifest, a Claude Code plugin
+manifest, and a zero-dependency stdio MCP server that calls `/api/v1` with a personal API key.
+
+```bash
+export TACOS_API_KEY=tac_...
+codex plugin marketplace add /absolute/path/to/TaCos
+codex plugin add tacos@tacos
+```
+
+Tools: `whoami`, `list_tasks`, `get_task`, `create_task`, `update_task`, `add_comment`,
+`delete_task`, `list_labels`, `create_label`. Installation for Claude Code and other clients, and
+the exact env vars, are in [`plugins/tacos/README.md`](plugins/tacos/README.md).
+
 ## Desktop builds
 
 | Command | Output |

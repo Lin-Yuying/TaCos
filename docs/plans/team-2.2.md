@@ -39,6 +39,11 @@ Item-level checks stay cheap (types, check scripts). End-to-end tests and screen
 | 15b | Type scale from the golden ratio, user request 2026-11-04; font family unchanged | done | `check-type-scale` passes; screenshots at 1440 and 1100 wide |
 | 16 | Deploy to the server without touching morula or Caddy; add this Mac's public key | done | `curl` through the tunnel returns the app; memory measured |
 | 17 | Push, open PR; after the user merges by hand, tag `v2.2.0` and publish "TaCos 2.2" | done | Release has its assets; title set |
+| 185 | Sidebar navigation uppercase, larger type and icons | done | Visible sidebar widths 216 / 176.5 / 92.5 px; 14px headings; screenshots checked |
+| 186 | Show Search shortcut only on hover or focus | done | Opacity 0 → 1 on hover; same button and row geometry; start screen checked |
+| 187 | Place document subpages at the cursor | done | 8 placements; two visible clients converge; SQLite order matches; screenshots checked |
+| 188 | Remember SSH targets and allow clearing history | done | 8-entry checks; visible Electron history, failed-connect, clear and reload checks |
+| 189 | Batch UI regression and cleanup | done | 7 real screenshots checked; tsc, type scale, i18n, syntax and focused checks pass; temp data removed |
 
 ## Notes
 

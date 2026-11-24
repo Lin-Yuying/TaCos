@@ -18,7 +18,7 @@ import { Table, TableCell, TableHeader, TableRow, renderTableToMarkdown } from "
 import Image from "@tiptap/extension-image";
 import Mention from "@tiptap/extension-mention";
 import { deleteSelectedImage, DOC_IMAGE_CLASS } from "@/lib/editor/doc-image";
-import { documentColor } from "@/lib/markdown";
+import { documentColor, pageReferenceAt, pageReferenceMarkdown } from "@/lib/markdown";
 import { mentionText } from "@/lib/mentions";
 
 const DocumentImage = Image.extend({
@@ -167,17 +167,16 @@ export const PageRef = Node.create({
     level: "inline",
     start: (src: string) => src.indexOf("[["),
     tokenize: (src: string) => {
-      const match = /^\[\[([^\]\n|]+)(?:\|([^\]\n|]+))?\]\]/.exec(src);
-      if (!match) return undefined;
-      return { type: "pageRef", raw: match[0], title: match[1], pageId: match[2] };
+      const reference = pageReferenceAt(src, 0);
+      if (!reference || reference.embed) return undefined;
+      return { type: "pageRef", raw: reference.raw, title: reference.title, pageId: reference.pageId };
     },
   },
   parseMarkdown: (token) => ({
     type: "pageRef",
     attrs: { title: token.title, pageId: token.pageId ?? null },
   }),
-  renderMarkdown: (node) =>
-    node.attrs?.pageId ? `[[${node.attrs.title}|${node.attrs.pageId}]]` : `[[${node.attrs?.title}]]`,
+  renderMarkdown: (node) => pageReferenceMarkdown(String(node.attrs?.title ?? ""), node.attrs?.pageId ?? undefined),
 });
 
 export const IssueRef = Node.create({
@@ -227,17 +226,23 @@ export const PageEmbed = Node.create({
     level: "block",
     start: (src: string) => src.indexOf("![["),
     tokenize: (src: string) => {
-      const match = /^!\[\[([^\]\n|]+)(?:\|([^\]\n|]+))?\]\][ \t]*(?:\n|$)/.exec(src);
-      if (!match) return undefined;
-      return { type: "pageEmbed", raw: match[0], title: match[1], pageId: match[2] };
+      const reference = pageReferenceAt(src, 0);
+      if (!reference?.embed) return undefined;
+      const tail = src.slice(reference.end);
+      if (!/^[ \t]*(?:\n|$)/.test(tail)) return undefined;
+      return {
+        type: "pageEmbed",
+        raw: src.slice(0, reference.end) + (/^[ \t]*(?:\n|$)/.exec(tail)?.[0] ?? ""),
+        title: reference.title,
+        pageId: reference.pageId,
+      };
     },
   },
   parseMarkdown: (token) => ({
     type: "pageEmbed",
     attrs: { title: token.title, pageId: token.pageId ?? null },
   }),
-  renderMarkdown: (node) =>
-    node.attrs?.pageId ? `![[${node.attrs.title}|${node.attrs.pageId}]]` : `![[${node.attrs?.title}]]`,
+  renderMarkdown: (node) => pageReferenceMarkdown(String(node.attrs?.title ?? ""), node.attrs?.pageId ?? undefined, true),
 });
 
 // The stored form is plain `@username` or `@[any other name]`, the same words a comment uses,

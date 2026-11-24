@@ -1,0 +1,16 @@
+{
+  "name": "tacos",
+  "interface": {
+    "displayName": "TaCos"
+  },
+  "plugins": [
+    {
+      "name": "tacos",
+      "source": {
+        "source": "local",
+        "path": "./plugins/tacos"
+      },
+      "category": "Productivity"
+    }
+  ]
+}

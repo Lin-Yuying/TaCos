@@ -36,6 +36,7 @@ let promptedInstallVersion = null;
 let installRequested = false;
 let availableInfo = null;
 let selfInstall = null;
+let selfSwapStarted = false;
 let agentWaitTimer = null;
 let getServerUrl = () => null;
 let log = (message) => console.log("[tacos-updater]", message);
@@ -375,10 +376,24 @@ function focusedWindow() {
   return null;
 }
 
+function startSelfSwap() {
+  if (selfSwapStarted) return true;
+  if (!status.enabled || status.state !== "downloaded" || installRoute() !== "self" || !selfInstall) return false;
+  selfSwapStarted = true;
+  try {
+    macUpdate.startSwap({ ...selfInstall, target: currentBundle(), args: process.argv.slice(1) });
+    log(`app update ${status.availableVersion || ""} queued for install on quit`);
+    return true;
+  } catch (err) {
+    selfSwapStarted = false;
+    log(`self update swap failed: ${err && err.message ? err.message : err}`);
+    return false;
+  }
+}
+
 function runQuitAndInstall() {
   if (!autoUpdater) return;
-  if (installRoute() === "self" && selfInstall) {
-    macUpdate.startSwap({ ...selfInstall, target: currentBundle(), args: process.argv.slice(1) });
+  if (startSelfSwap()) {
     setImmediate(() => app.quit());
     return;
   }
@@ -586,7 +601,10 @@ function registerIpc() {
 
   ipcMain.handle("tacos:app-update:status", () => snapshot());
   ipcMain.handle("tacos:app-update:cancel",()=>{installRequested=false;preparationAbort?.abort();return {ok:true};});
-  app.on?.("before-quit",()=>preparationAbort?.abort());
+  app.on?.("before-quit", () => {
+    preparationAbort?.abort();
+    startSelfSwap();
+  });
 
   ipcMain.handle("tacos:app-update:check", async () => {
     if (!status.enabled || !autoUpdater) {
@@ -682,7 +700,7 @@ function bindUpdaterEvents(updater) {
     setStatus({ state: "downloading", progress: percent, error: null });
   });
   updater.on("update-downloaded", (info) => {
-    // H-DESKTOP-UPDATE-05: nothing restarts until the person clicks update and confirms.
+    // Finishing a download never restarts by itself; the next normal quit installs it.
     downloadFinished(info && info.version);
   });
   updater.on("error", (err) => {

@@ -1,0 +1,15 @@
+{
+  "mcpServers": {
+    "tacos": {
+      "command": "node",
+      "args": [
+        "./mcp/tacos-mcp.mjs"
+      ],
+      "cwd": ".",
+      "env_vars": [
+        "TACOS_URL",
+        "TACOS_API_KEY"
+      ]
+    }
+  }
+}

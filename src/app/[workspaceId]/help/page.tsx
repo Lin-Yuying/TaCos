@@ -72,7 +72,7 @@ Docs can point at each other the way Notion pages do:
 - \`[[Page title|page-id]]\` is the explicit form the "Link a page" button inserts.
 - \`![[Page title]]\` on its own line embeds the whole page inside this one, inside a bordered card.
 - A page reference alone on its line is drawn as a subpage row, so a subpage can sit anywhere in the document — move the line and the row moves with it.
-- Subpages that are not yet in the text are listed at the top; the \\+ on a row puts it at the top of the text.
+- Subpages that are not yet in the text are listed at the top; click in a text block, then use the \\+ on a row to place it at the cursor.
 
 ## Editing shortcuts
 
@@ -161,7 +161,7 @@ const GUIDE_ZH = `# Markdown
 - \`[[页面标题|page-id]]\` 是完整写法，「链接页面」按钮插入的就是这种。
 - 单独一行的 \`![[页面标题]]\` 把整个页面嵌进当前页面，显示在一个带边框的卡片里。
 - 单独占一行的页面引用显示为子页面行，所以子页面可以放在文档任何位置：移动这一行，子页面行跟着移动。
-- 还没写进正文的子页面列在顶部；点某一行上的 \\+，把它放到正文顶部。
+- 还没写进正文的子页面列在顶部；先在正文文本块中点击，再点某一行上的 \\+，把它放到光标处。
 
 ## 编辑快捷键
 

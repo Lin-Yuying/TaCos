@@ -48,6 +48,7 @@ No migration CLI — the SQLite schema is created/updated idempotently by `src/d
 - **Harness errors name a log file**: `loggedTurn` (`src/lib/harness/turn-log.ts`) writes stderr and the event trail per turn to `~/.tacos/logs/harness/<id>-<session>-<time>.log` (`TACOS_LOG_DIR` changes the root) and appends `Log: <path>` to each error event.
 - **DeepSeek API is not dsh**: the DeepSeek API key lives under model/API settings for the API engine. It does not configure `dsh`; dsh keeps its own key (`dsh web` › Models or `DEEPSEEK_API_KEY` in its env).
 - **Codex ambient servers still start**: `-c mcp_servers={}` only suppresses the default empty table, so the user's own Codex config and plugins are passed explicitly as `-c mcp_servers.tacos.*` overrides next to `-c plugins={}`. Keep approvals for `tacos.*` inside our own elicitation handler; anything else the model asks for is denied.
+- **The plugin is another `/api/v1` client**: `plugins/tacos/` ships Codex and Claude Code manifests plus `mcp/tacos-mcp.mjs`, a stdio bridge that authenticates with a personal API key and imports nothing from `src/`. Keep it dependency-free; the marketplace manifests at the repo root (`.agents/plugins/marketplace.json`, `.claude-plugin/marketplace.json`) are what `codex plugin marketplace add` reads.
 
 ## Conventions
 

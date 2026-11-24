@@ -154,10 +154,16 @@ export function StartScreen({
           </section>
         )}
 
-        <button type="button" onClick={() => setPaletteOpen(true)} className={`${BTN} self-start`}>
+        <button
+          type="button"
+          onClick={() => setPaletteOpen(true)}
+          className={`${BTN} group self-start`}
+        >
           <Search size={13} />
           {t("Jump anywhere")}
-          <kbd className={KBD}>{modifier}K</kbd>
+          <kbd className={`${KBD} opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100`}>
+            {modifier}K
+          </kbd>
         </button>
       </div>
     </div>

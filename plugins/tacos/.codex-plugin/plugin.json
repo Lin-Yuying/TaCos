@@ -1,0 +1,40 @@
+{
+  "name": "tacos",
+  "version": "1.0.0",
+  "description": "Read and update TaCos tasks, comments and labels from Codex.",
+  "author": {
+    "name": "TaCos"
+  },
+  "homepage": "https://github.com/Lin-Yuying/TaCos/tree/main/plugins/tacos",
+  "repository": "https://github.com/Lin-Yuying/TaCos",
+  "license": "MIT",
+  "keywords": [
+    "tacos",
+    "tasks",
+    "issues",
+    "comments",
+    "mcp"
+  ],
+  "skills": "./skills/",
+  "interface": {
+    "displayName": "TaCos",
+    "shortDescription": "Work with TaCos tasks and comments",
+    "longDescription": "Lists, creates and updates TaCos tasks, adds comments, and reads labels and members through the workspace's agent API. Reads happen without asking; writes carry the API key's name in the task timeline.",
+    "developerName": "TaCos",
+    "category": "Productivity",
+    "capabilities": [
+      "Read",
+      "Write"
+    ],
+    "websiteURL": "https://github.com/Lin-Yuying/TaCos",
+    "defaultPrompt": [
+      "List my open TaCos tasks.",
+      "Create a TaCos task for this bug and assign it to me.",
+      "Add a summary comment to CORE-12."
+    ],
+    "brandColor": "#0D0D0D",
+    "composerIcon": "./assets/icon.png",
+    "logo": "./assets/icon.png",
+    "screenshots": []
+  }
+}

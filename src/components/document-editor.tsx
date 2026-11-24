@@ -1,7 +1,7 @@
 "use client";
 
 import { SuggestionMenu } from "./ui/suggestion-menu";
-import { Fragment, type RefObject, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
+import { Fragment, forwardRef, type RefObject, useEffect, useImperativeHandle, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { useRouter } from "next/navigation";
 import { EditorContent, NodeViewWrapper, ReactNodeViewRenderer, useEditor, type Editor, type Range } from "@tiptap/react";
 import type { NodeViewProps } from "@tiptap/react";
@@ -56,6 +56,7 @@ import { documentMarkdown, markdownToDocument } from "@/lib/editor/document-mark
 import { outlineHeadings } from "@/lib/doc-outline";
 import { anchorFromSelection, anchorRanges } from "@/lib/editor/anchors";
 import type { DocAnchor } from "@/lib/doc-anchor";
+import { insertStandalonePageRef } from "@/lib/editor/page-ref";
 import type { DocCollab } from "@/components/use-doc-collab";
 import { CodeLanguageMenu, setLineNumbers, useLineNumbers } from "@/components/code-block-controls";
 import { CodeView, codeViewKey } from "@/lib/editor/code-view";
@@ -609,29 +610,11 @@ const CommentAnchors = Extension.create<{ store: AnchorStore }>({
   },
 });
 
-export function DocumentEditor({
-  value,
-  onChange,
-  placeholder,
-  pages,
-  editable = true,
-  mentionWarning = null,
-  anchors = NO_ANCHORS,
-  members = NO_MEMBERS,
-  viewerId = null,
-  activeAnchor = null,
-  onComment,
-  onAnchorClick,
-  onAnchorsLocated,
-  onUpload,
-  collab,
-  editorRef,
-  onEditorReady,
-  outsideEditRef,
-  headingBase = "",
-}: {
-  editorRef?: { current: Editor | null };
-  onEditorReady?:(editor:Editor|null)=>void;
+export type DocumentEditorHandle = {
+  insertPageRef: (reference: Pick<PageRefEntry, "id" | "title">) => boolean;
+};
+
+export const DocumentEditor = forwardRef<DocumentEditorHandle, {
   value: string;
   onChange: (next: string) => void;
   placeholder?: string;
@@ -652,11 +635,33 @@ export function DocumentEditor({
   onUpload?: (file: File,controls?:{signal?:AbortSignal;onProgress?:(progress:number)=>void}) => Promise<string | null>;
   // A shared document; its text comes from here and not from `value`. Fixed for the editor's life.
   collab?: Extract<DocCollab, { doc: unknown }>;
+  editorRef?: { current: Editor | null };
+  onEditorReady?: (editor: Editor | null) => void;
   // Filled with the call that puts outside text into the editor and so into a shared document.
   outsideEditRef?: RefObject<((edit: OutsideEdit) => void) | null>;
   // Canonical path of this document ("/<workspace>/docs/<page>"); heading links point here.
   headingBase?: string;
-}) {
+}>(function DocumentEditor({
+  value,
+  onChange,
+  placeholder,
+  pages,
+  editable = true,
+  mentionWarning = null,
+  anchors = NO_ANCHORS,
+  members = NO_MEMBERS,
+  viewerId = null,
+  activeAnchor = null,
+  onComment,
+  onAnchorClick,
+  onAnchorsLocated,
+  onUpload,
+  collab,
+  editorRef,
+  onEditorReady,
+  outsideEditRef,
+  headingBase = "",
+}, ref) {
   const t = useT();
   const router = useRouter();
   const markdown = useMemo(() => documentMarkdown(), []);
@@ -967,6 +972,17 @@ export function DocumentEditor({
   }, [editor, showCodeNumbers]);
 
   useEffect(() => { if (editorRef) editorRef.current = editor;onEditorReady?.(editor); return () => { if (editorRef) editorRef.current = null;onEditorReady?.(null); }; }, [editor, editorRef,onEditorReady]);
+
+  useImperativeHandle(ref, () => ({
+    insertPageRef(reference) {
+      if (!editor || !editor.isEditable) return false;
+      const tr = insertStandalonePageRef(editor.state, reference);
+      if (!tr) return false;
+      editor.view.dispatch(tr);
+      editor.commands.focus();
+      return true;
+    },
+  }), [editor]);
 
   useEffect(() => {
     uploadRef.current = onUpload;
@@ -1430,4 +1446,4 @@ export function DocumentEditor({
       )}
     </div>
   );
-}
+});

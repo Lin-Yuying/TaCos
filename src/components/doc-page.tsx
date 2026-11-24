@@ -31,7 +31,12 @@ import {
 } from "lucide-react";
 import { Menu, MenuItem } from "@/components/menu";
 import type { PageContext, PageRefEntry } from "@/components/markdown";
-import { DocumentEditor, type EditorAnchor, type OutsideEdit } from "@/components/document-editor";
+import {
+  DocumentEditor,
+  type DocumentEditorHandle,
+  type EditorAnchor,
+  type OutsideEdit,
+} from "@/components/document-editor";
 import { useDocCollab } from "@/components/use-doc-collab";
 import { DocCommentsPanel } from "@/components/doc-comments";
 import { DocLinksPanel } from "@/components/doc-links";
@@ -66,6 +71,7 @@ import type { DocPage, PageAuthor, PageRef, PageSummary, PageVersionChange } fro
 import { DocMentionWarning } from "@/components/doc-mention-warning";
 import { useT } from "@/components/i18n-context";
 import { mentionedMembersWithoutAccess } from "@/lib/mentions";
+import { pageReferenceMarkdown, pageReferences } from "@/lib/markdown";
 
 const ICONS = ["📄", "📘", "📝", "🗂️", "🧭", "🚀", "🧪", "🌱", "🍅", "✨", "🐙", "🔭"];
 
@@ -74,10 +80,10 @@ const ICONS = ["📄", "📘", "📝", "🗂️", "🧭", "🚀", "🧪", "🌱"
 // the subpage; deleting the line puts it back in the list.
 function placedPageKeys(doc: string): Set<string> {
   const keys = new Set<string>();
-  for (const match of doc.matchAll(/!?\[\[([^\]\n|]+)(?:\|([^\]\n|]+))?\]\]/g)) {
-    const title = match[1].trim().toLowerCase();
+  for (const reference of pageReferences(doc)) {
+    const title = reference.title.trim().toLowerCase();
     if (title) keys.add(title);
-    const id = match[2]?.trim();
+    const id = reference.pageId?.trim();
     if (id) keys.add(id);
   }
   return keys;
@@ -150,6 +156,12 @@ export function DocPageView({
   const [doc, setDoc] = useState(page.doc);
   const [saved, setSaved] = useState(true);
   const contentRef = useRef(doc); contentRef.current = doc;
+  const subpageEditorRef = useRef<DocumentEditorHandle>(null);
+  const [editorReady, setEditorReady] = useState(false);
+  const attachEditor = useCallback((editor: DocumentEditorHandle | null) => {
+    subpageEditorRef.current = editor;
+    setEditorReady(Boolean(editor));
+  }, []);
   const [aiPanel, setAiPanel] = useState<{ x: number; y: number } | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [side, setSide] = useState<"updates" | "comments" | "links" | "outline" | null>(null);
@@ -399,8 +411,6 @@ export function DocPageView({
     router.push(`/${workspaceId}/docs/${result.data.id}`);
   }
 
-  // Inserting at the end is predictable; the editor owns the caret and has no public
-  // "insert at cursor" API, and a page reference is usually added as its own block.
   function insertRef(reference: PageRefEntry, embed: boolean) {
     if (!canEditBody || !editorRef.current?.isEditable) return;
     // The server read embedded pages when this page opened; a new embed needs its text now.
@@ -412,16 +422,15 @@ export function DocPageView({
         }
       });
     }
-    const syntax = embed ? `![[${reference.title}|${reference.id}]]` : `[[${reference.title}|${reference.id}]]`;
+    const syntax = pageReferenceMarkdown(reference.title, reference.id, embed);
     editorRef.current?.chain().focus().insertContent(markdownToDocument(markdown, syntax).content ?? []).run();
   }
 
-  // Putting the reference at the top of the text keeps the row where the list showed
-  // it; from there it is an ordinary line the editor can move anywhere.
   function placeSubpage(child: PageSummary) {
-    if (!canEditBody || !editorRef.current?.isEditable) return;
-    const syntax = `[[${child.title}|${child.id}]]`;
-    editorRef.current?.chain().focus().insertContent(markdownToDocument(markdown, syntax).content ?? []).run();
+    setError(null);
+    if (!subpageEditorRef.current?.insertPageRef(child)) {
+      setError(t("Click a text block in the document, then place the subpage there."));
+    }
   }
 
   function openAi(origin: HTMLElement) {
@@ -922,9 +931,11 @@ export function DocPageView({
                       <button
                         type="button"
                         onClick={() => placeSubpage(child)}
-                        title={t("Place in the page")}
-                        aria-label={t("Place {title} in the page", { title: child.title })}
-                        className="rounded p-0.5 text-faint opacity-0 transition-opacity hover:bg-elevated hover:text-text focus-visible:opacity-100 group-hover:opacity-100"
+                        onMouseDown={(event) => event.preventDefault()}
+                        disabled={!editorReady || collab.status === "connecting"}
+                        title={t("Place at the cursor")}
+                        aria-label={t("Place {title} at the cursor", { title: child.title })}
+                        className="rounded p-0.5 text-faint opacity-0 transition-opacity hover:bg-elevated hover:text-text focus-visible:opacity-100 group-hover:opacity-100 disabled:cursor-not-allowed disabled:opacity-30"
                       >
                         <Plus size={13} />
                       </button>
@@ -952,6 +963,7 @@ export function DocPageView({
                 editorRef={editorRef}
                 onEditorReady={setActiveEditor}
                 key={sharing ? collab.doc.guid : "alone"}
+                ref={attachEditor}
                 collab={sharing ? collab : undefined}
                 value={doc}
                 onChange={editDoc}
